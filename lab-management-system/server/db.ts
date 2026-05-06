@@ -31,8 +31,14 @@ let _db: ReturnType<typeof drizzle> | null = null;
 export async function getDb() {
   if (!_db && process.env.DATABASE_URL) {
     try {
+      // Parse the connection URL for mysql2
+      const dbUrl = new URL(process.env.DATABASE_URL);
       const pool = createPool({
-        uri: process.env.DATABASE_URL,
+        host: dbUrl.hostname,
+        port: parseInt(dbUrl.port || "3306"),
+        user: dbUrl.username,
+        password: dbUrl.password,
+        database: dbUrl.pathname.slice(1), // Remove leading '/'
         waitForConnections: true,
         connectionLimit: 10,
         queueLimit: 0,
