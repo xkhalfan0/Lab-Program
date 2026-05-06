@@ -84,6 +84,8 @@ export const samples = mysqlTable("samples", {
   receivedById: int("receivedById").notNull(), // reception staff
   receivedAt: timestamp("receivedAt").defaultNow().notNull(),
   managerReadAt: timestamp("managerReadAt"),         // when manager first opened the processed sample
+  deletedAt: timestamp("deletedAt"),
+  deletedBy: int("deletedBy"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });

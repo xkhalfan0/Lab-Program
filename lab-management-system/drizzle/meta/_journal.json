@@ -218,6 +218,13 @@
       "when": 1776000000000,
       "tag": "0030_add_samples_nominal_cube_size",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "5",
+      "when": 1776020000000,
+      "tag": "0031_soft_delete_samples",
+      "breakpoints": true
     }
   ]
 }

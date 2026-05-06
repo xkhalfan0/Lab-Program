@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, inArray, lte, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, isNull, lte, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import { createPool } from "mysql2";
 import {
@@ -285,11 +285,23 @@ export async function getAllSamples() {
     })
     .from(samples)
     .leftJoin(users, eq(samples.receivedById, users.id))
+    .where(isNull(samples.deletedAt))
     .orderBy(desc(samples.createdAt));
   return rows;
 }
 
 export async function getSampleById(id: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db
+    .select()
+    .from(samples)
+    .where(and(eq(samples.id, id), isNull(samples.deletedAt)))
+    .limit(1);
+  return result[0];
+}
+
+export async function getSampleByIdIncludingDeleted(id: number) {
   const db = await getDb();
   if (!db) return undefined;
   const result = await db.select().from(samples).where(eq(samples.id, id)).limit(1);
@@ -299,13 +311,21 @@ export async function getSampleById(id: number) {
 export async function getSamplesByBatch(batchId: string) {
   const db = await getDb();
   if (!db) return [];
-  return db.select().from(samples).where(eq(samples.batchId, batchId)).orderBy(samples.id);
+  return db
+    .select()
+    .from(samples)
+    .where(and(eq(samples.batchId, batchId), isNull(samples.deletedAt)))
+    .orderBy(samples.id);
 }
 
 export async function getSamplesByStatus(status: typeof samples.$inferSelect.status) {
   const db = await getDb();
   if (!db) return [];
-  return db.select().from(samples).where(eq(samples.status, status)).orderBy(desc(samples.createdAt));
+  return db
+    .select()
+    .from(samples)
+    .where(and(eq(samples.status, status), isNull(samples.deletedAt)))
+    .orderBy(desc(samples.createdAt));
 }
 
 export async function updateSampleStatus(
@@ -348,17 +368,31 @@ export async function updateSampleFields(
   await db.update(samples).set(updateData).where(eq(samples.id, id));
 }
 
+export async function softDeleteSample(id: number, userId: number) {
+  const db = await getDb();
+  if (!db) return;
+  await db
+    .update(samples)
+    .set({ deletedAt: new Date(), deletedBy: userId, updatedAt: new Date() })
+    .where(and(eq(samples.id, id), isNull(samples.deletedAt)));
+}
+
 export async function getDashboardStats() {
   const db = await getDb();
   if (!db) return null;
-  const total = await db.select({ count: sql<number>`COUNT(*)` }).from(samples);
+  const total = await db
+    .select({ count: sql<number>`COUNT(*)` })
+    .from(samples)
+    .where(isNull(samples.deletedAt));
   const byStatus = await db
     .select({ status: samples.status, count: sql<number>`COUNT(*)` })
     .from(samples)
+    .where(isNull(samples.deletedAt))
     .groupBy(samples.status);
   const byType = await db
     .select({ sampleType: samples.sampleType, count: sql<number>`COUNT(*)` })
     .from(samples)
+    .where(isNull(samples.deletedAt))
     .groupBy(samples.sampleType);
   return {
     total: total[0]?.count ?? 0,
@@ -381,6 +415,7 @@ export async function getDailyWork(fromDate: Date, toDate: Date) {
     .from(samples)
     .where(
       and(
+        isNull(samples.deletedAt),
         gte(samples.receivedAt, fromDate),
         lte(samples.receivedAt, endOfDay)
       )

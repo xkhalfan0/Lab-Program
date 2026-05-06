@@ -7,12 +7,22 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { trpc } from "@/lib/trpc";
 import { SAMPLE_TYPE_LABELS } from "@/lib/labTypes";
-import { ArrowLeft, Clock, User, FileText, Printer, Sparkles, X, Loader2, Building2, RefreshCw } from "lucide-react";
+import { ArrowLeft, Clock, User, FileText, Printer, Sparkles, X, Loader2, Building2, RefreshCw, Trash2 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { useParams, useLocation } from "wouter";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useAuth } from "@/_core/hooks/useAuth";
@@ -329,6 +339,8 @@ export default function SampleDetail() {
   const [, setLocation] = useLocation();
   const [showSimplifiedReport, setShowSimplifiedReport] = useState(false);
   const [showReassignDialog, setShowReassignDialog] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [reassignTechId, setReassignTechId] = useState("");
   const [reassignNotes, setReassignNotes] = useState("");
   const { lang } = useLanguage();
@@ -396,6 +408,27 @@ export default function SampleDetail() {
     if (["received", "distributed"].includes(s)) return "sample_receipt" as const;
     return "test_report" as const;
   })();
+
+  const handleDeleteSample = async () => {
+    try {
+      setIsDeleting(true);
+      const response = await fetch(`/api/samples/${sampleId}/delete`, {
+        method: "POST",
+        credentials: "include",
+      });
+      const data = await response.json();
+      if (!response.ok || !data?.success) {
+        throw new Error(data?.error || "Failed to delete sample");
+      }
+      toast.success(lang === "ar" ? "تم حذف العينة بنجاح" : "Sample deleted successfully");
+      setShowDeleteDialog(false);
+      setLocation("/");
+    } catch (error: any) {
+      toast.error(error?.message ?? (lang === "ar" ? "فشل حذف العينة" : "Failed to delete sample"));
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
   return (
     <DashboardLayout>
@@ -533,6 +566,17 @@ export default function SampleDetail() {
               <Printer className="w-4 h-4" />
               {lang === "ar" ? "طباعة" : "Print"}
             </Button>
+            {user?.role === "admin" && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-2 text-red-600 hover:text-red-700"
+                onClick={() => setShowDeleteDialog(true)}
+              >
+                <Trash2 className="w-4 h-4" />
+                {lang === "ar" ? "حذف العينة" : "Delete Sample"}
+              </Button>
+            )}
           </div>
         </div>
 
@@ -935,6 +979,23 @@ export default function SampleDetail() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={showDeleteDialog} onOpenChange={(open) => !isDeleting && setShowDeleteDialog(open)}>
+        <AlertDialogContent dir={lang === "ar" ? "rtl" : "ltr"}>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{lang === "ar" ? "تأكيد حذف العينة" : "Confirm Sample Deletion"}</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete this sample? This action will mark it as deleted and cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>{lang === "ar" ? "إلغاء" : "Cancel"}</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeleteSample} disabled={isDeleting}>
+              {isDeleting ? (lang === "ar" ? "جارٍ الحذف..." : "Deleting...") : (lang === "ar" ? "حذف" : "Delete")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </DashboardLayout>
   );
 }

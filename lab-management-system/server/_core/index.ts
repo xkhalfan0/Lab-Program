@@ -12,6 +12,8 @@ import { startScheduledJobs } from "../scheduledJobs";
 import { handleUserSSE, handleSectorSSE } from "../sse";
 import { registerPdfRoutes } from "../pdfGenerator";
 import adminImportRouter from "../routes/admin-import.js";
+import { sdk } from "./sdk";
+import { createAuditLog, getSampleByIdIncludingDeleted, softDeleteSample } from "../db";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -39,6 +41,52 @@ async function startServer() {
   app.use(express.json({ limit: "50mb" }));
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
   app.use(adminImportRouter);
+
+  app.post("/api/samples/:id/delete", async (req, res) => {
+    try {
+      const sampleId = parseInt(req.params.id, 10);
+      if (!Number.isFinite(sampleId) || sampleId <= 0) {
+        return res.status(400).json({ success: false, error: "Invalid sample id" });
+      }
+
+      const user = await sdk.authenticateRequest(req);
+      if (user.role !== "admin") {
+        return res.status(403).json({ success: false, error: "Admin role required" });
+      }
+
+      const existing = await getSampleByIdIncludingDeleted(sampleId);
+      if (!existing) {
+        return res.status(404).json({ success: false, error: "Sample not found" });
+      }
+      if ((existing as any).deletedAt) {
+        return res.status(400).json({ success: false, error: "Sample already deleted" });
+      }
+
+      await softDeleteSample(sampleId, user.id);
+      await createAuditLog({
+        userId: user.id,
+        userName: user.name ?? "Unknown",
+        action: "sample_deleted",
+        entity: "sample",
+        entityId: sampleId,
+        entityLabel: existing.sampleCode ?? String(sampleId),
+        oldValue: {
+          status: existing.status,
+          sampleCode: existing.sampleCode,
+          deletedAt: null,
+        },
+        newValue: {
+          deletedAt: new Date().toISOString(),
+          deletedBy: user.id,
+        },
+        ipAddress: req.ip,
+      });
+
+      return res.json({ success: true, message: "Sample deleted successfully" });
+    } catch (error: any) {
+      return res.status(500).json({ success: false, error: error?.message ?? "Internal server error" });
+    }
+  });
   // OAuth callback under /api/oauth/callback
   registerOAuthRoutes(app);
   // Local username/password auth

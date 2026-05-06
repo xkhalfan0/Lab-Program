@@ -25,6 +25,19 @@ import {
 } from "lucide-react";
 import { useLocation } from "wouter";
 import { useState } from "react";
+import { useAuth } from "@/_core/hooks/useAuth";
+import { toast } from "sonner";
+import { Trash2 } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import {
   BarChart,
   Bar,
@@ -59,10 +72,13 @@ function todayStr() {
 }
 
 export default function Home() {
-  const { data: samples, isLoading: samplesLoading } = trpc.samples.list.useQuery();
-  const { data: stats } = trpc.samples.stats.useQuery();
+  const { data: samples, isLoading: samplesLoading, refetch: refetchSamples } = trpc.samples.list.useQuery();
+  const { data: stats, refetch: refetchStats } = trpc.samples.stats.useQuery();
   const [, setLocation] = useLocation();
   const { lang, t, dir } = useLanguage();
+  const { user } = useAuth();
+  const [sampleToDelete, setSampleToDelete] = useState<{ id: number; sampleCode: string } | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const [fromDate, setFromDate] = useState(todayStr);
   const [toDate, setToDate] = useState(todayStr);
@@ -131,6 +147,28 @@ export default function Home() {
     const td = todayStr();
     setFromDate(td); setToDate(td);
     setAppliedFrom(td); setAppliedTo(td);
+  };
+
+  const handleDeleteSample = async () => {
+    if (!sampleToDelete) return;
+    try {
+      setIsDeleting(true);
+      const response = await fetch(`/api/samples/${sampleToDelete.id}/delete`, {
+        method: "POST",
+        credentials: "include",
+      });
+      const data = await response.json();
+      if (!response.ok || !data?.success) {
+        throw new Error(data?.error || "Failed to delete sample");
+      }
+      toast.success(lang === "ar" ? "تم حذف العينة بنجاح" : "Sample deleted successfully");
+      setSampleToDelete(null);
+      await Promise.all([refetchSamples(), refetchStats()]);
+    } catch (error: any) {
+      toast.error(error?.message ?? (lang === "ar" ? "فشل حذف العينة" : "Failed to delete sample"));
+    } finally {
+      setIsDeleting(false);
+    }
   };
 
   const periodLabel = isSingleDay && appliedFrom === todayStr()
@@ -457,6 +495,9 @@ export default function Home() {
                       {[t("table.sampleId"), t("table.contractor"), t("table.type"), lang === "ar" ? "القطاع" : "Sector", t("table.contractNo"), t("table.status"), t("table.date")].map(h => (
                         <th key={h} className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground">{h}</th>
                       ))}
+                      {user?.role === "admin" && (
+                        <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground">{t("table.actions")}</th>
+                      )}
                     </tr>
                   </thead>
                   <tbody>
@@ -476,6 +517,21 @@ export default function Home() {
                         <td className="px-4 py-2.5 text-xs text-muted-foreground">{sample.contractNumber ?? "—"}</td>
                         <td className="px-4 py-2.5"><StatusBadge status={sample.status} /></td>
                         <td className="px-4 py-2.5 text-xs text-muted-foreground">{new Date(sample.receivedAt).toLocaleDateString()}</td>
+                        {user?.role === "admin" && (
+                          <td className="px-4 py-2.5">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-7 px-2 text-red-600 hover:text-red-700"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSampleToDelete({ id: sample.id, sampleCode: sample.sampleCode });
+                              }}
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </Button>
+                          </td>
+                        )}
                       </tr>
                     ))}
                   </tbody>
@@ -485,6 +541,22 @@ export default function Home() {
           </CardContent>
         </Card>
       </div>
+      <AlertDialog open={!!sampleToDelete} onOpenChange={(open) => !open && !isDeleting && setSampleToDelete(null)}>
+        <AlertDialogContent dir={dir}>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{lang === "ar" ? "تأكيد حذف العينة" : "Confirm Sample Deletion"}</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete this sample? This action will mark it as deleted and cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>{lang === "ar" ? "إلغاء" : "Cancel"}</AlertDialogCancel>
+            <AlertDialogAction disabled={isDeleting} onClick={handleDeleteSample}>
+              {isDeleting ? (lang === "ar" ? "جارٍ الحذف..." : "Deleting...") : (lang === "ar" ? "حذف" : "Delete")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </DashboardLayout>
   );
 }
