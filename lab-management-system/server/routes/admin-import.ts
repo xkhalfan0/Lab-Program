@@ -18,6 +18,7 @@ router.post('/api/admin/import-backup', async (req, res) => {
       multipleStatements: true
     });
 
+    await pool.query('DELETE FROM test_types WHERE id >= 1001 AND id <= 5006');
     await pool.query(sql);
     await pool.end();
     
