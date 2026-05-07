@@ -49,6 +49,8 @@ export const deletionRouter = router({
         input.reasonCategory
       );
     }),
+
+  // Admin direct delete
   directDelete: protectedProcedure
     .input(
       z.object({
@@ -61,23 +63,31 @@ export const deletionRouter = router({
       if (ctx.user.role !== "admin") {
         throw new Error("Only admins can perform direct delete");
       }
+
+      // Whitelist of allowed tables (prevents SQL injection)
+      const allowedTables = ["lab_orders", "distributions", "test_results", "reviews", "samples"];
+      if (!allowedTables.includes(input.targetTable)) {
+        throw new Error(`Invalid table: ${input.targetTable}`);
+      }
+
       const db = await getDb();
       if (!db) throw new Error("Database connection failed");
 
       try {
-        await db.execute(sql`
-          UPDATE ${sql.identifier(input.targetTable)}
-          SET deletedAt = NOW(), deletedBy = ${ctx.user.id}
-          WHERE id = ${input.targetId}
-        `);
+        // Use raw SQL with whitelisted table name and parameterized values
+        const query = `UPDATE \`${input.targetTable}\` SET deletedAt = NOW(), deletedBy = ? WHERE id = ?`;
+        
+        const result = await db.execute(sql.raw(query, [ctx.user.id, input.targetId]));
+
+        console.log(`[directDelete] Deleted ${input.targetTable}:${input.targetId} by user ${ctx.user.id}`);
 
         return {
           success: true,
-          message: `Deleted ${input.targetTable}:${input.targetId}`,
+          message: `Record deleted successfully`,
         };
-      } catch (e) {
-        console.error("[deletionRouter] directDelete error:", e);
-        throw new Error("Direct delete failed");
+      } catch (e: any) {
+        console.error("[directDelete] Error:", e);
+        throw new Error(`Delete failed: ${e.message || "Unknown error"}`);
       }
     }),
 
