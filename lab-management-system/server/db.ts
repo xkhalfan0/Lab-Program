@@ -28,6 +28,34 @@ import { ENV } from "./_core/env";
 
 let _db: ReturnType<typeof drizzle> | null = null;
 
+/** After first DB connect: whether `samples.deletedAt` exists (Phase 1 adds it). */
+let _samplesSoftDeleteColumnsExist: boolean | null = null;
+
+function samplesHasSoftDeleteColumns(): boolean {
+  return _samplesSoftDeleteColumnsExist === true;
+}
+
+async function initSamplesSoftDeleteColumnFlag(db: ReturnType<typeof drizzle>) {
+  if (_samplesSoftDeleteColumnsExist !== null) return;
+  try {
+    const raw = await db.execute(
+      sql.raw(
+        "SELECT COUNT(*) AS c FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'samples' AND COLUMN_NAME = 'deletedAt'"
+      )
+    );
+    const rows = (raw as unknown as [Array<{ c?: number | bigint }>, unknown])[0];
+    _samplesSoftDeleteColumnsExist = Number(rows?.[0]?.c ?? 0) > 0;
+    if (!_samplesSoftDeleteColumnsExist) {
+      console.warn(
+        "[Database] samples.deletedAt not found — soft-delete filters are disabled until db:migration:phase1 completes."
+      );
+    }
+  } catch (e) {
+    console.warn("[Database] Could not probe samples.deletedAt; soft-delete filters disabled.", e);
+    _samplesSoftDeleteColumnsExist = false;
+  }
+}
+
 export async function getDb() {
   if (!_db && process.env.DATABASE_URL) {
     try {
@@ -46,6 +74,7 @@ export async function getDb() {
         keepAliveInitialDelay: 0,
       });
       _db = drizzle(pool);
+      await initSamplesSoftDeleteColumnFlag(_db);
     } catch (error) {
       console.warn("[Database] Failed to connect:", error);
       _db = null;
@@ -238,12 +267,55 @@ export async function generateCertificateCode(): Promise<string> {
 }
 
 // ─── Samples ──────────────────────────────────────────────────────────────────
+
+/** SELECT shape without soft-delete columns (DB may not have migrated yet). */
+const SAMPLE_ROW_BASE = {
+  id: samples.id,
+  sampleCode: samples.sampleCode,
+  contractId: samples.contractId,
+  contractNumber: samples.contractNumber,
+  contractName: samples.contractName,
+  contractorName: samples.contractorName,
+  sampleType: samples.sampleType,
+  sector: samples.sector,
+  sectorNameAr: samples.sectorNameAr,
+  sectorNameEn: samples.sectorNameEn,
+  quantity: samples.quantity,
+  condition: samples.condition,
+  notes: samples.notes,
+  status: samples.status,
+  requestedTestTypeId: samples.requestedTestTypeId,
+  testSubType: samples.testSubType,
+  sampleSubType: samples.sampleSubType,
+  testTypeName: samples.testTypeName,
+  batchId: samples.batchId,
+  location: samples.location,
+  nominalCubeSize: samples.nominalCubeSize,
+  castingDate: samples.castingDate,
+  receivedById: samples.receivedById,
+  receivedAt: samples.receivedAt,
+  managerReadAt: samples.managerReadAt,
+  createdAt: samples.createdAt,
+  updatedAt: samples.updatedAt,
+} as const;
+
+function sampleRowSelect() {
+  if (samplesHasSoftDeleteColumns()) {
+    return {
+      ...SAMPLE_ROW_BASE,
+      deletedAt: samples.deletedAt,
+      deletedBy: samples.deletedBy,
+    };
+  }
+  return SAMPLE_ROW_BASE;
+}
+
 export async function createSample(data: typeof samples.$inferInsert) {
   const db = await getDb();
   if (!db) throw new Error("DB not available");
   await db.insert(samples).values(data);
   const result = await db
-    .select()
+    .select(sampleRowSelect())
     .from(samples)
     .where(eq(samples.sampleCode, data.sampleCode))
     .limit(1);
@@ -254,7 +326,7 @@ export async function getAllSamples() {
   const db = await getDb();
   if (!db) return [];
   // Join with users to get receivedBy full name
-  const rows = await db
+  const baseQuery = db
     .select({
       id: samples.id,
       sampleCode: samples.sampleCode,
@@ -284,9 +356,11 @@ export async function getAllSamples() {
       updatedAt: samples.updatedAt,
     })
     .from(samples)
-    .leftJoin(users, eq(samples.receivedById, users.id))
-    .where(isNull(samples.deletedAt))
-    .orderBy(desc(samples.createdAt));
+    .leftJoin(users, eq(samples.receivedById, users.id));
+  const filtered = samplesHasSoftDeleteColumns()
+    ? baseQuery.where(isNull(samples.deletedAt))
+    : baseQuery;
+  const rows = await filtered.orderBy(desc(samples.createdAt));
   return rows;
 }
 
@@ -294,9 +368,13 @@ export async function getSampleById(id: number) {
   const db = await getDb();
   if (!db) return undefined;
   const result = await db
-    .select()
+    .select(sampleRowSelect())
     .from(samples)
-    .where(and(eq(samples.id, id), isNull(samples.deletedAt)))
+    .where(
+      samplesHasSoftDeleteColumns()
+        ? and(eq(samples.id, id), isNull(samples.deletedAt))
+        : eq(samples.id, id)
+    )
     .limit(1);
   return result[0];
 }
@@ -304,28 +382,30 @@ export async function getSampleById(id: number) {
 export async function getSampleByIdIncludingDeleted(id: number) {
   const db = await getDb();
   if (!db) return undefined;
-  const result = await db.select().from(samples).where(eq(samples.id, id)).limit(1);
+  const result = await db
+    .select(sampleRowSelect())
+    .from(samples)
+    .where(eq(samples.id, id))
+    .limit(1);
   return result[0];
 }
 
 export async function getSamplesByBatch(batchId: string) {
   const db = await getDb();
   if (!db) return [];
-  return db
-    .select()
-    .from(samples)
-    .where(and(eq(samples.batchId, batchId), isNull(samples.deletedAt)))
-    .orderBy(samples.id);
+  const whereClause = samplesHasSoftDeleteColumns()
+    ? and(eq(samples.batchId, batchId), isNull(samples.deletedAt))
+    : eq(samples.batchId, batchId);
+  return db.select(sampleRowSelect()).from(samples).where(whereClause).orderBy(samples.id);
 }
 
 export async function getSamplesByStatus(status: typeof samples.$inferSelect.status) {
   const db = await getDb();
   if (!db) return [];
-  return db
-    .select()
-    .from(samples)
-    .where(and(eq(samples.status, status), isNull(samples.deletedAt)))
-    .orderBy(desc(samples.createdAt));
+  const whereClause = samplesHasSoftDeleteColumns()
+    ? and(eq(samples.status, status), isNull(samples.deletedAt))
+    : eq(samples.status, status);
+  return db.select(sampleRowSelect()).from(samples).where(whereClause).orderBy(desc(samples.createdAt));
 }
 
 export async function updateSampleStatus(
@@ -371,6 +451,10 @@ export async function updateSampleFields(
 export async function softDeleteSample(id: number, userId: number) {
   const db = await getDb();
   if (!db) return;
+  if (!samplesHasSoftDeleteColumns()) {
+    console.warn("[db] softDeleteSample skipped: samples.deletedAt column missing (run db:migration:phase1).");
+    return;
+  }
   await db
     .update(samples)
     .set({ deletedAt: new Date(), deletedBy: userId, updatedAt: new Date() })
@@ -380,19 +464,20 @@ export async function softDeleteSample(id: number, userId: number) {
 export async function getDashboardStats() {
   const db = await getDb();
   if (!db) return null;
+  const activeFilter = samplesHasSoftDeleteColumns() ? isNull(samples.deletedAt) : sql`TRUE`;
   const total = await db
     .select({ count: sql<number>`COUNT(*)` })
     .from(samples)
-    .where(isNull(samples.deletedAt));
+    .where(activeFilter);
   const byStatus = await db
     .select({ status: samples.status, count: sql<number>`COUNT(*)` })
     .from(samples)
-    .where(isNull(samples.deletedAt))
+    .where(activeFilter)
     .groupBy(samples.status);
   const byType = await db
     .select({ sampleType: samples.sampleType, count: sql<number>`COUNT(*)` })
     .from(samples)
-    .where(isNull(samples.deletedAt))
+    .where(activeFilter)
     .groupBy(samples.sampleType);
   return {
     total: total[0]?.count ?? 0,
@@ -410,16 +495,14 @@ export async function getDailyWork(fromDate: Date, toDate: Date) {
   const endOfDay = new Date(toDate);
   endOfDay.setHours(23, 59, 59, 999);
 
+  const rangeConds = [gte(samples.receivedAt, fromDate), lte(samples.receivedAt, endOfDay)] as const;
+  const dailyWhere = samplesHasSoftDeleteColumns()
+    ? and(isNull(samples.deletedAt), ...rangeConds)
+    : and(...rangeConds);
   const result = await db
-    .select()
+    .select(sampleRowSelect())
     .from(samples)
-    .where(
-      and(
-        isNull(samples.deletedAt),
-        gte(samples.receivedAt, fromDate),
-        lte(samples.receivedAt, endOfDay)
-      )
-    )
+    .where(dailyWhere)
     .orderBy(desc(samples.receivedAt));
 
   const summary = {
