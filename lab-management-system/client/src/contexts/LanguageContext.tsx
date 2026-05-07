@@ -35,6 +35,7 @@ const translations: Record<string, Record<Language, string>> = {
   "nav.clearance": { en: "Clearance Certificate", ar: "شهادة براءة الذمة" },
   "nav.clearanceArchive": { en: "Clearance Archive", ar: "أرشيف براءة الذمة" },
   "nav.users": { en: "User Management", ar: "إدارة المستخدمين" },
+  "nav.deletionRequests": { en: "Deletion Requests", ar: "طلبات الحذف" },
   "nav.tests": { en: "Tests & Contractors", ar: "الاختبارات والمقاولون" },
   "nav.analytics": { en: "Analytics & Reports", ar: "الإحصائيات والتقارير" },
   "nav.monthlyReport": { en: "Monthly Performance Report", ar: "تقرير الأداء الشهري" },

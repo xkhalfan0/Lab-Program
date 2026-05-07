@@ -16,6 +16,7 @@ import Clearance from "./pages/ClearancePage";
 import ConcreteTest from "./pages/ConcreteTest";
 import ConcreteReport from "./pages/ConcreteReport";
 import UserManagement from "./pages/UserManagement";
+import AdminDeletionRequests from "./pages/AdminDeletionRequests";
 import SampleDetail from "./pages/SampleDetail";
 import TestTypesManagement from "./pages/TestTypesManagement";
 import TestRouter from "./pages/tests/TestRouter";
@@ -95,6 +96,7 @@ const ROUTE_ROLES: Record<string, string[]> = {
   "/clearance": ["admin", "lab_manager", "sample_manager", "accountant"],
   "/manager-dashboard": ["admin", "lab_manager", "supervisor", "sample_manager"],
   "/users": ["admin"],
+  "/admin/deletion-requests": ["admin", "lab_manager"],
   "/tests-management": ["admin"],
 };
 
@@ -200,6 +202,11 @@ function Router() {
       </Route>
       <Route path="/users">
         {() => <ProtectedRoute component={UserManagement} path="/users" />}
+      </Route>
+      <Route path="/admin/deletion-requests">
+        {() => (
+          <ProtectedRoute component={AdminDeletionRequests} path="/admin/deletion-requests" />
+        )}
       </Route>
       <Route path="/tests-management">
         {() => <ProtectedRoute component={TestTypesManagement} path="/tests-management" />}

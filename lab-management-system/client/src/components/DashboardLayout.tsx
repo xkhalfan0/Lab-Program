@@ -56,6 +56,7 @@ const ALL_MENU_ITEMS = [
   { icon: Award, labelKey: "nav.clearance", path: "/clearance", permKey: "certificates", minLevel: "view", allowedRoles: ["admin", "lab_manager", "accountant", "qc_inspector"] as AllowedRole[] },
   { icon: Archive, labelKey: "nav.clearanceArchive", path: "/clearance-archive", permKey: "cert_archive", minLevel: "view", allowedRoles: ["admin", "lab_manager", "accountant"] as AllowedRole[] },
   { icon: Users, labelKey: "nav.users", path: "/users", permKey: "users", minLevel: "view", allowedRoles: ["admin"] as AllowedRole[] },
+  { icon: ShieldCheck, labelKey: "nav.deletionRequests", path: "/admin/deletion-requests", permKey: "deletion_requests", minLevel: "view", allowedRoles: ["admin", "lab_manager"] as AllowedRole[] },
   { icon: FlaskConical, labelKey: "nav.tests", path: "/tests-management", permKey: "settings", minLevel: "view", allowedRoles: ["admin", "lab_manager"] as AllowedRole[] },
   { icon: TrendingUp, labelKey: "nav.analytics", path: "/analytics", permKey: "analytics", minLevel: "view", allowedRoles: ["admin", "lab_manager", "supervisor", "sample_manager"] as AllowedRole[] },
   { icon: TrendingUp, labelKey: "nav.monthlyReport", path: "/monthly-report", permKey: "monthly_report", minLevel: "view", allowedRoles: ["admin", "lab_manager"] as AllowedRole[] },
@@ -84,55 +85,55 @@ const ROLE_DEFAULT_PERMS: Record<string, PermMap> = {
     admin_dashboard: "edit", supervisor_dashboard: "edit",
     manager_dashboard: "edit", samples: "edit", distribution: "edit", results: "edit",
     supervisor: "edit", qc: "edit", certificates: "edit", cert_archive: "edit",
-    users: "edit", settings: "edit", analytics: "edit", monthly_report: "edit",
+    users: "edit", settings: "edit", analytics: "edit", monthly_report: "edit", deletion_requests: "edit",
   },
   // Reception: only Sample Reception page
   reception: {
     admin_dashboard: false, supervisor_dashboard: false,
     manager_dashboard: false, samples: "edit", distribution: false, results: false,
     supervisor: false, qc: false, certificates: false,
-    users: false, settings: false, analytics: false,
+    users: false, settings: false, analytics: false, deletion_requests: false,
   },
   // Lab Manager: Distribution + Supervisor Review + Analytics
   lab_manager: {
     admin_dashboard: false, supervisor_dashboard: false,
     manager_dashboard: false, samples: false, distribution: "edit", results: false,
     supervisor: "edit", qc: false, certificates: false,
-    users: false, settings: false, analytics: "view", monthly_report: "view",
+    users: false, settings: false, analytics: "view", monthly_report: "view", deletion_requests: "view",
   },
   // Technician: only My Assignments
   technician: {
     admin_dashboard: false, supervisor_dashboard: false,
     manager_dashboard: false, samples: false, distribution: false, results: "edit",
     supervisor: false, qc: false, certificates: false,
-    users: false, settings: false, analytics: false,
+    users: false, settings: false, analytics: false, deletion_requests: false,
   },
   // Sample Manager / Supervisor: only Supervisor Review
   sample_manager: {
     admin_dashboard: false, supervisor_dashboard: false,
     manager_dashboard: false, samples: false, distribution: false, results: false,
     supervisor: "edit", qc: false, certificates: false,
-    users: false, settings: false, analytics: false,
+    users: false, settings: false, analytics: false, deletion_requests: false,
   },
   // QC Inspector: only QC Review
   qc_inspector: {
     admin_dashboard: false, supervisor_dashboard: false,
     manager_dashboard: false, samples: false, distribution: false, results: false,
     supervisor: false, qc: "edit", certificates: false,
-    users: false, settings: false, analytics: false,
+    users: false, settings: false, analytics: false, deletion_requests: false,
   },
   // Accountant: Clearance + Archive
   accountant: {
     admin_dashboard: false, supervisor_dashboard: false,
     manager_dashboard: false, samples: false, distribution: false, results: false,
     supervisor: false, qc: false, certificates: "edit", cert_archive: "view",
-    users: false, settings: false, analytics: false,
+    users: false, settings: false, analytics: false, deletion_requests: false,
   },
   user: {
     admin_dashboard: false, supervisor_dashboard: false,
     manager_dashboard: false, samples: false, distribution: false, results: false,
     supervisor: false, qc: false, certificates: false,
-    users: false, settings: false, analytics: false,
+    users: false, settings: false, analytics: false, deletion_requests: false,
   },
 };
 
