@@ -561,7 +561,7 @@ export async function getDistributionsBySample(sampleId: number) {
     })
     .from(distributions)
     .leftJoin(testTypes, eq(distributions.testType, testTypes.code))
-    .where(eq(distributions.sampleId, sampleId));
+    .where(and(eq(distributions.sampleId, sampleId), isNull(distributions.deletedAt)));
 }
 
 export async function getDistributionsByTechnician(technicianId: number) {
@@ -599,7 +599,8 @@ export async function getDistributionsByTechnician(technicianId: number) {
     .where(
       and(
         eq(distributions.assignedTechnicianId, technicianId),
-        inArray(distributions.status, ["pending", "in_progress"])
+        inArray(distributions.status, ["pending", "in_progress"]),
+        isNull(distributions.deletedAt)
       )
     )
     .orderBy(desc(distributions.createdAt));
@@ -652,7 +653,7 @@ export async function getDistributionById(id: number) {
     .from(distributions)
     .leftJoin(samples, eq(distributions.sampleId, samples.id))
     .leftJoin(testTypes, eq(distributions.testType, testTypes.code))
-    .where(eq(distributions.id, id))
+    .where(and(eq(distributions.id, id), isNull(distributions.deletedAt)))
     .limit(1);
   return result[0];
 }
@@ -681,7 +682,7 @@ export async function getDistributionsByBatch(batchDistributionId: string) {
     })
     .from(distributions)
     .leftJoin(samples, eq(distributions.sampleId, samples.id))
-    .where(eq(distributions.batchDistributionId, batchDistributionId))
+    .where(and(eq(distributions.batchDistributionId, batchDistributionId), isNull(distributions.deletedAt)))
     .orderBy(distributions.id);
 }
 
@@ -1546,6 +1547,7 @@ export async function getAllLabOrders() {
     })
     .from(labOrders)
     .leftJoin(samples, eq(labOrders.sampleId, samples.id))
+    .where(isNull(labOrders.deletedAt))
     .orderBy(desc(labOrders.createdAt));
 }
 
@@ -1577,7 +1579,7 @@ export async function getLabOrderById(id: number) {
     })
     .from(labOrders)
     .leftJoin(samples, eq(labOrders.sampleId, samples.id))
-    .where(eq(labOrders.id, id))
+    .where(and(eq(labOrders.id, id), isNull(labOrders.deletedAt)))
     .limit(1);
   return result[0];
 }
@@ -1616,7 +1618,7 @@ export async function getLabOrdersByStatus(status: typeof labOrders.$inferSelect
     })
     .from(labOrders)
     .leftJoin(samples, eq(labOrders.sampleId, samples.id))
-    .where(eq(labOrders.status, status))
+    .where(and(eq(labOrders.status, status), isNull(labOrders.deletedAt)))
     .orderBy(desc(labOrders.createdAt));
 }
 
@@ -1645,7 +1647,8 @@ export async function getLabOrdersByTechnician(technicianId: number) {
     .where(
       and(
         eq(labOrders.assignedTechnicianId, technicianId),
-        inArray(labOrders.status, ["distributed", "in_progress"])
+        inArray(labOrders.status, ["distributed", "in_progress"]),
+        isNull(labOrders.deletedAt)
       )
     )
     .orderBy(desc(labOrders.createdAt));
