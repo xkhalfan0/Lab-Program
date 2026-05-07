@@ -1,4 +1,5 @@
 import DashboardLayout from "@/components/DashboardLayout";
+import { DeletionRequestButton } from "@/components/DeletionRequestButton";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -331,9 +332,21 @@ export default function Technician() {
                                   </span>
                                 </div>
                                 {!isDone && (
-                                  <Button size="sm" variant="outline" className="h-7 text-xs">
-                                    {lang === "ar" ? "ابدأ" : "Start"}
-                                  </Button>
+                                  <div className="flex items-center gap-1">
+                                    <Button size="sm" variant="outline" className="h-7 text-xs">
+                                      {lang === "ar" ? "ابدأ" : "Start"}
+                                    </Button>
+                                    <DeletionRequestButton
+                                      targetTable="test_results"
+                                      targetId={item.id}
+                                      targetLabel={`Test Result ${item.id}`}
+                                      variant="icon"
+                                      onSuccess={() => {
+                                        refetch();
+                                        refetchOrders();
+                                      }}
+                                    />
+                                  </div>
                                 )}
                               </div>
                             );

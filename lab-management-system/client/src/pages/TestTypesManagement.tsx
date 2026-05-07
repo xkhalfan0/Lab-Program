@@ -1,6 +1,5 @@
 import { useState } from "react";
 import DashboardLayout from "@/components/DashboardLayout";
-import { DeletionRequestButton } from "@/components/DeletionRequestButton";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -470,15 +469,6 @@ function ContractsTab() {
                 <td className="p-3">
                   <div className="flex gap-1">
                     <Button size="sm" variant="ghost" onClick={() => openEdit(c)}><Pencil className="w-3.5 h-3.5" /></Button>
-                    <DeletionRequestButton
-                      targetTable="contracts"
-                      targetId={c.id}
-                      targetLabel={`Contract ${c.contractNumber}`}
-                      variant="icon"
-                      onSuccess={() => {
-                        refetch();
-                      }}
-                    />
                     <Button size="sm" variant="ghost" className="text-destructive"
                       onClick={() => { if (confirm(lang === "ar" ? "هل تريد حذف هذا العقد؟" : "Remove this contract?")) deleteMut.mutate({ id: c.id }); }}>
                       <Trash2 className="w-3.5 h-3.5" />

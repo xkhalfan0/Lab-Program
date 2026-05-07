@@ -1,4 +1,4 @@
-import { desc, eq } from "drizzle-orm";
+import { desc, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { deletionRequests } from "../../drizzle/schema";
 import { getDb } from "../db";
@@ -49,6 +49,35 @@ export const deletionRouter = router({
         input.reasonCategory
       );
     }),
+  directDelete: protectedProcedure
+    .input(
+      z.object({
+        targetTable: z.string(),
+        targetId: z.number(),
+        reason: z.string().min(10, "Reason must be at least 10 characters"),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      if (ctx.user.role !== "admin") {
+        throw new Error("Only admins can perform direct delete");
+      }
+      const db = await getDb();
+      if (!db) throw new Error("Database connection failed");
+
+      await db.execute(
+        // raw SQL because table target is dynamic
+        sql.raw(`
+          UPDATE ${input.targetTable}
+          SET deletedAt = NOW(), deletedBy = ${ctx.user.id}
+          WHERE id = ${input.targetId}
+        `)
+      );
+
+      return {
+        success: true,
+        message: `Deleted ${input.targetTable}:${input.targetId}`,
+      };
+    }),
 
   // Get pending deletion requests (admin only)
   getPendingRequests: protectedProcedure.query(async ({ ctx }) => {
@@ -60,16 +89,34 @@ export const deletionRouter = router({
     const db = await getDb();
     if (!db) throw new Error("Database connection failed");
 
-    const requests = await db
-      .select()
-      .from(deletionRequests)
-      .where(eq(deletionRequests.status, "pending"))
-      .orderBy(desc(deletionRequests.createdAt));
+    try {
+      const requests = await db
+        .select({
+          id: deletionRequests.id,
+          requestedBy: deletionRequests.requestedBy,
+          targetTable: deletionRequests.targetTable,
+          targetId: deletionRequests.targetId,
+          reason: deletionRequests.reason,
+          reasonCategory: deletionRequests.reasonCategory,
+          impactAnalysis: deletionRequests.impactAnalysis,
+          status: deletionRequests.status,
+          reviewedBy: deletionRequests.reviewedBy,
+          reviewedAt: deletionRequests.reviewedAt,
+          reviewComment: deletionRequests.reviewComment,
+          createdAt: deletionRequests.createdAt,
+          updatedAt: deletionRequests.updatedAt,
+        })
+        .from(deletionRequests)
+        .orderBy(desc(deletionRequests.createdAt));
 
-    return requests.map((req) => ({
-      ...req,
-      impactAnalysis: req.impactAnalysis ? JSON.parse(req.impactAnalysis) : null,
-    }));
+      return requests.map((req) => ({
+        ...req,
+        impactAnalysis: req.impactAnalysis ?? "{}",
+      }));
+    } catch (e) {
+      console.error("[deletionRouter] getPendingRequests error:", e);
+      return [];
+    }
   }),
 
   // Get my deletion requests

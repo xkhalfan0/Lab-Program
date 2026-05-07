@@ -1,4 +1,5 @@
 import DashboardLayout from "@/components/DashboardLayout";
+import { DeletionRequestButton } from "@/components/DeletionRequestButton";
 import { StatusBadge } from "@/components/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -1242,6 +1243,13 @@ export default function Reception() {
                                 <Pencil className="w-3.5 h-3.5" />
                               </Button>
                             )}
+                            <DeletionRequestButton
+                              targetTable="lab_orders"
+                              targetId={order.id}
+                              targetLabel={`Order ${order.orderCode}`}
+                              variant="icon"
+                              onSuccess={() => refetch()}
+                            />
                           </div>
                         </td>
                       </tr>

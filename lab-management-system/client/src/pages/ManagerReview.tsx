@@ -1,4 +1,5 @@
 import DashboardLayout from "@/components/DashboardLayout";
+import { DeletionRequestButton } from "@/components/DeletionRequestButton";
 import { StatusBadge } from "@/components/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -354,6 +355,13 @@ export default function ManagerReview() {
                       <ClipboardCheck className="w-3.5 h-3.5" />
                       {lang === "ar" ? "مراجعة النتائج" : "Review Results"}
                     </Button>
+                    <DeletionRequestButton
+                      targetTable="reviews"
+                      targetId={sample.id}
+                      targetLabel={`Review ${sample.sampleCode}`}
+                      variant="icon"
+                      onSuccess={() => refetch()}
+                    />
                   </CardContent>
                 </Card>
               );

@@ -1,4 +1,5 @@
 import DashboardLayout from "@/components/DashboardLayout";
+import { DeletionRequestButton } from "@/components/DeletionRequestButton";
 import { StatusBadge } from "@/components/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -641,6 +642,13 @@ export default function QCReview() {
                         <ClipboardCheck className="w-3.5 h-3.5" />
                         {lang === "ar" ? "مراجعة جودة" : "QC Review"}
                       </Button>
+                    <DeletionRequestButton
+                      targetTable="reviews"
+                      targetId={sample.id}
+                      targetLabel={`QC Review ${sample.sampleCode}`}
+                      variant="icon"
+                      onSuccess={() => refetch()}
+                    />
                     </CardContent>
                   </Card>
                 );

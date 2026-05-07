@@ -1,4 +1,5 @@
 import DashboardLayout from "@/components/DashboardLayout";
+import { DeletionRequestButton } from "@/components/DeletionRequestButton";
 import { StatusBadge } from "@/components/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -518,10 +519,19 @@ export default function Distribution() {
                             {new Date(order.createdAt).toLocaleDateString(lang === "ar" ? "ar-AE" : "en-AE")}
                           </td>
                           <td className="px-4 py-2.5">
-                            <Button size="sm" className="h-7 gap-1 text-xs" onClick={() => handleOpenDialog(order)}>
-                              <UserCheck className="w-3.5 h-3.5" />
-                              {lang === "ar" ? "توزيع" : "Distribute"}
-                            </Button>
+                            <div className="flex items-center gap-1">
+                              <Button size="sm" className="h-7 gap-1 text-xs" onClick={() => handleOpenDialog(order)}>
+                                <UserCheck className="w-3.5 h-3.5" />
+                                {lang === "ar" ? "توزيع" : "Distribute"}
+                              </Button>
+                              <DeletionRequestButton
+                                targetTable="lab_orders"
+                                targetId={order.id}
+                                targetLabel={`Order ${order.orderCode}`}
+                                variant="icon"
+                                onSuccess={() => refetch()}
+                              />
+                            </div>
                           </td>
                         </tr>
                       ))}
@@ -631,6 +641,13 @@ export default function Distribution() {
                                   <Printer className="w-3.5 h-3.5" />
                                 </Button>
                               )}
+                              <DeletionRequestButton
+                                targetTable="lab_orders"
+                                targetId={order.id}
+                                targetLabel={`Order ${order.orderCode}`}
+                                variant="icon"
+                                onSuccess={() => refetch()}
+                              />
                             </div>
                           </td>
                         </tr>
