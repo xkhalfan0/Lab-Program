@@ -6,6 +6,7 @@ import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { sectorRouter } from "./routers/sector";
 import { dashboardRouter } from "./routers/dashboard";
+import { deletionRouter } from "./routers/deletion";
 import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
 import {
   getAllSectorAccounts,
@@ -3148,6 +3149,7 @@ ${testSummaries.length > 0 ? testSummaries.join("\n\n") : "لم تُجرَ اخ�
   }),
   // ─── Notifications ───────────────────────────────────────────────────────────────────────────────────────
   dashboard: dashboardRouter,
+  deletion: deletionRouter,
 
   // ─── Monthly Performance Report ─────────────────────────────────────────────────────────────────────────
   reports: router({
