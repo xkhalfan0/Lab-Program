@@ -74,10 +74,18 @@ export const deletionRouter = router({
       if (!db) throw new Error("Database connection failed");
 
       try {
-        // Use raw SQL with whitelisted table name and parameterized values
-        const query = `UPDATE \`${input.targetTable}\` SET deletedAt = NOW(), deletedBy = ? WHERE id = ?`;
+        // Build the SQL query manually with proper escaping
+        const now = new Date();
+        const timestamp = now.toISOString().slice(0, 19).replace('T', ' ');
         
-        const result = await db.execute(sql.raw(query, [ctx.user.id, input.targetId]));
+        await db.execute(
+          sql.raw(`
+            UPDATE \`${input.targetTable}\`
+            SET deletedAt = '${timestamp}',
+                deletedBy = ${ctx.user.id}
+            WHERE id = ${input.targetId}
+          `)
+        );
 
         console.log(`[directDelete] Deleted ${input.targetTable}:${input.targetId} by user ${ctx.user.id}`);
 
