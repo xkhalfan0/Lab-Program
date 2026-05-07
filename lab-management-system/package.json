@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "cross-env NODE_ENV=development tsx watch server/_core/index.ts",
     "build": "vite build && esbuild server/_core/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist",
-    "start": "pnpm run db:clean-orphans && pnpm run db:migration:phase1 && pnpm run db:seed:users && node dist/index.js",
+    "start": "pnpm run db:full-migration && node dist/index.js",
     "check": "tsc --noEmit",
     "format": "prettier --write .",
     "test": "vitest run",
@@ -16,6 +16,7 @@
     "db:add-soft-delete": "tsx server/scripts/add-soft-delete-columns.ts",
     "db:check-integrity": "tsx server/scripts/check-integrity.ts",
     "db:clean-orphans": "tsx server/scripts/clean-orphan-data.ts",
+    "db:full-migration": "tsx server/scripts/run-full-migration.ts",
     "db:migration:phase1": "npm run db:check-integrity && npm run db:add-fks && npm run db:add-soft-delete",
     "db:rollback-fks": "tsx server/scripts/rollback-fks.ts",
     "db:reset:tests": "tsx server/scripts/reset-test-data.ts",
