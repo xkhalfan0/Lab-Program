@@ -225,6 +225,13 @@
       "when": 1776020000000,
       "tag": "0031_soft_delete_samples",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "5",
+      "when": 1778144297383,
+      "tag": "0032_complete_the_executioner",
+      "breakpoints": true
     }
   ]
 }

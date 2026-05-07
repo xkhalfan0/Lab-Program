@@ -629,3 +629,5 @@ export const labOrderItems = mysqlTable("lab_order_items", {
 
 export type LabOrderItem = typeof labOrderItems.$inferSelect;
 export type InsertLabOrderItem = typeof labOrderItems.$inferInsert;
+
+export * from "./schema-deletion-requests";
