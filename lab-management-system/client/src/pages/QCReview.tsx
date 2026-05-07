@@ -643,9 +643,9 @@ export default function QCReview() {
                         {lang === "ar" ? "مراجعة جودة" : "QC Review"}
                       </Button>
                     <DeletionRequestButton
-                      targetTable="reviews"
+                      targetTable="samples"
                       targetId={sample.id}
-                      targetLabel={`QC Review ${sample.sampleCode}`}
+                      targetLabel={`Sample ${sample.sampleCode}`}
                       variant="icon"
                       onSuccess={() => refetch()}
                     />

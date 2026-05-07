@@ -356,9 +356,9 @@ export default function ManagerReview() {
                       {lang === "ar" ? "مراجعة النتائج" : "Review Results"}
                     </Button>
                     <DeletionRequestButton
-                      targetTable="reviews"
+                      targetTable="samples"
                       targetId={sample.id}
-                      targetLabel={`Review ${sample.sampleCode}`}
+                      targetLabel={`Sample ${sample.sampleCode}`}
                       variant="icon"
                       onSuccess={() => refetch()}
                     />
