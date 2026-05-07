@@ -64,19 +64,21 @@ export const deletionRouter = router({
       const db = await getDb();
       if (!db) throw new Error("Database connection failed");
 
-      await db.execute(
-        // raw SQL because table target is dynamic
-        sql.raw(`
-          UPDATE ${input.targetTable}
+      try {
+        await db.execute(sql`
+          UPDATE ${sql.identifier(input.targetTable)}
           SET deletedAt = NOW(), deletedBy = ${ctx.user.id}
           WHERE id = ${input.targetId}
-        `)
-      );
+        `);
 
-      return {
-        success: true,
-        message: `Deleted ${input.targetTable}:${input.targetId}`,
-      };
+        return {
+          success: true,
+          message: `Deleted ${input.targetTable}:${input.targetId}`,
+        };
+      } catch (e) {
+        console.error("[deletionRouter] directDelete error:", e);
+        throw new Error("Direct delete failed");
+      }
     }),
 
   // Get pending deletion requests (admin only)
