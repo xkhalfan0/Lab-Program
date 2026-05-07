@@ -290,6 +290,7 @@ async function main() {
   }
 
   console.log("[add-foreign-keys] Done.");
+  process.exit(0);
 }
 
 main().catch((e) => {

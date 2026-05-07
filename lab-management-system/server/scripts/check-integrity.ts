@@ -291,6 +291,7 @@ async function main() {
     process.exit(1);
   }
   console.log("[check-integrity] All checks passed.");
+  process.exit(0);
 }
 
 main().catch((e) => {

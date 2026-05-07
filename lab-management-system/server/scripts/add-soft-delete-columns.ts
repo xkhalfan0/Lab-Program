@@ -61,6 +61,7 @@ async function main() {
   }
 
   console.log("[add-soft-delete] Done.");
+  process.exit(0);
 }
 
 main().catch((e) => {
