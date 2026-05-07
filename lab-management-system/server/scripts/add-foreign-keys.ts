@@ -21,19 +21,43 @@ function requireDatabaseUrl(): void {
 }
 
 function isDropMissingFkError(e: unknown): boolean {
-  const err = e as { errno?: number; code?: string; message?: string };
-  return (
-    err?.errno === 1091 ||
-    err?.code === "ER_CANT_DROP_FIELD_OR_KEY" ||
-    (typeof err?.message === "string" && err.message.includes("check that column/key exists"))
-  );
+  const err = e as { errno?: number; code?: string; message?: string; cause?: any };
+
+  // Check outer error
+  if (err?.errno === 1091 || err?.code === "ER_CANT_DROP_FIELD_OR_KEY") return true;
+  if (typeof err?.message === "string" && err.message.includes("check that column/key exists"))
+    return true;
+
+  // Check cause (nested MySQL error from Drizzle)
+  const cause = err?.cause;
+  if (cause?.errno === 1091 || cause?.code === "ER_CANT_DROP_FIELD_OR_KEY") return true;
+  if (typeof cause?.message === "string" && cause.message.includes("check that column/key exists"))
+    return true;
+
+  return false;
 }
 
 function isAddDuplicateOrExistsError(e: unknown): boolean {
-  const err = e as { errno?: number; code?: string; message?: string };
+  const err = e as { errno?: number; code?: string; message?: string; cause?: any };
+
+  // Check outer error
   if (err?.errno === 1826 || err?.errno === 1061 || err?.errno === 121) return true;
-  const m = err?.message ?? "";
-  return typeof m === "string" && (m.includes("Duplicate foreign key") || m.includes("already exists"));
+  const message = err?.message ?? "";
+  if (
+    typeof message === "string" &&
+    (message.includes("Duplicate foreign key") || message.includes("already exists"))
+  ) {
+    return true;
+  }
+
+  // Check cause (nested MySQL error from Drizzle)
+  const cause = err?.cause;
+  if (cause?.errno === 1826 || cause?.errno === 1061 || cause?.errno === 121) return true;
+  const causeMessage = cause?.message ?? "";
+  return (
+    typeof causeMessage === "string" &&
+    (causeMessage.includes("Duplicate foreign key") || causeMessage.includes("already exists"))
+  );
 }
 
 async function dropFkIfExists(
@@ -47,9 +71,12 @@ async function dropFkIfExists(
     await db.execute(sql.raw(stmt));
     console.log(`[add-foreign-keys] Dropped ${constraint}`);
   } catch (e) {
+    const err = e as { errno?: number; code?: string };
+    console.log(`[add-foreign-keys] DROP error: errno=${err.errno}, code=${err.code}`);
     if (isDropMissingFkError(e)) {
       console.log(`[add-foreign-keys] Skip DROP ${constraint}: not present`);
     } else {
+      console.error(`[add-foreign-keys] Unexpected DROP error:`, e);
       throw e;
     }
   }

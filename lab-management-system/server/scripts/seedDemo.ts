@@ -705,9 +705,10 @@ async function main() {
 }
 
 function isConnRefused(e: unknown): boolean {
-  const err = e as { cause?: { code?: string }; code?: string; message?: string };
+  const err = e as { cause?: { code?: string; message?: string }; code?: string; message?: string };
   return (
     err?.cause?.code === "ECONNREFUSED" ||
+    (typeof err?.cause?.message === "string" && err.cause.message.includes("ECONNREFUSED")) ||
     err?.code === "ECONNREFUSED" ||
     (typeof err?.message === "string" && err.message.includes("ECONNREFUSED"))
   );

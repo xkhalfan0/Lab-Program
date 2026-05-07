@@ -16,12 +16,20 @@ function requireDatabaseUrl(): void {
 }
 
 function isDropMissingFkError(e: unknown): boolean {
-  const err = e as { errno?: number; code?: string; message?: string };
-  return (
-    err?.errno === 1091 ||
-    err?.code === "ER_CANT_DROP_FIELD_OR_KEY" ||
-    (typeof err?.message === "string" && err.message.includes("check that column/key exists"))
-  );
+  const err = e as { errno?: number; code?: string; message?: string; cause?: any };
+
+  // Check outer error
+  if (err?.errno === 1091 || err?.code === "ER_CANT_DROP_FIELD_OR_KEY") return true;
+  if (typeof err?.message === "string" && err.message.includes("check that column/key exists"))
+    return true;
+
+  // Check cause (nested MySQL error from Drizzle)
+  const cause = err?.cause;
+  if (cause?.errno === 1091 || cause?.code === "ER_CANT_DROP_FIELD_OR_KEY") return true;
+  if (typeof cause?.message === "string" && cause.message.includes("check that column/key exists"))
+    return true;
+
+  return false;
 }
 
 async function dropFk(

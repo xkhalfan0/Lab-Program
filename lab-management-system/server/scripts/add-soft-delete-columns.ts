@@ -18,10 +18,18 @@ function requireDatabaseUrl(): void {
 }
 
 function isDuplicateColumnError(e: unknown): boolean {
-  const err = e as { errno?: number; code?: string; message?: string };
+  const err = e as { errno?: number; code?: string; message?: string; cause?: any };
+
+  // Check outer error
   if (err?.errno === 1060) return true; // ER_DUP_FIELDNAME
-  const m = err?.message ?? "";
-  return typeof m === "string" && m.includes("Duplicate column name");
+  const message = err?.message ?? "";
+  if (typeof message === "string" && message.includes("Duplicate column name")) return true;
+
+  // Check cause (nested MySQL error from Drizzle)
+  const cause = err?.cause;
+  if (cause?.errno === 1060) return true;
+  const causeMessage = cause?.message ?? "";
+  return typeof causeMessage === "string" && causeMessage.includes("Duplicate column name");
 }
 
 async function addColumn(
