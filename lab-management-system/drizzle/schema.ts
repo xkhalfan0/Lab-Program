@@ -34,6 +34,8 @@ export const users = mysqlTable("users", {
   passwordHash: varchar("passwordHash", { length: 256 }), // bcrypt hash
   permissions: json("permissions"), // detailed permission overrides
   isActive: boolean("isActive").default(true).notNull(),
+  deletedAt: timestamp("deletedAt"),
+  deletedBy: int("deletedBy"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull(),
@@ -119,6 +121,8 @@ export const distributions = mysqlTable("distributions", {
   status: mysqlEnum("status", ["pending", "in_progress", "completed", "cancelled"])
     .default("pending")
     .notNull(),
+  deletedAt: timestamp("deletedAt"),
+  deletedBy: int("deletedBy"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
@@ -371,6 +375,8 @@ export const contractors = mysqlTable("contractors", {
   address: text("address"),
   contractorCode: varchar("contractorCode", { length: 64 }).unique(),
   isActive: boolean("isActive").default(true).notNull(),
+  deletedAt: timestamp("deletedAt"),
+  deletedBy: int("deletedBy"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
@@ -392,6 +398,8 @@ export const contracts = mysqlTable("contracts", {
   endDate: timestamp("endDate"),
   notes: text("notes"),
   isActive: boolean("isActive").default(true).notNull(),
+  deletedAt: timestamp("deletedAt"),
+  deletedBy: int("deletedBy"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
@@ -590,6 +598,8 @@ export const labOrders = mysqlTable("lab_orders", {
     "rejected",       // rejected at any stage
   ]).default("pending").notNull(),
   completedAt: timestamp("completedAt"),
+  deletedAt: timestamp("deletedAt"),
+  deletedBy: int("deletedBy"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
