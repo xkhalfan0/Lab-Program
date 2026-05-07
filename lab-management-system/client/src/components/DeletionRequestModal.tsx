@@ -38,14 +38,16 @@ export function DeletionRequestModal({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (reason.trim().length < 10) {
+    const isOther = reasonCategory === "other";
+    const trimmedReason = reason.trim();
+    if (isOther && trimmedReason.length < 10) {
       alert("Please provide a reason of at least 10 characters");
       return;
     }
     submitRequest.mutate({
       targetTable,
       targetId,
-      reason: reason.trim(),
+      reason: trimmedReason.length > 0 ? trimmedReason : `Category: ${reasonCategory}`,
       reasonCategory,
     });
   };
@@ -116,17 +118,26 @@ export function DeletionRequestModal({
           {/* Reason */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Reason for Deletion <span className="text-red-600">*</span>
+              Reason for Deletion{" "}
+              {reasonCategory === "other" && <span className="text-red-600">*</span>}
             </label>
             <textarea
               value={reason}
               onChange={(e) => setReason(e.target.value)}
-              placeholder="Please explain why this record needs to be deleted (minimum 10 characters)..."
+              placeholder={
+                reasonCategory === "other"
+                  ? "Please explain why this record needs to be deleted (minimum 10 characters)..."
+                  : "Optional note (required only for 'Other')."
+              }
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 min-h-[100px]"
-              required
-              minLength={10}
+              required={reasonCategory === "other"}
+              minLength={reasonCategory === "other" ? 10 : undefined}
             />
-            <p className="text-xs text-gray-500 mt-1">{reason.length} / 10 characters minimum</p>
+            <p className="text-xs text-gray-500 mt-1">
+              {reasonCategory === "other"
+                ? `${reason.length} / 10 characters minimum`
+                : "Optional. Pick 'Other' to require a detailed note."}
+            </p>
           </div>
 
           {/* Error Display */}
@@ -148,7 +159,11 @@ export function DeletionRequestModal({
             </button>
             <button
               type="submit"
-              disabled={submitRequest.isPending || loadingImpact || reason.length < 10}
+              disabled={
+                submitRequest.isPending ||
+                loadingImpact ||
+                (reasonCategory === "other" && reason.trim().length < 10)
+              }
               className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
             >
               {submitRequest.isPending ? (

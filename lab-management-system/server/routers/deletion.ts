@@ -26,26 +26,38 @@ export const deletionRouter = router({
   // Create a deletion request
   requestDeletion: protectedProcedure
     .input(
-      z.object({
-        targetTable: z.string(),
-        targetId: z.number(),
-        reason: z.string().min(10, "Reason must be at least 10 characters"),
-        reasonCategory: z.enum([
-          "data_error",
-          "duplicate",
-          "customer_request",
-          "compliance",
-          "test_data",
-          "other",
-        ]),
-      })
+      z
+        .object({
+          targetTable: z.string(),
+          targetId: z.number(),
+          reason: z.string().optional(),
+          reasonCategory: z.enum([
+            "data_error",
+            "duplicate",
+            "customer_request",
+            "compliance",
+            "test_data",
+            "other",
+          ]),
+        })
+        .refine(
+          (data) => data.reasonCategory !== "other" || (data.reason?.trim().length ?? 0) >= 10,
+          {
+            message: "Reason must be at least 10 characters when category is 'other'",
+            path: ["reason"],
+          }
+        )
     )
     .mutation(async ({ ctx, input }) => {
+      const reasonToSave =
+        input.reason?.trim().length
+          ? input.reason.trim()
+          : `Category: ${input.reasonCategory}`;
       return await createDeletionRequest(
         ctx.user.id,
         input.targetTable,
         input.targetId,
-        input.reason,
+        reasonToSave,
         input.reasonCategory
       );
     }),

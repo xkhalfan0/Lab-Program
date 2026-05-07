@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
+import { useLanguage } from "@/contexts/LanguageContext";
 import {
   Plus, Trash2, Save, Send, Printer, ChevronDown, ChevronUp,
   FlaskConical, CheckCircle, AlertTriangle, XCircle, Info
@@ -170,6 +171,8 @@ interface GroupPanelProps {
 }
 
 function GroupPanel({ group, distributionId, onRefresh, castingDate: distCastingDate, distributionNominalCube }: GroupPanelProps) {
+  const { lang } = useLanguage();
+  const ar = lang === "ar";
   const [open, setOpen] = useState(true);
   const [cubes, setCubes] = useState<CubeRow[]>([]);
   const [saving, setSaving] = useState<number | null>(null);
@@ -277,10 +280,10 @@ function GroupPanel({ group, distributionId, onRefresh, castingDate: distCasting
         groupId: group.id,
         markNo: cube.markNo,
         cubeId: cube.cubeId || undefined,
-        dateTested: cube.dateTested || undefined,
-        length: cube.length || "150",
-        width: cube.width || "150",
-        height: cube.height || "150",
+        // Date tested is auto-set by backend on save
+        length: String(defaultEdge),
+        width: String(defaultEdge),
+        height: String(defaultEdge),
         massKg: cube.massKg || undefined,
         maxLoadKN: cube.maxLoadKN,
         fractureType: cube.fractureType || undefined,
@@ -339,6 +342,23 @@ function GroupPanel({ group, distributionId, onRefresh, castingDate: distCasting
   };
 
   const handleSubmit = async () => {
+    const requiredFields = [
+      { label: ar ? "مصدر/مورد الخرسانة" : "Concrete Source/Supplier", value: sourceSupplier },
+      { label: ar ? "درجة الخرسانة" : "Class of Concrete", value: classOfConcrete },
+      { label: ar ? "أقصى حجم للركام (مم)" : "Maximum Aggregate Size (mm)", value: maxAggSize },
+      { label: ar ? "الهطول (مم)" : "Slump (mm)", value: slump },
+      { label: ar ? "مكان أخذ العينة" : "Place of Sampling", value: placeOfSampling },
+    ];
+    const missing = requiredFields.filter((f) => !String(f.value ?? "").trim()).map((f) => f.label);
+    if (missing.length > 0) {
+      toast.error(
+        ar
+          ? `الرجاء تعبئة الحقول المطلوبة: ${missing.join("، ")}`
+          : `Please fill required fields: ${missing.join(", ")}`
+      );
+      return;
+    }
+    await saveHeader();
     await saveAllCubes();
     try {
       await submitGroup.mutateAsync({ groupId: group.id });
@@ -417,8 +437,8 @@ function GroupPanel({ group, distributionId, onRefresh, castingDate: distCasting
             {headerExpanded && (
               <div className="mt-3 grid grid-cols-2 gap-3 p-3 bg-gray-50 rounded-lg border">
                 <div>
-                  <Label className="text-xs">Source/Supplier</Label>
-                  <Input value={sourceSupplier} onChange={e => setSourceSupplier(e.target.value)} className="h-8 text-sm" placeholder="e.g. Gulf Readymix" disabled={isSubmitted} />
+                  <Label className="text-xs">{ar ? "مصدر/مورد الخرسانة" : "Concrete Source/Supplier"} <span className="text-red-600">*</span></Label>
+                  <Input value={sourceSupplier} onChange={e => setSourceSupplier(e.target.value)} className="h-8 text-sm" placeholder={ar ? "مثال: مورد الخرسانة" : "e.g. Gulf Readymix"} disabled={isSubmitted} />
                 </div>
                 <div>
                   <Label className="text-xs">
@@ -437,16 +457,16 @@ function GroupPanel({ group, distributionId, onRefresh, castingDate: distCasting
                   )}
                 </div>
                 <div>
-                  <Label className="text-xs">Class of Concrete</Label>
-                  <Input value={classOfConcrete} onChange={e => setClassOfConcrete(e.target.value)} className="h-8 text-sm" placeholder="e.g. C 40/20 35%OPC" disabled={isSubmitted} />
+                  <Label className="text-xs">{ar ? "درجة الخرسانة" : "Class of Concrete"} <span className="text-red-600">*</span></Label>
+                  <Input value={classOfConcrete} onChange={e => setClassOfConcrete(e.target.value)} className="h-8 text-sm" placeholder="e.g. C30 / C40" disabled={isSubmitted} />
                 </div>
                 <div>
-                  <Label className="text-xs">Slump (mm)</Label>
+                  <Label className="text-xs">{ar ? "الهطول (مم)" : "Slump (mm)"} <span className="text-red-600">*</span></Label>
                   <Input value={slump} onChange={e => setSlump(e.target.value)} className="h-8 text-sm" placeholder="e.g. 120" disabled={isSubmitted} />
                 </div>
                 <div>
-                  <Label className="text-xs">Max Agg. Size</Label>
-                  <Input value={maxAggSize} onChange={e => setMaxAggSize(e.target.value)} className="h-8 text-sm" placeholder="e.g. 20mm" disabled={isSubmitted} />
+                  <Label className="text-xs">{ar ? "أقصى حجم للركام (مم)" : "Maximum Aggregate Size (mm)"} <span className="text-red-600">*</span></Label>
+                  <Input value={maxAggSize} onChange={e => setMaxAggSize(e.target.value)} className="h-8 text-sm" placeholder="e.g. 20" disabled={isSubmitted} />
                 </div>
                 <div>
                   <Label className="text-xs">Region</Label>
@@ -461,7 +481,7 @@ function GroupPanel({ group, distributionId, onRefresh, castingDate: distCasting
                   <Input value={cscRef} onChange={e => setCscRef(e.target.value)} className="h-8 text-sm" disabled={isSubmitted} />
                 </div>
                 <div>
-                  <Label className="text-xs">Place of Sampling</Label>
+                  <Label className="text-xs">{ar ? "مكان أخذ العينة" : "Place of Sampling"} <span className="text-red-600">*</span></Label>
                   <Input value={placeOfSampling} onChange={e => setPlaceOfSampling(e.target.value)} className="h-8 text-sm" disabled={isSubmitted} />
                 </div>
                 <div>
@@ -516,7 +536,6 @@ function GroupPanel({ group, distributionId, onRefresh, castingDate: distCasting
                 <tr className="bg-gray-100">
                   <th className="border px-2 py-1 text-center w-8">Mark</th>
                   <th className="border px-2 py-1 text-center">Cube ID</th>
-                  <th className="border px-2 py-1 text-center">Date Tested</th>
                   <th className="border px-2 py-1 text-center bg-orange-50" title="Actual age calculated from casting date to test date">Age (days)</th>
                   <th className="border px-2 py-1 text-center">L × W × H (mm)</th>
                   <th className="border px-2 py-1 text-center">Mass (kg)</th>
@@ -559,10 +578,6 @@ function GroupPanel({ group, distributionId, onRefresh, castingDate: distCasting
                         <Input value={cube.cubeId} onChange={e => updateCube(idx, "cubeId", e.target.value)}
                           className="h-7 text-xs w-20" disabled={isSubmitted} />
                       </td>
-                      <td className="border px-1 py-1">
-                        <Input type="date" value={cube.dateTested} onChange={e => updateCube(idx, "dateTested", e.target.value)}
-                          className="h-7 text-xs w-32" disabled={isSubmitted} />
-                      </td>
                       <td className="border px-1 py-1 bg-orange-50 text-center text-xs font-mono font-semibold">
                         {actualAge !== null ? (
                           <span title={effectiveAge !== actualAge ? `Evaluated as ${effectiveAge}-day band` : undefined}
@@ -572,15 +587,8 @@ function GroupPanel({ group, distributionId, onRefresh, castingDate: distCasting
                         ) : <span className="text-gray-400">—</span>}
                       </td>
                       <td className="border px-1 py-1">
-                        <div className="flex gap-1 items-center">
-                          <Input value={cube.length} onChange={e => updateCube(idx, "length", e.target.value)}
-                            className="h-7 text-xs w-12" disabled={isSubmitted} />
-                          <span className="text-gray-400 text-xs">×</span>
-                          <Input value={cube.width} onChange={e => updateCube(idx, "width", e.target.value)}
-                            className="h-7 text-xs w-12" disabled={isSubmitted} />
-                          <span className="text-gray-400 text-xs">×</span>
-                          <Input value={cube.height} onChange={e => updateCube(idx, "height", e.target.value)}
-                            className="h-7 text-xs w-12" disabled={isSubmitted} />
+                        <div className="h-7 text-xs flex items-center justify-center font-mono text-gray-700 bg-gray-50 border rounded">
+                          {defaultEdge} × {defaultEdge} × {defaultEdge}
                         </div>
                       </td>
                       <td className="border px-1 py-1">

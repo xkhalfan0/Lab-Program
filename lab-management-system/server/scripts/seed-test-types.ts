@@ -1,11 +1,12 @@
 /**
  * Seeds lab test catalog rows into `test_types` (codes + form templates for Reception & TestRouter).
- * Idempotent: ON DUPLICATE KEY UPDATE refreshes labels/templates by `code`.
+ * Idempotent: inserts missing codes only; never overwrites existing edited rows.
  *
  * Run: pnpm run db:seed:test-types   (loads `test_types` so Reception can filter by category = sampleType)
  * Requires DATABASE_URL in .env
  */
 import "dotenv/config";
+import { eq } from "drizzle-orm";
 import { testTypes } from "../../drizzle/schema";
 import { getDb } from "../db";
 import { OFFICIAL_TEST_CATALOG } from "../data/official-test-catalog";
@@ -19,8 +20,20 @@ async function main() {
     process.exit(1);
   }
 
-  let n = 0;
+  let inserted = 0;
+  let skipped = 0;
   for (const row of ROWS) {
+    const existing = await db
+      .select({ id: testTypes.id })
+      .from(testTypes)
+      .where(eq(testTypes.code, row.code))
+      .limit(1);
+
+    if (existing[0]) {
+      skipped++;
+      continue;
+    }
+
     await db
       .insert(testTypes)
       .values({
@@ -34,25 +47,11 @@ async function main() {
         formTemplate: row.formTemplate,
         isActive: row.isActive ?? true,
         sortOrder: row.sortOrder,
-      })
-      .onDuplicateKeyUpdate({
-        set: {
-          category: row.category,
-          nameEn: row.nameEn,
-          nameAr: row.nameAr,
-          unitPrice: row.unitPrice,
-          unit: row.unit,
-          standardRef: row.standardRef,
-          formTemplate: row.formTemplate,
-          isActive: row.isActive ?? true,
-          sortOrder: row.sortOrder,
-          updatedAt: new Date(),
-        },
       });
-    n++;
+    inserted++;
   }
 
-  console.log(`Seed test types: upserted ${n} rows (by code).`);
+  console.log(`Seed test types: inserted ${inserted}, skipped existing ${skipped}.`);
 }
 
 function isConnRefused(e: unknown): boolean {

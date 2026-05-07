@@ -1614,7 +1614,7 @@ ${testSummaries.length > 0 ? testSummaries.join("\n\n") : "لم تُجرَ اخ�
         groupId: z.number(),
         markNo: z.number(),
         cubeId: z.string().optional(),
-        dateTested: z.string().optional(), // ISO string
+        dateTested: z.string().optional(), // ignored: server stores NOW() on save
         length: z.string().optional().default("150"),
         width: z.string().optional().default("150"),
         height: z.string().optional().default("150"),
@@ -1648,7 +1648,7 @@ ${testSummaries.length > 0 ? testSummaries.join("\n\n") : "لم تُجرَ اخ�
           groupId: input.groupId,
           markNo: input.markNo,
           cubeId: input.cubeId,
-          dateTested: input.dateTested ? new Date(input.dateTested) : undefined,
+          dateTested: new Date(),
           length: input.length ?? "150",
           width: input.width ?? "150",
           height: input.height ?? "150",
@@ -1732,9 +1732,26 @@ ${testSummaries.length > 0 ? testSummaries.join("\n\n") : "لم تُجرَ اخ�
         requireRole(ctx.user.role, ["admin", "technician", "lab_manager"]);
         const group = await getConcreteGroupById(input.groupId);
         if (!group) throw new TRPCError({ code: "NOT_FOUND" });
+        const requiredHeaderFields: Array<{ key: keyof typeof group; label: string }> = [
+          { key: "sourceSupplier", label: "Concrete Source/Supplier" },
+          { key: "classOfConcrete", label: "Class of Concrete" },
+          { key: "maxAggSize", label: "Maximum Aggregate Size (mm)" },
+          { key: "slump", label: "Slump (mm)" },
+          { key: "placeOfSampling", label: "Place of Sampling" },
+        ];
+        const missing = requiredHeaderFields
+          .filter((f) => !String(group[f.key] ?? "").trim())
+          .map((f) => f.label);
+        if (missing.length > 0) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: `Missing required fields: ${missing.join(", ")}`,
+          });
+        }
         await updateConcreteGroupSummary(input.groupId, {
           status: "submitted",
           submittedAt: new Date(),
+          testedBy: ctx.user.name ?? ctx.user.username ?? group.testedBy ?? undefined,
         });
         // Notify sample managers
         await notifyUsersByRole(
