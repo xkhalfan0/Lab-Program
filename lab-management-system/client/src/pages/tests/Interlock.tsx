@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect } from "react";
 import { useParams, useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import DashboardLayout from "@/components/DashboardLayout";
+import { SampleInfoCard } from "@/components/SampleInfoCard";
 import { PassFailBadge, ResultBanner } from "@/components/PassFailBadge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -191,6 +192,7 @@ export default function Interlock() {
   return (
     <DashboardLayout>
       <div className="max-w-5xl mx-auto p-6 space-y-6">
+        <SampleInfoCard dist={dist} />
         <div className="flex items-start justify-between flex-wrap gap-3">
           <div>
             <div className="flex items-center gap-2 text-sm text-slate-500 mb-1">

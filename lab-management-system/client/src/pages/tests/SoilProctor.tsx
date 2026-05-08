@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useParams, useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import DashboardLayout from "@/components/DashboardLayout";
+import { SampleInfoCard } from "@/components/SampleInfoCard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -248,6 +249,7 @@ export default function SoilProctor() {
   return (
     <DashboardLayout>
       <div className="max-w-5xl mx-auto p-6 space-y-6" dir={dir}>
+        <SampleInfoCard dist={dist} />
         {/* Header */}
         <div className="flex items-start justify-between flex-wrap gap-3">
           <div>

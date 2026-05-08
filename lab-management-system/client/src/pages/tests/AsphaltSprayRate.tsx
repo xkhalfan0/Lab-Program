@@ -13,6 +13,7 @@ import { useState, useCallback, useEffect } from "react";
 import { useParams, useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import DashboardLayout from "@/components/DashboardLayout";
+import { SampleInfoCard } from "@/components/SampleInfoCard";
 import { PassFailBadge, ResultBanner } from "@/components/PassFailBadge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -246,6 +247,7 @@ export default function AsphaltSprayRate() {
   return (
     <DashboardLayout>
       <div className="container max-w-4xl py-6 space-y-6">
+        <SampleInfoCard dist={dist} />
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>

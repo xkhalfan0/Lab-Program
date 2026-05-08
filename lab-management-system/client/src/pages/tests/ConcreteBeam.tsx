@@ -21,6 +21,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useParams, useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import DashboardLayout from "@/components/DashboardLayout";
+import { SampleInfoCard } from "@/components/SampleInfoCard";
 import { PassFailBadge, ResultBanner } from "@/components/PassFailBadge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -243,6 +244,7 @@ export default function ConcreteBeam() {
   return (
     <DashboardLayout>
       <div dir={ar ? "rtl" : "ltr"} className="max-w-5xl mx-auto p-6 space-y-6">
+        <SampleInfoCard dist={dist} />
 
         {/* Header */}
         <div className="flex items-start justify-between">

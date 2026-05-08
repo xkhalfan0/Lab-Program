@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useParams, useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import DashboardLayout from "@/components/DashboardLayout";
+import { SampleInfoCard } from "@/components/SampleInfoCard";
 import { PassFailBadge, ResultBanner } from "@/components/PassFailBadge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -330,6 +331,12 @@ export default function SieveAnalysis() {
   return (
     <DashboardLayout>
       <div className="max-w-6xl mx-auto p-6 space-y-6" dir={ar ? "rtl" : "ltr"}>
+        <SampleInfoCard
+          dist={dist}
+          extraFields={[
+            { label: "نوع الركام", value: dist?.testSubType },
+          ]}
+        />
         {/* Header */}
         <div className="flex items-start justify-between flex-wrap gap-3">
           <div>

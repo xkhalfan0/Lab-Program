@@ -11,6 +11,7 @@ import { useState, useCallback } from "react";
 import { useParams } from "wouter";
 import { trpc } from "@/lib/trpc";
 import DashboardLayout from "@/components/DashboardLayout";
+import { SampleInfoCard } from "@/components/SampleInfoCard";
 import { PassFailBadge } from "@/components/PassFailBadge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -136,6 +137,12 @@ export default function AsphaltExtractedSieve() {
   return (
     <DashboardLayout>
       <div className="container max-w-5xl py-6 space-y-6">
+        <SampleInfoCard
+          dist={dist}
+          extraFields={[
+            { label: "نوع الخلطة", value: dist?.testSubType },
+          ]}
+        />
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
