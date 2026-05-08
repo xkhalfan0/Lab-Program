@@ -50,26 +50,9 @@ async function main() {
         )
       `);
       console.log("[migration] ✅ deletion_requests table created with correct column names");
-
-      // Debug: Show actual table structure
-      const tableInfo = await db.execute(sql`DESCRIBE deletion_requests`);
-      console.log("[migration] Table structure:", JSON.stringify(tableInfo, null, 2));
     } catch (e: any) {
       console.error("[migration] Error creating deletion_requests:", e);
       throw e;
-    }
-
-    // Final check: Show table structure
-    console.log("[migration] Final verification - checking deletion_requests table:");
-    try {
-      const tableCheck = await db.execute(sql`DESCRIBE deletion_requests`);
-      const columns = (tableCheck as any)[0] as any[];
-      console.log("[migration] Columns found:");
-      columns.forEach((col: any) => {
-        console.log(`  - ${col.Field} (${col.Type})`);
-      });
-    } catch (e) {
-      console.error("[migration] Could not verify table:", e);
     }
 
     console.log("[migration] ✅ All steps complete!");
