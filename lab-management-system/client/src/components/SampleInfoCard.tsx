@@ -76,12 +76,7 @@ export function SampleInfoCard({ dist, extraFields }: SampleInfoCardProps) {
       ]
     : [];
 
-  // TestSubType field (appears if present)
-  const subTypeField = dist.testSubType
-    ? [{ label: "العمر المطلوب / النوع", value: dist.testSubType }]
-    : [];
-
-  const allFields = [...baseFields, ...concreteFields, ...subTypeField, ...(extraFields ?? [])];
+  const allFields = [...baseFields, ...concreteFields, ...(extraFields ?? [])];
 
   return (
     <Card className="mb-4 border-l-4 border-l-blue-500 bg-blue-50/40 print:hidden">
