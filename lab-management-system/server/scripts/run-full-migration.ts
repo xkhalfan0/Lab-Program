@@ -25,32 +25,34 @@ async function main() {
     console.log("[migration] Step 6: Create deletion_requests table");
     const db = await getDb();
     if (!db) throw new Error("Database connection failed");
+
     try {
+      // Drop existing table to recreate with correct column names
+      await db.execute(sql`DROP TABLE IF EXISTS deletion_requests`);
+      console.log("[migration] Dropped existing deletion_requests table");
+
       await db.execute(sql`
-      CREATE TABLE IF NOT EXISTS deletion_requests (
-        id INT AUTO_INCREMENT NOT NULL,
-        requestedBy INT NOT NULL,
-        targetTable VARCHAR(50) NOT NULL,
-        targetId INT NOT NULL,
-        reason TEXT NOT NULL,
-        reasonCategory ENUM('data_error','duplicate','customer_request','compliance','test_data','other') NOT NULL,
-        impactAnalysis TEXT,
-        status ENUM('pending','approved','rejected') NOT NULL DEFAULT 'pending',
-        reviewedBy INT,
-        reviewedAt TIMESTAMP NULL,
-        reviewComment TEXT,
-        createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-        CONSTRAINT deletion_requests_id PRIMARY KEY(id)
-      )
-    `);
-      console.log("[migration] ✅ deletion_requests table created/verified");
+        CREATE TABLE deletion_requests (
+          id INT AUTO_INCREMENT NOT NULL,
+          requestedBy INT NOT NULL,
+          targetTable VARCHAR(50) NOT NULL,
+          targetId INT NOT NULL,
+          reason TEXT NOT NULL,
+          reasonCategory ENUM('data_error','duplicate','customer_request','compliance','test_data','other') NOT NULL,
+          impactAnalysis TEXT,
+          status ENUM('pending','approved','rejected') NOT NULL DEFAULT 'pending',
+          reviewedBy INT,
+          reviewedAt TIMESTAMP NULL,
+          reviewComment TEXT,
+          createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+          CONSTRAINT deletion_requests_id PRIMARY KEY(id)
+        )
+      `);
+      console.log("[migration] ✅ deletion_requests table created with correct column names");
     } catch (e: any) {
-      if (e.code === "ER_TABLE_EXISTS_ERR") {
-        console.log("[migration] deletion_requests table already exists ✅");
-      } else {
-        console.error("[migration] Error creating deletion_requests:", e);
-      }
+      console.error("[migration] Error creating deletion_requests:", e);
+      throw e;
     }
 
     console.log("[migration] ✅ All steps complete!");
