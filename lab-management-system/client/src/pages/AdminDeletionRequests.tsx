@@ -496,7 +496,11 @@ export default function AdminDeletionRequests() {
                                     <h4 className="text-sm font-semibold text-slate-900 mb-2">
                                       {lang === "ar" ? "تحليل التأثير:" : "Impact Analysis:"}
                                     </h4>
-                                    <DeletionImpactDisplay impact={impact} />
+                                    <DeletionImpactDisplay
+                                      affectedTables={impact.affectedTables}
+                                      totalRecords={impact.totalRecords}
+                                      warnings={impact.warnings}
+                                    />
                                   </div>
 
                                   {/* Review Comment (if rejected) */}

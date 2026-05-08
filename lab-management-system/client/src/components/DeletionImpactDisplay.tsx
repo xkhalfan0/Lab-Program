@@ -1,15 +1,26 @@
 import { AlertTriangle, Info } from "lucide-react";
 
-interface DeletionImpactDisplayProps {
-  impact: {
-    affectedTables: Record<string, number>;
-    totalRecords: number;
-    canDelete: boolean;
-    warnings: string[];
-  };
+interface DeletionImpact {
+  affectedTables: Record<string, number>;
+  totalRecords: number;
+  canDelete?: boolean;
+  warnings: string[];
 }
 
-export function DeletionImpactDisplay({ impact }: DeletionImpactDisplayProps) {
+interface DeletionImpactDisplayProps {
+  impact?: DeletionImpact;
+  affectedTables?: Record<string, number>;
+  totalRecords?: number;
+  warnings?: string[];
+  [key: string]: unknown;
+}
+
+export function DeletionImpactDisplay(props: DeletionImpactDisplayProps) {
+  const impact: DeletionImpact = props.impact ?? {
+    affectedTables: props.affectedTables ?? {},
+    totalRecords: props.totalRecords ?? 0,
+    warnings: props.warnings ?? [],
+  };
   if (impact.totalRecords === 0) {
     return (
       <div className="bg-green-50 border border-green-200 rounded-lg p-4">
