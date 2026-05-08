@@ -262,6 +262,12 @@ function DistributionAllOrdersStatusCell({ order }: { order: any }) {
   );
 }
 
+/** Pending-distribution table: deletion badge only (hook cannot run inside map/IIFE). */
+function DistributionPendingOrderDeletionBadgeCell({ order }: { order: any }) {
+  const { PendingDeletionBadge } = useDistributionRowDeletionStatus(order);
+  return <>{PendingDeletionBadge}</>;
+}
+
 function DistributionPendingOrderActionsCell({
   order,
   lang,
@@ -727,6 +733,9 @@ export default function Distribution() {
                         <th className="text-start px-4 py-2.5 text-xs font-medium text-muted-foreground">{lang === "ar" ? "الاختبارات" : "Tests"}</th>
                         <th className="text-start px-4 py-2.5 text-xs font-medium text-muted-foreground">{lang === "ar" ? "القطاع" : "Sector"}</th>
                         <th className="text-start px-4 py-2.5 text-xs font-medium text-muted-foreground">{lang === "ar" ? "تاريخ الاستلام" : "Received"}</th>
+                        <th className="text-start px-4 py-2.5 text-xs font-medium text-muted-foreground">
+                          {lang === "ar" ? "الحالة" : "Status"}
+                        </th>
                         <th className="text-start px-4 py-2.5 text-xs font-medium text-muted-foreground">{lang === "ar" ? "الإجراء" : "Action"}</th>
                       </tr>
                     </thead>
@@ -767,6 +776,9 @@ export default function Distribution() {
                           </td>
                           <td className="px-4 py-2.5 text-xs text-muted-foreground">
                             {new Date(order.createdAt).toLocaleDateString(lang === "ar" ? "ar-AE" : "en-AE")}
+                          </td>
+                          <td className="px-4 py-2.5">
+                            <DistributionPendingOrderDeletionBadgeCell order={order} />
                           </td>
                           <td className="px-4 py-2.5">
                             <DistributionPendingOrderActionsCell
