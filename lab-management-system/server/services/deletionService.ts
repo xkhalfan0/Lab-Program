@@ -122,9 +122,15 @@ export async function createDeletionRequest(
       status: "pending",
     });
 
-    const requestId = (result as any).insertId;
+    // Get the inserted ID properly
+    const insertResult = result as any;
+    const requestId = insertResult.insertId || insertResult[0]?.insertId;
 
-    // TODO: Send notification to admin
+    if (!requestId) {
+      console.error("[deletionService] Failed to get insertId from result:", result);
+      return { success: false, error: "Failed to create deletion request" };
+    }
+
     console.log(
       `[deletionService] Created deletion request #${requestId} for ${targetTable}:${targetId}`
     );
