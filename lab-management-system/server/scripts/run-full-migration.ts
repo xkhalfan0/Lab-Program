@@ -50,6 +50,10 @@ async function main() {
         )
       `);
       console.log("[migration] ✅ deletion_requests table created with correct column names");
+
+      // Debug: Show actual table structure
+      const tableInfo = await db.execute(sql`DESCRIBE deletion_requests`);
+      console.log("[migration] Table structure:", JSON.stringify(tableInfo, null, 2));
     } catch (e: any) {
       console.error("[migration] Error creating deletion_requests:", e);
       throw e;
