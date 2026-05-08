@@ -252,6 +252,16 @@ function useDistributionRowDeletionStatus(order: any) {
   return { hasPendingDeletion, PendingDeletionBadge, DisabledWarning };
 }
 
+function DistributionAllOrdersStatusCell({ order }: { order: any }) {
+  const deletionStatus = useDistributionRowDeletionStatus(order);
+  return (
+    <div className="flex items-center gap-2 flex-wrap">
+      <StatusBadge status={order.status} />
+      {deletionStatus.PendingDeletionBadge}
+    </div>
+  );
+}
+
 function DistributionPendingOrderActionsCell({
   order,
   lang,
@@ -832,7 +842,7 @@ export default function Distribution() {
                             {toText(order.assignedTechnicianName)}
                           </td>
                           <td className="px-4 py-2.5">
-                            <StatusBadge status={order.status} />
+                            <DistributionAllOrdersStatusCell order={order} />
                           </td>
                           <td className="px-4 py-2.5">
                             <DistributionAllOrdersActionsCell
