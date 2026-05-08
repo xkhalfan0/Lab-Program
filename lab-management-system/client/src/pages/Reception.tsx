@@ -15,11 +15,13 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { FlaskConical, Plus, Search, Eye, Printer, FileText, Lock, Building2, Pencil, X, Trash2, Layers, CheckSquare, Package, CalendarIcon } from "lucide-react";
-import { useState, useMemo } from "react";
+import { useState, useMemo, type ReactElement } from "react";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { useLocation } from "wouter";
+import { useDeletionStatus } from "@/hooks/useDeletionStatus";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 // ─── Sub-type options per test CODE ─────────────────────────────────────────
 const SUBTYPES_BY_CODE: Record<string, { value: string; labelAr: string; labelEn: string }[]> = {
@@ -195,6 +197,111 @@ const emptyForm = () => ({
   castingDate: undefined as Date | undefined,
   priority: "normal" as "low" | "normal" | "high" | "urgent",
 });
+
+function ReceptionOrderActionsCell({
+  order,
+  lang,
+  setLocation,
+  canEditSample,
+  handleEditOrder,
+  onDeletionSuccess,
+}: {
+  order: any;
+  lang: string;
+  setLocation: (path: string) => void;
+  canEditSample: boolean;
+  handleEditOrder: (order: any) => void;
+  onDeletionSuccess: () => void;
+}) {
+  const sampleId = typeof order.sampleId === "number" ? order.sampleId : Number(order.sampleId) || 0;
+  const { hasPendingDeletion, PendingDeletionBadge, DisabledWarning } = useDeletionStatus("samples", sampleId);
+
+  const wrapDisabledAction = (node: ReactElement) =>
+    hasPendingDeletion ? (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span className="inline-flex cursor-not-allowed">{node}</span>
+        </TooltipTrigger>
+        <TooltipContent side="top" className="max-w-xs">
+          {DisabledWarning}
+        </TooltipContent>
+      </Tooltip>
+    ) : (
+      node
+    );
+
+  return (
+    <div className="flex items-center gap-1 flex-wrap">
+      {PendingDeletionBadge}
+      {wrapDisabledAction(
+        <Button
+          size="sm"
+          variant="ghost"
+          className="h-7 px-2"
+          title={lang === "ar" ? "عرض" : "View"}
+          disabled={hasPendingDeletion}
+          onClick={() => setLocation(`/order/${order.id}`)}
+        >
+          <Eye className="w-3.5 h-3.5" />
+        </Button>
+      )}
+      {wrapDisabledAction(
+        <Button
+          size="sm"
+          variant="ghost"
+          className="h-7 px-2"
+          title={lang === "ar" ? "طباعة وصل الاستلام" : "Print Receipt"}
+          disabled={hasPendingDeletion}
+          onClick={() => window.open(`/print-receipt/${order.sampleId}`, "_blank")}
+        >
+          <Printer className="w-3.5 h-3.5" />
+        </Button>
+      )}
+      {canEditSample &&
+        ["pending", "distributed"].includes(order.status) &&
+        wrapDisabledAction(
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-7 px-2 text-blue-600 hover:text-blue-700"
+            title={lang === "ar" ? "تعديل" : "Edit"}
+            disabled={hasPendingDeletion}
+            onClick={() => handleEditOrder(order)}
+          >
+            <Pencil className="w-3.5 h-3.5" />
+          </Button>
+        )}
+      {hasPendingDeletion ? (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span className="inline-flex cursor-not-allowed opacity-60">
+              <span className="pointer-events-none inline-flex">
+                <DeletionRequestButton
+                  targetTable="lab_orders"
+                  targetId={order.id}
+                  targetLabel={`Order ${order.orderCode}`}
+                  variant="icon"
+                  onSuccess={onDeletionSuccess}
+                />
+              </span>
+            </span>
+          </TooltipTrigger>
+          <TooltipContent side="top" className="max-w-xs">
+            {DisabledWarning}
+          </TooltipContent>
+        </Tooltip>
+      ) : (
+        <DeletionRequestButton
+          targetTable="lab_orders"
+          targetId={order.id}
+          targetLabel={`Order ${order.orderCode}`}
+          variant="icon"
+          onSuccess={onDeletionSuccess}
+        />
+      )}
+    </div>
+  );
+}
 
 export default function Reception() {
   const { t, lang } = useLanguage();
@@ -1228,29 +1335,14 @@ export default function Reception() {
                           {new Date(order.createdAt).toLocaleDateString(lang === "ar" ? "ar-AE" : "en-AE")}
                         </td>
                         <td className="px-4 py-2.5">
-                          <div className="flex items-center gap-1">
-                            <Button size="sm" variant="ghost" className="h-7 px-2" title={lang === "ar" ? "عرض" : "View"}
-                              onClick={() => setLocation(`/order/${order.id}`)}>
-                              <Eye className="w-3.5 h-3.5" />
-                            </Button>
-                            <Button size="sm" variant="ghost" className="h-7 px-2" title={lang === "ar" ? "طباعة وصل الاستلام" : "Print Receipt"}
-                              onClick={() => window.open(`/print-receipt/${order.sampleId}`, "_blank")}>
-                              <Printer className="w-3.5 h-3.5" />
-                            </Button>
-                            {canEditSample && ["pending", "distributed"].includes(order.status) && (
-                              <Button size="sm" variant="ghost" className="h-7 px-2 text-blue-600 hover:text-blue-700" title={lang === "ar" ? "تعديل" : "Edit"}
-                                onClick={() => handleEditOrder(order)}>
-                                <Pencil className="w-3.5 h-3.5" />
-                              </Button>
-                            )}
-                            <DeletionRequestButton
-                              targetTable="lab_orders"
-                              targetId={order.id}
-                              targetLabel={`Order ${order.orderCode}`}
-                              variant="icon"
-                              onSuccess={() => refetch()}
-                            />
-                          </div>
+                          <ReceptionOrderActionsCell
+                            order={order}
+                            lang={lang}
+                            setLocation={setLocation}
+                            canEditSample={canEditSample}
+                            handleEditOrder={handleEditOrder}
+                            onDeletionSuccess={() => refetch()}
+                          />
                         </td>
                       </tr>
                     ))}

@@ -1,4 +1,4 @@
-import { desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { deletionRequests } from "../../drizzle/schema";
 import { getDb } from "../db";
@@ -109,6 +109,33 @@ export const deletionRouter = router({
         console.error("[directDelete] Error:", e);
         throw new Error(`Delete failed: ${e.message || "Unknown error"}`);
       }
+    }),
+
+  /** Any authenticated user: whether a pending deletion request exists for this entity */
+  getPendingForTarget: protectedProcedure
+    .input(
+      z.object({
+        targetTable: z.string(),
+        targetId: z.number(),
+      })
+    )
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new Error("Database connection failed");
+
+      const rows = await db
+        .select({ id: deletionRequests.id })
+        .from(deletionRequests)
+        .where(
+          and(
+            eq(deletionRequests.targetTable, input.targetTable),
+            eq(deletionRequests.targetId, input.targetId),
+            eq(deletionRequests.status, "pending")
+          )
+        )
+        .limit(1);
+
+      return { pending: rows.length > 0, requestId: rows[0]?.id ?? null };
     }),
 
   // Get pending deletion requests (admin only)

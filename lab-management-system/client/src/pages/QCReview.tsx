@@ -14,18 +14,28 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { trpc } from "@/lib/trpc";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { useDeletionStatus } from "@/hooks/useDeletionStatus";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { SAMPLE_TYPE_LABELS } from "@/lib/labTypes";
 import {
   ShieldCheck, CheckCircle, XCircle, RotateCcw, ClipboardCheck,
   BadgeCheck, FlaskConical, Clock, DollarSign, CheckCircle2,
   History, ChevronRight, ExternalLink,
 } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, type ReactElement } from "react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { toast } from "sonner";
 import {
-  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
-  LineChart, Line, ReferenceLine, Cell,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  Tooltip as RechartsTooltip,
+  ResponsiveContainer,
+  LineChart,
+  Line,
+  ReferenceLine,
+  Cell,
 } from "recharts";
 
 // ─── Task state helpers ───────────────────────────────────────────────────────
@@ -63,6 +73,170 @@ function TaskStateBadge({ state, lang }: { state: "new" | "incomplete" | "comple
       <CheckCircle2 className="w-3 h-3" />
       {lang === "ar" ? "مُنجزة" : "Completed"}
     </Badge>
+  );
+}
+
+function wrapDisabledWithTooltip(
+  hasPendingDeletion: boolean,
+  DisabledWarning: React.ReactNode,
+  node: ReactElement
+) {
+  return hasPendingDeletion ? (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span className="inline-flex cursor-not-allowed">{node}</span>
+      </TooltipTrigger>
+      <TooltipContent side="top" className="max-w-xs">
+        {DisabledWarning}
+      </TooltipContent>
+    </Tooltip>
+  ) : (
+    node
+  );
+}
+
+function QCReviewActiveSampleCard({
+  sample,
+  lang,
+  onOpen,
+  onRefetch,
+}: {
+  sample: any;
+  lang: string;
+  onOpen: (s: any) => void;
+  onRefetch: () => void;
+}) {
+  const state = getSampleTaskState(sample);
+  const { hasPendingDeletion, PendingDeletionBadge, DisabledWarning } = useDeletionStatus("samples", sample.id);
+
+  const tryOpen = () => {
+    if (hasPendingDeletion) {
+      toast.warning(
+        lang === "ar"
+          ? "طلب حذف قيد الانتظار لهذه العينة."
+          : "A deletion request is pending for this sample."
+      );
+      return;
+    }
+    onOpen(sample);
+  };
+
+  return (
+    <Card
+      className={`hover:shadow-md transition-shadow border-l-4 ${
+        hasPendingDeletion
+          ? "cursor-not-allowed opacity-90 border-l-muted bg-muted/20"
+          : "cursor-pointer " +
+            (state === "new"
+              ? "border-l-red-400 bg-red-50/20"
+              : state === "incomplete"
+                ? "border-l-amber-400 bg-amber-50/20"
+                : "border-l-green-400")
+      }`}
+      onClick={tryOpen}
+    >
+      <CardContent className="p-4 flex items-center justify-between gap-3">
+        <div className="space-y-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <p className="font-mono text-sm font-bold text-primary">{sample.sampleCode}</p>
+            <TaskStateBadge state={state} lang={lang} />
+            <StatusBadge status={sample.status} />
+            {PendingDeletionBadge}
+          </div>
+          <p className="text-xs text-muted-foreground">
+            {sample.contractorName} — {sample.contractNumber ?? "—"}
+          </p>
+          <p className="text-xs">{SAMPLE_TYPE_LABELS[sample.sampleType]}</p>
+        </div>
+        <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
+          {wrapDisabledWithTooltip(
+            hasPendingDeletion,
+            DisabledWarning,
+            <Button size="sm" variant="outline" className="gap-1.5" disabled={hasPendingDeletion}>
+              <ClipboardCheck className="w-3.5 h-3.5" />
+              {lang === "ar" ? "مراجعة جودة" : "QC Review"}
+            </Button>
+          )}
+          {hasPendingDeletion ? (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span className="inline-flex cursor-not-allowed opacity-60">
+                  <span className="pointer-events-none inline-flex">
+                    <DeletionRequestButton
+                      targetTable="samples"
+                      targetId={sample.id}
+                      targetLabel={`Sample ${sample.sampleCode}`}
+                      variant="icon"
+                      onSuccess={onRefetch}
+                    />
+                  </span>
+                </span>
+              </TooltipTrigger>
+              <TooltipContent side="top" className="max-w-xs">
+                {DisabledWarning}
+              </TooltipContent>
+            </Tooltip>
+          ) : (
+            <DeletionRequestButton
+              targetTable="samples"
+              targetId={sample.id}
+              targetLabel={`Sample ${sample.sampleCode}`}
+              variant="icon"
+              onSuccess={onRefetch}
+            />
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function QCReviewArchiveSampleCard({
+  sample,
+  lang,
+  onOpen,
+}: {
+  sample: any;
+  lang: string;
+  onOpen: (s: any) => void;
+}) {
+  const { hasPendingDeletion, PendingDeletionBadge, DisabledWarning } = useDeletionStatus("samples", sample.id);
+
+  const tryOpen = () => {
+    if (hasPendingDeletion) {
+      toast.warning(
+        lang === "ar"
+          ? "طلب حذف قيد الانتظار لهذه العينة."
+          : "A deletion request is pending for this sample."
+      );
+      return;
+    }
+    onOpen(sample);
+  };
+
+  return (
+    <Card
+      className={`border-l-4 border-l-green-400 hover:shadow-sm transition-shadow ${
+        hasPendingDeletion ? "cursor-not-allowed opacity-90" : "cursor-pointer"
+      }`}
+      onClick={tryOpen}
+    >
+      <CardContent className="p-3 flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2 flex-wrap min-w-0">
+          <p className="font-mono text-xs font-bold text-primary">{sample.sampleCode}</p>
+          <TaskStateBadge state="completed" lang={lang} />
+          <StatusBadge status={sample.status} />
+          {PendingDeletionBadge}
+        </div>
+        {wrapDisabledWithTooltip(
+          hasPendingDeletion,
+          DisabledWarning,
+          <span className="inline-flex">
+            <ChevronRight className={`w-4 h-4 text-muted-foreground ${lang === "ar" ? "rotate-180" : ""}`} />
+          </span>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -485,6 +659,12 @@ export default function QCReview() {
     onError: (err) => toast.error(err.message),
   });
 
+  const {
+    hasPendingDeletion: dialogSamplePending,
+    PendingDeletionBadge: dialogSamplePendingBadge,
+    DisabledWarning: dialogSampleDisabledWarning,
+  } = useDeletionStatus("samples", selectedSample?.id ?? 0);
+
   // All samples that have been approved (ready for QC) or already QC'd
   const qcSamples = samples?.filter((s) =>
     ["approved", "revision_requested", "qc_passed", "qc_failed", "clearance_issued", "rejected"].includes(s.status)
@@ -552,6 +732,14 @@ export default function QCReview() {
   };
 
   const handleReview = () => {
+    if (dialogSamplePending) {
+      toast.warning(
+        lang === "ar"
+          ? "طلب حذف قيد الانتظار لهذه العينة."
+          : "A deletion request is pending for this sample."
+      );
+      return;
+    }
     if (!decision) { toast.error(lang === "ar" ? "يرجى اختيار قرار" : "Please select a decision"); return; }
     if (!result) { toast.error(lang === "ar" ? "لم يتم العثور على نتيجة" : "No test result found"); return; }
     // Enforce mandatory notes on reject/revision
@@ -623,36 +811,21 @@ export default function QCReview() {
             </Card>
           ) : (
             <div className="grid gap-3">
-              {activeSamples.map((sample) => {
-                const state = getSampleTaskState(sample);
-                return (
-                  <Card key={sample.id} className={`hover:shadow-md transition-shadow cursor-pointer border-l-4 ${state === "new" ? "border-l-red-400 bg-red-50/20" : state === "incomplete" ? "border-l-amber-400 bg-amber-50/20" : "border-l-green-400"}`}
-                    onClick={() => { setSelectedSample(sample); setComments(""); setSignature(""); setDecision(null); setLoadTimedOut(false); }}>
-                    <CardContent className="p-4 flex items-center justify-between">
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <p className="font-mono text-sm font-bold text-primary">{sample.sampleCode}</p>
-                          <TaskStateBadge state={state} lang={lang} />
-                          <StatusBadge status={sample.status} />
-                        </div>
-                        <p className="text-xs text-muted-foreground">{sample.contractorName} — {sample.contractNumber ?? "—"}</p>
-                        <p className="text-xs">{SAMPLE_TYPE_LABELS[sample.sampleType]}</p>
-                      </div>
-                      <Button size="sm" variant="outline" className="gap-1.5">
-                        <ClipboardCheck className="w-3.5 h-3.5" />
-                        {lang === "ar" ? "مراجعة جودة" : "QC Review"}
-                      </Button>
-                    <DeletionRequestButton
-                      targetTable="samples"
-                      targetId={sample.id}
-                      targetLabel={`Sample ${sample.sampleCode}`}
-                      variant="icon"
-                      onSuccess={() => refetch()}
-                    />
-                    </CardContent>
-                  </Card>
-                );
-              })}
+              {activeSamples.map((sample) => (
+                <QCReviewActiveSampleCard
+                  key={sample.id}
+                  sample={sample}
+                  lang={lang}
+                  onOpen={(s) => {
+                    setSelectedSample(s);
+                    setComments("");
+                    setSignature("");
+                    setDecision(null);
+                    setLoadTimedOut(false);
+                  }}
+                  onRefetch={() => refetch()}
+                />
+              ))}
             </div>
           )}
 
@@ -666,18 +839,19 @@ export default function QCReview() {
               </Button>
               {showHistory && (
                 <div className="grid gap-2 mt-2 opacity-70">
-                  {completedSamples.map(sample => (
-                    <Card key={sample.id} className="border-l-4 border-l-green-400 cursor-pointer hover:shadow-sm"
-                      onClick={() => { setSelectedSample(sample); setComments(""); setSignature(""); setDecision(null); setLoadTimedOut(false); }}>
-                      <CardContent className="p-3 flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <p className="font-mono text-xs font-bold text-primary">{sample.sampleCode}</p>
-                          <TaskStateBadge state="completed" lang={lang} />
-                          <StatusBadge status={sample.status} />
-                        </div>
-                        <ChevronRight className={`w-4 h-4 text-muted-foreground ${lang === "ar" ? "rotate-180" : ""}`} />
-                      </CardContent>
-                    </Card>
+                  {completedSamples.map((sample) => (
+                    <QCReviewArchiveSampleCard
+                      key={sample.id}
+                      sample={sample}
+                      lang={lang}
+                      onOpen={(s) => {
+                        setSelectedSample(s);
+                        setComments("");
+                        setSignature("");
+                        setDecision(null);
+                        setLoadTimedOut(false);
+                      }}
+                    />
                   ))}
                 </div>
               )}
@@ -690,9 +864,10 @@ export default function QCReview() {
       <Dialog open={!!selectedSample} onOpenChange={(o) => !o && setSelectedSample(null)}>
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
+            <DialogTitle className="flex items-center gap-2 flex-wrap">
               <ShieldCheck className="w-5 h-5" />
               {lang === "ar" ? `ضبط الجودة — ${selectedSample?.sampleCode}` : `QC Review — ${selectedSample?.sampleCode}`}
+              {dialogSamplePendingBadge}
             </DialogTitle>
           </DialogHeader>
 
@@ -701,9 +876,18 @@ export default function QCReview() {
               {loadTimedOut ? (
                 <div className="space-y-3">
                   <p>{lang === "ar" ? "تعذر تحميل النتائج" : "Could not load results"}</p>
-                  <Button variant="outline" size="sm" onClick={handleRetryLoad}>
-                    {lang === "ar" ? "إعادة المحاولة" : "Retry"}
-                  </Button>
+                  {wrapDisabledWithTooltip(
+                    dialogSamplePending,
+                    dialogSampleDisabledWarning,
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={dialogSamplePending}
+                      onClick={handleRetryLoad}
+                    >
+                      {lang === "ar" ? "إعادة المحاولة" : "Retry"}
+                    </Button>
+                  )}
                 </div>
               ) : (
                 <p>{lang === "ar" ? "جاري تحميل النتائج..." : "Loading results..."}</p>
@@ -753,25 +937,43 @@ export default function QCReview() {
 
               {/* Full Report Link */}
               <div className="flex gap-2">
-                {(dist?.id || (selectedSample as any)?.batchId) && (
-                  <Button variant="outline" size="sm" className="gap-1.5 flex-1" onClick={() => {
-                    const batchId = (selectedSample as any)?.batchId;
-                    if (batchId) {
-                      window.open(`/batch-report/${batchId}`, "_blank");
-                    } else if (dist?.id) {
-                      window.open(`/test-report/${dist.id}`, "_blank");
-                    }
-                  }}>
-                    <ExternalLink className="w-3.5 h-3.5" />
-                    {lang === "ar" ? "تقرير الاختبار" : "Test Report"}
-                  </Button>
-                )}
-                {sampleOrders && sampleOrders.length > 0 && (
-                  <Button variant="default" size="sm" className="gap-1.5 flex-1 bg-blue-600 hover:bg-blue-700" onClick={() => window.open(`/order-report/${sampleOrders[0].id}`, "_blank")}>
-                    <ExternalLink className="w-3.5 h-3.5" />
-                    {lang === "ar" ? "التقرير الموحد للطلب" : "Unified Order Report"}
-                  </Button>
-                )}
+                {(dist?.id || (selectedSample as any)?.batchId) &&
+                  wrapDisabledWithTooltip(
+                    dialogSamplePending,
+                    dialogSampleDisabledWarning,
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="gap-1.5 flex-1"
+                      disabled={dialogSamplePending}
+                      onClick={() => {
+                        const batchId = (selectedSample as any)?.batchId;
+                        if (batchId) {
+                          window.open(`/batch-report/${batchId}`, "_blank");
+                        } else if (dist?.id) {
+                          window.open(`/test-report/${dist.id}`, "_blank");
+                        }
+                      }}
+                    >
+                      <ExternalLink className="w-3.5 h-3.5" />
+                      {lang === "ar" ? "تقرير الاختبار" : "Test Report"}
+                    </Button>
+                  )}
+                {sampleOrders && sampleOrders.length > 0 &&
+                  wrapDisabledWithTooltip(
+                    dialogSamplePending,
+                    dialogSampleDisabledWarning,
+                    <Button
+                      variant="default"
+                      size="sm"
+                      className="gap-1.5 flex-1 bg-blue-600 hover:bg-blue-700"
+                      disabled={dialogSamplePending}
+                      onClick={() => window.open(`/order-report/${sampleOrders[0].id}`, "_blank")}
+                    >
+                      <ExternalLink className="w-3.5 h-3.5" />
+                      {lang === "ar" ? "التقرير الموحد للطلب" : "Unified Order Report"}
+                    </Button>
+                  )}
               </div>
 
               {/* Charts */}
@@ -783,7 +985,7 @@ export default function QCReview() {
                       <LineChart data={trendData}>
                         <XAxis dataKey="name" tick={{ fontSize: 10 }} />
                         <YAxis tick={{ fontSize: 10 }} />
-                        <Tooltip />
+                        <RechartsTooltip />
                         {minVal != null && <ReferenceLine y={minVal} stroke="#ef4444" strokeDasharray="3 3" />}
                         {maxVal != null && <ReferenceLine y={maxVal} stroke="#f97316" strokeDasharray="3 3" />}
                         <ReferenceLine y={avg} stroke="#3b82f6" strokeDasharray="3 3" />
@@ -797,7 +999,7 @@ export default function QCReview() {
                       <BarChart data={barData}>
                         <XAxis dataKey="name" tick={{ fontSize: 10 }} />
                         <YAxis tick={{ fontSize: 10 }} />
-                        <Tooltip />
+                        <RechartsTooltip />
                         <Bar dataKey="value" radius={[3, 3, 0, 0]}>
                           {barData.map((entry, i) => <Cell key={i} fill={entry.fill} />)}
                         </Bar>
@@ -836,9 +1038,12 @@ export default function QCReview() {
                   "Documentation is complete",
                   "Results are reasonable and consistent",
                   "Procedures were followed correctly",
-                ]).map((item, i) => (
-                  <label key={i} className="flex items-center gap-2 text-xs cursor-pointer">
-                    <input type="checkbox" className="rounded" />
+                ]                ).map((item, i) => (
+                  <label
+                    key={i}
+                    className={`flex items-center gap-2 text-xs ${dialogSamplePending ? "cursor-not-allowed opacity-70" : "cursor-pointer"}`}
+                  >
+                    <input type="checkbox" className="rounded" disabled={dialogSamplePending} />
                     <span>{item}</span>
                   </label>
                 ))}
@@ -848,24 +1053,51 @@ export default function QCReview() {
               <div className="space-y-3 border-t pt-4">
                 <Label className="text-sm font-semibold">{lang === "ar" ? "قرار ضبط الجودة" : "QC Final Decision"}</Label>
                 <div className="flex gap-2">
-                  <Button type="button" size="sm" variant={decision === "approved" ? "default" : "outline"}
-                    className={`gap-1.5 flex-1 ${decision === "approved" ? "bg-green-600 hover:bg-green-700" : ""}`}
-                    onClick={() => setDecision("approved")}>
-                    <CheckCircle className="w-3.5 h-3.5" />
-                    {lang === "ar" ? "اعتماد الجودة" : "QC Approved"}
-                  </Button>
-                  <Button type="button" size="sm" variant={decision === "needs_revision" ? "default" : "outline"}
-                    className={`gap-1.5 flex-1 ${decision === "needs_revision" ? "bg-amber-600 hover:bg-amber-700" : ""}`}
-                    onClick={() => setDecision("needs_revision")}>
-                    <RotateCcw className="w-3.5 h-3.5" />
-                    {lang === "ar" ? "طلب مراجعة" : "Request Revision"}
-                  </Button>
-                  <Button type="button" size="sm" variant={decision === "rejected" ? "default" : "outline"}
-                    className={`gap-1.5 flex-1 ${decision === "rejected" ? "bg-red-600 hover:bg-red-700" : ""}`}
-                    onClick={() => setDecision("rejected")}>
-                    <XCircle className="w-3.5 h-3.5" />
-                    {lang === "ar" ? "رفض" : "Reject"}
-                  </Button>
+                  {wrapDisabledWithTooltip(
+                    dialogSamplePending,
+                    dialogSampleDisabledWarning,
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={decision === "approved" ? "default" : "outline"}
+                      className={`gap-1.5 flex-1 ${decision === "approved" ? "bg-green-600 hover:bg-green-700" : ""} ${dialogSamplePending ? "opacity-60" : ""}`}
+                      disabled={dialogSamplePending}
+                      onClick={() => setDecision("approved")}
+                    >
+                      <CheckCircle className="w-3.5 h-3.5" />
+                      {lang === "ar" ? "اعتماد الجودة" : "QC Approved"}
+                    </Button>
+                  )}
+                  {wrapDisabledWithTooltip(
+                    dialogSamplePending,
+                    dialogSampleDisabledWarning,
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={decision === "needs_revision" ? "default" : "outline"}
+                      className={`gap-1.5 flex-1 ${decision === "needs_revision" ? "bg-amber-600 hover:bg-amber-700" : ""} ${dialogSamplePending ? "opacity-60" : ""}`}
+                      disabled={dialogSamplePending}
+                      onClick={() => setDecision("needs_revision")}
+                    >
+                      <RotateCcw className="w-3.5 h-3.5" />
+                      {lang === "ar" ? "طلب مراجعة" : "Request Revision"}
+                    </Button>
+                  )}
+                  {wrapDisabledWithTooltip(
+                    dialogSamplePending,
+                    dialogSampleDisabledWarning,
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={decision === "rejected" ? "default" : "outline"}
+                      className={`gap-1.5 flex-1 ${decision === "rejected" ? "bg-red-600 hover:bg-red-700" : ""} ${dialogSamplePending ? "opacity-60" : ""}`}
+                      disabled={dialogSamplePending}
+                      onClick={() => setDecision("rejected")}
+                    >
+                      <XCircle className="w-3.5 h-3.5" />
+                      {lang === "ar" ? "رفض" : "Reject"}
+                    </Button>
+                  )}
                 </div>
 
                 <div className="space-y-1.5">
@@ -885,6 +1117,7 @@ export default function QCReview() {
                         : (lang === "ar" ? "أضف ملاحظات ونتائج الفحص..." : "Add QC notes and findings...")
                     }
                     value={comments}
+                    disabled={dialogSamplePending}
                     onChange={(e) => setComments(e.target.value)}
                     className={(decision === "rejected" || decision === "needs_revision") && !comments.trim() ? "border-amber-400 focus:border-amber-500" : ""}
                   />
@@ -910,18 +1143,32 @@ export default function QCReview() {
                 </div>
 
                 <div className="flex gap-2">
-                  <Button
-                    className={`flex-1 ${
-                      decision === "approved" ? "bg-green-600 hover:bg-green-700" :
-                      decision === "needs_revision" ? "bg-amber-600 hover:bg-amber-700" :
-                      decision === "rejected" ? "bg-red-600 hover:bg-red-700" : ""
-                    }`}
-                    disabled={!decision || qcReview.isPending || ((decision === "rejected" || decision === "needs_revision") && !comments.trim())}
-                    onClick={handleReview}>
-                    {qcReview.isPending
-                      ? (lang === "ar" ? "جاري الإرسال..." : "Submitting...")
-                      : (lang === "ar" ? "إرسال ضبط الجودة" : "Submit QC Review")}
-                  </Button>
+                  {wrapDisabledWithTooltip(
+                    dialogSamplePending,
+                    dialogSampleDisabledWarning,
+                    <Button
+                      className={`flex-1 ${
+                        decision === "approved"
+                          ? "bg-green-600 hover:bg-green-700"
+                          : decision === "needs_revision"
+                          ? "bg-amber-600 hover:bg-amber-700"
+                          : decision === "rejected"
+                          ? "bg-red-600 hover:bg-red-700"
+                          : ""
+                      }`}
+                      disabled={
+                        dialogSamplePending ||
+                        !decision ||
+                        qcReview.isPending ||
+                        ((decision === "rejected" || decision === "needs_revision") && !comments.trim())
+                      }
+                      onClick={handleReview}
+                    >
+                      {qcReview.isPending
+                        ? (lang === "ar" ? "جاري الإرسال..." : "Submitting...")
+                        : (lang === "ar" ? "إرسال ضبط الجودة" : "Submit QC Review")}
+                    </Button>
+                  )}
                   <Button variant="outline" onClick={() => setSelectedSample(null)}>
                     {lang === "ar" ? "إلغاء" : "Cancel"}
                   </Button>

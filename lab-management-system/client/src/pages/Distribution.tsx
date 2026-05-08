@@ -9,8 +9,22 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { trpc } from "@/lib/trpc";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { ClipboardList, Eye, UserCheck, Building2, FlaskConical, CheckCircle2, Pencil, Printer } from "lucide-react";
-import { useEffect, useState } from "react";
+import { Badge } from "@/components/ui/badge";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { useDeletionStatus } from "@/hooks/useDeletionStatus";
+import {
+  AlertCircle,
+  ClipboardList,
+  Clock,
+  Eye,
+  UserCheck,
+  Building2,
+  FlaskConical,
+  CheckCircle2,
+  Pencil,
+  Printer,
+} from "lucide-react";
+import { useMemo, useState, type ReactElement } from "react";
 import { toast } from "sonner";
 import { useLocation } from "wouter";
 
@@ -195,6 +209,232 @@ function printDistributionSlip(order: any, lang: string) {
     popup.focus();
     popup.print();
   }, 300);
+}
+
+function orderDistributionIds(order: any): number[] {
+  const raw = (order.items ?? [])
+    .map((i: any) => Number(i.distributionId) || 0)
+    .filter((id: number) => id > 0);
+  return Array.from(new Set(raw));
+}
+
+/** Pending deletion on any `distributions` row linked to this order's line items. */
+function useDistributionRowDeletionStatus(order: any) {
+  const distIds = useMemo(() => orderDistributionIds(order), [order]);
+
+  const firstId = distIds[0] ?? 0;
+  const { hasPendingDeletion: pendingFirst } = useDeletionStatus("distributions", firstId);
+
+  const restIds = distIds.slice(1);
+  const restQueries = trpc.useQueries((t) =>
+    restIds.map((targetId) =>
+      t.deletion.getPendingForTarget({ targetTable: "distributions", targetId })
+    )
+  );
+
+  const pendingRest = restIds.length > 0 && restQueries.some((q) => q.data?.pending);
+  const hasPendingDeletion = pendingFirst || pendingRest;
+
+  const PendingDeletionBadge = hasPendingDeletion ? (
+    <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-300 gap-1">
+      <Clock className="h-3 w-3" />
+      Deletion Pending
+    </Badge>
+  ) : null;
+
+  const DisabledWarning = hasPendingDeletion ? (
+    <span className="inline-flex items-center gap-1 text-xs text-orange-700">
+      <AlertCircle className="h-3 w-3 shrink-0" />
+      A deletion request is pending for this record.
+    </span>
+  ) : null;
+
+  return { hasPendingDeletion, PendingDeletionBadge, DisabledWarning };
+}
+
+function DistributionPendingOrderActionsCell({
+  order,
+  lang,
+  handleOpenDialog,
+  onDeletionSuccess,
+}: {
+  order: any;
+  lang: string;
+  handleOpenDialog: (order: any) => void;
+  onDeletionSuccess: () => void;
+}) {
+  const { hasPendingDeletion, PendingDeletionBadge, DisabledWarning } =
+    useDistributionRowDeletionStatus(order);
+
+  const wrapDisabledAction = (node: ReactElement) =>
+    hasPendingDeletion ? (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span className="inline-flex cursor-not-allowed">{node}</span>
+        </TooltipTrigger>
+        <TooltipContent side="top" className="max-w-xs">
+          {DisabledWarning}
+        </TooltipContent>
+      </Tooltip>
+    ) : (
+      node
+    );
+
+  return (
+    <div className="flex items-center gap-1">
+      {PendingDeletionBadge}
+      {wrapDisabledAction(
+        <Button
+          size="sm"
+          className="h-7 gap-1 text-xs"
+          disabled={hasPendingDeletion}
+          onClick={() => handleOpenDialog(order)}
+        >
+          <UserCheck className="w-3.5 h-3.5" />
+          {lang === "ar" ? "توزيع" : "Distribute"}
+        </Button>
+      )}
+      {hasPendingDeletion ? (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span className="inline-flex cursor-not-allowed opacity-60">
+              <span className="pointer-events-none inline-flex">
+                <DeletionRequestButton
+                  targetTable="lab_orders"
+                  targetId={order.id}
+                  targetLabel={`Order ${order.orderCode}`}
+                  variant="icon"
+                  onSuccess={onDeletionSuccess}
+                />
+              </span>
+            </span>
+          </TooltipTrigger>
+          <TooltipContent side="top" className="max-w-xs">
+            {DisabledWarning}
+          </TooltipContent>
+        </Tooltip>
+      ) : (
+        <DeletionRequestButton
+          targetTable="lab_orders"
+          targetId={order.id}
+          targetLabel={`Order ${order.orderCode}`}
+          variant="icon"
+          onSuccess={onDeletionSuccess}
+        />
+      )}
+    </div>
+  );
+}
+
+function DistributionAllOrdersActionsCell({
+  order,
+  lang,
+  setLocation,
+  handleOpenEditDialog,
+  printDistributionSlip,
+  onDeletionSuccess,
+}: {
+  order: any;
+  lang: string;
+  setLocation: (path: string) => void;
+  handleOpenEditDialog: (order: any) => void;
+  printDistributionSlip: (order: any, lang: string) => void;
+  onDeletionSuccess: () => void;
+}) {
+  const hasSubmittedItems = (order.items ?? []).some(
+    (item: any) => item.status === "completed" || item.status === "submitted"
+  );
+  const canEditDistribution =
+    (order.status === "distributed" || order.status === "in_progress") && !hasSubmittedItems;
+  const canPrintSlip = order.status === "distributed" || order.status === "in_progress";
+
+  const { hasPendingDeletion, PendingDeletionBadge, DisabledWarning } =
+    useDistributionRowDeletionStatus(order);
+
+  const wrapDisabledAction = (node: ReactElement) =>
+    hasPendingDeletion ? (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span className="inline-flex cursor-not-allowed">{node}</span>
+        </TooltipTrigger>
+        <TooltipContent side="top" className="max-w-xs">
+          {DisabledWarning}
+        </TooltipContent>
+      </Tooltip>
+    ) : (
+      node
+    );
+
+  return (
+    <div className="flex items-center gap-1">
+      {PendingDeletionBadge}
+      {wrapDisabledAction(
+        <Button
+          size="sm"
+          variant="ghost"
+          className="h-7 px-2"
+          disabled={hasPendingDeletion}
+          onClick={() => setLocation(`/order/${order.id}`)}
+        >
+          <Eye className="w-3.5 h-3.5" />
+        </Button>
+      )}
+      {canEditDistribution &&
+        wrapDisabledAction(
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-7 px-2 text-amber-600 hover:text-amber-700"
+            title={lang === "ar" ? "تعديل التوزيع" : "Edit Distribution"}
+            disabled={hasPendingDeletion}
+            onClick={() => handleOpenEditDialog(order)}
+          >
+            <Pencil className="w-3.5 h-3.5" />
+          </Button>
+        )}
+      {canPrintSlip &&
+        wrapDisabledAction(
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-7 px-2 text-blue-600 hover:text-blue-700"
+            title={lang === "ar" ? "طباعة بطاقة التوزيع" : "Print Distribution Slip"}
+            disabled={hasPendingDeletion}
+            onClick={() => printDistributionSlip(order, lang)}
+          >
+            <Printer className="w-3.5 h-3.5" />
+          </Button>
+        )}
+      {hasPendingDeletion ? (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span className="inline-flex cursor-not-allowed opacity-60">
+              <span className="pointer-events-none inline-flex">
+                <DeletionRequestButton
+                  targetTable="lab_orders"
+                  targetId={order.id}
+                  targetLabel={`Order ${order.orderCode}`}
+                  variant="icon"
+                  onSuccess={onDeletionSuccess}
+                />
+              </span>
+            </span>
+          </TooltipTrigger>
+          <TooltipContent side="top" className="max-w-xs">
+            {DisabledWarning}
+          </TooltipContent>
+        </Tooltip>
+      ) : (
+        <DeletionRequestButton
+          targetTable="lab_orders"
+          targetId={order.id}
+          targetLabel={`Order ${order.orderCode}`}
+          variant="icon"
+          onSuccess={onDeletionSuccess}
+        />
+      )}
+    </div>
+  );
 }
 
 export default function Distribution() {
@@ -519,19 +759,12 @@ export default function Distribution() {
                             {new Date(order.createdAt).toLocaleDateString(lang === "ar" ? "ar-AE" : "en-AE")}
                           </td>
                           <td className="px-4 py-2.5">
-                            <div className="flex items-center gap-1">
-                              <Button size="sm" className="h-7 gap-1 text-xs" onClick={() => handleOpenDialog(order)}>
-                                <UserCheck className="w-3.5 h-3.5" />
-                                {lang === "ar" ? "توزيع" : "Distribute"}
-                              </Button>
-                              <DeletionRequestButton
-                                targetTable="lab_orders"
-                                targetId={order.id}
-                                targetLabel={`Order ${order.orderCode}`}
-                                variant="icon"
-                                onSuccess={() => refetch()}
-                              />
-                            </div>
+                            <DistributionPendingOrderActionsCell
+                              order={order}
+                              lang={lang}
+                              handleOpenDialog={handleOpenDialog}
+                              onDeletionSuccess={() => refetch()}
+                            />
                           </td>
                         </tr>
                       ))}
@@ -570,14 +803,6 @@ export default function Distribution() {
                     {filteredOrders
                       .filter((o: any) => !PENDING_STATUSES.includes(o.status))
                       .map((order: any) => (
-                        (() => {
-                          const hasSubmittedItems = (order.items ?? []).some(
-                            (item: any) => item.status === "completed" || item.status === "submitted"
-                          );
-                          const canEditDistribution =
-                            (order.status === "distributed" || order.status === "in_progress") && !hasSubmittedItems;
-                          const canPrintSlip = order.status === "distributed" || order.status === "in_progress";
-                          return (
                         <tr key={order.id} className="border-b last:border-0 hover:bg-muted/20 transition-colors">
                           <td className="px-4 py-2.5 font-mono text-xs font-semibold text-primary">{toText(order.orderCode)}</td>
                           <td className="px-4 py-2.5 text-xs">{toText(order.contractorName)}</td>
@@ -610,49 +835,16 @@ export default function Distribution() {
                             <StatusBadge status={order.status} />
                           </td>
                           <td className="px-4 py-2.5">
-                            <div className="flex items-center gap-1">
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                className="h-7 px-2"
-                                onClick={() => setLocation(`/order/${order.id}`)}
-                              >
-                                <Eye className="w-3.5 h-3.5" />
-                              </Button>
-                              {canEditDistribution && (
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  className="h-7 px-2 text-amber-600 hover:text-amber-700"
-                                  title={lang === "ar" ? "تعديل التوزيع" : "Edit Distribution"}
-                                  onClick={() => handleOpenEditDialog(order)}
-                                >
-                                  <Pencil className="w-3.5 h-3.5" />
-                                </Button>
-                              )}
-                              {canPrintSlip && (
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  className="h-7 px-2 text-blue-600 hover:text-blue-700"
-                                  title={lang === "ar" ? "طباعة بطاقة التوزيع" : "Print Distribution Slip"}
-                                  onClick={() => printDistributionSlip(order, lang)}
-                                >
-                                  <Printer className="w-3.5 h-3.5" />
-                                </Button>
-                              )}
-                              <DeletionRequestButton
-                                targetTable="lab_orders"
-                                targetId={order.id}
-                                targetLabel={`Order ${order.orderCode}`}
-                                variant="icon"
-                                onSuccess={() => refetch()}
-                              />
-                            </div>
+                            <DistributionAllOrdersActionsCell
+                              order={order}
+                              lang={lang}
+                              setLocation={setLocation}
+                              handleOpenEditDialog={handleOpenEditDialog}
+                              printDistributionSlip={printDistributionSlip}
+                              onDeletionSuccess={() => refetch()}
+                            />
                           </td>
                         </tr>
-                          );
-                        })()
                       ))}
                   </tbody>
                 </table>

@@ -14,6 +14,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { trpc } from "@/lib/trpc";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { useDeletionStatus } from "@/hooks/useDeletionStatus";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { SAMPLE_TYPE_LABELS } from "@/lib/labTypes";
 import {
   CheckSquare,
@@ -31,7 +33,7 @@ import {
   Download,
   Loader2,
 } from "lucide-react";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, type ReactElement } from "react";
 import { toast } from "sonner";
 import { useAuth } from "@/_core/hooks/useAuth";
 
@@ -58,6 +60,197 @@ function getSampleTaskState(sample: any): "new" | "incomplete" | "completed" {
   }
   if (sample.managerReadAt) return "incomplete";
   return "new";
+}
+
+function wrapDisabledWithTooltip(
+  hasPendingDeletion: boolean,
+  DisabledWarning: React.ReactNode,
+  node: ReactElement
+) {
+  return hasPendingDeletion ? (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span className="inline-flex cursor-not-allowed">{node}</span>
+      </TooltipTrigger>
+      <TooltipContent side="top" className="max-w-xs">
+        {DisabledWarning}
+      </TooltipContent>
+    </Tooltip>
+  ) : (
+    node
+  );
+}
+
+/** Active-queue sample row: matches DeletionRequestButton targetTable `samples`. */
+function ManagerReviewActiveSampleCard({
+  sample,
+  lang,
+  onOpen,
+  onRefetch,
+}: {
+  sample: any;
+  lang: string;
+  onOpen: (s: any) => void;
+  onRefetch: () => void;
+}) {
+  const state = getSampleTaskState(sample);
+  const { hasPendingDeletion, PendingDeletionBadge, DisabledWarning } = useDeletionStatus("samples", sample.id);
+
+  const tryOpen = () => {
+    if (hasPendingDeletion) {
+      toast.warning(
+        lang === "ar"
+          ? "طلب حذف قيد الانتظار لهذه العينة."
+          : "A deletion request is pending for this sample."
+      );
+      return;
+    }
+    onOpen(sample);
+  };
+
+  return (
+    <Card
+      className={`hover:shadow-md transition-shadow border-l-4 ${
+        hasPendingDeletion
+          ? "cursor-not-allowed opacity-90 border-l-muted bg-muted/20"
+          : "cursor-pointer " +
+            (state === "new"
+              ? "border-l-red-400 bg-red-50/30"
+              : state === "incomplete"
+                ? "border-l-amber-400 bg-amber-50/20"
+                : "border-l-green-400")
+      }`}
+      onClick={tryOpen}
+    >
+      <CardContent className="p-4 flex items-center justify-between gap-3">
+        <div className="space-y-1.5 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <p className="font-mono text-sm font-bold text-primary">{sample.sampleCode}</p>
+            <TaskStateBadge state={state} lang={lang} />
+            <StatusBadge status={sample.status} />
+            {PendingDeletionBadge}
+            {(sample as any).sector && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200">
+                <Building2 className="w-3 h-3" />
+                {sectorLabel((sample as any).sector, lang)}
+              </span>
+            )}
+          </div>
+          <p className="text-xs text-muted-foreground">
+            {sample.contractorName} — {(sample as any).contractNumber ?? "—"}
+          </p>
+          <p className="text-xs text-muted-foreground">
+            {SAMPLE_TYPE_LABELS[(sample as any).sampleType] ?? (sample as any).sampleType}
+          </p>
+        </div>
+        <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
+          {wrapDisabledWithTooltip(
+            hasPendingDeletion,
+            DisabledWarning,
+            <Button size="sm" variant="outline" className="gap-1.5 shrink-0" disabled={hasPendingDeletion}>
+              <ClipboardCheck className="w-3.5 h-3.5" />
+              {lang === "ar" ? "مراجعة النتائج" : "Review Results"}
+            </Button>
+          )}
+          {hasPendingDeletion ? (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span className="inline-flex cursor-not-allowed opacity-60">
+                  <span className="pointer-events-none inline-flex">
+                    <DeletionRequestButton
+                      targetTable="samples"
+                      targetId={sample.id}
+                      targetLabel={`Sample ${sample.sampleCode}`}
+                      variant="icon"
+                      onSuccess={onRefetch}
+                    />
+                  </span>
+                </span>
+              </TooltipTrigger>
+              <TooltipContent side="top" className="max-w-xs">
+                {DisabledWarning}
+              </TooltipContent>
+            </Tooltip>
+          ) : (
+            <DeletionRequestButton
+              targetTable="samples"
+              targetId={sample.id}
+              targetLabel={`Sample ${sample.sampleCode}`}
+              variant="icon"
+              onSuccess={onRefetch}
+            />
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function ManagerReviewArchiveSampleCard({
+  sample,
+  lang,
+  onOpen,
+}: {
+  sample: any;
+  lang: string;
+  onOpen: (s: any) => void;
+}) {
+  const { hasPendingDeletion, PendingDeletionBadge, DisabledWarning } = useDeletionStatus("samples", sample.id);
+
+  const tryOpen = () => {
+    if (hasPendingDeletion) {
+      toast.warning(
+        lang === "ar"
+          ? "طلب حذف قيد الانتظار لهذه العينة."
+          : "A deletion request is pending for this sample."
+      );
+      return;
+    }
+    onOpen(sample);
+  };
+
+  return (
+    <Card
+      className={`border-l-4 border-l-green-400 hover:shadow-sm transition-shadow opacity-80 hover:opacity-100 ${
+        hasPendingDeletion ? "cursor-not-allowed" : "cursor-pointer"
+      }`}
+      onClick={tryOpen}
+    >
+      <CardContent className="p-4 flex items-center justify-between">
+        <div className="space-y-1">
+          <div className="flex items-center gap-2 flex-wrap">
+            <p className="font-mono text-sm font-bold text-primary">{sample.sampleCode}</p>
+            <StatusBadge status={sample.status} />
+            {PendingDeletionBadge}
+            {(sample as any).sector && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200">
+                <Building2 className="w-3 h-3" />
+                {sectorLabel((sample as any).sector, lang)}
+              </span>
+            )}
+          </div>
+          <p className="text-xs text-muted-foreground">
+            {sample.contractorName} — {(sample as any).contractNumber ?? "—"}
+          </p>
+          <p className="text-xs text-muted-foreground">
+            {SAMPLE_TYPE_LABELS[(sample as any).sampleType] ?? (sample as any).sampleType}
+            {(sample as any).receivedAt && (
+              <span className="ms-2 text-muted-foreground/70">
+                • {new Date((sample as any).receivedAt).toLocaleDateString(lang === "ar" ? "ar-AE" : "en-AE")}
+              </span>
+            )}
+          </p>
+        </div>
+        {wrapDisabledWithTooltip(
+          hasPendingDeletion,
+          DisabledWarning,
+          <span className="inline-flex">
+            <ChevronRight className={`w-4 h-4 text-muted-foreground ${lang === "ar" ? "rotate-180" : ""}`} />
+          </span>
+        )}
+      </CardContent>
+    </Card>
+  );
 }
 
 function TaskStateBadge({ state, lang }: { state: "new" | "incomplete" | "completed"; lang: string }) {
@@ -138,6 +331,12 @@ export default function ManagerReview() {
 
   const markManagerRead = trpc.reviews.markManagerRead.useMutation();
 
+  const {
+    hasPendingDeletion: dialogSamplePending,
+    PendingDeletionBadge: dialogSamplePendingBadge,
+    DisabledWarning: dialogSampleDisabledWarning,
+  } = useDeletionStatus("samples", selectedSample?.id ?? 0);
+
   // All samples that have been processed (ready for manager review)
   const reviewSamples = samples?.filter((s) =>
     ["processed", "reviewed", "approved", "qc_passed", "qc_failed", "clearance_issued", "rejected"].includes(s.status)
@@ -172,6 +371,14 @@ export default function ManagerReview() {
   };
 
   const handleReview = () => {
+    if (dialogSamplePending) {
+      toast.warning(
+        lang === "ar"
+          ? "طلب حذف قيد الانتظار لهذه العينة."
+          : "A deletion request is pending for this sample."
+      );
+      return;
+    }
     if (!decision) {
       toast.error(lang === "ar" ? "يرجى اختيار قرار" : "Please select a decision");
       return;
@@ -319,53 +526,15 @@ export default function ManagerReview() {
           </Card>
         ) : (
           <div className="grid gap-3">
-            {activeSamples.map((sample) => {
-              const state = getSampleTaskState(sample);
-              return (
-                <Card
-                  key={sample.id}
-                  className={`hover:shadow-md transition-shadow cursor-pointer border-l-4 ${
-                    state === "new" ? "border-l-red-400 bg-red-50/30" :
-                    state === "incomplete" ? "border-l-amber-400 bg-amber-50/20" :
-                    "border-l-green-400"
-                  }`}
-                  onClick={() => handleOpenSample(sample)}
-                >
-                  <CardContent className="p-4 flex items-center justify-between">
-                    <div className="space-y-1.5">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <p className="font-mono text-sm font-bold text-primary">{sample.sampleCode}</p>
-                        <TaskStateBadge state={state} lang={lang} />
-                        <StatusBadge status={sample.status} />
-                        {(sample as any).sector && (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200">
-                            <Building2 className="w-3 h-3" />
-                            {sectorLabel((sample as any).sector, lang)}
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-xs text-muted-foreground">
-                        {sample.contractorName} — {(sample as any).contractNumber ?? "—"}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {SAMPLE_TYPE_LABELS[(sample as any).sampleType] ?? (sample as any).sampleType}
-                      </p>
-                    </div>
-                    <Button size="sm" variant="outline" className="gap-1.5 shrink-0">
-                      <ClipboardCheck className="w-3.5 h-3.5" />
-                      {lang === "ar" ? "مراجعة النتائج" : "Review Results"}
-                    </Button>
-                    <DeletionRequestButton
-                      targetTable="samples"
-                      targetId={sample.id}
-                      targetLabel={`Sample ${sample.sampleCode}`}
-                      variant="icon"
-                      onSuccess={() => refetch()}
-                    />
-                  </CardContent>
-                </Card>
-              );
-            })}
+            {activeSamples.map((sample) => (
+              <ManagerReviewActiveSampleCard
+                key={sample.id}
+                sample={sample}
+                lang={lang}
+                onOpen={handleOpenSample}
+                onRefetch={() => refetch()}
+              />
+            ))}
           </div>
         )}
 
@@ -399,37 +568,13 @@ export default function ManagerReview() {
                 );
               })
               .map((sample) => (
-              <Card
-                key={sample.id}
-                className="border-l-4 border-l-green-400 cursor-pointer hover:shadow-sm transition-shadow opacity-80 hover:opacity-100"
-                onClick={() => handleOpenSample(sample)}
-              >
-                <CardContent className="p-4 flex items-center justify-between">
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <p className="font-mono text-sm font-bold text-primary">{sample.sampleCode}</p>
-                      <StatusBadge status={sample.status} />
-                      {(sample as any).sector && (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200">
-                          <Building2 className="w-3 h-3" />
-                          {sectorLabel((sample as any).sector, lang)}
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-xs text-muted-foreground">{sample.contractorName} — {(sample as any).contractNumber ?? "—"}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {SAMPLE_TYPE_LABELS[(sample as any).sampleType] ?? (sample as any).sampleType}
-                      {(sample as any).receivedAt && (
-                        <span className="ms-2 text-muted-foreground/70">
-                          • {new Date((sample as any).receivedAt).toLocaleDateString(lang === "ar" ? "ar-AE" : "en-AE")}
-                        </span>
-                      )}
-                    </p>
-                  </div>
-                  <ChevronRight className={`w-4 h-4 text-muted-foreground ${lang === "ar" ? "rotate-180" : ""}`} />
-                </CardContent>
-              </Card>
-            ))}
+                <ManagerReviewArchiveSampleCard
+                  key={sample.id}
+                  sample={sample}
+                  lang={lang}
+                  onOpen={handleOpenSample}
+                />
+              ))}
             {completedSamples.filter(s => {
               if (!archiveSearch.trim()) return true;
               const q = archiveSearch.toLowerCase();
@@ -452,10 +597,11 @@ export default function ManagerReview() {
       <Dialog open={!!selectedSample} onOpenChange={(o) => !o && setSelectedSample(null)}>
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto" dir={lang === "ar" ? "rtl" : "ltr"}>
           <DialogHeader>
-            <DialogTitle className="text-center text-base font-bold">
+            <DialogTitle className="text-center text-base font-bold flex flex-wrap items-center justify-center gap-2">
               {lang === "ar"
                 ? `مراجعة النتائج — ${selectedSample?.sampleCode}`
                 : `Review Results — ${selectedSample?.sampleCode}`}
+              {dialogSamplePendingBadge}
             </DialogTitle>
           </DialogHeader>
 
@@ -542,73 +688,106 @@ export default function ManagerReview() {
 
               {/* ── Full Report Link ──────────────────────────────────────── */}
               <div className="flex gap-2">
-                {dist?.id && (
-                  <Button variant="outline" size="sm" className="gap-1.5 flex-1" onClick={handleOpenFullReport}>
-                    <FileText className="w-3.5 h-3.5" />
-                    {lang === "ar" ? "تقرير الاختبار" : "Test Report"}
-                  </Button>
-                )}
-                {sampleOrders && sampleOrders.length > 0 && (
-                  <Button variant="default" size="sm" className="gap-1.5 flex-1 bg-blue-600 hover:bg-blue-700" onClick={handleOpenOrderReport}>
-                    <ExternalLink className="w-3.5 h-3.5" />
-                    {lang === "ar" ? "التقرير الموحد للطلب" : "Unified Order Report"}
-                  </Button>
-                )}
+                {dist?.id &&
+                  wrapDisabledWithTooltip(
+                    dialogSamplePending,
+                    dialogSampleDisabledWarning,
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="gap-1.5 flex-1"
+                      disabled={dialogSamplePending}
+                      onClick={handleOpenFullReport}
+                    >
+                      <FileText className="w-3.5 h-3.5" />
+                      {lang === "ar" ? "تقرير الاختبار" : "Test Report"}
+                    </Button>
+                  )}
+                {sampleOrders && sampleOrders.length > 0 &&
+                  wrapDisabledWithTooltip(
+                    dialogSamplePending,
+                    dialogSampleDisabledWarning,
+                    <Button
+                      variant="default"
+                      size="sm"
+                      className="gap-1.5 flex-1 bg-blue-600 hover:bg-blue-700"
+                      disabled={dialogSamplePending}
+                      onClick={handleOpenOrderReport}
+                    >
+                      <ExternalLink className="w-3.5 h-3.5" />
+                      {lang === "ar" ? "التقرير الموحد للطلب" : "Unified Order Report"}
+                    </Button>
+                  )}
               </div>
 
               {/* ── Decision Buttons ──────────────────────────────────────── */}
               <div className="grid grid-cols-3 gap-3">
-                <button
-                  type="button"
-                  onClick={() => setDecision("approved")}
-                  className={`flex flex-col items-center gap-2 rounded-xl border-2 p-3 transition-all ${
-                    decision === "approved"
-                      ? "border-green-500 bg-green-50 text-green-800 shadow-md"
-                      : "border-border bg-background text-muted-foreground hover:border-green-300 hover:bg-green-50/50"
-                  }`}
-                >
-                  <CheckSquare className={`w-7 h-7 ${decision === "approved" ? "text-green-600" : "text-muted-foreground"}`} />
-                  <span className="text-xs font-semibold">
-                    {lang === "ar" ? "اعتماد ✓" : "Approve ✓"}
-                  </span>
-                  <span className="text-[10px] opacity-70 text-center leading-tight">
-                    {lang === "ar" ? "النتيجة مقبولة" : "Result accepted"}
-                  </span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setDecision("needs_revision")}
-                  className={`flex flex-col items-center gap-2 rounded-xl border-2 p-3 transition-all ${
-                    decision === "needs_revision"
-                      ? "border-amber-500 bg-amber-50 text-amber-800 shadow-md"
-                      : "border-border bg-background text-muted-foreground hover:border-amber-300 hover:bg-amber-50/50"
-                  }`}
-                >
-                  <RotateCcw className={`w-7 h-7 ${decision === "needs_revision" ? "text-amber-600" : "text-muted-foreground"}`} />
-                  <span className="text-xs font-semibold">
-                    {lang === "ar" ? "طلب مراجعة ↺" : "Revision ↺"}
-                  </span>
-                  <span className="text-[10px] opacity-70 text-center leading-tight">
-                    {lang === "ar" ? "إعادة للفني" : "Return to technician"}
-                  </span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setDecision("rejected")}
-                  className={`flex flex-col items-center gap-2 rounded-xl border-2 p-3 transition-all ${
-                    decision === "rejected"
-                      ? "border-red-500 bg-red-50 text-red-800 shadow-md"
-                      : "border-border bg-background text-muted-foreground hover:border-red-300 hover:bg-red-50/50"
-                  }`}
-                >
-                  <XCircle className={`w-7 h-7 ${decision === "rejected" ? "text-red-600" : "text-muted-foreground"}`} />
-                  <span className="text-xs font-semibold">
-                    {lang === "ar" ? "رفض ✗" : "Reject ✗"}
-                  </span>
-                  <span className="text-[10px] opacity-70 text-center leading-tight">
-                    {lang === "ar" ? "النتيجة مرفوضة" : "Result is rejected"}
-                  </span>
-                </button>
+                {wrapDisabledWithTooltip(
+                  dialogSamplePending,
+                  dialogSampleDisabledWarning,
+                  <button
+                    type="button"
+                    disabled={dialogSamplePending}
+                    onClick={() => setDecision("approved")}
+                    className={`flex flex-col items-center gap-2 rounded-xl border-2 p-3 transition-all ${
+                      decision === "approved"
+                        ? "border-green-500 bg-green-50 text-green-800 shadow-md"
+                        : "border-border bg-background text-muted-foreground hover:border-green-300 hover:bg-green-50/50"
+                    } ${dialogSamplePending ? "opacity-60" : ""}`}
+                  >
+                    <CheckSquare className={`w-7 h-7 ${decision === "approved" ? "text-green-600" : "text-muted-foreground"}`} />
+                    <span className="text-xs font-semibold">
+                      {lang === "ar" ? "اعتماد ✓" : "Approve ✓"}
+                    </span>
+                    <span className="text-[10px] opacity-70 text-center leading-tight">
+                      {lang === "ar" ? "النتيجة مقبولة" : "Result accepted"}
+                    </span>
+                  </button>
+                )}
+                {wrapDisabledWithTooltip(
+                  dialogSamplePending,
+                  dialogSampleDisabledWarning,
+                  <button
+                    type="button"
+                    disabled={dialogSamplePending}
+                    onClick={() => setDecision("needs_revision")}
+                    className={`flex flex-col items-center gap-2 rounded-xl border-2 p-3 transition-all ${
+                      decision === "needs_revision"
+                        ? "border-amber-500 bg-amber-50 text-amber-800 shadow-md"
+                        : "border-border bg-background text-muted-foreground hover:border-amber-300 hover:bg-amber-50/50"
+                    } ${dialogSamplePending ? "opacity-60" : ""}`}
+                  >
+                    <RotateCcw className={`w-7 h-7 ${decision === "needs_revision" ? "text-amber-600" : "text-muted-foreground"}`} />
+                    <span className="text-xs font-semibold">
+                      {lang === "ar" ? "طلب مراجعة ↺" : "Revision ↺"}
+                    </span>
+                    <span className="text-[10px] opacity-70 text-center leading-tight">
+                      {lang === "ar" ? "إعادة للفني" : "Return to technician"}
+                    </span>
+                  </button>
+                )}
+                {wrapDisabledWithTooltip(
+                  dialogSamplePending,
+                  dialogSampleDisabledWarning,
+                  <button
+                    type="button"
+                    disabled={dialogSamplePending}
+                    onClick={() => setDecision("rejected")}
+                    className={`flex flex-col items-center gap-2 rounded-xl border-2 p-3 transition-all ${
+                      decision === "rejected"
+                        ? "border-red-500 bg-red-50 text-red-800 shadow-md"
+                        : "border-border bg-background text-muted-foreground hover:border-red-300 hover:bg-red-50/50"
+                    } ${dialogSamplePending ? "opacity-60" : ""}`}
+                  >
+                    <XCircle className={`w-7 h-7 ${decision === "rejected" ? "text-red-600" : "text-muted-foreground"}`} />
+                    <span className="text-xs font-semibold">
+                      {lang === "ar" ? "رفض ✗" : "Reject ✗"}
+                    </span>
+                    <span className="text-[10px] opacity-70 text-center leading-tight">
+                      {lang === "ar" ? "النتيجة مرفوضة" : "Result is rejected"}
+                    </span>
+                  </button>
+                )}
               </div>
 
               {/* Reason / Comments — required only for rejection/revision */}
@@ -637,6 +816,7 @@ export default function ManagerReview() {
                       : (lang === "ar" ? "ملاحظات إضافية (اختياري)..." : "Additional notes (optional)...")
                   }
                   value={comments}
+                  disabled={dialogSamplePending}
                   onChange={(e) => setComments(e.target.value)}
                   className={
                     (decision === "rejected" || decision === "needs_revision") && !comments.trim()
@@ -669,33 +849,38 @@ export default function ManagerReview() {
 
               {/* Submit */}
               <div className="flex gap-2 pt-1">
-                <Button
-                  className={`flex-1 ${
-                    decision === "approved"
-                      ? "bg-green-600 hover:bg-green-700"
+                {wrapDisabledWithTooltip(
+                  dialogSamplePending,
+                  dialogSampleDisabledWarning,
+                  <Button
+                    className={`flex-1 ${
+                      decision === "approved"
+                        ? "bg-green-600 hover:bg-green-700"
+                        : decision === "needs_revision"
+                        ? "bg-amber-600 hover:bg-amber-700"
+                        : decision === "rejected"
+                        ? "bg-red-600 hover:bg-red-700"
+                        : ""
+                    }`}
+                    disabled={
+                      dialogSamplePending ||
+                      !decision ||
+                      managerReview.isPending ||
+                      ((decision === "rejected" || decision === "needs_revision") && !comments.trim())
+                    }
+                    onClick={() => handleReview()}
+                  >
+                    {managerReview.isPending
+                      ? (lang === "ar" ? "جاري الإرسال..." : "Submitting...")
+                      : decision === "approved"
+                      ? (lang === "ar" ? "✓ تأكيد الاعتماد" : "✓ Confirm Approval")
                       : decision === "needs_revision"
-                      ? "bg-amber-600 hover:bg-amber-700"
+                      ? (lang === "ar" ? "↺ إرسال طلب المراجعة" : "↺ Send Revision Request")
                       : decision === "rejected"
-                      ? "bg-red-600 hover:bg-red-700"
-                      : ""
-                  }`}
-                  disabled={
-                    !decision ||
-                    managerReview.isPending ||
-                    ((decision === "rejected" || decision === "needs_revision") && !comments.trim())
-                  }
-                  onClick={() => handleReview()}
-                >
-                  {managerReview.isPending
-                    ? (lang === "ar" ? "جاري الإرسال..." : "Submitting...")
-                    : decision === "approved"
-                    ? (lang === "ar" ? "✓ تأكيد الاعتماد" : "✓ Confirm Approval")
-                    : decision === "needs_revision"
-                    ? (lang === "ar" ? "↺ إرسال طلب المراجعة" : "↺ Send Revision Request")
-                    : decision === "rejected"
-                    ? (lang === "ar" ? "✗ تأكيد الرفض" : "✗ Confirm Rejection")
-                    : (lang === "ar" ? "تقديم المراجعة" : "Submit Review")}
-                </Button>
+                      ? (lang === "ar" ? "✗ تأكيد الرفض" : "✗ Confirm Rejection")
+                      : (lang === "ar" ? "تقديم المراجعة" : "Submit Review")}
+                  </Button>
+                )}
                 <Button variant="outline" onClick={() => setSelectedSample(null)}>
                   {lang === "ar" ? "إلغاء" : "Cancel"}
                 </Button>

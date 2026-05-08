@@ -3,6 +3,7 @@ import { DeletionRequestButton } from "@/components/DeletionRequestButton";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   Dialog,
   DialogContent,
@@ -14,8 +15,9 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { trpc } from "@/lib/trpc";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { useDeletionStatus } from "@/hooks/useDeletionStatus";
 import { Microscope, Plus, Trash2, FlaskConical, CheckCircle2, Clock, ChevronDown, ChevronRight } from "lucide-react";
-import { useState } from "react";
+import { useMemo, useState, type ReactElement } from "react";
 import { useLocation } from "wouter";
 import { toast } from "sonner";
 import { TaskQueue, getDistributionTaskState, type Task } from "@/components/TaskQueue";
@@ -109,6 +111,126 @@ const SPECIALIZED_CODES = [
   "SOIL_PROCTOR", "ASPH_ACWC", "ASPH_ACBC", "ASPH_DBM",
 ];
 
+/** Prefer FK on order-item rows; otherwise use distribution primary key (assignments). */
+function resolveDistributionId(dist: any | null | undefined): number {
+  if (!dist) return 0;
+  const fromFk = Number(dist.distributionId);
+  if (fromFk > 0) return fromFk;
+  return Number(dist.id) || 0;
+}
+
+function wrapDisabledWithTooltip(
+  hasPendingDeletion: boolean,
+  DisabledWarning: React.ReactNode,
+  node: ReactElement
+) {
+  return hasPendingDeletion ? (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span className="inline-flex cursor-not-allowed">{node}</span>
+      </TooltipTrigger>
+      <TooltipContent side="top" className="max-w-xs">
+        {DisabledWarning}
+      </TooltipContent>
+    </Tooltip>
+  ) : (
+    node
+  );
+}
+
+function TechnicianOrderItemRow({
+  order,
+  item,
+  lang,
+  isDone,
+  handleOpenTest,
+  onDeletionSuccess,
+}: {
+  order: any;
+  item: any;
+  lang: string;
+  isDone: boolean;
+  handleOpenTest: (dist: any) => void;
+  onDeletionSuccess: () => void;
+}) {
+  const distId = resolveDistributionId(item);
+  const { hasPendingDeletion, PendingDeletionBadge, DisabledWarning } = useDeletionStatus(
+    "distributions",
+    distId
+  );
+
+  const openPayload = {
+    ...item,
+    sampleId: item.sampleId ?? order.sampleId,
+    sampleCode: item.sampleCode ?? order.sampleCode,
+  };
+
+  return (
+    <div
+      className={`flex items-center justify-between rounded-md px-3 py-2 text-sm ${
+        isDone
+          ? "bg-muted/30 text-muted-foreground"
+          : hasPendingDeletion
+            ? "bg-muted/40 cursor-not-allowed opacity-90"
+            : "bg-primary/5 hover:bg-primary/10 cursor-pointer"
+      }`}
+      onClick={() => !isDone && !hasPendingDeletion && handleOpenTest(openPayload)}
+    >
+      <div className="flex items-center gap-2">
+        {isDone ? (
+          <CheckCircle2 className="w-4 h-4 text-green-500" />
+        ) : (
+          <Clock className="w-4 h-4 text-amber-500" />
+        )}
+        <span className={isDone ? "line-through" : ""}>
+          {lang === "ar" ? (item.testNameAr || item.testName) : (item.testNameEn || item.testName)}
+        </span>
+      </div>
+      {!isDone && (
+        <div className="flex items-center gap-1 flex-wrap justify-end">
+          {PendingDeletionBadge}
+          {wrapDisabledWithTooltip(
+            hasPendingDeletion,
+            DisabledWarning,
+            <Button size="sm" variant="outline" className="h-7 text-xs" disabled={hasPendingDeletion}>
+              {lang === "ar" ? "ابدأ" : "Start"}
+            </Button>
+          )}
+          {distId > 0 &&
+            (hasPendingDeletion ? (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="inline-flex cursor-not-allowed opacity-60">
+                    <span className="pointer-events-none inline-flex">
+                      <DeletionRequestButton
+                        targetTable="distributions"
+                        targetId={distId}
+                        targetLabel={`${order.orderCode} · ${item.testTypeCode ?? item.testName ?? distId}`}
+                        variant="icon"
+                        onSuccess={onDeletionSuccess}
+                      />
+                    </span>
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="max-w-xs">
+                  {DisabledWarning}
+                </TooltipContent>
+              </Tooltip>
+            ) : (
+              <DeletionRequestButton
+                targetTable="distributions"
+                targetId={distId}
+                targetLabel={`${order.orderCode} · ${item.testTypeCode ?? item.testName ?? distId}`}
+                variant="icon"
+                onSuccess={onDeletionSuccess}
+              />
+            ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function Technician() {
   const { lang } = useLanguage();
   const [, navigate] = useLocation();
@@ -162,33 +284,64 @@ export default function Technician() {
       setRawValues(["", "", ""]);
       setTestNotes("");
       refetch();
+      refetchOrders();
     },
     onError: (err) => toast.error(err.message),
   });
 
-  // Build Task objects from assignments
-  const tasks: Task[] = assignments.map((dist) => {
-    const subTypeLabel = getSubTypeLabel(dist.sampleSubType, lang);
-    const subtitleParts: string[] = [];
-    if (dist.sampleCode) subtitleParts.push(dist.sampleCode);
-    if (subTypeLabel) subtitleParts.push(subTypeLabel);
-    return {
-      id: dist.id,
-      code: dist.distributionCode,
-      title: lang === "ar" ? (dist.testNameAr || dist.testName) : (dist.testNameEn || dist.testName),
-      subtitle: subtitleParts.length > 0 ? subtitleParts.join(" • ") : undefined,
-      meta: dist.expectedCompletionDate
-        ? `${tx("dueDate", lang)}: ${new Date(dist.expectedCompletionDate).toLocaleDateString()}`
-        : undefined,
-      state: getDistributionTaskState({ status: dist.status, taskReadAt: dist.taskReadAt }),
-      createdAt: dist.createdAt,
-    };
-  });
+  const assignmentDistIds = useMemo(() => assignments.map((d) => d.id), [assignments]);
+  const assignmentPendingQueries = trpc.useQueries((t) =>
+    assignmentDistIds.map((targetId) =>
+      t.deletion.getPendingForTarget({ targetTable: "distributions", targetId })
+    )
+  );
 
-  // Also include completed ones for history
-  const allTasks = tasks; // myAssignments already returns pending+in_progress; completed ones come from history
+  const {
+    hasPendingDeletion: dialogDeletionPending,
+    PendingDeletionBadge: dialogPendingBadge,
+    DisabledWarning: dialogDisabledWarning,
+  } = useDeletionStatus("distributions", resolveDistributionId(selectedDist));
+
+  // Build Task objects from assignments
+  const allTasks: Task[] = useMemo(() => {
+    return assignments.map((dist, i) => {
+      const subTypeLabel = getSubTypeLabel(dist.sampleSubType, lang);
+      const subtitleParts: string[] = [];
+      if (dist.sampleCode) subtitleParts.push(dist.sampleCode);
+      if (subTypeLabel) subtitleParts.push(subTypeLabel);
+      const pendingDeletion = assignmentPendingQueries[i]?.data?.pending;
+      const metaParts: string[] = [];
+      if (dist.expectedCompletionDate) {
+        metaParts.push(
+          `${tx("dueDate", lang)}: ${new Date(dist.expectedCompletionDate).toLocaleDateString()}`
+        );
+      }
+      if (pendingDeletion) {
+        metaParts.push(lang === "ar" ? "حذف قيد الانتظار" : "Deletion pending");
+      }
+      return {
+        id: dist.id,
+        code: dist.distributionCode,
+        title: lang === "ar" ? (dist.testNameAr || dist.testName) : (dist.testNameEn || dist.testName),
+        subtitle: subtitleParts.length > 0 ? subtitleParts.join(" • ") : undefined,
+        meta: metaParts.length > 0 ? metaParts.join(" • ") : undefined,
+        state: getDistributionTaskState({ status: dist.status, taskReadAt: dist.taskReadAt }),
+        createdAt: dist.createdAt,
+      };
+    });
+  }, [assignments, assignmentPendingQueries, lang]);
 
   const handleOpenTask = async (task: Task) => {
+    const distIndex = assignments.findIndex((d) => d.id === task.id);
+    if (distIndex >= 0 && assignmentPendingQueries[distIndex]?.data?.pending) {
+      toast.warning(
+        lang === "ar"
+          ? "طلب حذف قيد الانتظار لهذا التوزيع."
+          : "A deletion request is pending for this assignment."
+      );
+      return;
+    }
+
     const dist = assignments.find((d) => d.id === task.id);
     if (!dist) return;
 
@@ -224,6 +377,7 @@ export default function Technician() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (dialogDeletionPending) return;
     const values = rawValues.map((v) => parseFloat(v)).filter((v) => !isNaN(v));
     if (values.length === 0) {
       toast.error(tx("noValue", lang));
@@ -239,7 +393,7 @@ export default function Technician() {
       return;
     }
     submitResults.mutate({
-      distributionId: selectedDist.id,
+      distributionId: resolveDistributionId(selectedDist),
       sampleId: resolvedSampleId,
       rawValues: values,
       unit,
@@ -307,48 +461,18 @@ export default function Technician() {
                           {(order.items ?? []).map((item: any) => {
                             const isDone = item.status === "completed";
                             return (
-                              <div
+                              <TechnicianOrderItemRow
                                 key={item.id}
-                                className={`flex items-center justify-between rounded-md px-3 py-2 text-sm ${
-                                  isDone
-                                    ? "bg-muted/30 text-muted-foreground"
-                                    : "bg-primary/5 hover:bg-primary/10 cursor-pointer"
-                                }`}
-                                onClick={() =>
-                                  !isDone &&
-                                  handleOpenTest({
-                                    ...item,
-                                    sampleId: item.sampleId ?? order.sampleId,
-                                    sampleCode: item.sampleCode ?? order.sampleCode,
-                                  })
-                                }
-                              >
-                                <div className="flex items-center gap-2">
-                                  {isDone
-                                    ? <CheckCircle2 className="w-4 h-4 text-green-500" />
-                                    : <Clock className="w-4 h-4 text-amber-500" />}
-                                  <span className={isDone ? "line-through" : ""}>
-                                    {lang === "ar" ? (item.testNameAr || item.testName) : (item.testNameEn || item.testName)}
-                                  </span>
-                                </div>
-                                {!isDone && (
-                                  <div className="flex items-center gap-1">
-                                    <Button size="sm" variant="outline" className="h-7 text-xs">
-                                      {lang === "ar" ? "ابدأ" : "Start"}
-                                    </Button>
-                                    <DeletionRequestButton
-                                      targetTable="test_results"
-                                      targetId={item.id}
-                                      targetLabel={`Test Result ${item.id}`}
-                                      variant="icon"
-                                      onSuccess={() => {
-                                        refetch();
-                                        refetchOrders();
-                                      }}
-                                    />
-                                  </div>
-                                )}
-                              </div>
+                                order={order}
+                                item={item}
+                                lang={lang}
+                                isDone={isDone}
+                                handleOpenTest={handleOpenTest}
+                                onDeletionSuccess={() => {
+                                  refetch();
+                                  refetchOrders();
+                                }}
+                              />
                             );
                           })}
                         </div>
@@ -372,9 +496,10 @@ export default function Technician() {
       <Dialog open={!!selectedDist} onOpenChange={(o) => !o && setSelectedDist(null)}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
+            <DialogTitle className="flex items-center gap-2 flex-wrap">
               <Microscope className="w-5 h-5" />
               {lang === "ar" ? "إدخال نتائج الاختبار" : "Enter Test Results"}
+              {dialogPendingBadge}
             </DialogTitle>
           </DialogHeader>
           {selectedDist && (
@@ -405,6 +530,7 @@ export default function Technician() {
                     className="h-7 w-20 text-xs"
                     placeholder="Unit"
                     value={unit}
+                    disabled={dialogDeletionPending}
                     onChange={(e) => setUnit(e.target.value)}
                   />
                 </div>
@@ -419,33 +545,43 @@ export default function Technician() {
                         step="0.001"
                         placeholder={`Value in ${unit}`}
                         value={val}
+                        disabled={dialogDeletionPending}
                         onChange={(e) => updateRow(i, e.target.value)}
                         className="flex-1"
                       />
-                      {rawValues.length > 1 && (
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          className="h-8 w-8 p-0 text-destructive"
-                          onClick={() => removeRow(i)}
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </Button>
-                      )}
+                      {rawValues.length > 1 &&
+                        wrapDisabledWithTooltip(
+                          dialogDeletionPending,
+                          dialogDisabledWarning,
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 w-8 p-0 text-destructive"
+                            disabled={dialogDeletionPending}
+                            onClick={() => removeRow(i)}
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </Button>
+                        )}
                     </div>
                   ))}
                 </div>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="w-full gap-1.5 text-xs"
-                  onClick={addRow}
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  {tx("addReading", lang)}
-                </Button>
+                {wrapDisabledWithTooltip(
+                  dialogDeletionPending,
+                  dialogDisabledWarning,
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="w-full gap-1.5 text-xs"
+                    disabled={dialogDeletionPending}
+                    onClick={addRow}
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    {tx("addReading", lang)}
+                  </Button>
+                )}
               </div>
 
               <div className="space-y-1.5">
@@ -455,14 +591,23 @@ export default function Technician() {
                   rows={2}
                   placeholder={lang === "ar" ? "الملاحظات والظروف..." : "Observations, conditions, notes..."}
                   value={testNotes}
+                  disabled={dialogDeletionPending}
                   onChange={(e) => setTestNotes(e.target.value)}
                 />
               </div>
 
               <div className="flex gap-2 pt-1">
-                <Button type="submit" className="flex-1" disabled={submitResults.isPending}>
-                  {submitResults.isPending ? tx("loading", lang) : tx("submit", lang)}
-                </Button>
+                {wrapDisabledWithTooltip(
+                  dialogDeletionPending,
+                  dialogDisabledWarning,
+                  <Button
+                    type="submit"
+                    className="flex-1"
+                    disabled={submitResults.isPending || dialogDeletionPending}
+                  >
+                    {submitResults.isPending ? tx("loading", lang) : tx("submit", lang)}
+                  </Button>
+                )}
                 <Button type="button" variant="outline" onClick={() => setSelectedDist(null)}>
                   {tx("cancel", lang)}
                 </Button>
