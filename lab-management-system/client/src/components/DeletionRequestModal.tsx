@@ -23,6 +23,8 @@ export function DeletionRequestModal({
     "data_error" | "duplicate" | "customer_request" | "compliance" | "test_data" | "other"
   >("other");
 
+  const utils = trpc.useUtils();
+
   // Fetch impact analysis
   const { data: impact, isLoading: loadingImpact } = trpc.deletion.getDeletionImpact.useQuery({
     targetTable,
@@ -31,8 +33,10 @@ export function DeletionRequestModal({
 
   // Submit deletion request
   const submitRequest = trpc.deletion.requestDeletion.useMutation({
-    onSuccess: () => {
-      onSuccess();
+    onSuccess: async () => {
+      await utils.deletion.getPendingForTarget.invalidate();
+      onSuccess(); // Parent refetch (lists, etc.)
+      onClose(); // Close the modal
     },
   });
 
