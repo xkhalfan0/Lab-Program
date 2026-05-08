@@ -211,45 +211,66 @@ function printDistributionSlip(order: any, lang: string) {
   }, 300);
 }
 
-function orderDistributionIds(order: any): number[] {
-  const raw = (order.items ?? [])
-    .map((i: any) => Number(i.distributionId) || 0)
-    .filter((id: number) => id > 0);
-  return Array.from(new Set(raw));
-}
-
-/** Pending deletion on any `distributions` row linked to this order's line items. */
+/** Pending deletion on `lab_orders` for this row or any linked `distributions` line items. */
 function useDistributionRowDeletionStatus(order: any) {
-  const distIds = useMemo(() => orderDistributionIds(order), [order]);
+  const distributionIds = useMemo((): number[] => {
+    const raw = (order.items ?? [])
+      .map((item: any) => {
+        const n = Number(item.distributionId);
+        return Number.isFinite(n) && n > 0 ? n : 0;
+      })
+      .filter((id: number) => id > 0);
+    return Array.from(new Set<number>(raw));
+  }, [order]);
 
-  const firstId = distIds[0] ?? 0;
-  const { hasPendingDeletion: pendingFirst } = useDeletionStatus("distributions", firstId);
+  const firstDistId: number = distributionIds[0] ?? 0;
+  const orderId =
+    typeof order?.id === "number" && Number.isFinite(order.id)
+      ? order.id
+      : Number(order?.id) || 0;
 
-  const restIds = distIds.slice(1);
-  const restQueries = trpc.useQueries((t) =>
-    restIds.map((targetId) =>
+  const distDeletion = useDeletionStatus("distributions", firstDistId);
+  const orderDeletion = useDeletionStatus("lab_orders", orderId);
+
+  const restDistIds = distributionIds.slice(1);
+  const extraQueries = trpc.useQueries((t) =>
+    restDistIds.map((targetId) =>
       t.deletion.getPendingForTarget({ targetTable: "distributions", targetId })
     )
   );
 
-  const pendingRest = restIds.length > 0 && restQueries.some((q) => q.data?.pending);
-  const hasPendingDeletion = pendingFirst || pendingRest;
+  const extraHasPending = extraQueries.some((q) => q.data?.pending);
 
-  const PendingDeletionBadge = hasPendingDeletion ? (
-    <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-300 gap-1">
-      <Clock className="h-3 w-3" />
-      Deletion Pending
-    </Badge>
-  ) : null;
+  const hasPendingDeletion =
+    distDeletion.hasPendingDeletion ||
+    orderDeletion.hasPendingDeletion ||
+    extraHasPending;
 
-  const DisabledWarning = hasPendingDeletion ? (
-    <span className="inline-flex items-center gap-1 text-xs text-orange-700">
-      <AlertCircle className="h-3 w-3 shrink-0" />
-      A deletion request is pending for this record.
-    </span>
-  ) : null;
+  const PendingDeletionBadge = hasPendingDeletion
+    ? distDeletion.PendingDeletionBadge ||
+      orderDeletion.PendingDeletionBadge || (
+        <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-300 gap-1">
+          <Clock className="h-3 w-3" />
+          Deletion Pending
+        </Badge>
+      )
+    : null;
 
-  return { hasPendingDeletion, PendingDeletionBadge, DisabledWarning };
+  const DisabledWarning = hasPendingDeletion
+    ? distDeletion.DisabledWarning ||
+      orderDeletion.DisabledWarning || (
+        <span className="inline-flex items-center gap-1 text-xs text-orange-700">
+          <AlertCircle className="h-3 w-3 shrink-0" />
+          A deletion request is pending for this record.
+        </span>
+      )
+    : null;
+
+  return {
+    hasPendingDeletion,
+    PendingDeletionBadge,
+    DisabledWarning,
+  };
 }
 
 function DistributionAllOrdersStatusCell({ order }: { order: any }) {

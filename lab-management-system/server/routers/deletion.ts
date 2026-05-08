@@ -1,6 +1,6 @@
 import { and, desc, eq, sql } from "drizzle-orm";
 import { z } from "zod";
-import { deletionRequests } from "../../drizzle/schema";
+import { deletionRequests, users } from "../../drizzle/schema";
 import { getDb } from "../db";
 import { protectedProcedure, router } from "../_core/trpc";
 import {
@@ -164,8 +164,14 @@ export const deletionRouter = router({
           reviewComment: deletionRequests.reviewComment,
           createdAt: deletionRequests.createdAt,
           updatedAt: deletionRequests.updatedAt,
+          requester: {
+            id: users.id,
+            name: users.name,
+            email: users.email,
+          },
         })
         .from(deletionRequests)
+        .leftJoin(users, eq(deletionRequests.requestedBy, users.id))
         .orderBy(desc(deletionRequests.createdAt));
 
       return requests.map((req) => ({
