@@ -364,11 +364,12 @@ function DistributionAllOrdersActionsCell({
     (order.status === "distributed" || order.status === "in_progress") && !hasSubmittedItems;
   const canPrintSlip = order.status === "distributed" || order.status === "in_progress";
 
-  const { hasPendingDeletion, PendingDeletionBadge, DisabledWarning } =
-    useDistributionRowDeletionStatus(order);
+  const deletionStatus = useDistributionRowDeletionStatus(order);
+  const { hasPendingDeletion, DisabledWarning, PendingDeletionBadge } = deletionStatus;
 
-  const wrapDisabledAction = (node: ReactElement) =>
-    hasPendingDeletion ? (
+  const wrapDisabledAction = (node: ReactElement, disabled: boolean) => {
+    if (!disabled) return node;
+    return (
       <Tooltip>
         <TooltipTrigger asChild>
           <span className="inline-flex cursor-not-allowed">{node}</span>
@@ -377,9 +378,8 @@ function DistributionAllOrdersActionsCell({
           {DisabledWarning}
         </TooltipContent>
       </Tooltip>
-    ) : (
-      node
     );
+  };
 
   return (
     <div className="flex items-center gap-1">
@@ -393,7 +393,8 @@ function DistributionAllOrdersActionsCell({
           onClick={() => setLocation(`/order/${order.id}`)}
         >
           <Eye className="w-3.5 h-3.5" />
-        </Button>
+        </Button>,
+        hasPendingDeletion
       )}
       {canEditDistribution &&
         wrapDisabledAction(
@@ -406,7 +407,8 @@ function DistributionAllOrdersActionsCell({
             onClick={() => handleOpenEditDialog(order)}
           >
             <Pencil className="w-3.5 h-3.5" />
-          </Button>
+          </Button>,
+          hasPendingDeletion
         )}
       {canPrintSlip &&
         wrapDisabledAction(
@@ -419,7 +421,8 @@ function DistributionAllOrdersActionsCell({
             onClick={() => printDistributionSlip(order, lang)}
           >
             <Printer className="w-3.5 h-3.5" />
-          </Button>
+          </Button>,
+          hasPendingDeletion
         )}
       {hasPendingDeletion ? (
         <Tooltip>
