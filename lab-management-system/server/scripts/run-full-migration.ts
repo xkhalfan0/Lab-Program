@@ -59,6 +59,19 @@ async function main() {
       throw e;
     }
 
+    // Final check: Show table structure
+    console.log("[migration] Final verification - checking deletion_requests table:");
+    try {
+      const tableCheck = await db.execute(sql`DESCRIBE deletion_requests`);
+      const columns = (tableCheck as any)[0] as any[];
+      console.log("[migration] Columns found:");
+      columns.forEach((col: any) => {
+        console.log(`  - ${col.Field} (${col.Type})`);
+      });
+    } catch (e) {
+      console.error("[migration] Could not verify table:", e);
+    }
+
     console.log("[migration] ✅ All steps complete!");
     process.exit(0);
   } catch (error) {
