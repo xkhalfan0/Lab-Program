@@ -1,26 +1,64 @@
 import { execSync } from "child_process";
+import { sql } from "drizzle-orm";
+import { getDb } from "../db";
 
 console.log("[migration] Starting full migration...");
 
-try {
-  console.log("[migration] Step 1: Clean orphans");
-  execSync("tsx server/scripts/clean-orphan-data.ts", { stdio: "inherit" });
+async function main() {
+  try {
+    console.log("[migration] Step 1: Clean orphans");
+    execSync("tsx server/scripts/clean-orphan-data.ts", { stdio: "inherit" });
 
-  console.log("[migration] Step 2: Check integrity");
-  execSync("tsx server/scripts/check-integrity.ts", { stdio: "inherit" });
+    console.log("[migration] Step 2: Check integrity");
+    execSync("tsx server/scripts/check-integrity.ts", { stdio: "inherit" });
 
-  console.log("[migration] Step 3: Add foreign keys");
-  execSync("tsx server/scripts/add-foreign-keys.ts", { stdio: "inherit" });
+    console.log("[migration] Step 3: Add foreign keys");
+    execSync("tsx server/scripts/add-foreign-keys.ts", { stdio: "inherit" });
 
-  console.log("[migration] Step 4: Add soft delete");
-  execSync("tsx server/scripts/add-soft-delete-columns.ts", { stdio: "inherit" });
+    console.log("[migration] Step 4: Add soft delete");
+    execSync("tsx server/scripts/add-soft-delete-columns.ts", { stdio: "inherit" });
 
-  console.log("[migration] Step 5: Seed users");
-  execSync("tsx server/scripts/seed-role-users.ts", { stdio: "inherit" });
+    console.log("[migration] Step 5: Seed users");
+    execSync("tsx server/scripts/seed-role-users.ts", { stdio: "inherit" });
 
-  console.log("[migration] ✅ All steps complete!");
-  process.exit(0);
-} catch (error) {
-  console.error("[migration] ❌ Failed:", error);
-  process.exit(1);
+    // Step 6: Create deletion_requests table if it doesn't exist
+    console.log("[migration] Step 6: Create deletion_requests table");
+    const db = await getDb();
+    if (!db) throw new Error("Database connection failed");
+    try {
+      await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS deletion_requests (
+        id INT AUTO_INCREMENT NOT NULL,
+        requestedBy INT NOT NULL,
+        targetTable VARCHAR(50) NOT NULL,
+        targetId INT NOT NULL,
+        reason TEXT NOT NULL,
+        reasonCategory ENUM('data_error','duplicate','customer_request','compliance','test_data','other') NOT NULL,
+        impactAnalysis TEXT,
+        status ENUM('pending','approved','rejected') NOT NULL DEFAULT 'pending',
+        reviewedBy INT,
+        reviewedAt TIMESTAMP NULL,
+        reviewComment TEXT,
+        createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        CONSTRAINT deletion_requests_id PRIMARY KEY(id)
+      )
+    `);
+      console.log("[migration] ✅ deletion_requests table created/verified");
+    } catch (e: any) {
+      if (e.code === "ER_TABLE_EXISTS_ERR") {
+        console.log("[migration] deletion_requests table already exists ✅");
+      } else {
+        console.error("[migration] Error creating deletion_requests:", e);
+      }
+    }
+
+    console.log("[migration] ✅ All steps complete!");
+    process.exit(0);
+  } catch (error) {
+    console.error("[migration] ❌ Failed:", error);
+    process.exit(1);
+  }
 }
+
+void main();
