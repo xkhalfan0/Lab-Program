@@ -1,3 +1,31 @@
+import { sql } from "drizzle-orm";
+import { getDb } from "../db";
+
+async function checkTable() {
+  const db = await getDb();
+  if (!db) {
+    console.error("Database connection failed");
+    process.exit(1);
+  }
+
+  try {
+    const result = await db.execute(sql`DESCRIBE deletion_requests`);
+    const rows = result[0] as any[];
+
+    console.log("\n=== deletion_requests TABLE STRUCTURE ===");
+    rows.forEach((row: any) => {
+      console.log(`Column: ${row.Field} | Type: ${row.Type} | Null: ${row.Null}`);
+    });
+    console.log("==========================================\n");
+
+    process.exit(0);
+  } catch (e) {
+    console.error("Error:", e);
+    process.exit(1);
+  }
+}
+
+checkTable();
 import "dotenv/config";
 import { getDb } from "../db";
 
