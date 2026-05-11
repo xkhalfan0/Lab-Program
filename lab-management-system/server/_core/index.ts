@@ -1,4 +1,5 @@
 import "dotenv/config";
+import { execSync } from "node:child_process";
 import express from "express";
 import { createServer } from "http";
 import net from "net";
@@ -106,6 +107,39 @@ async function startServer() {
       createContext,
     })
   );
+
+  // ONE-TIME: Run pending Drizzle migrations (hit once from Railway, then remove)
+  app.get("/api/admin/run-drizzle-migrations/:secret", async (req, res) => {
+    const SECRET = "migrate-now-abc123xyz";
+
+    if (req.params.secret !== SECRET) {
+      return res.status(403).json({ success: false, error: "Invalid secret" });
+    }
+
+    try {
+      const output = execSync("pnpm exec drizzle-kit migrate", {
+        cwd: process.cwd(),
+        encoding: "utf-8",
+        env: process.env,
+        stdio: "pipe",
+      });
+
+      return res.json({
+        success: true,
+        message: "✅ Migrations applied successfully!",
+        output: output.toString(),
+      });
+    } catch (err: unknown) {
+      const e = err as { message?: string; stdout?: Buffer; stderr?: Buffer };
+      return res.status(500).json({
+        success: false,
+        error: e.message ?? String(err),
+        stdout: e.stdout?.toString(),
+        stderr: e.stderr?.toString(),
+      });
+    }
+  });
+
   // development mode uses Vite, production mode uses static files
   if (process.env.NODE_ENV === "development") {
     await setupVite(app, server);
