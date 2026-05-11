@@ -57,7 +57,6 @@ const T = {
   startTest:   { ar: "بدء الاختبار",              en: "Start test" },
   viewReport:  { ar: "عرض التقرير",               en: "View report" },
   partOf:      { ar: "ضمن الطلب",                 en: "Part of" },
-  ageDays:     { ar: "العمر (يوم)",               en: "Age (days)" },
   received:    { ar: "تاريخ الاستلام",            en: "Received" },
   sampleCode:  { ar: "رمز العينة",               en: "Sample code" },
   contractNo:  { ar: "رقم العقد",                 en: "Contract no." },
@@ -151,31 +150,12 @@ function resolveDistributionId(dist: any | null | undefined): number {
   return Number(dist.id) || 0;
 }
 
-/** Days since casting (concrete-style age). */
-function getCastingAgeDays(dist: any, sample: any | undefined): number | null {
-  const cast = dist?.castingDate ?? sample?.castingDate;
-  if (!cast) return null;
-  const t = new Date(cast).getTime();
-  if (Number.isNaN(t)) return null;
-  return Math.max(0, Math.ceil((Date.now() - t) / (1000 * 60 * 60 * 24)));
-}
-
-/** Days since receipt/creation — for sorting when no casting date. */
-function getDaysSinceReceived(dist: any, sample: any | undefined): number | null {
-  const base = dist.sampleReceivedAt ?? sample?.receivedAt ?? dist.createdAt;
-  if (!base) return null;
-  const t = new Date(base).getTime();
-  if (Number.isNaN(t)) return null;
-  return Math.max(1, Math.ceil((Date.now() - t) / (1000 * 60 * 60 * 24)));
-}
-
-/** Sort key: prefer age since casting when present, else days since received. */
-function getAgeDaysForSort(dist: any, sample: any | undefined): number | null {
-  const hasCast = !!(dist?.castingDate ?? sample?.castingDate);
-  if (hasCast) {
-    return getCastingAgeDays(dist, sample) ?? getDaysSinceReceived(dist, sample);
-  }
-  return getDaysSinceReceived(dist, sample);
+/** Received timestamp for sort (oldest first). Missing dates sort last. */
+function getReceivedSortKey(dist: any): number {
+  const raw = dist.sampleReceivedAt || dist.createdAt;
+  if (!raw) return Number.MAX_SAFE_INTEGER;
+  const t = new Date(raw).getTime();
+  return Number.isNaN(t) ? Number.MAX_SAFE_INTEGER : t;
 }
 
 function priorityRank(p: string | null | undefined): number {
@@ -257,17 +237,7 @@ function TechnicianAssignmentCard({
   const contractNo = sample?.contractNumber ?? "—";
   const sampleCode = dist.sampleCode ?? sample?.sampleCode ?? "—";
 
-  const hasCastingDate = !!(dist.castingDate || sample?.castingDate);
-  const ageDays = getCastingAgeDays(dist, sample);
-  const receivedTs = dist.sampleReceivedAt ?? sample?.receivedAt ?? dist.createdAt;
-  const locale = lang === "ar" ? "ar" : "en-GB";
-  const ageOrReceivedValue = hasCastingDate
-    ? ageDays != null
-      ? String(ageDays)
-      : "—"
-    : receivedTs
-      ? new Date(receivedTs).toLocaleDateString(locale)
-      : "—";
+  const receivedDate = dist.sampleReceivedAt || dist.createdAt;
 
   const statusBadge = isCompleted ? (
     <Badge className="shrink-0 border border-green-200 bg-green-100 text-xs text-green-800">
@@ -316,10 +286,15 @@ function TechnicianAssignmentCard({
                 <p className="font-mono text-sm font-medium">{dist.distributionCode ?? "—"}</p>
               </div>
               <div>
-                <p className="text-xs text-muted-foreground">
-                  {hasCastingDate ? tx("ageDays", lang) : tx("received", lang)}
+                <p className="text-xs text-muted-foreground">{tx("received", lang)}</p>
+                <p className="font-mono text-sm font-medium">
+                  {receivedDate
+                    ? new Date(receivedDate).toLocaleDateString(
+                        lang === "ar" ? "ar-AE" : "en-GB",
+                        { year: "numeric", month: "2-digit", day: "2-digit" }
+                      )
+                    : "—"}
                 </p>
-                <p className="font-mono text-sm font-medium">{ageOrReceivedValue}</p>
               </div>
             </div>
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -456,15 +431,13 @@ export default function Technician() {
       }
       const pr = priorityRank(a.priority) - priorityRank(b.priority);
       if (pr !== 0) return pr;
-      const sa = allSamples.find((s: any) => s.id === a.sampleId);
-      const sb = allSamples.find((s: any) => s.id === b.sampleId);
-      const ageA = getAgeDaysForSort(a, sa) ?? 0;
-      const ageB = getAgeDaysForSort(b, sb) ?? 0;
-      if (ageA !== ageB) return ageB - ageA;
+      const timeA = getReceivedSortKey(a);
+      const timeB = getReceivedSortKey(b);
+      if (timeA !== timeB) return timeA - timeB;
       return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
     });
     return list;
-  }, [enrichedTasks, allSamples]);
+  }, [enrichedTasks]);
 
   const counts = useMemo(() => {
     const active = sortedTasks.filter((d) => d.status !== "completed").length;

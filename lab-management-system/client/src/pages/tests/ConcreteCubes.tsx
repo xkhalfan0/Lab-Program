@@ -34,15 +34,6 @@ function getCubeSizeFactor(sizeLabel: string): number {
 // Cubes tested at days 8–13 belong to the 14-day set (85%), not 7-day.
 // Cubes tested at days 15–28 belong to the 28-day set (100%).
 // Age factors corrected: 7d→65% (was wrong at 70%). Added 3d/56d/>56d.
-function getStrengthFactor(ageDays: number): number {
-  if (ageDays <= 3)  return 0.40;  // 3-day group: 40%
-  if (ageDays <= 7)  return 0.65;  // 7-day group (days 4–7): 65%
-  if (ageDays <= 14) return 0.85;  // 14-day group (days 8–14): 85%
-  if (ageDays <= 28) return 1.00;  // 28-day group (days 15–28): 100%
-  if (ageDays <= 56) return 1.10;  // 56-day: 110%
-  return 1.15;                     // >56 days: 115%
-}
-
 function getAgeGroupLabel(ageDays: number): string {
   if (ageDays <= 3)  return "3-day";
   if (ageDays <= 7)  return "7-day";
@@ -123,6 +114,7 @@ export default function ConcreteCubes() {
   const [batchReference, setBatchReference] = useState("");
   const [notes, setNotes] = useState("");
   const [rows, setRows] = useState<CubeRow[]>([newRow(0), newRow(1), newRow(2)]);
+  const [testAge, setTestAge] = useState<7 | 14 | 28 | null>(null);
   const [saving, setSaving] = useState(false);
   const { lang } = useLanguage();
   const ar = lang === "ar";
@@ -135,11 +127,19 @@ export default function ConcreteCubes() {
   const sampleAgeDays = castingDate
     ? Math.floor((testDate.getTime() - castingDate.getTime()) / (1000 * 60 * 60 * 24))
     : null;
+  /** Calendar age from casting (same as sampleAgeDays); used for late-test UI and persisted actualAge. */
+  const actualAge = sampleAgeDays;
 
-  // Required strength at test age (based on age factor)
+  // Required strength at selected test age (7d / 14d / 28d factors)
   const specStr = parseFloat(specifiedStrength) || 30;
-  const ageFactor = sampleAgeDays ? getStrengthFactor(sampleAgeDays) : 1.0;
-  const requiredAtAge = specStr * ageFactor;
+  const strengthFactor = testAge
+    ? testAge === 7
+      ? 0.65
+      : testAge === 14
+        ? 0.85
+        : 1.0
+    : 1.0;
+  const requiredAtAge = specStr * strengthFactor;
 
   const saveResult = trpc.specializedTests.save.useMutation({
     onSuccess: (_, vars) => {
@@ -162,6 +162,9 @@ export default function ConcreteCubes() {
     if (fd.curingCondition) setCuringCondition(String(fd.curingCondition));
     if (fd.batchReference) setBatchReference(String(fd.batchReference));
     if (fd.notes) setNotes(fd.notes);
+    if (fd.testAge === 7 || fd.testAge === 14 || fd.testAge === 28) {
+      setTestAge(fd.testAge);
+    }
     if (fd.cubes && Array.isArray(fd.cubes)) {
       setRows(fd.cubes.map((c: any) => ({
         id: c.id || `row_${Date.now()}_${Math.random()}`,
@@ -204,6 +207,12 @@ export default function ConcreteCubes() {
   const removeRow = (id: string) => setRows(prev => prev.filter(r => r.id !== id));
 
   const handleSave = async (status: "draft" | "submitted") => {
+    if (!testAge) {
+      toast.error(
+        lang === "ar" ? "يجب اختيار عمر الاختبار" : "Please select test age"
+      );
+      return;
+    }
     if (!dist?.sampleId) {
       toast.error(lang === "ar" ? "معرف العينة مفقود" : "Sample ID missing");
       return;
@@ -220,6 +229,10 @@ export default function ConcreteCubes() {
         testTypeCode: "CONC_CUBE",
         formTemplate: "concrete_cubes",
         formData: {
+          testAge,
+          actualAge,
+          isLate: testAge ? (actualAge != null && actualAge > testAge + 5) : false,
+          cubeSize: rows[0]?.cubeSize ?? "150",
           specifiedStrength: specStr,
           structureType,
           curingCondition,
@@ -274,6 +287,77 @@ export default function ConcreteCubes() {
             { label: "القوة المحددة", value: specifiedStrength ? `${specifiedStrength} MPa` : null },
           ]}
         />
+
+        <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded">
+          <label className="block text-sm font-semibold mb-2">
+            {lang === "ar" ? "عمر الاختبار *" : "Test Age *"}
+            <span className="text-red-600"> ({lang === "ar" ? "مطلوب" : "required"})</span>
+          </label>
+
+          <div className="flex flex-wrap gap-4 mb-3">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="radio"
+                name="testAge"
+                value="7"
+                checked={testAge === 7}
+                onChange={() => setTestAge(7)}
+                className="w-4 h-4"
+                disabled={submitted}
+              />
+              <span>{lang === "ar" ? "7 أيام" : "7-Day Test"}</span>
+            </label>
+
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="radio"
+                name="testAge"
+                value="14"
+                checked={testAge === 14}
+                onChange={() => setTestAge(14)}
+                className="w-4 h-4"
+                disabled={submitted}
+              />
+              <span>{lang === "ar" ? "14 يوم" : "14-Day Test"}</span>
+            </label>
+
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="radio"
+                name="testAge"
+                value="28"
+                checked={testAge === 28}
+                onChange={() => setTestAge(28)}
+                className="w-4 h-4"
+                disabled={submitted}
+              />
+              <span>{lang === "ar" ? "28 يوم" : "28-Day Test"}</span>
+            </label>
+          </div>
+
+          {testAge != null && (
+            <div
+              className={`p-2 rounded text-sm ${
+                actualAge != null && actualAge > testAge + 5
+                  ? "bg-amber-100 text-amber-700"
+                  : "bg-gray-100 text-gray-700"
+              }`}
+            >
+              {lang === "ar" ? "العمر الفعلي:" : "Current Age:"}
+              <strong className="ml-2">
+                {actualAge != null
+                  ? `${actualAge} ${lang === "ar" ? "يوم" : "days"}`
+                  : "—"}
+              </strong>
+              {actualAge != null && actualAge > testAge + 5 && (
+                <span className="ml-2">
+                  ⚠️ ({lang === "ar" ? "متأخر" : "tested late"})
+                </span>
+              )}
+            </div>
+          )}
+        </div>
+
         {/* Header */}
         <div className="flex items-start justify-between flex-wrap gap-3">
           <div>
@@ -444,7 +528,7 @@ export default function ConcreteCubes() {
                   {requiredAtAge.toFixed(1)} <span className="text-sm font-normal">N/mm²</span>
                 </p>
                 <p className="text-xs text-amber-600 mt-1">
-                  {ar ? "7 أيام → 70% من المقاومة المحددة" : "7 days → 70% of specified strength"}
+                  {ar ? "7 أيام → 65% من المقاومة المحددة" : "7 days → 65% of specified strength"}
                 </p>
                 <p className="text-xs text-amber-600">
                   {ar ? "14 يومًا → 85% من المقاومة المحددة" : "14 days → 85% of specified strength"}
@@ -452,11 +536,11 @@ export default function ConcreteCubes() {
                 <p className="text-xs text-amber-600">
                   {ar ? "28 يومًا → 100% من المقاومة المحددة" : "28 days → 100% of specified strength"}
                 </p>
-                {sampleAgeDays !== null && (
+                {testAge != null && (
                   <p className="text-xs text-amber-600 mt-1">
                     {ar
-                      ? `${specStr} × ${(ageFactor * 100).toFixed(0)}% (معامل العمر ${sampleAgeDays} يوم)`
-                      : `${specStr} × ${(ageFactor * 100).toFixed(0)}% (age factor at ${sampleAgeDays} days)`}
+                      ? `${specStr} × ${(strengthFactor * 100).toFixed(0)}% (${testAge} يوم — معامل الاختبار المختار)`
+                      : `${specStr} × ${(strengthFactor * 100).toFixed(0)}% (${testAge}-day selected test factor)`}
                   </p>
                 )}
               </div>
@@ -598,8 +682,12 @@ export default function ConcreteCubes() {
                 <div className="bg-slate-50 rounded-xl p-4 text-center border">
                   <p className="text-xs text-slate-500 mb-1">
                     {ar
-                      ? `المطلوب عند ${sampleAgeDays ?? "—"} يوم`
-                      : `Required at ${sampleAgeDays ?? "—"} days`}
+                      ? testAge != null
+                        ? `المطلوب — اختبار ${testAge} يوم (عمر العينة: ${sampleAgeDays ?? "—"} يوم)`
+                        : `المطلوب عند ${sampleAgeDays ?? "—"} يوم`
+                      : testAge != null
+                        ? `Required — ${testAge}-day test (sample age: ${sampleAgeDays ?? "—"} days)`
+                        : `Required at ${sampleAgeDays ?? "—"} days`}
                   </p>
                   <p className="text-3xl font-bold text-slate-800">{requiredAtAge.toFixed(1)}</p>
                   <p className="text-xs text-slate-400">N/mm²</p>
