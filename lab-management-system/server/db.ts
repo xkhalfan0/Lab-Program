@@ -1,5 +1,6 @@
-import { and, desc, eq, gte, inArray, isNull, lte, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, isNotNull, isNull, lte, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
+import { alias } from "drizzle-orm/mysql-core";
 import { createPool } from "mysql2";
 import {
   InsertUser,
@@ -23,7 +24,6 @@ import {
   type InsertConcreteTestGroup,
   type InsertConcreteCube,
   type InsertClearanceRequest,
-  type InsertSample,
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 
@@ -306,18 +306,17 @@ function sampleRowSelect() {
       ...SAMPLE_ROW_BASE,
       deletedAt: samples.deletedAt,
       deletedBy: samples.deletedBy,
+      deletionReason: samples.deletionReason,
+      deletionCategory: samples.deletionCategory,
     };
   }
   return SAMPLE_ROW_BASE;
 }
 
-export async function createSample(data: InsertSample) {
+export async function createSample(data: typeof samples.$inferInsert) {
   const db = await getDb();
   if (!db) throw new Error("DB not available");
-
-  const { deletedAt, deletedBy, deletionReason, deletionCategory, ...cleanData } = data as any;
-
-  await db.insert(samples).values(cleanData);
+  await db.insert(samples).values(data);
   const result = await db
     .select(sampleRowSelect())
     .from(samples)
@@ -326,46 +325,139 @@ export async function createSample(data: InsertSample) {
   return result[0];
 }
 
-export async function getAllSamples() {
+export async function getAllSamples(options?: { includeDeleted?: boolean }) {
   const db = await getDb();
   if (!db) return [];
-  // Join with users to get receivedBy full name
-  const baseQuery = db
+  const soft = samplesHasSoftDeleteColumns();
+  const rowShape = {
+    id: samples.id,
+    sampleCode: samples.sampleCode,
+    contractId: samples.contractId,
+    contractNumber: samples.contractNumber,
+    contractName: samples.contractName,
+    contractorName: samples.contractorName,
+    sampleType: samples.sampleType,
+    sector: samples.sector,
+    quantity: samples.quantity,
+    condition: samples.condition,
+    notes: samples.notes,
+    status: samples.status,
+    requestedTestTypeId: samples.requestedTestTypeId,
+    testSubType: samples.testSubType,
+    sampleSubType: samples.sampleSubType,
+    testTypeName: samples.testTypeName,
+    batchId: samples.batchId,
+    location: samples.location,
+    nominalCubeSize: samples.nominalCubeSize,
+    castingDate: samples.castingDate,
+    receivedById: samples.receivedById,
+    receivedByName: users.name,
+    receivedAt: samples.receivedAt,
+    managerReadAt: samples.managerReadAt,
+    createdAt: samples.createdAt,
+    updatedAt: samples.updatedAt,
+    ...(soft
+      ? {
+          deletedAt: samples.deletedAt,
+          deletedBy: samples.deletedBy,
+          deletionReason: samples.deletionReason,
+          deletionCategory: samples.deletionCategory,
+        }
+      : {}),
+  };
+  const baseQuery = db.select(rowShape).from(samples).leftJoin(users, eq(samples.receivedById, users.id));
+  const filtered = soft && !options?.includeDeleted ? baseQuery.where(isNull(samples.deletedAt)) : baseQuery;
+  return filtered.orderBy(desc(samples.createdAt));
+}
+
+/**
+ * Full sample row for the sample detail API (includes soft-deleted rows).
+ * Adds `receivedByName`, `deletedByName`, and `deletedByEmail` via user joins.
+ */
+export async function getSampleDetailRow(id: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+
+  const receiver = alias(users, "sample_detail_receiver");
+
+  if (!samplesHasSoftDeleteColumns()) {
+    const rows = await db
+      .select({
+        ...sampleRowSelect(),
+        receivedByName: receiver.name,
+      })
+      .from(samples)
+      .leftJoin(receiver, eq(samples.receivedById, receiver.id))
+      .where(eq(samples.id, id))
+      .limit(1);
+    const row = rows[0];
+    if (!row) return undefined;
+    const { receivedByName, ...rest } = row;
+    return {
+      ...rest,
+      receivedByName: receivedByName?.trim() ?? null,
+      deletedByName: null as string | null,
+      deletedByEmail: null as string | null,
+    };
+  }
+
+  const deleter = alias(users, "sample_detail_deleter");
+  const rows = await db
+    .select({
+      ...sampleRowSelect(),
+      receivedByName: receiver.name,
+      deleterName: deleter.name,
+      deleterUsername: deleter.username,
+      deleterEmail: deleter.email,
+    })
+    .from(samples)
+    .leftJoin(receiver, eq(samples.receivedById, receiver.id))
+    .leftJoin(deleter, eq(samples.deletedBy, deleter.id))
+    .where(eq(samples.id, id))
+    .limit(1);
+
+  const row = rows[0];
+  if (!row) return undefined;
+
+  const { receivedByName, deleterName, deleterUsername, deleterEmail, ...rest } = row;
+  const deletedByName = deleterName?.trim() || deleterUsername?.trim() || null;
+
+  return {
+    ...rest,
+    receivedByName: receivedByName?.trim() ?? null,
+    deletedByName,
+    deletedByEmail: deleterEmail ?? null,
+  };
+}
+
+/**
+ * Admin deletion audit list (`DeletionLog` / `samples.deletionAuditLog`).
+ * Rows have `deletedAt` set; joins `users` for who performed the soft-delete.
+ * Requires soft-delete columns on `samples` (incl. `deletionReason` / `deletionCategory` after migration 0033).
+ */
+export async function listDeletedSamplesAudit() {
+  const db = await getDb();
+  if (!db) return [];
+  if (!samplesHasSoftDeleteColumns()) return [];
+  return db
     .select({
       id: samples.id,
       sampleCode: samples.sampleCode,
-      contractId: samples.contractId,
       contractNumber: samples.contractNumber,
       contractName: samples.contractName,
       contractorName: samples.contractorName,
-      sampleType: samples.sampleType,
-      sector: samples.sector,
-      quantity: samples.quantity,
-      condition: samples.condition,
-      notes: samples.notes,
-      status: samples.status,
-      requestedTestTypeId: samples.requestedTestTypeId,
-      testSubType: samples.testSubType,
-      sampleSubType: samples.sampleSubType,
-      testTypeName: samples.testTypeName,
-      batchId: samples.batchId,
-      location: samples.location,
-      nominalCubeSize: samples.nominalCubeSize,
-      castingDate: samples.castingDate,
-      receivedById: samples.receivedById,
-      receivedByName: users.name,
-      receivedAt: samples.receivedAt,
-      managerReadAt: samples.managerReadAt,
-      createdAt: samples.createdAt,
-      updatedAt: samples.updatedAt,
+      deletedAt: samples.deletedAt,
+      deletionReason: samples.deletionReason,
+      deletionCategory: samples.deletionCategory,
+      deletedBy: samples.deletedBy,
+      deletedByUserName: users.name,
+      deletedByUserEmail: users.email,
+      deletedByUsername: users.username,
     })
     .from(samples)
-    .leftJoin(users, eq(samples.receivedById, users.id));
-  const filtered = samplesHasSoftDeleteColumns()
-    ? baseQuery.where(isNull(samples.deletedAt))
-    : baseQuery;
-  const rows = await filtered.orderBy(desc(samples.createdAt));
-  return rows;
+    .leftJoin(users, eq(samples.deletedBy, users.id))
+    .where(isNotNull(samples.deletedAt))
+    .orderBy(desc(samples.deletedAt));
 }
 
 export async function getSampleById(id: number) {
@@ -452,17 +544,35 @@ export async function updateSampleFields(
   await db.update(samples).set(updateData).where(eq(samples.id, id));
 }
 
-export async function softDeleteSample(id: number, userId: number) {
+export async function softDeleteSample(
+  id: number,
+  userId: number,
+  opts?: { deletionReason?: string | null; deletionCategory?: string | null }
+) {
   const db = await getDb();
   if (!db) return;
   if (!samplesHasSoftDeleteColumns()) {
     console.warn("[db] softDeleteSample skipped: samples.deletedAt column missing (run db:migration:phase1).");
     return;
   }
+  const now = new Date();
+  const patch: Record<string, unknown> = {
+    deletedAt: now,
+    deletedBy: userId,
+    updatedAt: now,
+  };
+  if (opts?.deletionReason !== undefined) patch.deletionReason = opts.deletionReason;
+  if (opts?.deletionCategory !== undefined) patch.deletionCategory = opts.deletionCategory;
+
   await db
     .update(samples)
-    .set({ deletedAt: new Date(), deletedBy: userId, updatedAt: new Date() })
+    .set(patch as any)
     .where(and(eq(samples.id, id), isNull(samples.deletedAt)));
+
+  await db
+    .update(distributions)
+    .set({ deletedAt: now, deletedBy: userId, updatedAt: now })
+    .where(and(eq(distributions.sampleId, id), isNull(distributions.deletedAt)));
 }
 
 export async function getDashboardStats() {
