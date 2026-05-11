@@ -599,7 +599,7 @@ export async function getDistributionsByTechnician(technicianId: number) {
     .where(
       and(
         eq(distributions.assignedTechnicianId, technicianId),
-        inArray(distributions.status, ["pending", "in_progress"]),
+        inArray(distributions.status, ["pending", "in_progress", "completed"]),
         isNull(distributions.deletedAt)
       )
     )

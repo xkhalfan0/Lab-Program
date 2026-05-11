@@ -2,7 +2,6 @@ import DashboardLayout from "@/components/DashboardLayout";
 import { DeletionRequestButton } from "@/components/DeletionRequestButton";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   Dialog,
@@ -16,11 +15,20 @@ import { Textarea } from "@/components/ui/textarea";
 import { trpc } from "@/lib/trpc";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useDeletionStatus } from "@/hooks/useDeletionStatus";
-import { Microscope, Plus, Trash2, FlaskConical, CheckCircle2, Clock, ChevronDown, ChevronRight } from "lucide-react";
+import {
+  Microscope,
+  Plus,
+  Trash2,
+  FlaskConical,
+  CheckCircle2,
+  Clock,
+  Building2,
+  Calendar,
+  FileText,
+} from "lucide-react";
 import { useMemo, useState, type ReactElement } from "react";
 import { useLocation } from "wouter";
 import { toast } from "sonner";
-import { TaskQueue, getDistributionTaskState, type Task } from "@/components/TaskQueue";
 
 // ─── Bilingual labels ─────────────────────────────────────────────────────────
 const T = {
@@ -40,6 +48,19 @@ const T = {
   testType:    { ar: "نوع الاختبار",              en: "Test Type" },
   priority:    { ar: "الأولوية",                  en: "Priority" },
   dueDate:     { ar: "تاريخ الاستحقاق",           en: "Due Date" },
+  tabAll:      { ar: "الكل",                      en: "All" },
+  tabActive:   { ar: "نشطة",                      en: "Active" },
+  tabCompleted:{ ar: "مكتملة",                    en: "Completed" },
+  sectionActive: { ar: "تكليفات نشطة",            en: "Active assignments" },
+  sectionDone:   { ar: "اختبارات مكتملة",         en: "Completed tests" },
+  emptyView:   { ar: "لا توجد اختبارات في هذا العرض", en: "No tests in this view" },
+  startTest:   { ar: "بدء الاختبار",              en: "Start test" },
+  viewReport:  { ar: "عرض التقرير",               en: "View report" },
+  partOf:      { ar: "ضمن الطلب",                 en: "Part of" },
+  ageDays:     { ar: "العمر (يوم)",               en: "Age (days)" },
+  sampleCode:  { ar: "رمز العينة",               en: "Sample code" },
+  contractNo:  { ar: "رقم العقد",                 en: "Contract no." },
+  distCode:    { ar: "رمز التوزيع",               en: "Distribution" },
 };
 
 function tx(key: keyof typeof T, lang: string) {
@@ -103,13 +124,23 @@ const SPECIALIZED_CODES = [
   "AGG_SIEVE_COARSE", "AGG_SIEVE_FINE", "AGG_LOS_ANGELES", "AGG_FLAKINESS",
   "SOIL_PROCTOR", "SOIL_CBR", "SOIL_ATTERBERG", "SOIL_COMPACTION",
   "ASPH_ACWC", "ASPH_ACBC", "ASPH_DBM", "ASPH_MARSHALL",
-  // legacy codes
   "CONC_BLOCK_SOLID", "CONC_BLOCK_HOLLOW", "CONC_BLOCK_THERMAL",
   "CONC_INTERLOCK_6CM", "CONC_INTERLOCK_8CM",
   "STEEL_REBAR_BS4449", "STEEL_REBAR_ASTM",
-  "AGG_SIEVE_COARSE", "AGG_SIEVE_FINE", "CONC_MORTAR_SAND",
-  "SOIL_PROCTOR", "ASPH_ACWC", "ASPH_ACBC", "ASPH_DBM",
+  "CONC_MORTAR_SAND",
 ];
+
+function isSpecializedTestType(testType: string): boolean {
+  return (
+    SPECIALIZED_CODES.includes(testType) ||
+    testType.startsWith("STEEL_") ||
+    testType.startsWith("AGG_") ||
+    testType.startsWith("SOIL_") ||
+    testType.startsWith("ASPH_") ||
+    testType.startsWith("CONC_") ||
+    testType.startsWith("CEM_")
+  );
+}
 
 /** Prefer FK on order-item rows; otherwise use distribution primary key (assignments). */
 function resolveDistributionId(dist: any | null | undefined): number {
@@ -117,6 +148,41 @@ function resolveDistributionId(dist: any | null | undefined): number {
   const fromFk = Number(dist.distributionId);
   if (fromFk > 0) return fromFk;
   return Number(dist.id) || 0;
+}
+
+function getAgeDays(dist: any, sample: any | undefined): number | null {
+  const base = dist.sampleReceivedAt ?? sample?.receivedAt ?? dist.createdAt;
+  if (!base) return null;
+  const t = new Date(base).getTime();
+  if (Number.isNaN(t)) return null;
+  return Math.max(1, Math.ceil((Date.now() - t) / (1000 * 60 * 60 * 24)));
+}
+
+function priorityRank(p: string | null | undefined): number {
+  switch (p) {
+    case "urgent":
+      return 0;
+    case "high":
+      return 1;
+    case "normal":
+      return 2;
+    case "low":
+      return 3;
+    default:
+      return 2;
+  }
+}
+
+function reportUrlForDistribution(dist: any): string {
+  const id = dist.id;
+  const testType = dist.testType ?? "";
+  if (testType === "CONC_CUBE" || testType === "concrete" || testType === "concrete_compression") {
+    return `/concrete-report/${id}`;
+  }
+  if (isSpecializedTestType(testType)) {
+    return `/test-report/${id}`;
+  }
+  return `/test-report/${id}`;
 }
 
 function wrapDisabledWithTooltip(
@@ -138,66 +204,130 @@ function wrapDisabledWithTooltip(
   );
 }
 
-function TechnicianOrderItemRow({
-  order,
-  item,
+function TechnicianAssignmentCard({
+  dist,
   lang,
-  isDone,
-  handleOpenTest,
+  sample,
+  ageDays,
+  isCompleted,
+  pendingDeletion,
+  onStartTest,
+  onViewReport,
   onDeletionSuccess,
 }: {
-  order: any;
-  item: any;
+  dist: any;
   lang: string;
-  isDone: boolean;
-  handleOpenTest: (dist: any) => void;
+  sample: any | undefined;
+  ageDays: number | null;
+  isCompleted: boolean;
+  pendingDeletion: boolean;
+  onStartTest: () => void;
+  onViewReport: () => void;
   onDeletionSuccess: () => void;
 }) {
-  const distId = resolveDistributionId(item);
+  const distId = resolveDistributionId(dist);
   const { hasPendingDeletion, PendingDeletionBadge, DisabledWarning } = useDeletionStatus(
     "distributions",
     distId
   );
+  const combinedPending = pendingDeletion || hasPendingDeletion;
 
-  const openPayload = {
-    ...item,
-    sampleId: item.sampleId ?? order.sampleId,
-    sampleCode: item.sampleCode ?? order.sampleCode,
-  };
+  const testTitle =
+    lang === "ar" ? dist.testNameAr || dist.testName : dist.testNameEn || dist.testName;
+  const subLabel = getSubTypeLabel(dist.sampleSubType, lang);
+  const contractor = sample?.contractorName ?? "—";
+  const contractNo = sample?.contractNumber ?? "—";
+  const sampleCode = dist.sampleCode ?? sample?.sampleCode ?? "—";
+
+  const statusBadge = isCompleted ? (
+    <Badge className="shrink-0 border border-green-200 bg-green-100 text-xs text-green-800">
+      <CheckCircle2 className="mr-1 h-3 w-3" />
+      {lang === "ar" ? "مكتمل" : "Completed"}
+    </Badge>
+  ) : (
+    <Badge className="shrink-0 border border-amber-200 bg-amber-100 text-xs text-amber-900">
+      <Clock className="mr-1 h-3 w-3" />
+      {lang === "ar" ? "نشط" : "Active"}
+    </Badge>
+  );
 
   return (
     <div
-      className={`flex items-center justify-between rounded-md px-3 py-2 text-sm ${
-        isDone
-          ? "bg-muted/30 text-muted-foreground"
-          : hasPendingDeletion
-            ? "bg-muted/40 cursor-not-allowed opacity-90"
-            : "bg-primary/5 hover:bg-primary/10 cursor-pointer"
+      className={`rounded-lg border px-5 py-4 transition-shadow hover:shadow-md ${
+        isCompleted ? "border-green-200/80 bg-green-50/20" : "border-amber-200/40 bg-amber-50/10"
       }`}
-      onClick={() => !isDone && !hasPendingDeletion && handleOpenTest(openPayload)}
     >
-      <div className="flex items-center gap-2">
-        {isDone ? (
-          <CheckCircle2 className="w-4 h-4 text-green-500" />
-        ) : (
-          <Clock className="w-4 h-4 text-amber-500" />
-        )}
-        <span className={isDone ? "line-through" : ""}>
-          {lang === "ar" ? (item.testNameAr || item.testName) : (item.testNameEn || item.testName)}
-        </span>
-      </div>
-      {!isDone && (
-        <div className="flex items-center gap-1 flex-wrap justify-end">
-          {PendingDeletionBadge}
-          {wrapDisabledWithTooltip(
-            hasPendingDeletion,
-            DisabledWarning,
-            <Button size="sm" variant="outline" className="h-7 text-xs" disabled={hasPendingDeletion}>
-              {lang === "ar" ? "ابدأ" : "Start"}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex min-w-0 flex-1 items-start gap-3">
+          <FlaskConical className="h-5 w-5 shrink-0 text-primary" />
+          <div className="min-w-0 flex-1 space-y-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="text-lg font-semibold leading-tight text-foreground">{testTitle}</h2>
+              {statusBadge}
+              {PendingDeletionBadge}
+            </div>
+            {subLabel && <p className="text-xs text-muted-foreground">{subLabel}</p>}
+            {dist.orderCode && dist.isMultiTest && (
+              <Badge variant="secondary" className="text-xs font-normal">
+                {tx("partOf", lang)} {dist.orderCode}
+              </Badge>
+            )}
+            <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+              <div>
+                <p className="text-xs text-muted-foreground">{tx("sampleCode", lang)}</p>
+                <p className="font-mono text-sm font-medium">{sampleCode}</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">{tx("contractNo", lang)}</p>
+                <p className="font-mono text-sm font-medium">{contractNo}</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">{tx("distCode", lang)}</p>
+                <p className="font-mono text-sm font-medium">{dist.distributionCode ?? "—"}</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">{tx("ageDays", lang)}</p>
+                <p className="font-mono text-sm font-medium">{ageDays != null ? String(ageDays) : "—"}</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Building2 className="h-4 w-4 shrink-0" />
+              <span className="truncate">{contractor}</span>
+            </div>
+            {dist.expectedCompletionDate && (
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <Calendar className="h-4 w-4 shrink-0" />
+                <span>
+                  {tx("dueDate", lang)}:{" "}
+                  {new Date(dist.expectedCompletionDate).toLocaleDateString(lang === "ar" ? "ar" : "en")}
+                </span>
+              </div>
+            )}
+          </div>
+        </div>
+        <div className="flex shrink-0 flex-wrap items-center gap-2 sm:flex-col sm:items-end">
+          {isCompleted ? (
+            <Button type="button" variant="outline" size="sm" className="gap-1.5" onClick={onViewReport}>
+              <FileText className="h-4 w-4" />
+              {tx("viewReport", lang)}
             </Button>
+          ) : (
+            wrapDisabledWithTooltip(
+              combinedPending,
+              DisabledWarning,
+              <Button
+                type="button"
+                size="sm"
+                className="gap-1.5"
+                disabled={combinedPending}
+                onClick={onStartTest}
+              >
+                {tx("startTest", lang)}
+              </Button>
+            )
           )}
           {distId > 0 &&
-            (hasPendingDeletion ? (
+            (combinedPending ? (
               <Tooltip>
                 <TooltipTrigger asChild>
                   <span className="inline-flex cursor-not-allowed opacity-60">
@@ -205,7 +335,7 @@ function TechnicianOrderItemRow({
                       <DeletionRequestButton
                         targetTable="distributions"
                         targetId={distId}
-                        targetLabel={`${order.orderCode} · ${item.testTypeCode ?? item.testName ?? distId}`}
+                        targetLabel={`${dist.distributionCode ?? distId} · ${dist.testType ?? ""}`}
                         variant="icon"
                         onSuccess={onDeletionSuccess}
                       />
@@ -220,13 +350,22 @@ function TechnicianOrderItemRow({
               <DeletionRequestButton
                 targetTable="distributions"
                 targetId={distId}
-                targetLabel={`${order.orderCode} · ${item.testTypeCode ?? item.testName ?? distId}`}
+                targetLabel={`${dist.distributionCode ?? distId} · ${dist.testType ?? ""}`}
                 variant="icon"
                 onSuccess={onDeletionSuccess}
               />
             ))}
         </div>
-      )}
+      </div>
+    </div>
+  );
+}
+
+function EmptyState({ lang }: { lang: string }) {
+  return (
+    <div className="flex flex-col items-center justify-center rounded-lg border border-dashed py-14 text-center text-muted-foreground">
+      <FlaskConical className="mb-2 h-10 w-10 opacity-40" />
+      <p className="text-sm">{tx("emptyView", lang)}</p>
     </div>
   );
 }
@@ -238,44 +377,77 @@ export default function Technician() {
   const [rawValues, setRawValues] = useState<string[]>(["", "", ""]);
   const [unit, setUnit] = useState("MPa");
   const [testNotes, setTestNotes] = useState("");
-  const [expandedOrders, setExpandedOrders] = useState<Set<number>>(new Set());
+  const [filterTab, setFilterTab] = useState<"all" | "active" | "completed">("all");
 
   const { data: assignments = [], refetch } = trpc.distributions.myAssignments.useQuery();
   const { data: myOrders = [], refetch: refetchOrders } = trpc.orders.myOrders.useQuery();
   const { data: allSamples = [] } = trpc.samples.list.useQuery();
   const markRead = trpc.distributions.markRead.useMutation();
 
-  const toggleOrder = (id: number) => {
-    setExpandedOrders(prev => {
-      const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
-      return next;
+  const assignmentDistIds = useMemo(() => assignments.map((d) => d.id), [assignments]);
+  const assignmentPendingQueries = trpc.useQueries((t) =>
+    assignmentDistIds.map((targetId) =>
+      t.deletion.getPendingForTarget({ targetTable: "distributions", targetId })
+    )
+  );
+
+  const pendingByDistId = useMemo(() => {
+    const m = new Map<number, boolean>();
+    assignments.forEach((d, i) => {
+      m.set(d.id, Boolean(assignmentPendingQueries[i]?.data?.pending));
     });
-  };
+    return m;
+  }, [assignments, assignmentPendingQueries]);
 
-  const handleOpenTest = (dist: any) => {
-    const testType = dist.testType ?? "";
-    const isSpecialized =
-      SPECIALIZED_CODES.includes(testType) ||
-      testType.startsWith("STEEL_") ||
-      testType.startsWith("AGG_") ||
-      testType.startsWith("SOIL_") ||
-      testType.startsWith("ASPH_") ||
-      testType.startsWith("CONC_") ||
-      testType.startsWith("CEM_");
+  const enrichedTasks = useMemo(() => {
+    return assignments.map((dist) => {
+      const parentOrder = myOrders.find((ord: any) =>
+        ord.items?.some(
+          (item: any) =>
+            Number(item.distributionId) === dist.id || Number(item.id) === dist.id
+        )
+      );
+      return {
+        ...dist,
+        orderCode: parentOrder?.orderCode,
+        isMultiTest: (parentOrder?.items?.length || 1) > 1,
+        pendingDeletion: pendingByDistId.get(dist.id) ?? false,
+      };
+    });
+  }, [assignments, myOrders, pendingByDistId]);
 
-    if (testType === "CONC_CUBE" || testType === "concrete" || testType === "concrete_compression") {
-      navigate(`/concrete-test/${dist.distributionId ?? dist.id}`);
-    } else if (isSpecialized) {
-      navigate(`/test/${dist.distributionId ?? dist.id}`);
-    } else {
-      setSelectedDist(dist);
-      setUnit(dist.unit ?? "MPa");
-      const qty = dist.quantity && dist.quantity > 0 ? dist.quantity : 3;
-      setRawValues(Array(qty).fill(""));
-      setTestNotes("");
-    }
-  };
+  const sortedTasks = useMemo(() => {
+    const list = [...enrichedTasks];
+    list.sort((a, b) => {
+      if (a.pendingDeletion !== b.pendingDeletion) {
+        return a.pendingDeletion ? 1 : -1;
+      }
+      const pr = priorityRank(a.priority) - priorityRank(b.priority);
+      if (pr !== 0) return pr;
+      const sa = allSamples.find((s: any) => s.id === a.sampleId);
+      const sb = allSamples.find((s: any) => s.id === b.sampleId);
+      const ageA = getAgeDays(a, sa) ?? 0;
+      const ageB = getAgeDays(b, sb) ?? 0;
+      if (ageA !== ageB) return ageB - ageA;
+      return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+    });
+    return list;
+  }, [enrichedTasks, allSamples]);
+
+  const counts = useMemo(() => {
+    const active = sortedTasks.filter((d) => d.status !== "completed").length;
+    const completed = sortedTasks.filter((d) => d.status === "completed").length;
+    return { all: sortedTasks.length, active, completed };
+  }, [sortedTasks]);
+
+  const activeList = useMemo(
+    () => sortedTasks.filter((d) => d.status !== "completed"),
+    [sortedTasks]
+  );
+  const completedList = useMemo(
+    () => sortedTasks.filter((d) => d.status === "completed"),
+    [sortedTasks]
+  );
 
   const submitResults = trpc.testResults.submit.useMutation({
     onSuccess: () => {
@@ -289,51 +461,15 @@ export default function Technician() {
     onError: (err) => toast.error(err.message),
   });
 
-  const assignmentDistIds = useMemo(() => assignments.map((d) => d.id), [assignments]);
-  const assignmentPendingQueries = trpc.useQueries((t) =>
-    assignmentDistIds.map((targetId) =>
-      t.deletion.getPendingForTarget({ targetTable: "distributions", targetId })
-    )
-  );
-
   const {
     hasPendingDeletion: dialogDeletionPending,
     PendingDeletionBadge: dialogPendingBadge,
     DisabledWarning: dialogDisabledWarning,
   } = useDeletionStatus("distributions", resolveDistributionId(selectedDist));
 
-  // Build Task objects from assignments
-  const allTasks: Task[] = useMemo(() => {
-    return assignments.map((dist, i) => {
-      const subTypeLabel = getSubTypeLabel(dist.sampleSubType, lang);
-      const subtitleParts: string[] = [];
-      if (dist.sampleCode) subtitleParts.push(dist.sampleCode);
-      if (subTypeLabel) subtitleParts.push(subTypeLabel);
-      const pendingDeletion = assignmentPendingQueries[i]?.data?.pending;
-      const metaParts: string[] = [];
-      if (dist.expectedCompletionDate) {
-        metaParts.push(
-          `${tx("dueDate", lang)}: ${new Date(dist.expectedCompletionDate).toLocaleDateString()}`
-        );
-      }
-      if (pendingDeletion) {
-        metaParts.push(lang === "ar" ? "حذف قيد الانتظار" : "Deletion pending");
-      }
-      return {
-        id: dist.id,
-        code: dist.distributionCode,
-        title: lang === "ar" ? (dist.testNameAr || dist.testName) : (dist.testNameEn || dist.testName),
-        subtitle: subtitleParts.length > 0 ? subtitleParts.join(" • ") : undefined,
-        meta: metaParts.length > 0 ? metaParts.join(" • ") : undefined,
-        state: getDistributionTaskState({ status: dist.status, taskReadAt: dist.taskReadAt }),
-        createdAt: dist.createdAt,
-      };
-    });
-  }, [assignments, assignmentPendingQueries, lang]);
-
-  const handleOpenTask = async (task: Task) => {
-    const distIndex = assignments.findIndex((d) => d.id === task.id);
-    if (distIndex >= 0 && assignmentPendingQueries[distIndex]?.data?.pending) {
+  const openTestFlow = (dist: any) => {
+    const pid = dist.id;
+    if (pendingByDistId.get(pid)) {
       toast.warning(
         lang === "ar"
           ? "طلب حذف قيد الانتظار لهذا التوزيع."
@@ -341,34 +477,18 @@ export default function Technician() {
       );
       return;
     }
-
-    const dist = assignments.find((d) => d.id === task.id);
-    if (!dist) return;
-
-    // Mark as read (transitions new → incomplete)
-    if (!dist.taskReadAt) {
+    if (dist.status !== "completed" && !dist.taskReadAt) {
       markRead.mutate({ id: dist.id });
     }
-
-    // Route to the correct form - all prefixed test codes go to /test/:id
     const testType = dist.testType ?? "";
-    const isSpecialized =
-      SPECIALIZED_CODES.includes(testType) ||
-      testType.startsWith("STEEL_") ||
-      testType.startsWith("AGG_") ||
-      testType.startsWith("SOIL_") ||
-      testType.startsWith("ASPH_") ||
-      testType.startsWith("CONC_") ||
-      testType.startsWith("CEM_");
-
+    const isSpecialized = isSpecializedTestType(testType);
     if (testType === "CONC_CUBE" || testType === "concrete" || testType === "concrete_compression") {
-      navigate(`/concrete-test/${dist.id}`);
+      navigate(`/concrete-test/${dist.distributionId ?? dist.id}`);
     } else if (isSpecialized) {
-      navigate(`/test/${dist.id}`);
+      navigate(`/test/${dist.distributionId ?? dist.id}`);
     } else {
       setSelectedDist(dist);
       setUnit(dist.unit ?? "MPa");
-      // Auto-populate reading count based on sample quantity (min 1)
       const qty = dist.sampleQuantity && dist.sampleQuantity > 0 ? dist.sampleQuantity : 3;
       setRawValues(Array(qty).fill(""));
       setTestNotes("");
@@ -409,6 +529,54 @@ export default function Technician() {
     setRawValues(updated);
   };
 
+  const renderCard = (dist: any) => {
+    const sample = allSamples.find((s: any) => s.id === dist.sampleId);
+    const ageDays = getAgeDays(dist, sample);
+    const isCompleted = dist.status === "completed";
+    const pend = pendingByDistId.get(dist.id) ?? false;
+    return (
+      <TechnicianAssignmentCard
+        key={dist.id}
+        dist={dist}
+        lang={lang}
+        sample={sample}
+        ageDays={ageDays}
+        isCompleted={isCompleted}
+        pendingDeletion={pend}
+        onStartTest={() => openTestFlow(dist)}
+        onViewReport={() => window.open(reportUrlForDistribution(dist), "_blank")}
+        onDeletionSuccess={() => {
+          refetch();
+          refetchOrders();
+        }}
+      />
+    );
+  };
+
+  const tabBtn = (key: "all" | "active" | "completed", labelKey: keyof typeof T, count: number) => {
+    const active = filterTab === key;
+    return (
+      <button
+        type="button"
+        onClick={() => setFilterTab(key)}
+        className={`flex items-center gap-2 rounded-lg border px-4 py-2 text-sm font-medium transition-all ${
+          active
+            ? "border-primary bg-primary text-primary-foreground shadow-sm"
+            : "border-border bg-background text-muted-foreground hover:border-primary/40"
+        }`}
+      >
+        {tx(labelKey, lang)}
+        <span
+          className={`rounded-full px-2 py-0.5 text-xs font-bold ${
+            active ? "bg-primary-foreground/20 text-primary-foreground" : "bg-muted text-foreground"
+          }`}
+        >
+          {count}
+        </span>
+      </button>
+    );
+  };
+
   return (
     <DashboardLayout>
       <div className="space-y-5">
@@ -417,94 +585,64 @@ export default function Technician() {
           <p className="text-sm text-muted-foreground">{tx("subtitle", lang)}</p>
         </div>
 
-        {/* Orders Section */}
-        {myOrders.length > 0 && (
-          <div className="space-y-3">
-            <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
-              {lang === "ar" ? "الأوردرات" : "My Orders"}
-            </h2>
-            <div className="space-y-2">
-              {myOrders.map((order: any) => {
-                const isExpanded = expandedOrders.has(order.id);
-                const doneCount = (order.items ?? []).filter((i: any) => i.status === "completed").length;
-                const totalCount = (order.items ?? []).length;
-                const allDone = doneCount === totalCount && totalCount > 0;
-                return (
-                  <Card key={order.id} className="overflow-hidden">
-                    <CardHeader
-                      className="py-3 px-4 cursor-pointer hover:bg-muted/30 transition-colors"
-                      onClick={() => toggleOrder(order.id)}
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          {isExpanded ? <ChevronDown className="w-4 h-4 text-muted-foreground" /> : <ChevronRight className="w-4 h-4 text-muted-foreground" />}
-                          <FlaskConical className="w-4 h-4 text-primary" />
-                          <span className="font-mono text-sm font-bold">{order.orderCode}</span>
-                          <span className="text-xs text-muted-foreground">•</span>
-                          <span className="text-sm text-muted-foreground">{order.sampleCode}</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs text-muted-foreground">
-                            {doneCount}/{totalCount} {lang === "ar" ? "مكتمل" : "done"}
-                          </span>
-                          <Badge variant={allDone ? "default" : "secondary"} className="text-xs">
-                            {allDone
-                              ? (lang === "ar" ? "مكتمل" : "Complete")
-                              : (lang === "ar" ? "جارٍ" : "In Progress")}
-                          </Badge>
-                        </div>
-                      </div>
-                    </CardHeader>
-                    {isExpanded && (
-                      <CardContent className="pt-0 pb-3 px-4">
-                        <div className="space-y-1.5">
-                          {(order.items ?? []).map((item: any) => {
-                            const isDone = item.status === "completed";
-                            return (
-                              <TechnicianOrderItemRow
-                                key={item.id}
-                                order={order}
-                                item={item}
-                                lang={lang}
-                                isDone={isDone}
-                                handleOpenTest={handleOpenTest}
-                                onDeletionSuccess={() => {
-                                  refetch();
-                                  refetchOrders();
-                                }}
-                              />
-                            );
-                          })}
-                        </div>
-                      </CardContent>
-                    )}
-                  </Card>
-                );
-              })}
-            </div>
+        <div className="flex flex-wrap gap-2">
+          {tabBtn("all", "tabAll", counts.all)}
+          {tabBtn("active", "tabActive", counts.active)}
+          {tabBtn("completed", "tabCompleted", counts.completed)}
+        </div>
+
+        {filterTab === "all" && (
+          <div className="space-y-8">
+            <section className="space-y-3 border-l-4 border-amber-400 pl-4">
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-amber-900">
+                {tx("sectionActive", lang)}
+              </h2>
+              <div className="space-y-3">
+                {activeList.length === 0 ? <EmptyState lang={lang} /> : activeList.map(renderCard)}
+              </div>
+            </section>
+            <section className="space-y-3 border-l-4 border-green-500 pl-4">
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-green-800">
+                {tx("sectionDone", lang)}
+              </h2>
+              <div className="space-y-3">
+                {completedList.length === 0 ? <EmptyState lang={lang} /> : completedList.map(renderCard)}
+              </div>
+            </section>
           </div>
         )}
 
-        <TaskQueue
-          tasks={allTasks}
-          lang={lang}
-          onOpen={handleOpenTask}
-        />
+        {filterTab === "active" && (
+          <div className="space-y-3 border-l-4 border-amber-400 pl-4">
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-amber-900">
+              {tx("sectionActive", lang)}
+            </h2>
+            {activeList.length === 0 ? <EmptyState lang={lang} /> : activeList.map(renderCard)}
+          </div>
+        )}
+
+        {filterTab === "completed" && (
+          <div className="space-y-3 border-l-4 border-green-500 pl-4">
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-green-800">
+              {tx("sectionDone", lang)}
+            </h2>
+            {completedList.length === 0 ? <EmptyState lang={lang} /> : completedList.map(renderCard)}
+          </div>
+        )}
       </div>
 
-      {/* Inline Results Entry Dialog (for non-specialized tests) */}
       <Dialog open={!!selectedDist} onOpenChange={(o) => !o && setSelectedDist(null)}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 flex-wrap">
-              <Microscope className="w-5 h-5" />
+            <DialogTitle className="flex flex-wrap items-center gap-2">
+              <Microscope className="h-5 w-5" />
               {lang === "ar" ? "إدخال نتائج الاختبار" : "Enter Test Results"}
               {dialogPendingBadge}
             </DialogTitle>
           </DialogHeader>
           {selectedDist && (
-            <form onSubmit={handleSubmit} className="space-y-4 mt-2">
-              <div className="bg-muted/40 rounded-lg p-3 text-xs space-y-1">
+            <form onSubmit={handleSubmit} className="mt-2 space-y-4">
+              <div className="space-y-1 rounded-lg bg-muted/40 p-3 text-xs">
                 <div>
                   <span className="text-muted-foreground">{tx("order", lang)}:</span>{" "}
                   <span className="font-mono font-bold">{selectedDist.distributionCode}</span>
@@ -512,20 +650,25 @@ export default function Technician() {
                 <div>
                   <span className="text-muted-foreground">{tx("testType", lang)}:</span>{" "}
                   <span className="font-medium">
-                    {lang === "ar" ? (selectedDist.testNameAr || selectedDist.testName) : (selectedDist.testNameEn || selectedDist.testName)}
+                    {lang === "ar"
+                      ? selectedDist.testNameAr || selectedDist.testName
+                      : selectedDist.testNameEn || selectedDist.testName}
                   </span>
                 </div>
                 <div>
                   <span className="text-muted-foreground">{tx("range", lang)}:</span>{" "}
                   <span className="font-medium">
-                    {selectedDist.minAcceptable ?? "—"} – {selectedDist.maxAcceptable ?? "—"} {selectedDist.unit}
+                    {selectedDist.minAcceptable ?? "—"} – {selectedDist.maxAcceptable ?? "—"}{" "}
+                    {selectedDist.unit}
                   </span>
                 </div>
               </div>
 
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <Label>{lang === "ar" ? `${tx("measurements", lang)} (${unit})` : `${tx("measurements", lang)} (${unit})`}</Label>
+                  <Label>
+                    {lang === "ar" ? `${tx("measurements", lang)} (${unit})` : `${tx("measurements", lang)} (${unit})`}
+                  </Label>
                   <Input
                     className="h-7 w-20 text-xs"
                     placeholder="Unit"
@@ -537,7 +680,7 @@ export default function Technician() {
                 <div className="space-y-2">
                   {rawValues.map((val, i) => (
                     <div key={i} className="flex items-center gap-2">
-                      <span className="text-xs text-muted-foreground w-20">
+                      <span className="w-20 text-xs text-muted-foreground">
                         {lang === "ar" ? `قراءة ${i + 1}` : `Reading ${i + 1}`}
                       </span>
                       <Input
@@ -561,7 +704,7 @@ export default function Technician() {
                             disabled={dialogDeletionPending}
                             onClick={() => removeRow(i)}
                           >
-                            <Trash2 className="w-3.5 h-3.5" />
+                            <Trash2 className="h-3.5 w-3.5" />
                           </Button>
                         )}
                     </div>
@@ -578,7 +721,7 @@ export default function Technician() {
                     disabled={dialogDeletionPending}
                     onClick={addRow}
                   >
-                    <Plus className="w-3.5 h-3.5" />
+                    <Plus className="h-3.5 w-3.5" />
                     {tx("addReading", lang)}
                   </Button>
                 )}
