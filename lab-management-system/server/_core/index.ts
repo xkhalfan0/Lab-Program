@@ -1,5 +1,5 @@
 import "dotenv/config";
-import { execSync } from "node:child_process";
+import { sql } from "drizzle-orm";
 import express from "express";
 import { createServer } from "http";
 import net from "net";
@@ -14,7 +14,7 @@ import { handleUserSSE, handleSectorSSE } from "../sse";
 import { registerPdfRoutes } from "../pdfGenerator";
 import adminImportRouter from "../routes/admin-import.js";
 import { sdk } from "./sdk";
-import { createAuditLog, getSampleByIdIncludingDeleted, softDeleteSample } from "../db";
+import { createAuditLog, getDb, getSampleByIdIncludingDeleted, softDeleteSample } from "../db";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -108,34 +108,56 @@ async function startServer() {
     })
   );
 
-  // ONE-TIME: Run pending Drizzle migrations (hit once from Railway, then remove)
-  app.get("/api/admin/run-drizzle-migrations/:secret", async (req, res) => {
-    const SECRET = "migrate-now-abc123xyz";
+  // ONE-TIME: Add missing soft-delete columns (skips already-existing ones)
+  app.get("/api/admin/add-missing-columns/:secret", async (req, res) => {
+    const SECRET = "add-columns-xyz789";
 
     if (req.params.secret !== SECRET) {
       return res.status(403).json({ success: false, error: "Invalid secret" });
     }
 
+    const db = await getDb();
+    if (!db) {
+      return res.status(503).json({ success: false, error: "Database not available" });
+    }
+
     try {
-      const output = execSync("pnpm exec drizzle-kit migrate", {
-        cwd: process.cwd(),
-        encoding: "utf-8",
-        env: process.env,
-        stdio: "pipe",
-      });
+      const results: string[] = [];
+
+      try {
+        await db.execute(sql.raw(`ALTER TABLE samples ADD COLUMN deletionReason text NULL`));
+        results.push("✅ deletionReason added");
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        if (msg.includes("Duplicate column")) {
+          results.push("⚠️ deletionReason already exists");
+        } else {
+          results.push(`❌ deletionReason error: ${msg}`);
+        }
+      }
+
+      try {
+        await db.execute(sql.raw(`ALTER TABLE samples ADD COLUMN deletionCategory varchar(50) NULL`));
+        results.push("✅ deletionCategory added");
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        if (msg.includes("Duplicate column")) {
+          results.push("⚠️ deletionCategory already exists");
+        } else {
+          results.push(`❌ deletionCategory error: ${msg}`);
+        }
+      }
 
       return res.json({
         success: true,
-        message: "✅ Migrations applied successfully!",
-        output: output.toString(),
+        message: "Column check complete",
+        results,
       });
     } catch (err: unknown) {
-      const e = err as { message?: string; stdout?: Buffer; stderr?: Buffer };
+      const e = err as { message?: string };
       return res.status(500).json({
         success: false,
         error: e.message ?? String(err),
-        stdout: e.stdout?.toString(),
-        stderr: e.stderr?.toString(),
       });
     }
   });
