@@ -1,222 +1,432 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import DashboardLayout from "@/components/DashboardLayout";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { toast } from "sonner";
-import { Plus, Pencil, Trash2, FlaskConical, Building2, Phone, Mail, User, FileText, Calendar, Layers } from "lucide-react";
+import {
+  Plus,
+  Pencil,
+  Trash2,
+  FlaskConical,
+  Building2,
+  Phone,
+  Mail,
+  User,
+  FileText,
+  Download,
+  Search,
+  Check,
+  X,
+  ChevronDown,
+  ChevronRight,
+  Users,
+  MapPin,
+  Wrench,
+  Mountain,
+  Truck,
+  Box,
+  Settings,
+  Database,
+} from "lucide-react";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { useAuth } from "@/_core/hooks/useAuth";
+import type { LucideIcon } from "lucide-react";
 
-const CATEGORIES = [
-  { value: "concrete", label: "Concrete — الخرسانة", color: "bg-blue-100 text-blue-800" },
-  { value: "soil", label: "Soils — التربة", color: "bg-amber-100 text-amber-800" },
-  { value: "steel", label: "Steel — الحديد", color: "bg-gray-100 text-gray-800" },
-  { value: "asphalt", label: "Asphalt — الأسفلت", color: "bg-purple-100 text-purple-800" },
-  { value: "aggregates", label: "Aggregates — الركام", color: "bg-green-100 text-green-800" },
-] as const;
+function dbCategoryFromConfigKey(key: string): string {
+  return key === "aggregate" ? "aggregates" : key;
+}
 
-type Category = typeof CATEGORIES[number]["value"];
+const categoryConfig: Array<{
+  key: string;
+  icon: LucideIcon;
+  nameEn: string;
+  nameAr: string;
+  bgColor: string;
+  textColor: string;
+}> = [
+  {
+    key: "concrete",
+    icon: Building2,
+    nameEn: "Concrete Tests",
+    nameAr: "اختبارات الخرسانة",
+    bgColor: "bg-blue-100",
+    textColor: "text-blue-600",
+  },
+  {
+    key: "steel",
+    icon: Wrench,
+    nameEn: "Steel Tests",
+    nameAr: "اختبارات الحديد",
+    bgColor: "bg-gray-100",
+    textColor: "text-gray-600",
+  },
+  {
+    key: "soil",
+    icon: Mountain,
+    nameEn: "Soil Tests",
+    nameAr: "اختبارات التربة",
+    bgColor: "bg-amber-100",
+    textColor: "text-amber-600",
+  },
+  {
+    key: "asphalt",
+    icon: Truck,
+    nameEn: "Asphalt Tests",
+    nameAr: "اختبارات الإسفلت",
+    bgColor: "bg-slate-100",
+    textColor: "text-slate-600",
+  },
+  {
+    key: "aggregate",
+    icon: Box,
+    nameEn: "Aggregate Tests",
+    nameAr: "اختبارات الركام",
+    bgColor: "bg-stone-100",
+    textColor: "text-stone-600",
+  },
+];
 
-// ─── Test Types Tab ────────────────────────────────────────────────────────────
+// ─── Test Types (Configuration) ─────────────────────────────────────────────
 function TestTypesTab() {
   const { lang } = useLanguage();
-  const [activeCategory, setActiveCategory] = useState<Category>("concrete");
-  const [showDialog, setShowDialog] = useState(false);
-  const [editItem, setEditItem] = useState<any>(null);
-  const [form, setForm] = useState({
-    nameEn: "", nameAr: "", code: "", unitPrice: 0,
-    unit: "N/mm²", standardRef: "", formTemplate: "", sortOrder: 0,
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
+  const utils = trpc.useUtils();
+
+  const [expandedCategories, setExpandedCategories] = useState<string[]>(["concrete"]);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState("all");
+  const [editingPrice, setEditingPrice] = useState<{ testId: number; value: string } | null>(null);
+
+  const { data: allTestTypes = [] } = trpc.testTypes.list.useQuery();
+
+  const updatePriceMutation = trpc.testTypes.updatePrice.useMutation({
+    onSuccess: () => {
+      toast.success(lang === "ar" ? "تم تحديث السعر بنجاح" : "Price updated successfully");
+      setEditingPrice(null);
+      void utils.testTypes.list.invalidate();
+    },
+    onError: (err) => {
+      toast.error(err.message);
+    },
   });
 
-  const { data: tests = [], refetch } = trpc.testTypes.list.useQuery();
-  const createMut = trpc.testTypes.create.useMutation({ onSuccess: () => { refetch(); setShowDialog(false); toast.success(lang === "ar" ? "تم إضافة نوع الاختبار" : "Test type added"); } });
-  const updateMut = trpc.testTypes.update.useMutation({ onSuccess: () => { refetch(); setShowDialog(false); toast.success(lang === "ar" ? "تم تحديث نوع الاختبار" : "Test type updated"); } });
-  const deleteMut = trpc.testTypes.delete.useMutation({ onSuccess: () => { refetch(); toast.success(lang === "ar" ? "تم حذف نوع الاختبار" : "Test type removed"); } });
+  const filteredTests = useMemo(() => {
+    return allTestTypes.filter((test) => {
+      const q = searchQuery.trim().toLowerCase();
+      const matchesSearch =
+        searchQuery === "" ||
+        (test.nameEn?.toLowerCase().includes(q) ?? false) ||
+        (test.nameAr?.includes(searchQuery) ?? false) ||
+        (test.code?.toLowerCase().includes(q) ?? false);
 
-  const filtered = tests.filter(t => t.category === activeCategory);
+      const cat = test.category?.toLowerCase() ?? "";
+      const matchesCategory =
+        categoryFilter === "all" ||
+        (categoryFilter === "aggregate" ? cat === "aggregates" : cat === categoryFilter.toLowerCase());
 
-  const openCreate = () => {
-    setEditItem(null);
-    setForm({ nameEn: "", nameAr: "", code: "", unitPrice: 0, unit: "N/mm²", standardRef: "", formTemplate: "", sortOrder: filtered.length + 1 });
-    setShowDialog(true);
+      return matchesSearch && matchesCategory;
+    });
+  }, [allTestTypes, searchQuery, categoryFilter]);
+
+  const groupedTests = useMemo(() => {
+    return categoryConfig
+      .map((cat) => ({
+        ...cat,
+        tests: filteredTests.filter(
+          (t) => (t.category?.toLowerCase() ?? "") === dbCategoryFromConfigKey(cat.key).toLowerCase()
+        ),
+      }))
+      .filter((cat) => cat.tests.length > 0);
+  }, [filteredTests]);
+
+  const toggleCategory = (key: string) => {
+    setExpandedCategories((prev) => (prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]));
   };
 
-  const openEdit = (t: any) => {
-    setEditItem(t);
-    setForm({ nameEn: t.nameEn, nameAr: t.nameAr || "", code: t.code || "", unitPrice: Number(t.unitPrice), unit: t.unit || "", standardRef: t.standardRef || "", formTemplate: t.formTemplate || "", sortOrder: t.sortOrder || 0 });
-    setShowDialog(true);
+  const handleExportCSV = () => {
+    const csvData: string[][] = [
+      ["#", "Test Name (EN)", "Test Name (AR)", "Code", "Price (AED)", "Unit", "Category", "Standard"],
+      ...allTestTypes.map((test, idx) => {
+        const price = Number(test.unitPrice ?? 0);
+        return [
+          (idx + 1).toString(),
+          test.nameEn || "",
+          test.nameAr || "",
+          test.code || "",
+          price.toFixed(2),
+          test.unit || "",
+          test.category || "",
+          test.standardRef || "",
+        ];
+      }),
+    ];
+
+    const csvContent = csvData
+      .map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(","))
+      .join("\n");
+
+    const blob = new Blob(["\ufeff" + csvContent], { type: "text/csv;charset=utf-8;" });
+    const link = document.createElement("a");
+    const url = URL.createObjectURL(blob);
+    link.setAttribute("href", url);
+    link.setAttribute("download", `test-types-${new Date().toISOString().split("T")[0]}.csv`);
+    link.style.visibility = "hidden";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+
+    toast.success(lang === "ar" ? "تم تصدير الملف بنجاح" : "CSV exported successfully");
   };
 
-  const handleSave = () => {
-    if (!form.nameEn.trim()) { toast.error(lang === "ar" ? "اسم الاختبار مطلوب" : "Test name is required"); return; }
-    if (editItem) {
-      updateMut.mutate({ id: editItem.id, ...form });
-    } else {
-      createMut.mutate({ category: activeCategory, ...form });
+  const renderPriceCell = (test: (typeof allTestTypes)[number]) => {
+    const priceNum = Number(test.unitPrice ?? 0);
+    const isEditing = editingPrice?.testId === test.id;
+
+    if (!isAdmin) {
+      return (
+        <span className="font-mono font-semibold">
+          {priceNum.toFixed(2)} AED
+        </span>
+      );
     }
-  };
 
-  const FORM_TEMPLATES = [
-    // Concrete (10)
-    "ConcreteCubes", "ConcreteCore", "ConcreteBlocks", "ConcreteBlocks",
-    "ConcreteFoam", "ConcreteFoam", "CementSetting", "SieveAnalysis",
-    "ConcreteBeam", "ConcreteBeam",
-    // Soil (5)
-    "SoilAtterberg", "SoilProctor", "SoilCBR", "SoilFieldDensity",
-    // Steel (5)
-    "SteelRebar", "SteelBendRebend", "SteelBendRebend",
-    "SteelAnchorBolt", "SteelStructural",
-    // Asphalt (6)
-    "AsphaltHotBin", "AsphaltBitumenExtraction", "AsphaltExtractedSieve",
-    "AsphaltMarshall", "AsphaltMarshall", "AsphaltCore",
-    // Aggregate (6)
-    "AggSieveAnalysis", "AggCrushingImpact", "AggCrushingImpact",
-    "AggCrushingImpact", "AggCrushingImpact", "AggLAAbrasion",
-  ].filter((v, i, a) => a.indexOf(v) === i); // deduplicate
+    if (isEditing && editingPrice) {
+      return (
+        <div className="flex items-center justify-end gap-2">
+          <Input
+            type="number"
+            step="0.01"
+            min="0"
+            value={editingPrice.value}
+            onChange={(e) => setEditingPrice({ testId: test.id, value: e.target.value })}
+            className="w-28 h-8 text-right font-mono"
+            autoFocus
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                const newPrice = parseFloat(editingPrice.value);
+                if (!Number.isNaN(newPrice) && newPrice > 0) {
+                  updatePriceMutation.mutate({ testTypeId: test.id, newPrice });
+                }
+              }
+              if (e.key === "Escape") {
+                setEditingPrice(null);
+              }
+            }}
+          />
+          <Button
+            type="button"
+            size="sm"
+            variant="default"
+            className="h-8 w-8 p-0"
+            onClick={() => {
+              const newPrice = parseFloat(editingPrice.value);
+              if (!Number.isNaN(newPrice) && newPrice > 0) {
+                updatePriceMutation.mutate({ testTypeId: test.id, newPrice });
+              } else {
+                toast.error(lang === "ar" ? "السعر غير صالح" : "Invalid price");
+              }
+            }}
+            disabled={updatePriceMutation.isPending}
+          >
+            <Check className="h-4 w-4" />
+          </Button>
+          <Button type="button" size="sm" variant="ghost" className="h-8 w-8 p-0" onClick={() => setEditingPrice(null)}>
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
+      );
+    }
+
+    return (
+      <div className="flex items-center gap-2 justify-end">
+        <span className="font-mono font-semibold">
+          {priceNum.toFixed(2)} AED
+        </span>
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          className="h-7 w-7 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+          onClick={(e) => {
+            e.stopPropagation();
+            setEditingPrice({ testId: test.id, value: String(test.unitPrice ?? "0") });
+          }}
+        >
+          <Pencil className="h-3 w-3" />
+        </Button>
+      </div>
+    );
+  };
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap gap-2">
-        {CATEGORIES.map(cat => (
-          <button key={cat.value} onClick={() => setActiveCategory(cat.value)}
-            className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all ${activeCategory === cat.value ? "bg-primary text-primary-foreground shadow" : "bg-muted text-muted-foreground hover:bg-muted/80"}`}>
-            {cat.label}
-          </button>
-        ))}
+    <div className="space-y-6 p-6">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2 className="text-2xl font-bold flex items-center gap-2">
+            <FlaskConical className="h-6 w-6" />
+            {lang === "ar" ? "إدارة أنواع الاختبارات" : "Test Types Management"}
+          </h2>
+          <p className="text-sm text-muted-foreground mt-1">
+            {lang === "ar"
+              ? "إدارة أنواع الاختبارات والأسعار (المسؤول فقط)"
+              : "Manage test types and pricing (Admin only)"}
+          </p>
+        </div>
+
+        <Button type="button" variant="outline" size="default" onClick={handleExportCSV} className="gap-2 shrink-0">
+          <Download className="h-4 w-4" />
+          {lang === "ar" ? "تصدير CSV" : "Export CSV"}
+        </Button>
       </div>
 
-      <div className="flex justify-between items-center">
-        <p className="text-sm text-muted-foreground">{filtered.length} {lang === "ar" ? "اختبار في هذه الفئة" : "tests in this category"}</p>
-        <Button size="sm" onClick={openCreate}><Plus className="w-4 h-4 me-1" />{lang === "ar" ? "إضافة اختبار" : "Add Test"}</Button>
+      <div className="grid grid-cols-2 gap-4 max-w-md">
+        <Card>
+          <CardContent className="p-4 text-center">
+            <div className="text-3xl font-bold text-primary">{filteredTests.length}</div>
+            <div className="text-xs text-muted-foreground mt-1">
+              {lang === "ar" ? "إجمالي الاختبارات" : "Total Tests"}
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4 text-center">
+            <div className="text-3xl font-bold text-primary">{categoryConfig.length}</div>
+            <div className="text-xs text-muted-foreground mt-1">
+              {lang === "ar" ? "الفئات" : "Categories"}
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
-      <div className="rounded-lg border overflow-x-auto">
-        <table className="text-sm" style={{ minWidth: "860px", width: "100%", tableLayout: "fixed" }}>
-          <colgroup>
-            <col style={{ width: "36px" }} />
-            <col style={{ width: "220px" }} />
-            <col style={{ width: "170px" }} />
-            <col style={{ width: "130px" }} />
-            <col style={{ width: "110px" }} />
-            <col style={{ width: "60px" }} />
-            <col style={{ width: "110px" }} />
-            <col style={{ width: "80px" }} />
-          </colgroup>
-          <thead className="bg-muted/50">
-            <tr>
-              <th className="text-center px-2 py-2.5 font-medium">#</th>
-              <th className="text-start px-3 py-2.5 font-medium">{lang === "ar" ? "اسم الاختبار (EN)" : "Test Name (EN)"}</th>
-              <th className="text-start px-3 py-2.5 font-medium">{lang === "ar" ? "الاسم بالعربي" : "Arabic Name"}</th>
-              <th className="text-start px-3 py-2.5 font-medium">{lang === "ar" ? "الكود" : "Code"}</th>
-              <th className="text-start px-3 py-2.5 font-medium">{lang === "ar" ? "السعر (AED)" : "Price (AED)"}</th>
-              <th className="text-start px-3 py-2.5 font-medium">{lang === "ar" ? "الوحدة" : "Unit"}</th>
-              <th className="text-start px-3 py-2.5 font-medium">{lang === "ar" ? "المعيار" : "Standard"}</th>
-              <th className="text-center px-2 py-2.5 font-medium">{lang === "ar" ? "إجراءات" : "Actions"}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.map((t, i) => (
-              <tr key={t.id} className="border-t hover:bg-muted/30">
-                <td className="px-2 py-2.5 text-muted-foreground text-center text-xs">{i + 1}</td>
-                <td className="px-3 py-2.5 font-medium" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={t.nameEn}>{t.nameEn}</td>
-                <td className="px-3 py-2.5 text-muted-foreground" dir="rtl" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={t.nameAr || ""}>{t.nameAr || "—"}</td>
-                <td className="px-3 py-2.5"><Badge variant="outline" className="font-mono text-xs whitespace-nowrap">{t.code || "—"}</Badge></td>
-                <td className="px-3 py-2.5 font-semibold text-green-700 whitespace-nowrap">{Number(t.unitPrice).toFixed(2)} AED</td>
-                <td className="px-3 py-2.5 text-muted-foreground text-xs">{t.unit}</td>
-                <td className="px-3 py-2.5 text-xs text-muted-foreground whitespace-nowrap">{t.standardRef || "—"}</td>
-                <td className="p-3">
-                  <div className="flex gap-1">
-                    <Button size="sm" variant="ghost" onClick={() => openEdit(t)}><Pencil className="w-3.5 h-3.5" /></Button>
-                    <Button size="sm" variant="ghost" className="text-destructive" onClick={() => { if (confirm(lang === "ar" ? "هل تريد حذف نوع الاختبار؟" : "Remove this test type?")) deleteMut.mutate({ id: t.id }); }}>
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </Button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-            {filtered.length === 0 && (
-              <tr><td colSpan={9} className="p-8 text-center text-muted-foreground">{lang === "ar" ? "لا توجد اختبارات في هذه الفئة بعد" : "No tests in this category yet"}</td></tr>
-            )}
-          </tbody>
-        </table>
-      </div>
-
-      {/* Summary */}
-      <div className="grid grid-cols-5 gap-3">
-        {CATEGORIES.map(cat => {
-          const count = tests.filter(t => t.category === cat.value).length;
-          const total = tests.filter(t => t.category === cat.value).reduce((s, t) => s + Number(t.unitPrice), 0);
-          return (
-            <Card key={cat.value} className="text-center">
-              <CardContent className="pt-4 pb-3">
-                <p className="text-xs text-muted-foreground mb-1">{cat.label.split("—")[0].trim()}</p>
-                <p className="text-2xl font-bold">{count}</p>
-                <p className="text-xs text-green-600 font-medium">{lang === "ar" ? "متوسط" : "Avg"}: {count ? (total / count).toFixed(0) : 0} AED</p>
-              </CardContent>
-            </Card>
-          );
-        })}
-      </div>
-
-      <Dialog open={showDialog} onOpenChange={setShowDialog}>
-        <DialogContent className="max-w-xl">
-          <DialogHeader>
-            <DialogTitle>{editItem ? (lang === "ar" ? "تعديل نوع الاختبار" : "Edit Test Type") : (lang === "ar" ? "إضافة نوع اختبار جديد" : "Add New Test Type")}</DialogTitle>
-          </DialogHeader>
-          <div className="grid grid-cols-2 gap-4">
-            <div className="col-span-2">
-              <Label>{lang === "ar" ? "اسم الاختبار (إنجليزي) *" : "Test Name (English) *"}</Label>
-              <Input value={form.nameEn} onChange={e => setForm(f => ({ ...f, nameEn: e.target.value }))} placeholder="e.g. Compressive Strength of Concrete Cubes" />
-            </div>
-            <div className="col-span-2">
-              <Label>{lang === "ar" ? "اسم الاختبار (عربي)" : "Test Name (Arabic)"}</Label>
-              <Input dir="rtl" value={form.nameAr} onChange={e => setForm(f => ({ ...f, nameAr: e.target.value }))} placeholder="مقاومة الانضغاط لمكعبات الخرسانة" />
-            </div>
-            <div>
-              <Label>{lang === "ar" ? "الكود الداخلي" : "Internal Code"}</Label>
-              <Input value={form.code} onChange={e => setForm(f => ({ ...f, code: e.target.value }))} placeholder="CONC_CUBE" className="font-mono" />
-            </div>
-            <div>
-              <Label>{lang === "ar" ? "سعر الوحدة (AED)" : "Unit Price (AED)"}</Label>
-              <Input type="number" min={0} value={form.unitPrice} onChange={e => setForm(f => ({ ...f, unitPrice: Number(e.target.value) }))} />
-            </div>
-            <div>
-              <Label>{lang === "ar" ? "الوحدة" : "Unit"}</Label>
-              <Input value={form.unit} onChange={e => setForm(f => ({ ...f, unit: e.target.value }))} placeholder="N/mm²" />
-            </div>
-            <div>
-              <Label>{lang === "ar" ? "المرجع المعياري" : "Standard Reference"}</Label>
-              <Input value={form.standardRef} onChange={e => setForm(f => ({ ...f, standardRef: e.target.value }))} placeholder="BS 1881 / ASTM C39" />
-            </div>
-            <div className="col-span-2">
-              <Label>{lang === "ar" ? "قالب النموذج" : "Form Template"}</Label>
-              <Select value={form.formTemplate} onValueChange={v => setForm(f => ({ ...f, formTemplate: v }))}>
-                <SelectTrigger><SelectValue placeholder="Select form template" /></SelectTrigger>
-                <SelectContent>
-                  {FORM_TEMPLATES.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label>{lang === "ar" ? "ترتيب العرض" : "Sort Order"}</Label>
-              <Input type="number" min={0} value={form.sortOrder} onChange={e => setForm(f => ({ ...f, sortOrder: Number(e.target.value) }))} />
-            </div>
+      <div className="flex flex-col gap-4 sm:flex-row">
+        <div className="flex-1 max-w-md">
+          <div className="relative">
+            <Search className="absolute start-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+            <Input
+              placeholder={lang === "ar" ? "البحث عن الاختبارات..." : "Search tests..."}
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="ps-9"
+            />
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowDialog(false)}>{lang === "ar" ? "إلغاء" : "Cancel"}</Button>
-            <Button onClick={handleSave} disabled={createMut.isPending || updateMut.isPending}>
-              {editItem ? (lang === "ar" ? "حفظ التغييرات" : "Save Changes") : (lang === "ar" ? "إضافة نوع الاختبار" : "Add Test Type")}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        </div>
+        <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+          <SelectTrigger className="w-full sm:w-[200px]">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">{lang === "ar" ? "جميع الفئات" : "All Categories"}</SelectItem>
+            <SelectItem value="concrete">{lang === "ar" ? "الخرسانة" : "Concrete"}</SelectItem>
+            <SelectItem value="steel">{lang === "ar" ? "الحديد" : "Steel"}</SelectItem>
+            <SelectItem value="soil">{lang === "ar" ? "التربة" : "Soil"}</SelectItem>
+            <SelectItem value="asphalt">{lang === "ar" ? "الإسفلت" : "Asphalt"}</SelectItem>
+            <SelectItem value="aggregate">{lang === "ar" ? "الركام" : "Aggregate"}</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="space-y-4">
+        {groupedTests.length === 0 ? (
+          <p className="text-sm text-muted-foreground text-center py-8">
+            {lang === "ar" ? "لا توجد اختبارات تطابق البحث أو الفلتر" : "No tests match your search or filter"}
+          </p>
+        ) : (
+          groupedTests.map((category) => {
+            const isExpanded = expandedCategories.includes(category.key);
+            const Icon = category.icon;
+
+            return (
+              <Card key={category.key} className="overflow-hidden">
+                <button
+                  type="button"
+                  className="flex w-full items-center justify-between p-4 cursor-pointer hover:bg-muted/50 transition-colors border-b text-start"
+                  onClick={() => toggleCategory(category.key)}
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className={`p-2 rounded-lg shrink-0 ${category.bgColor}`}>
+                      <Icon className={`h-5 w-5 ${category.textColor}`} />
+                    </div>
+                    <div className="min-w-0">
+                      <h3 className="font-semibold text-lg truncate">
+                        {lang === "ar" ? category.nameAr : category.nameEn}
+                      </h3>
+                      <p className="text-sm text-muted-foreground">
+                        {category.tests.length} {lang === "ar" ? "اختبار" : "tests"}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0 ms-2">
+                    <Badge variant="secondary" className="font-mono">
+                      {category.tests.length}
+                    </Badge>
+                    {isExpanded ? (
+                      <ChevronDown className="h-5 w-5 text-muted-foreground" />
+                    ) : (
+                      <ChevronRight className="h-5 w-5 text-muted-foreground" />
+                    )}
+                  </div>
+                </button>
+
+                {isExpanded && (
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="w-12">#</TableHead>
+                          <TableHead>{lang === "ar" ? "اسم الاختبار" : "Test Name"}</TableHead>
+                          <TableHead>{lang === "ar" ? "الرمز" : "Code"}</TableHead>
+                          <TableHead className="text-right">{lang === "ar" ? "السعر" : "Price"}</TableHead>
+                          <TableHead>{lang === "ar" ? "الوحدة" : "Unit"}</TableHead>
+                          <TableHead>{lang === "ar" ? "المعيار" : "Standard"}</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {category.tests.map((test, idx) => (
+                          <TableRow key={test.id} className="group">
+                            <TableCell className="font-medium text-muted-foreground">{idx + 1}</TableCell>
+                            <TableCell>
+                              <div className="space-y-1">
+                                <div className="font-medium">{test.nameEn}</div>
+                                <div className="text-sm text-muted-foreground" dir="rtl">
+                                  {test.nameAr || "—"}
+                                </div>
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <code className="text-xs bg-muted px-2 py-1 rounded font-mono">{test.code || "—"}</code>
+                            </TableCell>
+                            <TableCell className="text-right">{renderPriceCell(test)}</TableCell>
+                            <TableCell className="text-sm">{test.unit || "—"}</TableCell>
+                            <TableCell className="text-sm text-muted-foreground">{test.standardRef || "—"}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
+              </Card>
+            );
+          })
+        )}
+      </div>
     </div>
   );
 }
@@ -706,6 +916,8 @@ function SectorsTab() {
 // ─── Main Page ─────────────────────────────────────────────────────────────────
 export default function TestTypesManagement() {
   const { lang } = useLanguage();
+  const [businessTab, setBusinessTab] = useState("contracts");
+
   return (
     <DashboardLayout>
       <div className="p-6 space-y-6">
@@ -717,38 +929,77 @@ export default function TestTypesManagement() {
           <p className="text-muted-foreground mt-1">{lang === "ar" ? "إدارة قائمة الاختبارات بأسعار AED والمقاولين المسجلين والعقود" : "Manage test types with AED prices, registered contractors, and contracts"}</p>
         </div>
 
-        <Tabs defaultValue="contracts">
-          <TabsList className="h-auto flex-wrap gap-1 p-1">
-            <TabsTrigger value="contracts" className="flex items-center gap-1.5 text-xs sm:text-sm px-3 py-1.5">
-              <FileText className="w-3.5 h-3.5 shrink-0" />
-              <span>{lang === "ar" ? "العقود" : "Contracts"}</span>
-            </TabsTrigger>
-            <TabsTrigger value="contractors" className="flex items-center gap-1.5 text-xs sm:text-sm px-3 py-1.5">
-              <Building2 className="w-3.5 h-3.5 shrink-0" />
-              <span>{lang === "ar" ? "المقاولون" : "Contractors"}</span>
-            </TabsTrigger>
-            <TabsTrigger value="tests" className="flex items-center gap-1.5 text-xs sm:text-sm px-3 py-1.5">
-              <FlaskConical className="w-3.5 h-3.5 shrink-0" />
-              <span>{lang === "ar" ? "أنواع الاختبارات" : "Test Types"}</span>
-            </TabsTrigger>
-            <TabsTrigger value="sectors" className="flex items-center gap-1.5 text-xs sm:text-sm px-3 py-1.5">
-              <Layers className="w-3.5 h-3.5 shrink-0" />
-              <span>{lang === "ar" ? "القطاعات" : "Sectors"}</span>
-            </TabsTrigger>
-          </TabsList>
-          <TabsContent value="contracts" className="mt-4">
-            <ContractsTab />
-          </TabsContent>
-          <TabsContent value="contractors" className="mt-4">
-            <ContractorsTab />
-          </TabsContent>
-          <TabsContent value="tests" className="mt-4">
-            <TestTypesTab />
-          </TabsContent>
-          <TabsContent value="sectors" className="mt-4">
-            <SectorsTab />
-          </TabsContent>
-        </Tabs>
+        <div className="space-y-6">
+          <Card>
+            <CardHeader className="pb-3">
+              <div className="flex items-center gap-2">
+                <Settings className="h-5 w-5 text-muted-foreground" />
+                <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+                  {lang === "ar" ? "الإعدادات" : "Configuration"}
+                </h3>
+              </div>
+            </CardHeader>
+            <Tabs value="test-types" className="w-full">
+              <TabsList className="w-full justify-start border-b rounded-none h-auto p-0 bg-transparent">
+                <TabsTrigger
+                  value="test-types"
+                  className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent"
+                >
+                  <FlaskConical className="h-4 w-4 me-2" />
+                  {lang === "ar" ? "أنواع الاختبارات" : "Test Types"}
+                </TabsTrigger>
+              </TabsList>
+              <TabsContent value="test-types" className="mt-0 p-0">
+                <TestTypesTab />
+              </TabsContent>
+            </Tabs>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-3">
+              <div className="flex items-center gap-2">
+                <Database className="h-5 w-5 text-muted-foreground" />
+                <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+                  {lang === "ar" ? "البيانات التشغيلية" : "Business Data"}
+                </h3>
+              </div>
+            </CardHeader>
+            <Tabs value={businessTab} onValueChange={setBusinessTab} className="w-full">
+              <TabsList className="w-full justify-start border-b rounded-none h-auto p-0 bg-transparent">
+                <TabsTrigger
+                  value="contracts"
+                  className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent"
+                >
+                  <FileText className="h-4 w-4 me-2" />
+                  {lang === "ar" ? "العقود" : "Contracts"}
+                </TabsTrigger>
+                <TabsTrigger
+                  value="contractors"
+                  className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent"
+                >
+                  <Users className="h-4 w-4 me-2" />
+                  {lang === "ar" ? "المقاولون" : "Contractors"}
+                </TabsTrigger>
+                <TabsTrigger
+                  value="sectors"
+                  className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent"
+                >
+                  <MapPin className="h-4 w-4 me-2" />
+                  {lang === "ar" ? "القطاعات" : "Sectors"}
+                </TabsTrigger>
+              </TabsList>
+              <TabsContent value="contracts" className="mt-4 px-6 pb-6">
+                <ContractsTab />
+              </TabsContent>
+              <TabsContent value="contractors" className="mt-4 px-6 pb-6">
+                <ContractorsTab />
+              </TabsContent>
+              <TabsContent value="sectors" className="mt-4 px-6 pb-6">
+                <SectorsTab />
+              </TabsContent>
+            </Tabs>
+          </Card>
+        </div>
       </div>
     </DashboardLayout>
   );

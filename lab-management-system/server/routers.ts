@@ -1817,6 +1817,14 @@ ${testSummaries.length > 0 ? testSummaries.join("\n\n") : "لم تُجرَ اخ�
         });
         return { success: true };
       }),
+    /** Admin-only: update unit price only (test catalog is code-managed). */
+    updatePrice: protectedProcedure
+      .input(z.object({ testTypeId: z.number(), newPrice: z.number().positive() }))
+      .mutation(async ({ ctx, input }) => {
+        requireRole(ctx.user.role, ["admin"]);
+        await updateTestType(input.testTypeId, { unitPrice: String(input.newPrice) });
+        return { success: true };
+      }),
     delete: protectedProcedure
       .input(z.object({ id: z.number() }))
       .mutation(async ({ ctx, input }) => {

@@ -138,6 +138,30 @@ function getRequiredLabel(targetMpa: number, testAge: number): string {
   return `${pct}% of ${targetMpa} N/mm² = ${required.toFixed(1)} N/mm²`;
 }
 
+/** Persist cube age UI metadata in group comments (hidden suffix; stripped for display). */
+const AGE_META_MARKER = "\n__AGE_META__:";
+function stripAgeMetaFromComments(comments: string): string {
+  const i = comments.indexOf(AGE_META_MARKER);
+  if (i === -1) return comments;
+  return comments.slice(0, i).trimEnd();
+}
+function parseAgeMetaFromComments(comments: string): { testAge?: number; actualAge?: number | null; isLate?: boolean } | null {
+  const i = comments.indexOf(AGE_META_MARKER);
+  if (i === -1) return null;
+  try {
+    return JSON.parse(comments.slice(i + AGE_META_MARKER.length)) as { testAge?: number; actualAge?: number | null; isLate?: boolean };
+  } catch {
+    return null;
+  }
+}
+function mergeAgeMetaIntoComments(
+  comments: string,
+  meta: { testAge: number; actualAge: number | null; isLate: boolean; cubes: unknown[] }
+): string {
+  const base = stripAgeMetaFromComments(comments);
+  return `${base}${AGE_META_MARKER}${JSON.stringify(meta)}`;
+}
+
 // ─── Empty cube factory ───────────────────────────────────────────────────────
 function edgeMmFromNominal(nom: string | null | undefined): "100" | "150" {
   if (!nom) return "150";
@@ -170,13 +194,22 @@ interface GroupPanelProps {
   distributionNominalCube?: string | null;
 }
 
+function initialSelectedTestAge(g: { comments?: string | null; testAge?: number }): number | null {
+  const m = parseAgeMetaFromComments(g.comments ?? "");
+  if (m?.testAge != null && [7, 14, 28].includes(m.testAge)) return m.testAge;
+  const gt = g.testAge ?? 28;
+  return [7, 14, 28].includes(gt) ? gt : null;
+}
+
 function GroupPanel({ group, distributionId, onRefresh, castingDate: distCastingDate, distributionNominalCube }: GroupPanelProps) {
   const { lang } = useLanguage();
   const ar = lang === "ar";
   const [open, setOpen] = useState(true);
   const [cubes, setCubes] = useState<CubeRow[]>([]);
   const [saving, setSaving] = useState<number | null>(null);
-  const [comments, setComments] = useState(group.comments ?? "");
+  const [comments, setComments] = useState(() => stripAgeMetaFromComments(group.comments ?? ""));
+  /** Selected design test age (7 / 14 / 28 days) for acceptance band — required before save/submit. */
+  const [testAge, setTestAge] = useState<number | null>(() => initialSelectedTestAge(group));
   const [headerExpanded, setHeaderExpanded] = useState(false);
 
   // Header fields
@@ -197,6 +230,11 @@ function GroupPanel({ group, distributionId, onRefresh, castingDate: distCasting
   const submitGroup = trpc.concrete.submitGroup.useMutation();
 
   const defaultEdge = edgeMmFromNominal(group.nominalCubeSize ?? distributionNominalCube);
+
+  useEffect(() => {
+    setComments(stripAgeMetaFromComments(group.comments ?? ""));
+    setTestAge(initialSelectedTestAge(group));
+  }, [group.id]);
 
   const castingIso = distCastingDate
     ? (distCastingDate instanceof Date ? distCastingDate.toISOString().split("T")[0] : String(distCastingDate).split("T")[0])
@@ -267,7 +305,50 @@ function GroupPanel({ group, distributionId, onRefresh, castingDate: distCasting
     onRefresh();
   };
 
+  const getCastingDateStr = () =>
+    distCastingDate
+      ? (distCastingDate instanceof Date ? distCastingDate.toISOString() : String(distCastingDate))
+      : (group.batchDateTime ? group.batchDateTime.split(" ")[0] : null);
+
+  const computePanelActualAge = (): number | null => {
+    const castingDateStr = getCastingDateStr();
+    const ages = cubes
+      .map(c => calcCubeAge(castingDateStr, c.dateTested))
+      .filter((a): a is number => a !== null);
+    return ages.length > 0 ? Math.max(...ages) : null;
+  };
+
+  /** Snapshot for hidden JSON suffix on group comments (testAge / ages / cube summary). */
+  const buildAgeFormData = (ta: number) => {
+    const panelActualAge = computePanelActualAge();
+    return {
+      testAge: ta,
+      actualAge: panelActualAge,
+      isLate: panelActualAge != null && panelActualAge > ta + 5,
+      cubes: cubes.map(c => ({
+        markNo: c.markNo,
+        cubeId: c.cubeId,
+        dateTested: c.dateTested,
+        maxLoadKN: c.maxLoadKN,
+        massKg: c.massKg,
+        compressiveStrengthMpa: c.compressiveStrengthMpa,
+      })),
+    };
+  };
+
+  const persistAgeMetaToComments = async (ta: number) => {
+    const formData = buildAgeFormData(ta);
+    await updateGroup.mutateAsync({
+      groupId: group.id,
+      comments: mergeAgeMetaIntoComments(comments, formData),
+    });
+  };
+
   const saveSingleCube = async (idx: number) => {
+    if (!testAge) {
+      toast.error(lang === "ar" ? "يجب اختيار عمر الاختبار" : "Please select test age");
+      return;
+    }
     const cube = cubes[idx];
     if (!cube.maxLoadKN) {
       toast.error("Max Load (kN) is required");
@@ -301,6 +382,7 @@ function GroupPanel({ group, distributionId, onRefresh, castingDate: distCasting
           return next;
         });
       }
+      await persistAgeMetaToComments(testAge);
       toast.success(`Cube ${cube.markNo} saved`);
       onRefresh();
     } catch (e: any) {
@@ -311,17 +393,29 @@ function GroupPanel({ group, distributionId, onRefresh, castingDate: distCasting
   };
 
   const saveAllCubes = async () => {
+    if (!testAge) {
+      toast.error(lang === "ar" ? "يجب اختيار عمر الاختبار" : "Please select test age");
+      return;
+    }
     for (let i = 0; i < cubes.length; i++) {
       if (cubes[i].maxLoadKN) await saveSingleCube(i);
     }
   };
 
   const saveHeader = async () => {
+    if (!isSubmitted && !testAge) {
+      toast.error(lang === "ar" ? "يجب اختيار عمر الاختبار" : "Please select test age");
+      return;
+    }
     try {
       const batchVal = castingLocked ? (castingIso ?? undefined) : (batchDateTime || undefined);
+      const commentsPayload =
+        !isSubmitted && testAge
+          ? mergeAgeMetaIntoComments(comments, buildAgeFormData(testAge))
+          : comments;
       await updateGroup.mutateAsync({
         groupId: group.id,
-        comments,
+        comments: commentsPayload,
         sourceSupplier: sourceSupplier || undefined,
         batchDateTime: batchVal,
         dateSampled: batchVal,
@@ -342,6 +436,10 @@ function GroupPanel({ group, distributionId, onRefresh, castingDate: distCasting
   };
 
   const handleSubmit = async () => {
+    if (!testAge) {
+      toast.error(lang === "ar" ? "يجب اختيار عمر الاختبار" : "Please select test age");
+      return;
+    }
     const requiredFields = [
       { label: ar ? "مصدر/مورد الخرسانة" : "Concrete Source/Supplier", value: sourceSupplier },
       { label: ar ? "درجة الخرسانة" : "Class of Concrete", value: classOfConcrete },
@@ -373,12 +471,14 @@ function GroupPanel({ group, distributionId, onRefresh, castingDate: distCasting
   const cubeStrengthVals = cubes
     .map(c => parseFloat(c.compressiveStrengthMpa ?? calcStrength(c.maxLoadKN, c.length, c.width)))
     .filter(v => v > 0);
-  const compliance = complianceColor(avg, group.minAcceptable, group.maxAcceptable, group.testAge, cubeStrengthVals);
+  const strengthBandMilestone = testAge ?? group.testAge ?? 28;
+  const compliance = complianceColor(avg, group.minAcceptable, group.maxAcceptable, strengthBandMilestone, cubeStrengthVals);
   const targetMpa = group.minAcceptable ? parseFloat(group.minAcceptable) : null;
-  const testAgeN = group.testAge ?? 28;
+  const testAgeN = strengthBandMilestone;
   const requiredMpa =
     targetMpa != null && testAgeN >= 28 ? targetMpa : targetMpa != null ? getRequiredStrength(targetMpa, testAgeN) : null;
   const isSubmitted = group.status === "submitted" || group.status === "approved";
+  const panelActualAge = computePanelActualAge();
 
   return (
     <Card className="border-2">
@@ -514,9 +614,9 @@ function GroupPanel({ group, distributionId, onRefresh, castingDate: distCasting
                 <div className="col-span-2 border-t pt-1 mt-1">
                   <span className="text-gray-500">Acceptance (BS EN 12390-3 / 206):</span>{" "}
                   <strong className="text-blue-700">
-                    {(group.testAge ?? 28) >= 28
+                    {strengthBandMilestone >= 28
                       ? `Average ≥ ${parseFloat(group.minAcceptable).toFixed(1)} N/mm²; each cube ≥ ${(parseFloat(group.minAcceptable) - 4).toFixed(1)} N/mm²`
-                      : getRequiredLabel(parseFloat(group.minAcceptable), group.testAge ?? 28)}
+                      : getRequiredLabel(parseFloat(group.minAcceptable), strengthBandMilestone)}
                   </strong>
                 </div>
                 {group.testAge && group.testAge < 28 && (
@@ -528,6 +628,75 @@ function GroupPanel({ group, distributionId, onRefresh, castingDate: distCasting
               </div>
             </div>
           )}
+
+          <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded">
+            <label className="block text-sm font-semibold mb-2">
+              {lang === "ar" ? "عمر الاختبار *" : "Test Age *"}
+              <span className="text-red-600">{lang === "ar" ? " (مطلوب)" : " (required)"}</span>
+            </label>
+
+            <div className="flex flex-wrap gap-4 mb-3">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="radio"
+                  name={`testAge-${group.id}`}
+                  value="7"
+                  checked={testAge === 7}
+                  onChange={() => setTestAge(7)}
+                  disabled={isSubmitted}
+                />
+                <span>{lang === "ar" ? "7 أيام" : "7-Day"}</span>
+              </label>
+
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="radio"
+                  name={`testAge-${group.id}`}
+                  value="14"
+                  checked={testAge === 14}
+                  onChange={() => setTestAge(14)}
+                  disabled={isSubmitted}
+                />
+                <span>{lang === "ar" ? "14 يوم" : "14-Day"}</span>
+              </label>
+
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="radio"
+                  name={`testAge-${group.id}`}
+                  value="28"
+                  checked={testAge === 28}
+                  onChange={() => setTestAge(28)}
+                  disabled={isSubmitted}
+                />
+                <span>{lang === "ar" ? "28 يوم" : "28-Day"}</span>
+              </label>
+            </div>
+
+            {testAge != null && (
+              <div
+                className={`p-2 rounded text-sm ${
+                  panelActualAge != null && panelActualAge > testAge + 5
+                    ? "bg-amber-100 text-amber-700"
+                    : "bg-gray-100 text-gray-700"
+                }`}
+              >
+                {lang === "ar" ? "العمر الفعلي:" : "Current Age:"}
+                <strong className="ml-2">
+                  {panelActualAge != null
+                    ? `${panelActualAge} ${lang === "ar" ? "يوم" : "days"}`
+                    : lang === "ar"
+                      ? "—"
+                      : "—"}
+                </strong>
+                {panelActualAge != null && panelActualAge > testAge + 5 && (
+                  <span className="ml-2">
+                    ⚠️ ({lang === "ar" ? "متأخر" : "tested late"})
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
 
           {/* Results Table */}
           <div className="overflow-x-auto">
@@ -560,13 +729,14 @@ function GroupPanel({ group, distributionId, onRefresh, castingDate: distCasting
                     ? (distCastingDate instanceof Date ? distCastingDate.toISOString() : String(distCastingDate))
                     : (group.batchDateTime ? group.batchDateTime.split(' ')[0] : null);
                   const actualAge = calcCubeAge(castingDateStr, cube.dateTested);
-                  // Use effective age band: if actual age > group age, use next milestone
-                  const effectiveAge = actualAge !== null ? getEffectiveAge(actualAge, group.testAge ?? 28) : (group.testAge ?? 28);
-                  // For concrete: fail only if below required minimum for effective age
+                  const effectiveAge =
+                    actualAge !== null
+                      ? getEffectiveAge(actualAge, strengthBandMilestone)
+                      : strengthBandMilestone;
                   const requiredV = minV ? getRequiredStrength(minV, effectiveAge) : null;
                   const rowFail = (() => {
                     if (!strength || cube.withinSpec === true) return false;
-                    if ((group.testAge ?? 28) >= 28 && minV != null) return strengthVal < minV - 4;
+                    if (strengthBandMilestone >= 28 && minV != null) return strengthVal < minV - 4;
                     if (requiredV != null) return strengthVal < requiredV;
                     return false;
                   })();
@@ -578,13 +748,14 @@ function GroupPanel({ group, distributionId, onRefresh, castingDate: distCasting
                         <Input value={cube.cubeId} onChange={e => updateCube(idx, "cubeId", e.target.value)}
                           className="h-7 text-xs w-20" disabled={isSubmitted} />
                       </td>
-                      <td className="border px-1 py-1 bg-orange-50 text-center text-xs font-mono font-semibold">
+                      <td className="border px-1 py-1 bg-orange-50 text-center text-xs font-mono font-semibold text-gray-700">
                         {actualAge !== null ? (
-                          <span title={effectiveAge !== actualAge ? `Evaluated as ${effectiveAge}-day band` : undefined}
-                            className={effectiveAge !== actualAge ? 'text-orange-600' : 'text-gray-700'}>
-                            {actualAge}{effectiveAge !== actualAge ? ` →${effectiveAge}` : ''}
+                          <span>
+                            {actualAge} {ar ? "يوم" : "days"}
                           </span>
-                        ) : <span className="text-gray-400">—</span>}
+                        ) : (
+                          <span className="text-gray-400">—</span>
+                        )}
                       </td>
                       <td className="border px-1 py-1">
                         <div className="h-7 text-xs flex items-center justify-center font-mono text-gray-700 bg-gray-50 border rounded">
