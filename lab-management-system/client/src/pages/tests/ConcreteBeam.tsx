@@ -190,6 +190,10 @@ export default function ConcreteBeam() {
   });
 
   const handleSave = async (status: "draft" | "submitted") => {
+    if (!dist?.sampleId) {
+      toast.error(lang === "ar" ? "معرف العينة مفقود" : "Sample ID missing");
+      return;
+    }
     if (status === "submitted" && validRows.length === 0) {
       toast.error(ar ? "أدخل نتيجة كمرة صحيحة واحدة على الأقل" : "Enter at least one valid beam result");
       return;
@@ -198,7 +202,7 @@ export default function ConcreteBeam() {
     try {
       await saveMut.mutateAsync({
         distributionId: distId,
-        sampleId: dist?.sampleId ?? 0,
+        sampleId: dist.sampleId,
         testTypeCode: dist?.testType ?? "CONC_BEAM_SMALL",
         formTemplate: "concrete_beam",
         formData: {
@@ -240,6 +244,18 @@ export default function ConcreteBeam() {
     if (!ar) return v.label;
     return k === "small" ? "100×100×500 مم (البحر = 300 مم)" : "150×150×750 مم (البحر = 450 مم)";
   };
+
+  if (!distId || distId === 0) {
+    return (
+      <DashboardLayout>
+        <div className="p-6">
+          <div className="text-center text-red-600">
+            {lang === "ar" ? "معرف التوزيع غير صالح" : "Invalid distribution ID"}
+          </div>
+        </div>
+      </DashboardLayout>
+    );
+  }
 
   return (
     <DashboardLayout>

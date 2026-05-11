@@ -105,6 +105,10 @@ export default function AggShapeIndex() {
   };
 
   const handleSave = async (status: "draft" | "submitted") => {
+    if (!dist?.sampleId) {
+      toast.error(lang === "ar" ? "معرف العينة مفقود" : "Sample ID missing");
+      return;
+    }
     if (status === "submitted" && overallIndex === undefined) {
       toast.error(ar ? "الرجاء إدخال بيانات الاختبار" : "Please enter test data");
       return;
@@ -113,7 +117,7 @@ export default function AggShapeIndex() {
     try {
       await saveResult.mutateAsync({
         distributionId: distId,
-        sampleId: dist?.sampleId ?? 0,
+        sampleId: dist.sampleId,
         testTypeCode: spec.code,
         formTemplate: "agg_shape_index",
         formData: { shapeType, spec, source, rows: computedRows, overallIndex, overallResult },
@@ -126,6 +130,18 @@ export default function AggShapeIndex() {
       setSaving(false);
     }
   };
+
+  if (!distId || distId === 0) {
+    return (
+      <DashboardLayout>
+        <div className="p-6">
+          <div className="text-center text-red-600">
+            {lang === "ar" ? "معرف التوزيع غير صالح" : "Invalid distribution ID"}
+          </div>
+        </div>
+      </DashboardLayout>
+    );
+  }
 
   return (
     <DashboardLayout>

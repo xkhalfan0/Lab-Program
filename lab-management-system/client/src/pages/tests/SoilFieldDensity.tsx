@@ -158,6 +158,10 @@ export default function SoilFieldDensity() {
   };
 
   const handleSave = async (status: "draft" | "submitted") => {
+    if (!dist?.sampleId) {
+      toast.error(lang === "ar" ? "معرف العينة مفقود" : "Sample ID missing");
+      return;
+    }
     if (status === "submitted" && validPoints.length === 0) {
       toast.error("Please enter at least one test point result");
       return;
@@ -166,7 +170,7 @@ export default function SoilFieldDensity() {
     try {
       await saveResult.mutateAsync({
         distributionId: distId,
-        sampleId: dist?.sampleId ?? 0,
+        sampleId: dist.sampleId,
         testTypeCode: "SOIL_FIELD_DENSITY",
         formTemplate: "soil_field_density",
         formData: { method, mdd, requiredRC, location, points: computedPoints, overallResult },
@@ -183,6 +187,18 @@ export default function SoilFieldDensity() {
   const isSandReplacement = method === "SAND_REPLACEMENT";
   const isCoreMethod = method === "CORE_CUTTER";
   const isNuclear = method === "NUCLEAR";
+
+  if (!distId || distId === 0) {
+    return (
+      <DashboardLayout>
+        <div className="p-6">
+          <div className="text-center text-red-600">
+            {lang === "ar" ? "معرف التوزيع غير صالح" : "Invalid distribution ID"}
+          </div>
+        </div>
+      </DashboardLayout>
+    );
+  }
 
   return (
     <DashboardLayout>

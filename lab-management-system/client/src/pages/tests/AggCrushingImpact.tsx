@@ -132,6 +132,10 @@ export default function AggCrushingImpact() {
   };
 
   const handleSave = async (status: "draft" | "submitted") => {
+    if (!dist?.sampleId) {
+      toast.error(lang === "ar" ? "معرف العينة مفقود" : "Sample ID missing");
+      return;
+    }
     if (status === "submitted" && validRows.length === 0) {
       toast.error(ar ? "الرجاء إدخال نتيجة عينة واحدة على الأقل" : "Please enter at least one sample result");
       return;
@@ -140,7 +144,7 @@ export default function AggCrushingImpact() {
     try {
       await saveResult.mutateAsync({
         distributionId: distId,
-        sampleId: dist?.sampleId ?? 0,
+        sampleId: dist.sampleId,
         testTypeCode: spec.code,
         formTemplate: testType === "ACV" ? "agg_crushing" : "agg_impact",
         formData: { testType, spec, usageType, aggregateSource, samples: computedRows, avgValue, limit, overallResult },
@@ -159,6 +163,18 @@ export default function AggCrushingImpact() {
       setSaving(false);
     }
   };
+
+  if (!distId || distId === 0) {
+    return (
+      <DashboardLayout>
+        <div className="p-6">
+          <div className="text-center text-red-600">
+            {lang === "ar" ? "معرف التوزيع غير صالح" : "Invalid distribution ID"}
+          </div>
+        </div>
+      </DashboardLayout>
+    );
+  }
 
   return (
     <DashboardLayout>

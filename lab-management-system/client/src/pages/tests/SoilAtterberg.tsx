@@ -88,10 +88,11 @@ export default function SoilAtterberg() {
     onSuccess: (_, vars) => {
       if (vars.status === "submitted") {
         toast.success(ar ? "تم إرسال النتائج بنجاح" : "Results submitted successfully");
+        setSubmitted(true);
         setLocation("/technician");
       } else {
         toast.success(ar ? "تم حفظ المسودة بنجاح" : "Draft saved successfully");
-      setSubmitted(true);}
+      }
     },
     onError: (e) => toast.error(e.message),
   });
@@ -133,6 +134,10 @@ export default function SoilAtterberg() {
   };
 
   const handleSave = async (status: "draft" | "submitted") => {
+    if (!dist?.sampleId) {
+      toast.error(lang === "ar" ? "معرف العينة مفقود" : "Sample ID missing");
+      return;
+    }
     if (status === "submitted" && validLlPoints.length < 2) {
       toast.error("Please enter at least 2 Liquid Limit data points");
       return;
@@ -141,7 +146,7 @@ export default function SoilAtterberg() {
     try {
       await saveResult.mutateAsync({
         distributionId: distId,
-        sampleId: dist?.sampleId ?? 0,
+        sampleId: dist.sampleId,
         testTypeCode: "SOIL_ATTERBERG",
         formTemplate: "soil_atterberg",
         formData: {
@@ -170,6 +175,18 @@ export default function SoilAtterberg() {
     : pi < 35 ? "High Plasticity (CH/MH)"
     : "Very High Plasticity (CV/MV)"
     : undefined;
+
+  if (!distId || distId === 0) {
+    return (
+      <DashboardLayout>
+        <div className="p-6">
+          <div className="text-center text-red-600">
+            {lang === "ar" ? "معرف التوزيع غير صالح" : "Invalid distribution ID"}
+          </div>
+        </div>
+      </DashboardLayout>
+    );
+  }
 
   return (
     <DashboardLayout>

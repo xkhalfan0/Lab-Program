@@ -133,6 +133,7 @@ export default function ConcreteFoam() {
 
   const { lang } = useLanguage();
   const ar = lang === "ar";
+  const distId = parseInt(distributionId || "0", 10);
 
   const [testMode, setTestMode] = useState<"strength" | "density">("strength");
   const [grade, setGrade] = useState("FC5");
@@ -144,8 +145,8 @@ export default function ConcreteFoam() {
   const [submitted, setSubmitted] = useState(false);
 
   const { data: distribution } = trpc.distributions.get.useQuery(
-    { id: parseInt(distributionId || "0") },
-    { enabled: !!distributionId }
+    { id: distId },
+    { enabled: !!distId }
   );
 
   const saveMut = trpc.specializedTests.save.useMutation({
@@ -186,6 +187,10 @@ export default function ConcreteFoam() {
   }, []);
 
   const handleSubmit = () => {
+    if (!distribution?.sampleId) {
+      toast.error(lang === "ar" ? "معرف العينة مفقود" : "Sample ID missing");
+      return;
+    }
     if (!distributionId) return;
     const resultData = {
       testType: "CONC_FOAM",
@@ -203,8 +208,8 @@ export default function ConcreteFoam() {
       submittedAt: new Date().toISOString(),
     };
     saveMut.mutate({
-      distributionId: parseInt(distributionId),
-      sampleId: distribution?.sampleId ?? 0,
+      distributionId: distId,
+      sampleId: distribution.sampleId,
       testTypeCode: testMode === "strength" ? "CONC_FOAM_CUBE" : "CONC_FOAM_DENSITY",
       formTemplate: "concrete_foam",
       formData: resultData,
@@ -213,6 +218,18 @@ export default function ConcreteFoam() {
       status: "submitted",
     });
   };
+
+  if (!distId || distId === 0) {
+    return (
+      <DashboardLayout>
+        <div className="p-6">
+          <div className="text-center text-red-600">
+            {lang === "ar" ? "معرف التوزيع غير صالح" : "Invalid distribution ID"}
+          </div>
+        </div>
+      </DashboardLayout>
+    );
+  }
 
   return (
     <DashboardLayout>

@@ -152,6 +152,10 @@ export default function AsphaltHotBin() {
   });
 
   const handleSave = async (status: "draft" | "submitted") => {
+    if (!dist?.sampleId) {
+      toast.error(lang === "ar" ? "معرف العينة مفقود" : "Sample ID missing");
+      return;
+    }
     if (status === "submitted" && checkedRows.length === 0) {
       toast.error(ar ? "الرجاء إدخال كتل المناخل أولاً" : "Enter sieve masses first");
       return;
@@ -160,7 +164,7 @@ export default function AsphaltHotBin() {
     try {
       await saveMut.mutateAsync({
         distributionId: distId,
-        sampleId: dist?.sampleId ?? 0,
+        sampleId: dist.sampleId,
         testTypeCode: "ASPH_HOTBIN",
         formTemplate: "asphalt_hotbin",
         formData: {
@@ -182,6 +186,18 @@ export default function AsphaltHotBin() {
       setSaving(false);
     }
   };
+
+  if (!distId || distId === 0) {
+    return (
+      <DashboardLayout>
+        <div className="p-6">
+          <div className="text-center text-red-600">
+            {lang === "ar" ? "معرف التوزيع غير صالح" : "Invalid distribution ID"}
+          </div>
+        </div>
+      </DashboardLayout>
+    );
+  }
 
   return (
     <DashboardLayout>

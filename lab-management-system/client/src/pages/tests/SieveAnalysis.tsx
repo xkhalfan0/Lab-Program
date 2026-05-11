@@ -260,6 +260,10 @@ export default function SieveAnalysis() {
   });
 
   const handleSave = async (status: "draft" | "submitted") => {
+    if (!dist?.sampleId) {
+      toast.error(lang === "ar" ? "معرف العينة مفقود" : "Sample ID missing");
+      return;
+    }
     if (status === "submitted" && !anyComputed) {
       toast.error(ar ? "يرجى إدخال كتل المناخل" : "Please enter sieve masses");
       return;
@@ -276,7 +280,7 @@ export default function SieveAnalysis() {
       const testTypeCode = isFineGrading ? "AGG_SIEVE_FINE" : "AGG_SIEVE_COARSE";
       await saveResult.mutateAsync({
         distributionId: distId,
-        sampleId: dist?.sampleId ?? 0,
+        sampleId: dist.sampleId,
         testTypeCode,
         formTemplate: "sieve_analysis",
         formData: {
@@ -327,6 +331,18 @@ export default function SieveAnalysis() {
     gradingType.includes("PLASTER") ||
     gradingType.includes("MASONRY") ||
     gradingType === "ASTM_FINE_CONCRETE";
+
+  if (!distId || distId === 0) {
+    return (
+      <DashboardLayout>
+        <div className="p-6">
+          <div className="text-center text-red-600">
+            {lang === "ar" ? "معرف التوزيع غير صالح" : "Invalid distribution ID"}
+          </div>
+        </div>
+      </DashboardLayout>
+    );
+  }
 
   return (
     <DashboardLayout>

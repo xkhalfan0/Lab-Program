@@ -204,6 +204,10 @@ export default function ConcreteCubes() {
   const removeRow = (id: string) => setRows(prev => prev.filter(r => r.id !== id));
 
   const handleSave = async (status: "draft" | "submitted") => {
+    if (!dist?.sampleId) {
+      toast.error(lang === "ar" ? "معرف العينة مفقود" : "Sample ID missing");
+      return;
+    }
     if (status === "submitted" && validRows.length === 0) {
       toast.error(ar ? "الرجاء إدخال نتيجة مكعب واحد على الأقل" : "Please enter at least one cube result");
       return;
@@ -212,7 +216,7 @@ export default function ConcreteCubes() {
     try {
       await saveResult.mutateAsync({
         distributionId: distId,
-        sampleId: dist?.sampleId ?? 0,
+        sampleId: dist.sampleId,
         testTypeCode: "CONC_CUBE",
         formTemplate: "concrete_cubes",
         formData: {
@@ -247,6 +251,18 @@ export default function ConcreteCubes() {
       setSaving(false);
     }
   };
+
+  if (!distId || distId === 0) {
+    return (
+      <DashboardLayout>
+        <div className="p-6">
+          <div className="text-center text-red-600">
+            {lang === "ar" ? "معرف التوزيع غير صالح" : "Invalid distribution ID"}
+          </div>
+        </div>
+      </DashboardLayout>
+    );
+  }
 
   return (
     <DashboardLayout>

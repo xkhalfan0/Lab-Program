@@ -196,15 +196,20 @@ export default function SoilProctor() {
     onSuccess: (_, vars) => {
       if (vars.status === "submitted") {
         toast.success(lang === "ar" ? "تم إرسال النتائج بنجاح" : "Results submitted successfully");
+        setSubmitted(true);
         setLocation("/technician");
       } else {
         toast.success(lang === "ar" ? "تم حفظ المسودة بنجاح" : "Draft saved successfully");
-      setSubmitted(true);}
+      }
     },
     onError: (e) => toast.error(e.message),
   });
 
   const handleSave = async (status: "draft" | "submitted") => {
+    if (!dist?.sampleId) {
+      toast.error(lang === "ar" ? "معرف العينة مفقود" : "Sample ID missing");
+      return;
+    }
     if (status === "submitted" && validPoints.length < 3) {
       toast.error(lang === "ar" ? "يرجى إدخال 3 نقاط على الأقل لاختبار بروكتور" : "Please enter at least 3 data points for Proctor test");
       return;
@@ -213,7 +218,7 @@ export default function SoilProctor() {
     try {
       await saveResult.mutateAsync({
         distributionId: distId,
-        sampleId: dist?.sampleId ?? 0,
+        sampleId: dist.sampleId,
         testTypeCode: "SOIL_PROCTOR",
         formTemplate: "soil_proctor",
         formData: {
@@ -245,6 +250,18 @@ export default function SoilProctor() {
   };
 
   const isRtl = dir === "rtl";
+
+  if (!distId || distId === 0) {
+    return (
+      <DashboardLayout>
+        <div className="p-6">
+          <div className="text-center text-red-600">
+            {lang === "ar" ? "معرف التوزيع غير صالح" : "Invalid distribution ID"}
+          </div>
+        </div>
+      </DashboardLayout>
+    );
+  }
 
   return (
     <DashboardLayout>

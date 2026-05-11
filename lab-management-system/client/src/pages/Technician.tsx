@@ -58,6 +58,7 @@ const T = {
   viewReport:  { ar: "عرض التقرير",               en: "View report" },
   partOf:      { ar: "ضمن الطلب",                 en: "Part of" },
   ageDays:     { ar: "العمر (يوم)",               en: "Age (days)" },
+  received:    { ar: "تاريخ الاستلام",            en: "Received" },
   sampleCode:  { ar: "رمز العينة",               en: "Sample code" },
   contractNo:  { ar: "رقم العقد",                 en: "Contract no." },
   distCode:    { ar: "رمز التوزيع",               en: "Distribution" },
@@ -150,12 +151,31 @@ function resolveDistributionId(dist: any | null | undefined): number {
   return Number(dist.id) || 0;
 }
 
-function getAgeDays(dist: any, sample: any | undefined): number | null {
+/** Days since casting (concrete-style age). */
+function getCastingAgeDays(dist: any, sample: any | undefined): number | null {
+  const cast = dist?.castingDate ?? sample?.castingDate;
+  if (!cast) return null;
+  const t = new Date(cast).getTime();
+  if (Number.isNaN(t)) return null;
+  return Math.max(0, Math.ceil((Date.now() - t) / (1000 * 60 * 60 * 24)));
+}
+
+/** Days since receipt/creation — for sorting when no casting date. */
+function getDaysSinceReceived(dist: any, sample: any | undefined): number | null {
   const base = dist.sampleReceivedAt ?? sample?.receivedAt ?? dist.createdAt;
   if (!base) return null;
   const t = new Date(base).getTime();
   if (Number.isNaN(t)) return null;
   return Math.max(1, Math.ceil((Date.now() - t) / (1000 * 60 * 60 * 24)));
+}
+
+/** Sort key: prefer age since casting when present, else days since received. */
+function getAgeDaysForSort(dist: any, sample: any | undefined): number | null {
+  const hasCast = !!(dist?.castingDate ?? sample?.castingDate);
+  if (hasCast) {
+    return getCastingAgeDays(dist, sample) ?? getDaysSinceReceived(dist, sample);
+  }
+  return getDaysSinceReceived(dist, sample);
 }
 
 function priorityRank(p: string | null | undefined): number {
@@ -208,7 +228,6 @@ function TechnicianAssignmentCard({
   dist,
   lang,
   sample,
-  ageDays,
   isCompleted,
   pendingDeletion,
   onStartTest,
@@ -218,7 +237,6 @@ function TechnicianAssignmentCard({
   dist: any;
   lang: string;
   sample: any | undefined;
-  ageDays: number | null;
   isCompleted: boolean;
   pendingDeletion: boolean;
   onStartTest: () => void;
@@ -238,6 +256,18 @@ function TechnicianAssignmentCard({
   const contractor = sample?.contractorName ?? "—";
   const contractNo = sample?.contractNumber ?? "—";
   const sampleCode = dist.sampleCode ?? sample?.sampleCode ?? "—";
+
+  const hasCastingDate = !!(dist.castingDate || sample?.castingDate);
+  const ageDays = getCastingAgeDays(dist, sample);
+  const receivedTs = dist.sampleReceivedAt ?? sample?.receivedAt ?? dist.createdAt;
+  const locale = lang === "ar" ? "ar" : "en-GB";
+  const ageOrReceivedValue = hasCastingDate
+    ? ageDays != null
+      ? String(ageDays)
+      : "—"
+    : receivedTs
+      ? new Date(receivedTs).toLocaleDateString(locale)
+      : "—";
 
   const statusBadge = isCompleted ? (
     <Badge className="shrink-0 border border-green-200 bg-green-100 text-xs text-green-800">
@@ -286,8 +316,10 @@ function TechnicianAssignmentCard({
                 <p className="font-mono text-sm font-medium">{dist.distributionCode ?? "—"}</p>
               </div>
               <div>
-                <p className="text-xs text-muted-foreground">{tx("ageDays", lang)}</p>
-                <p className="font-mono text-sm font-medium">{ageDays != null ? String(ageDays) : "—"}</p>
+                <p className="text-xs text-muted-foreground">
+                  {hasCastingDate ? tx("ageDays", lang) : tx("received", lang)}
+                </p>
+                <p className="font-mono text-sm font-medium">{ageOrReceivedValue}</p>
               </div>
             </div>
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -426,8 +458,8 @@ export default function Technician() {
       if (pr !== 0) return pr;
       const sa = allSamples.find((s: any) => s.id === a.sampleId);
       const sb = allSamples.find((s: any) => s.id === b.sampleId);
-      const ageA = getAgeDays(a, sa) ?? 0;
-      const ageB = getAgeDays(b, sb) ?? 0;
+      const ageA = getAgeDaysForSort(a, sa) ?? 0;
+      const ageB = getAgeDaysForSort(b, sb) ?? 0;
       if (ageA !== ageB) return ageB - ageA;
       return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
     });
@@ -531,7 +563,6 @@ export default function Technician() {
 
   const renderCard = (dist: any) => {
     const sample = allSamples.find((s: any) => s.id === dist.sampleId);
-    const ageDays = getAgeDays(dist, sample);
     const isCompleted = dist.status === "completed";
     const pend = pendingByDistId.get(dist.id) ?? false;
     return (
@@ -540,7 +571,6 @@ export default function Technician() {
         dist={dist}
         lang={lang}
         sample={sample}
-        ageDays={ageDays}
         isCompleted={isCompleted}
         pendingDeletion={pend}
         onStartTest={() => openTestFlow(dist)}

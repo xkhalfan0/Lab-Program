@@ -234,6 +234,10 @@ export default function SteelRebar() {
   };
 
   const handleSave = async (status: "draft" | "submitted") => {
+    if (!dist?.sampleId) {
+      toast.error(lang === "ar" ? "معرف العينة مفقود" : "Sample ID missing");
+      return;
+    }
     if (status === "submitted" && validRows.length === 0) {
       toast.error("Please enter at least one specimen result");
       return;
@@ -242,7 +246,7 @@ export default function SteelRebar() {
     try {
       await saveResult.mutateAsync({
         distributionId: distId,
-        sampleId: dist?.sampleId ?? 0,
+        sampleId: dist.sampleId,
         testTypeCode: spec.code,
         formTemplate: "steel_rebar",
         formData: { standard, spec, heatNo, supplier, specimens: computedRows, overallResult },
@@ -261,6 +265,18 @@ export default function SteelRebar() {
       setSaving(false);
     }
   };
+
+  if (!distId || distId === 0) {
+    return (
+      <DashboardLayout>
+        <div className="p-6">
+          <div className="text-center text-red-600">
+            {lang === "ar" ? "معرف التوزيع غير صالح" : "Invalid distribution ID"}
+          </div>
+        </div>
+      </DashboardLayout>
+    );
+  }
 
   return (
     <DashboardLayout>

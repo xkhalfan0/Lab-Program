@@ -167,6 +167,10 @@ export default function Interlock() {
   }, []);
 
   const handleSave = async (status: "draft" | "submitted") => {
+    if (!dist?.sampleId) {
+      toast.error(lang === "ar" ? "معرف العينة مفقود" : "Sample ID missing");
+      return;
+    }
     if (status === "submitted" && validRows.length === 0) {
       toast.error("Please enter at least one result");
       return;
@@ -175,7 +179,7 @@ export default function Interlock() {
     try {
       await saveResult.mutateAsync({
         distributionId: distId,
-        sampleId: dist?.sampleId ?? 0,
+        sampleId: dist.sampleId,
         testTypeCode: spec.code,
         formTemplate: "interlock",
         formData: { interlockType, spec, manufacturer, mtsReference, blockShape, blockColor, blocks: computedRows, avgStrength, overallResult },
@@ -188,6 +192,18 @@ export default function Interlock() {
       setSaving(false);
     }
   };
+
+  if (!distId || distId === 0) {
+    return (
+      <DashboardLayout>
+        <div className="p-6">
+          <div className="text-center text-red-600">
+            {lang === "ar" ? "معرف التوزيع غير صالح" : "Invalid distribution ID"}
+          </div>
+        </div>
+      </DashboardLayout>
+    );
+  }
 
   return (
     <DashboardLayout>

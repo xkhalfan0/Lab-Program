@@ -142,7 +142,15 @@ export default function ConcreteMixGrad() {
     }));
 
   const handleSave = async (status: "draft" | "submitted") => {
-    if (!distId) return;
+    if (!distId) {
+      toast.error(ar ? "معرّف التوزيع غير صالح" : "Invalid distribution");
+      return;
+    }
+    const sampleId = distribution?.sampleId;
+    if (!sampleId) {
+      toast.error(ar ? "تعذر تحديد العينة. أعد تحميل الصفحة." : "Could not resolve sample. Please reload.");
+      return;
+    }
     if (status === "submitted" && validRows.length === 0) {
       toast.error(ar ? "يرجى إدخال بيانات المناخل" : "Please enter sieve data");
       return;
@@ -151,7 +159,7 @@ export default function ConcreteMixGrad() {
     try {
       await saveMut.mutateAsync({
         distributionId: distId,
-        sampleId: distribution?.sampleId ?? 0,
+        sampleId,
         testTypeCode: "CONC_MIX_GRAD",
         formTemplate: "concrete_mix_grad",
         formData: { mixType, sampleMass, panMass, totalMass, rows: computed, overallPass },

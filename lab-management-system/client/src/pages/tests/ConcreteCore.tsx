@@ -241,6 +241,10 @@ export default function ConcreteCore() {
   const removeRow = (id: string) => setRows(prev => prev.filter(r => r.id !== id));
 
   const handleSave = async (status: "draft" | "submitted") => {
+    if (!dist?.sampleId) {
+      toast.error(lang === "ar" ? "معرف العينة مفقود" : "Sample ID missing");
+      return;
+    }
     if (status === "submitted" && validRows.length === 0) {
       toast.error(ar ? "الرجاء إدخال نتيجة لب واحدة على الأقل" : "Please enter at least one core result");
       return;
@@ -249,7 +253,7 @@ export default function ConcreteCore() {
     try {
       await saveResult.mutateAsync({
         distributionId: distId,
-        sampleId: dist?.sampleId ?? 0,
+        sampleId: dist.sampleId,
         testTypeCode: "CONC_CORE",
         formTemplate: "concrete_cores",
         formData: {
@@ -289,6 +293,18 @@ export default function ConcreteCore() {
     { ld: "1.75", cf: "0.97" },
     { ld: "2.00", cf: "1.00 (cylinder strength)" },
   ];
+
+  if (!distId || distId === 0) {
+    return (
+      <DashboardLayout>
+        <div className="p-6">
+          <div className="text-center text-red-600">
+            {lang === "ar" ? "معرف التوزيع غير صالح" : "Invalid distribution ID"}
+          </div>
+        </div>
+      </DashboardLayout>
+    );
+  }
 
   return (
     <DashboardLayout>

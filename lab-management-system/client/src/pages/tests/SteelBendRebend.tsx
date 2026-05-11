@@ -132,10 +132,11 @@ export default function SteelBendRebend() {
     onSuccess: (_, vars) => {
       if (vars.status === "submitted") {
         toast.success(ar ? "تم إرسال النتائج بنجاح" : "Results submitted successfully");
+        setSubmitted(true);
         setLocation("/technician");
       } else {
         toast.success(ar ? "تم حفظ المسودة بنجاح" : "Draft saved successfully");
-      setSubmitted(true);}
+      }
     },
     onError: (e) => toast.error(e.message),
   });
@@ -145,6 +146,10 @@ export default function SteelBendRebend() {
   }, []);
 
   const handleSave = async (status: "draft" | "submitted") => {
+    if (!dist?.sampleId) {
+      toast.error(lang === "ar" ? "معرف العينة مفقود" : "Sample ID missing");
+      return;
+    }
     if (status === "submitted" && validRows.length === 0) {
       toast.error("Please enter at least one specimen result");
       return;
@@ -153,7 +158,7 @@ export default function SteelBendRebend() {
     try {
       await saveResult.mutateAsync({
         distributionId: distId,
-        sampleId: dist?.sampleId ?? 0,
+        sampleId: dist.sampleId,
         testTypeCode: spec.code,
         formTemplate: "steel_bend_rebend",
         formData: { standard, spec, testMode, heatNo, supplier, specimens: computedRows, overallResult },
@@ -171,6 +176,18 @@ export default function SteelBendRebend() {
       setSaving(false);
     }
   };
+
+  if (!distId || distId === 0) {
+    return (
+      <DashboardLayout>
+        <div className="p-6">
+          <div className="text-center text-red-600">
+            {lang === "ar" ? "معرف التوزيع غير صالح" : "Invalid distribution ID"}
+          </div>
+        </div>
+      </DashboardLayout>
+    );
+  }
 
   return (
     <DashboardLayout>

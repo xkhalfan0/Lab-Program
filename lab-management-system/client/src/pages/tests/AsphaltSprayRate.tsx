@@ -210,7 +210,15 @@ export default function AsphaltSprayRate() {
       : "ASPH_SPRAY";
 
   const handleSave = async (status: "draft" | "submitted") => {
-    if (!distId) return;
+    if (!distId) {
+      toast.error(ar ? "معرّف التوزيع غير صالح" : "Invalid distribution");
+      return;
+    }
+    const sampleId = distribution?.sampleId;
+    if (!sampleId) {
+      toast.error(ar ? "تعذر تحديد العينة. أعد تحميل الصفحة." : "Could not resolve sample. Please reload.");
+      return;
+    }
     if (status === "submitted" && validRows.length === 0) {
       toast.error(ar ? "الرجاء إدخال قراءة صينية واحدة على الأقل" : "Please enter at least one pad reading");
       return;
@@ -219,7 +227,7 @@ export default function AsphaltSprayRate() {
     try {
       await saveMut.mutateAsync({
         distributionId: distId,
-        sampleId: distribution?.sampleId ?? 0,
+        sampleId,
         testTypeCode: resolvedTestTypeCode,
         formTemplate: "asphalt_spray_rate",
         formData: {

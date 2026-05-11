@@ -176,6 +176,10 @@ export default function CementSettingTime() {
   };
 
   const handleSave = async (status: "draft" | "submitted") => {
+    if (!dist?.sampleId) {
+      toast.error(lang === "ar" ? "معرف العينة مفقود" : "Sample ID missing");
+      return;
+    }
     if (status === "submitted" && validReadings.length < 3) {
       toast.error(ar ? "الرجاء إدخال 3 قراءات اختراق على الأقل" : "Please enter at least 3 penetration readings");
       return;
@@ -184,7 +188,7 @@ export default function CementSettingTime() {
     try {
       await saveResult.mutateAsync({
         distributionId: distId,
-        sampleId: dist?.sampleId ?? 0,
+        sampleId: dist.sampleId,
         testTypeCode: spec.code,
         formTemplate: "cement_setting_time",
         formData: {
@@ -215,6 +219,18 @@ export default function CementSettingTime() {
     const m = min % 60;
     return h > 0 ? `${h}h ${m}m` : `${m}m`;
   };
+
+  if (!distId || distId === 0) {
+    return (
+      <DashboardLayout>
+        <div className="p-6">
+          <div className="text-center text-red-600">
+            {lang === "ar" ? "معرف التوزيع غير صالح" : "Invalid distribution ID"}
+          </div>
+        </div>
+      </DashboardLayout>
+    );
+  }
 
   return (
     <DashboardLayout>

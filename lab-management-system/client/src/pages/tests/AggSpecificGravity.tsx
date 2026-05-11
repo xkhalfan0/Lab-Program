@@ -139,15 +139,19 @@ export default function AggSpecificGravity() {
   };
 
   const handleSave = async (status: "draft" | "submitted") => {
+    if (!dist?.sampleId) {
+      toast.error(lang === "ar" ? "معرف العينة مفقود" : "Sample ID missing");
+      return;
+    }
     if (status === "submitted" && validRows.length === 0) {
-  toast.error(ar ? "الرجاء إدخال نتيجة واحدة على الأقل" : "Please enter at least one result");
+      toast.error(ar ? "الرجاء إدخال نتيجة واحدة على الأقل" : "Please enter at least one result");
       return;
     }
     setSaving(true);
     try {
       await saveResult.mutateAsync({
         distributionId: distId,
-        sampleId: dist?.sampleId ?? 0,
+        sampleId: dist.sampleId,
         testTypeCode: spec.code,
         formTemplate: "agg_specific_gravity",
         formData: { aggType, spec, source, rows: computedRows, avgSg, avgAbsorption, overallResult },
@@ -160,6 +164,18 @@ export default function AggSpecificGravity() {
       setSaving(false);
     }
   };
+
+  if (!distId || distId === 0) {
+    return (
+      <DashboardLayout>
+        <div className="p-6">
+          <div className="text-center text-red-600">
+            {lang === "ar" ? "معرف التوزيع غير صالح" : "Invalid distribution ID"}
+          </div>
+        </div>
+      </DashboardLayout>
+    );
+  }
 
   return (
     <DashboardLayout>

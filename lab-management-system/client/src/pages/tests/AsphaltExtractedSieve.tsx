@@ -75,6 +75,7 @@ export default function AsphaltExtractedSieve() {
   const { distributionId } = useParams<{ distributionId: string }>();
   const { lang } = useLanguage();
   const ar = lang === "ar";
+  const distId = parseInt(distributionId || "0", 10);
 
   const [mixType, setMixType] = useState("ACWC");
   const [sampleMass, setSampleMass] = useState("1000");
@@ -83,8 +84,8 @@ export default function AsphaltExtractedSieve() {
   const [submitted, setSubmitted] = useState(false);
 
   const { data: distribution } = trpc.distributions.get.useQuery(
-    { id: parseInt(distributionId || "0") },
-    { enabled: !!distributionId }
+    { id: distId },
+    { enabled: !!distId }
   );
 
   const saveMut = trpc.specializedTests.save.useMutation({
@@ -121,10 +122,14 @@ export default function AsphaltExtractedSieve() {
     }));
 
   const handleSubmit = () => {
+    if (!distribution?.sampleId) {
+      toast.error(lang === "ar" ? "معرف العينة مفقود" : "Sample ID missing");
+      return;
+    }
     if (!distributionId) return;
     saveMut.mutate({
-      distributionId: parseInt(distributionId),
-      sampleId: distribution?.sampleId ?? 0,
+      distributionId: distId,
+      sampleId: distribution.sampleId,
       testTypeCode: `ASPH_EXTRACTED_SIEVE_${mixType}`,
       formTemplate: "asphalt_extracted_sieve",
       formData: { mixType, sampleMass, panMass, totalMass, rows: computed, overallPass },
@@ -133,6 +138,18 @@ export default function AsphaltExtractedSieve() {
       status: "submitted",
     });
   };
+
+  if (!distId || distId === 0) {
+    return (
+      <DashboardLayout>
+        <div className="p-6">
+          <div className="text-center text-red-600">
+            {lang === "ar" ? "معرف التوزيع غير صالح" : "Invalid distribution ID"}
+          </div>
+        </div>
+      </DashboardLayout>
+    );
+  }
 
   return (
     <DashboardLayout>

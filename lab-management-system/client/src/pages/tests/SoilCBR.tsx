@@ -151,6 +151,10 @@ export default function SoilCBR() {
   }, []);
 
   const handleSave = async (status: "draft" | "submitted") => {
+    if (!dist?.sampleId) {
+      toast.error(lang === "ar" ? "معرف العينة مفقود" : "Sample ID missing");
+      return;
+    }
     if (status === "submitted" && finalCBR === undefined) {
       toast.error(ar ? "الرجاء إدخال قراءات الحمل عند 2.5mm و 5.0mm على الأقل" : "Please enter at least 2.5mm and 5.0mm load readings");
       return;
@@ -159,7 +163,7 @@ export default function SoilCBR() {
     try {
       await saveResult.mutateAsync({
         distributionId: distId,
-        sampleId: dist?.sampleId ?? 0,
+        sampleId: dist.sampleId,
         testTypeCode: "SOIL_CBR",
         formTemplate: "soil_cbr",
         formData: {
@@ -193,6 +197,18 @@ export default function SoilCBR() {
       depth,
       load: parseFloat(face.readings[i] || "0") || 0,
     })).filter(d => d.load > 0 || d.depth === 0);
+
+  if (!distId || distId === 0) {
+    return (
+      <DashboardLayout>
+        <div className="p-6">
+          <div className="text-center text-red-600">
+            {lang === "ar" ? "معرف التوزيع غير صالح" : "Invalid distribution ID"}
+          </div>
+        </div>
+      </DashboardLayout>
+    );
+  }
 
   return (
     <DashboardLayout>
