@@ -4,6 +4,7 @@ import PrintHeader from "@/components/PrintHeader";
 import { StatusBadge } from "@/components/StatusBadge";
 import { WorkflowProgress } from "@/components/WorkflowProgress";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { trpc } from "@/lib/trpc";
 import { SAMPLE_TYPE_LABELS } from "@/lib/labTypes";
@@ -346,7 +347,10 @@ export default function SampleDetail() {
   const { lang } = useLanguage();
   const { user } = useAuth();
 
-  const { data: sample, isLoading, refetch: refetchSample } = trpc.samples.get.useQuery({ id: sampleId }, { enabled: !!sampleId });
+  const { data: sample, isLoading, error: sampleError, refetch: refetchSample } = trpc.samples.detail.useQuery(
+    { id: sampleId },
+    { enabled: !!sampleId }
+  );
   const { data: history, refetch: refetchHistory } = trpc.samples.history.useQuery({ sampleId }, { enabled: !!sampleId });
   const { data: distributions, refetch: refetchDist } = trpc.distributions.bySample.useQuery({ sampleId }, { enabled: !!sampleId });
   const { data: results } = trpc.testResults.bySample.useQuery({ sampleId }, { enabled: !!sampleId });
@@ -375,13 +379,23 @@ export default function SampleDetail() {
     );
   }
 
-  if (!sample) {
+  if (sampleError || !sample) {
     return (
       <DashboardLayout>
-        <div className="flex items-center justify-center h-64 text-muted-foreground text-sm">Sample not found</div>
+        <div className="flex items-center justify-center h-64 text-muted-foreground text-sm">
+          {lang === "ar" ? "العينة غير موجودة" : "Sample not found"}
+        </div>
       </DashboardLayout>
     );
   }
+
+  const isDeleted = Boolean((sample as { deletedAt?: Date | string | null }).deletedAt);
+  const del = sample as {
+    deletedAt?: Date | string | null;
+    deletedByName?: string | null;
+    deletionReason?: string | null;
+    deletionCategory?: string | null;
+  };
 
   const dist = distributions?.[0];
   const result = results?.[0];
@@ -445,6 +459,36 @@ export default function SampleDetail() {
             { label: lang === "ar" ? "تاريخ الاستلام" : "Received At", value: new Date(sample.receivedAt).toLocaleDateString(lang === "ar" ? "ar-AE" : "en-AE") },
           ]}
         />
+
+        {isDeleted && del.deletedAt && (
+          <Alert variant="destructive" className="border-red-200 bg-red-50 print:hidden">
+            <Trash2 className="h-4 w-4" />
+            <AlertTitle className="text-sm font-semibold">
+              {lang === "ar" ? "تم الحذف بواسطة المسؤول" : "Deleted by Admin"}
+            </AlertTitle>
+            <AlertDescription className="text-xs space-y-1">
+              <div>
+                <span className="font-medium">{lang === "ar" ? "المسؤول:" : "Admin:"}</span>{" "}
+                {del.deletedByName?.trim() || (lang === "ar" ? "النظام" : "System")}
+              </div>
+              <div>
+                <span className="font-medium">{lang === "ar" ? "التاريخ:" : "Date:"}</span>{" "}
+                {new Date(del.deletedAt).toLocaleString(lang === "ar" ? "ar-AE" : "en-AE")}
+              </div>
+              {del.deletionCategory ? (
+                <div>
+                  <span className="font-medium">{lang === "ar" ? "الفئة:" : "Category:"}</span> {del.deletionCategory}
+                </div>
+              ) : null}
+              {del.deletionReason ? (
+                <div className="mt-2 p-2 bg-white rounded border text-xs">
+                  <span className="font-medium">{lang === "ar" ? "السبب:" : "Reason:"}</span>
+                  <div className="mt-1 whitespace-pre-wrap">{del.deletionReason}</div>
+                </div>
+              ) : null}
+            </AlertDescription>
+          </Alert>
+        )}
 
         {/* Header */}
         <div className="flex items-center justify-between">
@@ -566,7 +610,7 @@ export default function SampleDetail() {
               <Printer className="w-4 h-4" />
               {lang === "ar" ? "طباعة" : "Print"}
             </Button>
-            {user?.role === "admin" && (
+            {user?.role === "admin" && !isDeleted && (
               <Button
                 variant="outline"
                 size="sm"
@@ -635,7 +679,9 @@ export default function SampleDetail() {
             <Card className="print:hidden">
               <CardHeader className="pb-2 flex flex-row items-center justify-between">
                 <CardTitle className="text-sm font-semibold">{lang === "ar" ? "أمر التوزيع" : "Distribution Order"}</CardTitle>
-                {(user?.role === "admin" || user?.role === "lab_manager") && ["distributed", "testing", "processing"].includes(sample.status as string) && (
+                {(user?.role === "admin" || user?.role === "lab_manager") &&
+                  !isDeleted &&
+                  ["distributed", "testing", "processing"].includes(sample.status as string) && (
                   <Button
                     size="sm"
                     variant="outline"
@@ -885,21 +931,34 @@ export default function SampleDetail() {
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
-                {history.map((h, i) => (
-                  <div key={h.id} className="flex gap-3">
-                    <div className="flex flex-col items-center">
-                      <div className="w-2 h-2 rounded-full bg-blue-500 mt-1.5 shrink-0" />
-                      {i < history.length - 1 && <div className="w-0.5 bg-border flex-1 mt-1" />}
+                {history.map((h, i) => {
+                  const isDelEvent = h.action === "Deleted by Admin";
+                  return (
+                    <div key={h.id} className="flex gap-3">
+                      <div className="flex flex-col items-center">
+                        {isDelEvent ? (
+                          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-red-100 mt-0 shrink-0">
+                            <Trash2 className="h-4 w-4 text-red-600" />
+                          </div>
+                        ) : (
+                          <div className="w-2 h-2 rounded-full bg-blue-500 mt-1.5 shrink-0" />
+                        )}
+                        {i < history.length - 1 && <div className="w-0.5 bg-border flex-1 mt-1" />}
+                      </div>
+                      <div className="pb-3 flex-1">
+                        <p className={`text-xs font-medium ${isDelEvent ? "text-red-700" : ""}`}>{h.action}</p>
+                        {h.notes && (
+                          <p className={`text-xs mt-0.5 ${isDelEvent ? "text-red-900/80" : "text-muted-foreground"}`}>
+                            {h.notes}
+                          </p>
+                        )}
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          {new Date(h.createdAt).toLocaleString(lang === "ar" ? "ar-AE" : "en-AE")}
+                        </p>
+                      </div>
                     </div>
-                    <div className="pb-3 flex-1">
-                      <p className="text-xs font-medium">{h.action}</p>
-                      {h.notes && <p className="text-xs text-muted-foreground mt-0.5">{h.notes}</p>}
-                      <p className="text-xs text-muted-foreground mt-0.5">
-                        {new Date(h.createdAt).toLocaleString(lang === "ar" ? "ar-AE" : "en-AE")}
-                      </p>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </CardContent>
           </Card>

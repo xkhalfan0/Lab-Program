@@ -277,59 +277,52 @@ function TestTypesTab() {
   };
 
   return (
-    <div className="space-y-6 p-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+    <div className="space-y-4 p-6">
+      <div className="flex items-center justify-between mb-4">
         <div>
-          <h2 className="text-2xl font-bold flex items-center gap-2">
-            <FlaskConical className="h-6 w-6" />
+          <h2 className="text-xl font-bold flex items-center gap-2">
+            <FlaskConical className="h-5 w-5" />
             {lang === "ar" ? "إدارة أنواع الاختبارات" : "Test Types Management"}
           </h2>
-          <p className="text-sm text-muted-foreground mt-1">
+          <p className="text-xs text-muted-foreground mt-0.5">
             {lang === "ar"
               ? "إدارة أنواع الاختبارات والأسعار (المسؤول فقط)"
               : "Manage test types and pricing (Admin only)"}
           </p>
         </div>
 
-        <Button type="button" variant="outline" size="default" onClick={handleExportCSV} className="gap-2 shrink-0">
-          <Download className="h-4 w-4" />
+        <Button type="button" variant="outline" size="sm" onClick={handleExportCSV} className="gap-2 shrink-0">
+          <Download className="h-3.5 w-3.5" />
           {lang === "ar" ? "تصدير CSV" : "Export CSV"}
         </Button>
       </div>
 
-      <div className="grid grid-cols-2 gap-4 max-w-md">
-        <Card>
-          <CardContent className="p-4 text-center">
-            <div className="text-3xl font-bold text-primary">{filteredTests.length}</div>
-            <div className="text-xs text-muted-foreground mt-1">
-              {lang === "ar" ? "إجمالي الاختبارات" : "Total Tests"}
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4 text-center">
-            <div className="text-3xl font-bold text-primary">{categoryConfig.length}</div>
-            <div className="text-xs text-muted-foreground mt-1">
-              {lang === "ar" ? "الفئات" : "Categories"}
-            </div>
-          </CardContent>
-        </Card>
+      <div className="flex items-center gap-6 text-sm mb-4">
+        <div className="flex items-baseline gap-2">
+          <span className="text-2xl font-bold text-primary">{filteredTests.length}</span>
+          <span className="text-muted-foreground">{lang === "ar" ? "اختبار" : "tests"}</span>
+        </div>
+        <div className="text-muted-foreground">•</div>
+        <div className="flex items-baseline gap-2">
+          <span className="text-2xl font-bold text-primary">5</span>
+          <span className="text-muted-foreground">{lang === "ar" ? "فئات" : "categories"}</span>
+        </div>
       </div>
 
-      <div className="flex flex-col gap-4 sm:flex-row">
+      <div className="flex flex-col gap-3 mb-4 sm:flex-row">
         <div className="flex-1 max-w-md">
           <div className="relative">
-            <Search className="absolute start-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+            <Search className="absolute start-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
             <Input
               placeholder={lang === "ar" ? "البحث عن الاختبارات..." : "Search tests..."}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="ps-9"
+              className="ps-8 h-9"
             />
           </div>
         </div>
         <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-          <SelectTrigger className="w-full sm:w-[200px]">
+          <SelectTrigger className="w-full h-9 sm:w-[180px]">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -343,9 +336,9 @@ function TestTypesTab() {
         </Select>
       </div>
 
-      <div className="space-y-4">
+      <div className="space-y-3">
         {groupedTests.length === 0 ? (
-          <p className="text-sm text-muted-foreground text-center py-8">
+          <p className="text-xs text-muted-foreground text-center py-6">
             {lang === "ar" ? "لا توجد اختبارات تطابق البحث أو الفلتر" : "No tests match your search or filter"}
           </p>
         ) : (
@@ -357,30 +350,30 @@ function TestTypesTab() {
               <Card key={category.key} className="overflow-hidden">
                 <button
                   type="button"
-                  className="flex w-full items-center justify-between p-4 cursor-pointer hover:bg-muted/50 transition-colors border-b text-start"
+                  className="flex w-full items-center justify-between p-3 cursor-pointer hover:bg-muted/50 transition-colors border-b text-start"
                   onClick={() => toggleCategory(category.key)}
                 >
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className={`p-2 rounded-lg shrink-0 ${category.bgColor}`}>
-                      <Icon className={`h-5 w-5 ${category.textColor}`} />
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className={`p-1.5 rounded-lg shrink-0 ${category.bgColor}`}>
+                      <Icon className={`h-4 w-4 ${category.textColor}`} />
                     </div>
                     <div className="min-w-0">
-                      <h3 className="font-semibold text-lg truncate">
+                      <h3 className="font-semibold text-base truncate">
                         {lang === "ar" ? category.nameAr : category.nameEn}
                       </h3>
-                      <p className="text-sm text-muted-foreground">
+                      <p className="text-xs text-muted-foreground">
                         {category.tests.length} {lang === "ar" ? "اختبار" : "tests"}
                       </p>
                     </div>
                   </div>
                   <div className="flex items-center gap-2 shrink-0 ms-2">
-                    <Badge variant="secondary" className="font-mono">
+                    <Badge variant="secondary" className="font-mono text-xs">
                       {category.tests.length}
                     </Badge>
                     {isExpanded ? (
-                      <ChevronDown className="h-5 w-5 text-muted-foreground" />
+                      <ChevronDown className="h-4 w-4 text-muted-foreground" />
                     ) : (
-                      <ChevronRight className="h-5 w-5 text-muted-foreground" />
+                      <ChevronRight className="h-4 w-4 text-muted-foreground" />
                     )}
                   </div>
                 </button>
@@ -389,8 +382,8 @@ function TestTypesTab() {
                   <div className="overflow-x-auto">
                     <Table>
                       <TableHeader>
-                        <TableRow>
-                          <TableHead className="w-12">#</TableHead>
+                        <TableRow className="h-10">
+                          <TableHead className="w-10">#</TableHead>
                           <TableHead>{lang === "ar" ? "اسم الاختبار" : "Test Name"}</TableHead>
                           <TableHead>{lang === "ar" ? "الرمز" : "Code"}</TableHead>
                           <TableHead className="text-right">{lang === "ar" ? "السعر" : "Price"}</TableHead>
@@ -400,22 +393,26 @@ function TestTypesTab() {
                       </TableHeader>
                       <TableBody>
                         {category.tests.map((test, idx) => (
-                          <TableRow key={test.id} className="group">
-                            <TableCell className="font-medium text-muted-foreground">{idx + 1}</TableCell>
-                            <TableCell>
-                              <div className="space-y-1">
-                                <div className="font-medium">{test.nameEn}</div>
-                                <div className="text-sm text-muted-foreground" dir="rtl">
+                          <TableRow key={test.id} className="group h-12">
+                            <TableCell className="font-medium text-muted-foreground py-2">{idx + 1}</TableCell>
+                            <TableCell className="py-2">
+                              <div className="space-y-0.5">
+                                <div className="font-medium text-sm">{test.nameEn}</div>
+                                <div className="text-xs text-muted-foreground" dir="rtl">
                                   {test.nameAr || "—"}
                                 </div>
                               </div>
                             </TableCell>
-                            <TableCell>
-                              <code className="text-xs bg-muted px-2 py-1 rounded font-mono">{test.code || "—"}</code>
+                            <TableCell className="py-2">
+                              <code className="text-xs bg-muted px-1.5 py-0.5 rounded font-mono">
+                                {test.code || "—"}
+                              </code>
                             </TableCell>
-                            <TableCell className="text-right">{renderPriceCell(test)}</TableCell>
-                            <TableCell className="text-sm">{test.unit || "—"}</TableCell>
-                            <TableCell className="text-sm text-muted-foreground">{test.standardRef || "—"}</TableCell>
+                            <TableCell className="text-right py-2">{renderPriceCell(test)}</TableCell>
+                            <TableCell className="text-xs py-2">{test.unit || "—"}</TableCell>
+                            <TableCell className="text-xs text-muted-foreground py-2">
+                              {test.standardRef || "—"}
+                            </TableCell>
                           </TableRow>
                         ))}
                       </TableBody>

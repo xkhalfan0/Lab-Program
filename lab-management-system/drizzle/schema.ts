@@ -88,6 +88,9 @@ export const samples = mysqlTable("samples", {
   managerReadAt: timestamp("managerReadAt"),         // when manager first opened the processed sample
   deletedAt: timestamp("deletedAt"),
   deletedBy: int("deletedBy"),
+  /** Filled when soft-deleted via admin approval or direct admin delete */
+  deletionReason: text("deletionReason"),
+  deletionCategory: varchar("deletionCategory", { length: 64 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
