@@ -253,7 +253,7 @@ export default function SieveAnalysis() {
         setSubmitted(true);
         setLocation("/technician");
       } else {
-        toast.success(ar ? "تم حفظ المسودة" : "Draft saved");
+        toast.success(ar ? "تم حفظ المسودة بنجاح" : "Draft saved successfully");
       }
     },
     onError: (e) => toast.error(e.message),
@@ -371,7 +371,7 @@ export default function SieveAnalysis() {
                 <Button variant="outline" size="sm" onClick={() => handleSave("draft")} disabled={saving}>
                   {ar ? "حفظ مسودة" : "Save Draft"}
                 </Button>
-                <Button size="sm" onClick={() => handleSave("submitted")} disabled={saving}>
+                <Button className="bg-blue-600 hover:bg-blue-700" onClick={() => handleSave("submitted")} disabled={saving}>
                   <Send size={14} className={ar ? "ml-1.5" : "mr-1.5"} />
                   {saving ? (ar ? "جاري الإرسال..." : "Submitting...") : (ar ? "إرسال النتائج" : "Submit Results")}
                 </Button>
@@ -495,8 +495,9 @@ export default function SieveAnalysis() {
             <CardHeader className="pb-3">
               <CardTitle className="text-base">{ar ? "بيانات المناخل" : "Sieve Data"}</CardTitle>
             </CardHeader>
-            <CardContent className="overflow-x-auto">
-              <table className="w-full text-sm border-collapse">
+            <CardContent>
+            <div className="overflow-x-auto">
+<table className="w-full text-sm border-collapse">
                 <thead>
                   <tr className="bg-slate-50">
                     <th className="border border-slate-200 px-2 py-2 text-xs font-semibold text-slate-600 text-center">
@@ -564,6 +565,7 @@ export default function SieveAnalysis() {
                   )}
                 </tbody>
               </table>
+</div>
 
               {/* Fineness Modulus */}
               {showFinenessModulus && anyComputed && (

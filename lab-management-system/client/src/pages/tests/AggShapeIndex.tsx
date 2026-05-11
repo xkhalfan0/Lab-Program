@@ -94,7 +94,7 @@ export default function AggShapeIndex() {
         setSubmitted(true);
         setLocation("/technician");
       } else {
-        toast.success(ar ? "تم حفظ المسودة" : "Draft saved");
+        toast.success(ar ? "تم حفظ المسودة بنجاح" : "Draft saved successfully");
       }
     },
     onError: (e) => toast.error(e.message),
@@ -166,7 +166,7 @@ export default function AggShapeIndex() {
             ) : (
               <>
                 <Button variant="outline" size="sm" onClick={() => handleSave("draft")} disabled={saving}>{ar ? "حفظ مسودة" : "Save Draft"}</Button>
-                <Button size="sm" onClick={() => handleSave("submitted")} disabled={saving}>
+                <Button className="bg-blue-600 hover:bg-blue-700" onClick={() => handleSave("submitted")} disabled={saving}>
                   <Send size={14} className="mr-1.5" />{saving ? (ar ? "جاري..." : "Submitting...") : (ar ? "إرسال النتائج" : "Submit Results")}
                 </Button>
               </>
@@ -212,7 +212,8 @@ export default function AggShapeIndex() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <table className="w-full text-sm border-collapse">
+            <div className="overflow-x-auto">
+<table className="w-full text-sm border-collapse">
               <thead>
                 <tr className="bg-slate-50">
                   <th className="border border-slate-200 px-2 py-2 text-xs font-semibold text-slate-600 text-left">{ar ? "نطاق المنخل (مم)" : "Sieve Range (mm)"}</th>
@@ -260,6 +261,7 @@ export default function AggShapeIndex() {
                 </tr>
               </tfoot>
             </table>
+</div>
 
             {overallIndex !== undefined && (
               <div className="mt-4 grid grid-cols-3 gap-3">

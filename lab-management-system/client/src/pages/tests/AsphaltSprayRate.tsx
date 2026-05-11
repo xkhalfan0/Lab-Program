@@ -182,7 +182,7 @@ export default function AsphaltSprayRate() {
         toast.success(ar ? "تم إرسال النتائج بنجاح" : "Results submitted successfully");
         setLocation("/technician");
       } else {
-        toast.success(ar ? "تم حفظ المسودة" : "Draft saved");
+        toast.success(ar ? "تم حفظ المسودة بنجاح" : "Draft saved successfully");
       }
     },
     onError: (err: { message: string }) => toast.error(ar ? "خطأ: " + err.message : "Error: " + err.message),
@@ -247,7 +247,7 @@ export default function AsphaltSprayRate() {
   return (
     <DashboardLayout>
       <div className="container max-w-4xl py-6 space-y-6">
-        <SampleInfoCard dist={dist} />
+        <SampleInfoCard dist={distribution} />
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
@@ -425,6 +425,7 @@ export default function AsphaltSprayRate() {
           <Button
             type="button"
             variant="outline"
+            size="sm"
             onClick={() => handleSave("draft")}
             disabled={saving || saveMut.isPending || submitted}
           >
@@ -432,9 +433,9 @@ export default function AsphaltSprayRate() {
           </Button>
           <Button
             type="button"
+            className="min-w-32 bg-blue-600 hover:bg-blue-700"
             onClick={() => handleSave("submitted")}
             disabled={saving || saveMut.isPending || submitted}
-            className="min-w-32"
           >
             <Send className="h-4 w-4 mr-2" />
             {saving || saveMut.isPending

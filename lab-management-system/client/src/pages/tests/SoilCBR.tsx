@@ -135,7 +135,7 @@ export default function SoilCBR() {
         setSubmitted(true);
         setLocation("/technician");
       } else {
-        toast.success(ar ? "تم حفظ المسودة" : "Draft saved");
+        toast.success(ar ? "تم حفظ المسودة بنجاح" : "Draft saved successfully");
       }
     },
     onError: (e) => toast.error(ar ? "حدث خطأ: " + e.message : e.message),
@@ -232,7 +232,7 @@ export default function SoilCBR() {
                 <Button variant="outline" size="sm" onClick={() => handleSave("draft")} disabled={saving}>
                   {ar ? "حفظ مسودة" : "Save Draft"}
                 </Button>
-                <Button size="sm" onClick={() => handleSave("submitted")} disabled={saving}>
+                <Button className="bg-blue-600 hover:bg-blue-700" onClick={() => handleSave("submitted")} disabled={saving}>
                   <Send size={14} className="mr-1.5" />
                   {saving ? (ar ? "جاري الإرسال..." : "Submitting...") : (ar ? "إرسال النتائج" : "Submit Results")}
                 </Button>

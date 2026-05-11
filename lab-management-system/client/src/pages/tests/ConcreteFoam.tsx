@@ -217,7 +217,7 @@ export default function ConcreteFoam() {
   return (
     <DashboardLayout>
       <div className="container max-w-5xl py-6 space-y-6">
-        <SampleInfoCard dist={dist} />
+        <SampleInfoCard dist={distribution} />
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
@@ -340,8 +340,13 @@ export default function ConcreteFoam() {
                         <td className="p-2 font-medium">{row.density || "-"}</td>
                         <td className="p-2"><PassFailBadge result={row.result ?? "pending"} /></td>
                         <td className="p-2">
-                          <Button variant="ghost" size="sm" onClick={() => setCubeRows(prev => prev.filter(r => r.id !== row.id))}>
-                            <Trash2 className="h-4 w-4 text-red-500" />
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 w-8 p-0 text-red-600 hover:text-red-700"
+                            onClick={() => setCubeRows(prev => prev.filter(r => r.id !== row.id))}
+                          >
+                            <Trash2 className="h-4 w-4" />
                           </Button>
                         </td>
                       </tr>
@@ -400,8 +405,13 @@ export default function ConcreteFoam() {
                         <td className="p-2 font-medium">{row.moistureContent || "-"}</td>
                         <td className="p-2"><PassFailBadge result={row.result ?? "pending"} /></td>
                         <td className="p-2">
-                          <Button variant="ghost" size="sm" onClick={() => setDensityRows(prev => prev.filter(r => r.id !== row.id))}>
-                            <Trash2 className="h-4 w-4 text-red-500" />
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 w-8 p-0 text-red-600 hover:text-red-700"
+                            onClick={() => setDensityRows(prev => prev.filter(r => r.id !== row.id))}
+                          >
+                            <Trash2 className="h-4 w-4" />
                           </Button>
                         </td>
                       </tr>
@@ -442,7 +452,11 @@ export default function ConcreteFoam() {
               </Button>
             </>
           ) : (
-            <Button onClick={handleSubmit} disabled={submitted || saveMut.isPending}>
+            <Button
+              className="bg-blue-600 hover:bg-blue-700"
+              onClick={handleSubmit}
+              disabled={submitted || saveMut.isPending}
+            >
               {saveMut.isPending && <span className="i-lucide-loader-2 mr-2 h-4 w-4 animate-spin" />} {ar ? "جاري..." : "Submitting..."}
               <Send className="mr-2 h-4 w-4" /> {ar ? "إرسال النتائج" : "Submit Results"}
             </Button>

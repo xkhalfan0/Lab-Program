@@ -132,7 +132,7 @@ export default function ConcreteBlocks() {
         setSubmitted(true);
         setLocation("/technician");
       } else {
-        toast.success(ar ? "تم حفظ المسودة" : "Draft saved");
+        toast.success(ar ? "تم حفظ المسودة بنجاح" : "Draft saved successfully");
       }
     },
     onError: (e) => toast.error(e.message),
@@ -232,7 +232,7 @@ export default function ConcreteBlocks() {
                 <Button variant="outline" size="sm" onClick={() => handleSave("draft")} disabled={saving}>
                   {ar ? "حفظ مسودة" : "Save Draft"}
                 </Button>
-                <Button size="sm" onClick={() => handleSave("submitted")} disabled={saving}>
+                <Button className="bg-blue-600 hover:bg-blue-700" onClick={() => handleSave("submitted")} disabled={saving}>
                   <Send size={14} className="mr-1.5" />
                   {saving ? (ar ? "جاري..." : "Submitting...") : (ar ? "إرسال النتائج" : "Submit Results")}
                 </Button>
@@ -314,8 +314,9 @@ export default function ConcreteBlocks() {
               </Button>
             </div>
           </CardHeader>
-          <CardContent className="overflow-x-auto">
-            <table className="w-full text-sm border-collapse">
+          <CardContent>
+            <div className="overflow-x-auto">
+<table className="w-full text-sm border-collapse">
               <thead>
                 <tr className="bg-slate-50">
                   {[
@@ -359,7 +360,7 @@ export default function ConcreteBlocks() {
                       {row.result && row.result !== "pending" ? <PassFailBadge result={row.result} size="sm" /> : "—"}
                     </td>
                     <td className="border border-slate-200 px-1 py-1 text-center">
-                      <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-red-400 hover:text-red-600" onClick={() => removeRow(row.id)} disabled={rows.length <= 1}>
+                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-red-600 hover:text-red-700" onClick={() => removeRow(row.id)} disabled={rows.length <= 1}>
                         <Trash2 size={12} />
                       </Button>
                     </td>
@@ -382,6 +383,7 @@ export default function ConcreteBlocks() {
                 </tfoot>
               )}
             </table>
+</div>
           </CardContent>
         </Card>
 

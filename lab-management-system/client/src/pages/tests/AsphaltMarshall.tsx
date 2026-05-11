@@ -195,7 +195,7 @@ export default function AsphaltMarshall() {
         setSubmitted(true);
         setLocation("/technician");
       } else {
-        toast.success(ar ? "تم حفظ المسودة" : "Draft saved");
+        toast.success(ar ? "تم حفظ المسودة بنجاح" : "Draft saved successfully");
       }
     },
     onError: (e) => toast.error(e.message),
@@ -292,7 +292,7 @@ export default function AsphaltMarshall() {
                 <Button variant="outline" size="sm" onClick={() => handleSave("draft")} disabled={saving}>
                   {ar ? "حفظ مسودة" : "Save Draft"}
                 </Button>
-                <Button size="sm" onClick={() => handleSave("submitted")} disabled={saving}>
+                <Button className="bg-blue-600 hover:bg-blue-700" onClick={() => handleSave("submitted")} disabled={saving}>
                   <Send size={14} className="mr-1.5" />
                   {saving ? (ar ? "جاري الإرسال..." : "Submitting...") : (ar ? "إرسال النتائج" : "Submit Results")}
                 </Button>
@@ -359,8 +359,9 @@ export default function AsphaltMarshall() {
               </Button>
             </div>
           </CardHeader>
-          <CardContent className="overflow-x-auto">
-            <table className="w-full text-sm border-collapse">
+          <CardContent>
+            <div className="overflow-x-auto">
+<table className="w-full text-sm border-collapse">
               <thead>
                 <tr className="bg-slate-50">
                   <th className="border border-slate-200 px-2 py-2 text-xs font-semibold text-slate-600">Spec. No.</th>
@@ -434,7 +435,7 @@ export default function AsphaltMarshall() {
                       {row.overallResult && row.overallResult !== "pending" ? <PassFailBadge result={row.overallResult} size="sm" /> : "—"}
                     </td>
                     <td className="border border-slate-200 px-1 py-1 text-center">
-                      <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-red-400 hover:text-red-600" onClick={() => setRows(p => p.filter(r => r.id !== row.id))} disabled={rows.length <= 1}>
+                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-red-600 hover:text-red-700" onClick={() => setRows(p => p.filter(r => r.id !== row.id))} disabled={rows.length <= 1}>
                         <Trash2 size={12} />
                       </Button>
                     </td>
@@ -453,6 +454,7 @@ export default function AsphaltMarshall() {
                 </tfoot>
               )}
             </table>
+</div>
           </CardContent>
         </Card>
 

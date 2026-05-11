@@ -120,9 +120,9 @@ export default function SteelAnchorBolt() {
     <DashboardLayout>
       <div className="container max-w-4xl py-6 space-y-6">
         <SampleInfoCard
-          dist={dist}
+          dist={distribution}
           extraFields={[
-            { label: "القطر", value: dist?.testSubType ? `${dist.testSubType} mm` : null },
+            { label: "القطر", value: distribution?.testSubType ? `${distribution.testSubType} mm` : null },
           ]}
         />
         {/* Header */}
@@ -252,8 +252,13 @@ export default function SteelAnchorBolt() {
                       </td>
                       <td className="border px-1 py-1">
                         {rows.length > 1 && (
-                          <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => setRows(p => p.filter(r => r.id !== row.id))}>
-                            <Trash2 className="h-3 w-3 text-destructive" />
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 w-8 p-0 text-red-600 hover:text-red-700"
+                            onClick={() => setRows(p => p.filter(r => r.id !== row.id))}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
                           </Button>
                         )}
                       </td>
@@ -301,7 +306,11 @@ export default function SteelAnchorBolt() {
               <Printer className="h-4 w-4 mr-2" /> طباعة التقرير
             </Button>
           )}
-          <Button onClick={handleSubmit} disabled={saveMut.isPending || submitted} className="min-w-32">
+          <Button
+            onClick={handleSubmit}
+            disabled={saveMut.isPending || submitted}
+            className="min-w-32 bg-blue-600 hover:bg-blue-700"
+          >
             <Send className="h-4 w-4 mr-2" />
             {saveMut.isPending ? "جاري الحفظ..." : submitted ? "تم الحفظ ✓" : "تأكيد النتائج"}
           </Button>

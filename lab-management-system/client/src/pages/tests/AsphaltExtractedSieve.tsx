@@ -138,9 +138,9 @@ export default function AsphaltExtractedSieve() {
     <DashboardLayout>
       <div className="container max-w-5xl py-6 space-y-6">
         <SampleInfoCard
-          dist={dist}
+          dist={distribution}
           extraFields={[
-            { label: "نوع الخلطة", value: dist?.testSubType },
+            { label: "نوع الخلطة", value: distribution?.testSubType },
           ]}
         />
         {/* Header */}
@@ -294,7 +294,11 @@ export default function AsphaltExtractedSieve() {
               <Printer className="h-4 w-4 mr-2" /> طباعة التقرير
             </Button>
           )}
-          <Button onClick={handleSubmit} disabled={saveMut.isPending || submitted} className="min-w-32">
+          <Button
+            onClick={handleSubmit}
+            disabled={saveMut.isPending || submitted}
+            className="min-w-32 bg-blue-600 hover:bg-blue-700"
+          >
             <Send className="h-4 w-4 mr-2" />
             {saveMut.isPending ? "جاري الحفظ..." : submitted ? "تم الحفظ ✓" : "تأكيد النتائج"}
           </Button>

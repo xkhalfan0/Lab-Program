@@ -147,7 +147,7 @@ export default function ConcreteCubes() {
         toast.success(ar ? "تم إرسال النتائج بنجاح" : "Test results submitted successfully");
         setSubmitted(true);
       } else {
-        toast.success(ar ? "تم حفظ المسودة" : "Draft saved");
+        toast.success(ar ? "تم حفظ المسودة بنجاح" : "Draft saved successfully");
       }
     },
     onError: (e) => toast.error(e.message),
@@ -297,9 +297,7 @@ export default function ConcreteCubes() {
                 <Button variant="outline" size="sm" onClick={() => handleSave("draft")} disabled={saving}>
                   {ar ? "حفظ مسودة" : "Save Draft"}
                 </Button>
-                <Button
-                  size="sm"
-                  className="bg-blue-600 hover:bg-blue-700 gap-1.5"
+                <Button className="bg-blue-600 hover:bg-blue-700 gap-1.5"
                   onClick={() => handleSave("submitted")}
                   disabled={saving}
                 >
@@ -466,8 +464,9 @@ export default function ConcreteCubes() {
               </Button>
             )}
           </CardHeader>
-          <CardContent className="overflow-x-auto">
-            <table className="w-full text-sm border-collapse">
+          <CardContent>
+            <div className="overflow-x-auto">
+<table className="w-full text-sm border-collapse">
               <thead>
                 <tr className="bg-slate-50">
                   {[
@@ -547,7 +546,7 @@ export default function ConcreteCubes() {
                         <Button
                           variant="ghost"
                           size="sm"
-                          className="h-6 w-6 p-0 text-red-400 hover:text-red-600"
+                          className="h-8 w-8 p-0 text-red-600 hover:text-red-700"
                           onClick={() => removeRow(row.id)}
                           disabled={rows.length <= 1}
                         >
@@ -559,6 +558,7 @@ export default function ConcreteCubes() {
                 ))}
               </tbody>
             </table>
+</div>
           </CardContent>
         </Card>
 

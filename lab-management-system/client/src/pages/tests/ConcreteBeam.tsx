@@ -183,7 +183,7 @@ export default function ConcreteBeam() {
         toast.success(ar ? "تم إرسال نتائج اختبار الكمرات بنجاح" : "Beam test results submitted successfully");
         setSubmitted(true);
       } else {
-        toast.success(ar ? "تم حفظ المسودة" : "Draft saved");
+        toast.success(ar ? "تم حفظ المسودة بنجاح" : "Draft saved successfully");
       }
     },
     onError: (e) => toast.error(e.message),
@@ -498,7 +498,8 @@ export default function ConcreteBeam() {
             <CardTitle className="text-sm text-slate-600">{ar ? "معايير القبول — ASTM C78" : "Acceptance Criteria — ASTM C78"}</CardTitle>
           </CardHeader>
           <CardContent>
-            <table className="w-full text-xs">
+            <div className="overflow-x-auto">
+<table className="w-full text-xs">
               <thead>
                 <tr className="border-b text-slate-500">
                   <th className="text-left py-1.5 pr-4">{ar ? "رتبة الخرسانة" : "Concrete Grade"}</th>
@@ -524,6 +525,7 @@ export default function ConcreteBeam() {
                 ))}
               </tbody>
             </table>
+</div>
             <p className="text-xs text-slate-500 mt-2">
               {ar
                 ? "* MOR (معامل الانعطاف) = مقاومة الانعطاف. يجب أن تفي كل كمرة على حدة بالحد الأدنى المطلوب لـ MOR. يتم استبعاد الكمرات التي يحدث فيها الكسر خارج حدود 5% من البحر."
@@ -553,10 +555,10 @@ export default function ConcreteBeam() {
                 </div>
               )}
               <div className="flex gap-2 ml-auto">
-                <Button variant="outline" onClick={() => handleSave("draft")} disabled={saving}>
+                <Button variant="outline" size="sm" onClick={() => handleSave("draft")} disabled={saving}>
                   {ar ? "حفظ مسودة" : "Save Draft"}
                 </Button>
-                <Button onClick={() => handleSave("submitted")} disabled={saving || submitted}>
+                <Button className="bg-blue-600 hover:bg-blue-700" onClick={() => handleSave("submitted")} disabled={saving || submitted}>
                   {saving ? (ar ? "جارٍ الحفظ..." : "Saving...") : submitted ? (ar ? "تم الحفظ ✓" : "Saved ✓") : (
                     <><Send size={14} className="mr-1.5" /> {ar ? "إرسال النتائج" : "Submit Results"}</>
                   )}

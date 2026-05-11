@@ -145,7 +145,7 @@ export default function AsphaltHotBin() {
         toast.success(ar ? "تم إرسال نتائج تدرج الصندوق الساخن" : "Hot Bin gradation results submitted");
         setSubmitted(true);
       } else {
-        toast.success(ar ? "تم حفظ المسودة" : "Draft saved");
+        toast.success(ar ? "تم حفظ المسودة بنجاح" : "Draft saved successfully");
       }
     },
     onError: (e) => toast.error(e.message),
@@ -224,7 +224,7 @@ export default function AsphaltHotBin() {
                 <Button variant="outline" size="sm" onClick={() => handleSave("draft")} disabled={saving}>
                   {ar ? "حفظ مسودة" : "Save Draft"}
                 </Button>
-                <Button size="sm" onClick={() => handleSave("submitted")} disabled={saving}>
+                <Button className="bg-blue-600 hover:bg-blue-700" onClick={() => handleSave("submitted")} disabled={saving}>
                   <Send size={14} className="mr-1.5" />
                   {saving ? (ar ? "جاري الإرسال..." : "Submitting...") : (ar ? "إرسال النتائج" : "Submit Results")}
                 </Button>
@@ -437,10 +437,10 @@ export default function AsphaltHotBin() {
                 </div>
               )}
               <div className="flex gap-2 ml-auto">
-                <Button variant="outline" onClick={() => handleSave("draft")} disabled={saving}>
+                <Button variant="outline" size="sm" onClick={() => handleSave("draft")} disabled={saving}>
                   {ar ? "حفظ مسودة" : "Save Draft"}
                 </Button>
-                <Button onClick={() => handleSave("submitted")} disabled={saving || submitted}>
+                <Button className="bg-blue-600 hover:bg-blue-700" onClick={() => handleSave("submitted")} disabled={saving || submitted}>
                   {saving ? (ar ? "جاري الحفظ..." : "Saving...") : submitted ? (ar ? "تم الحفظ ✓" : "Saved ✓") : (
                     <><Send size={14} className="mr-1.5" /> {ar ? "إرسال النتائج" : "Submit Results"}</>
                   )}

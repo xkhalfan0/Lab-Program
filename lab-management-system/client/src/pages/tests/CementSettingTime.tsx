@@ -165,7 +165,7 @@ export default function CementSettingTime() {
         setSubmitted(true);
         setLocation("/technician");
       } else {
-        toast.success(ar ? "تم حفظ المسودة" : "Draft saved");
+        toast.success(ar ? "تم حفظ المسودة بنجاح" : "Draft saved successfully");
       }
     },
     onError: (e) => toast.error(e.message),
@@ -250,7 +250,7 @@ export default function CementSettingTime() {
             ) : (
               <>
                 <Button variant="outline" size="sm" onClick={() => handleSave("draft")} disabled={saving}>{ar ? "حفظ مسودة" : "Save Draft"}</Button>
-                <Button size="sm" onClick={() => handleSave("submitted")} disabled={saving}>
+                <Button className="bg-blue-600 hover:bg-blue-700" onClick={() => handleSave("submitted")} disabled={saving}>
                   <Send size={14} className="mr-1.5" />{saving ? (ar ? "جاري..." : "Submitting...") : (ar ? "إرسال النتائج" : "Submit Results")}
                 </Button>
               </>
@@ -312,7 +312,8 @@ export default function CementSettingTime() {
               </div>
             </CardHeader>
             <CardContent>
-              <table className="w-full text-sm border-collapse">
+              <div className="overflow-x-auto">
+<table className="w-full text-sm border-collapse">
                 <thead>
                   <tr className="bg-slate-50">
                     <th className="border border-slate-200 px-2 py-2 text-xs font-semibold text-slate-600">{ar ? "الوقت (دقيقة)" : "Time (min)"}</th>
@@ -330,7 +331,7 @@ export default function CementSettingTime() {
                         <Input value={r.penetration} onChange={e => updateReading(r.id, "penetration", e.target.value)} className="h-7 text-xs w-24 text-center font-mono" placeholder="—" />
                       </td>
                       <td className="border border-slate-200 px-1 py-1 text-center">
-                        <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-red-400 hover:text-red-600" onClick={() => setReadings(p => p.filter(x => x.id !== r.id))} disabled={readings.length <= 2}>
+                        <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-red-600 hover:text-red-700" onClick={() => setReadings(p => p.filter(x => x.id !== r.id))} disabled={readings.length <= 2}>
                           <Trash2 size={12} />
                         </Button>
                       </td>
@@ -338,6 +339,7 @@ export default function CementSettingTime() {
                   ))}
                 </tbody>
               </table>
+</div>
             </CardContent>
           </Card>
 
