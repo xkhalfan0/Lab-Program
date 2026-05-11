@@ -38,8 +38,10 @@ import {
   getNotificationsByUser,
   getReviewsBySample,
   getSampleById,
+  getSampleDetailRow,
   getSampleHistory,
   getSamplesByBatch,
+  listDeletedSamplesAudit,
   getTechnicians,
   getTestResultBySample,
   getTestResultById,
@@ -407,9 +409,15 @@ export const appRouter = router({
   }),
   // ─── Samples ────────────────────────────────────────────────────────────────
   samples: router({
-    list: protectedProcedure.query(async () => {
-      return getAllSamples();
-    }),
+    list: protectedProcedure
+      .input(z.object({ includeDeleted: z.boolean().optional() }).optional())
+      .query(async ({ ctx, input }) => {
+        const include = input?.includeDeleted === true;
+        if (include && !["admin", "lab_manager"].includes(ctx.user.role)) {
+          return getAllSamples();
+        }
+        return getAllSamples({ includeDeleted: include });
+      }),
 
     get: protectedProcedure
       .input(z.object({ id: z.number() }))
@@ -418,6 +426,30 @@ export const appRouter = router({
         if (!sample) throw new TRPCError({ code: "NOT_FOUND" });
         return sample;
       }),
+
+    /** Sample detail including soft-deleted rows + admin deleter name (authorized roles only) */
+    detail: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .query(async ({ ctx, input }) => {
+        const row = await getSampleDetailRow(input.id);
+        if (!row) throw new TRPCError({ code: "NOT_FOUND" });
+        const deleted = Boolean((row as { deletedAt?: Date | null }).deletedAt);
+        if (deleted) {
+          const allowed = ["admin", "lab_manager", "reception", "sample_manager", "qc_inspector"].includes(
+            ctx.user.role
+          );
+          if (!allowed) throw new TRPCError({ code: "NOT_FOUND" });
+        }
+        return row;
+      }),
+
+    /** Admin audit trail: soft-deleted samples with reason/category */
+    deletionAuditLog: protectedProcedure.query(async ({ ctx }) => {
+      if (!["admin", "lab_manager"].includes(ctx.user.role)) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Admin or lab manager only" });
+      }
+      return listDeletedSamplesAudit();
+    }),
 
     create: protectedProcedure
       .input(
