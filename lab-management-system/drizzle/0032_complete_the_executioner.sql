@@ -23,7 +23,6 @@ ALTER TABLE `distributions` ADD `deletedAt` timestamp;--> statement-breakpoint
 ALTER TABLE `distributions` ADD `deletedBy` int;--> statement-breakpoint
 ALTER TABLE `lab_orders` ADD `deletedAt` timestamp;--> statement-breakpoint
 ALTER TABLE `lab_orders` ADD `deletedBy` int;--> statement-breakpoint
-ALTER TABLE `samples` ADD `deletedAt` timestamp;--> statement-breakpoint
-ALTER TABLE `samples` ADD `deletedBy` int;--> statement-breakpoint
+-- samples.deletedAt / deletedBy: already added in 0031_soft_delete_samples.sql
 ALTER TABLE `users` ADD `deletedAt` timestamp;--> statement-breakpoint
 ALTER TABLE `users` ADD `deletedBy` int;
