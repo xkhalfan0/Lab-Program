@@ -23,6 +23,7 @@ import {
   type InsertConcreteTestGroup,
   type InsertConcreteCube,
   type InsertClearanceRequest,
+  type InsertSample,
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 
@@ -310,10 +311,13 @@ function sampleRowSelect() {
   return SAMPLE_ROW_BASE;
 }
 
-export async function createSample(data: typeof samples.$inferInsert) {
+export async function createSample(data: InsertSample) {
   const db = await getDb();
   if (!db) throw new Error("DB not available");
-  await db.insert(samples).values(data);
+
+  const { deletedAt, deletedBy, deletionReason, deletionCategory, ...cleanData } = data as any;
+
+  await db.insert(samples).values(cleanData);
   const result = await db
     .select(sampleRowSelect())
     .from(samples)

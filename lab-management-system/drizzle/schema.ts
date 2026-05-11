@@ -93,7 +93,10 @@ export const samples = mysqlTable("samples", {
 });
 
 export type Sample = typeof samples.$inferSelect;
-export type InsertSample = typeof samples.$inferInsert;
+export type InsertSample = Omit<
+  typeof samples.$inferInsert,
+  "deletedAt" | "deletedBy" | "deletionReason" | "deletionCategory"
+>;
 
 // ─── Distribution Orders ──────────────────────────────────────────────────────
 export const distributions = mysqlTable("distributions", {
