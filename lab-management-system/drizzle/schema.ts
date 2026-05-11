@@ -88,6 +88,8 @@ export const samples = mysqlTable("samples", {
   managerReadAt: timestamp("managerReadAt"),         // when manager first opened the processed sample
   deletedAt: timestamp("deletedAt"),
   deletedBy: int("deletedBy"),
+  deletionReason: text("deletionReason"),
+  deletionCategory: varchar("deletionCategory", { length: 50 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
