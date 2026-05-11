@@ -22,12 +22,12 @@ import {
   Beaker,
   ShieldCheck,
   Building2,
-  Trash2,
 } from "lucide-react";
 import { useLocation } from "wouter";
 import { useState } from "react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { toast } from "sonner";
+import { Trash2 } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -52,9 +52,6 @@ import {
   CartesianGrid,
   LabelList,
 } from "recharts";
-import { Switch } from "@/components/ui/switch";
-import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
 
 const STATUS_COLORS: Record<string, string> = {
   received: "#3b82f6",
@@ -75,15 +72,11 @@ function todayStr() {
 }
 
 export default function Home() {
-  const { user } = useAuth();
-  const canViewDeleted = user?.role === "admin" || user?.role === "lab_manager";
-  const [showDeleted, setShowDeleted] = useState(false);
-  const { data: samples, isLoading: samplesLoading, refetch: refetchSamples } = trpc.samples.list.useQuery({
-    includeDeleted: canViewDeleted ? showDeleted : false,
-  });
+  const { data: samples, isLoading: samplesLoading, refetch: refetchSamples } = trpc.samples.list.useQuery();
   const { data: stats, refetch: refetchStats } = trpc.samples.stats.useQuery();
   const [, setLocation] = useLocation();
   const { lang, t, dir } = useLanguage();
+  const { user } = useAuth();
   const [sampleToDelete, setSampleToDelete] = useState<{ id: number; sampleCode: string } | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
@@ -477,21 +470,11 @@ export default function Home() {
 
                 {/* ── Recent Samples Table ──────────────────────────────────────── */}
         <Card>
-          <CardHeader className="pb-2 flex flex-row items-center justify-between gap-3 flex-wrap">
+          <CardHeader className="pb-2 flex flex-row items-center justify-between">
             <CardTitle className="text-sm font-semibold">{t("dashboard.recentSamples")}</CardTitle>
-            <div className="flex items-center gap-4 flex-wrap">
-              {canViewDeleted && (
-                <div className="flex items-center gap-2">
-                  <Switch id="show-deleted-samples" checked={showDeleted} onCheckedChange={setShowDeleted} />
-                  <Label htmlFor="show-deleted-samples" className="text-xs cursor-pointer whitespace-nowrap">
-                    {lang === "ar" ? "إظهار المحذوفة" : "Show deleted"}
-                  </Label>
-                </div>
-              )}
-              <button onClick={() => setLocation("/reception")} className="text-xs text-primary hover:underline">
-                {t("dashboard.viewAll")}
-              </button>
-            </div>
+            <button onClick={() => setLocation("/reception")} className="text-xs text-primary hover:underline">
+              {t("dashboard.viewAll")}
+            </button>
           </CardHeader>
           <CardContent className="p-0">
             {samplesLoading ? (
@@ -519,25 +502,8 @@ export default function Home() {
                   </thead>
                   <tbody>
                     {recentSamples.map((sample) => (
-                      <tr
-                        key={sample.id}
-                        className={
-                          "border-b last:border-0 hover:bg-muted/20 cursor-pointer transition-colors " +
-                          ((sample as { deletedAt?: unknown }).deletedAt ? "opacity-80" : "")
-                        }
-                        onClick={() => setLocation(`/sample/${sample.id}`)}
-                      >
-                        <td className="px-4 py-2.5 font-mono text-xs font-semibold text-primary">
-                          <span className="inline-flex items-center gap-2 flex-wrap">
-                            {sample.sampleCode}
-                            {Boolean((sample as { deletedAt?: Date | string | null }).deletedAt) && (
-                              <Badge variant="outline" className="border-red-600 text-red-700 bg-red-50 font-normal">
-                                <Trash2 className="h-3 w-3 me-1" />
-                                {lang === "ar" ? "محذوف" : "Deleted"}
-                              </Badge>
-                            )}
-                          </span>
-                        </td>
+                      <tr key={sample.id} className="border-b last:border-0 hover:bg-muted/20 cursor-pointer transition-colors" onClick={() => setLocation(`/sample/${sample.id}`)}>
+                        <td className="px-4 py-2.5 font-mono text-xs font-semibold text-primary">{sample.sampleCode}</td>
                         <td className="px-4 py-2.5 text-xs">{sample.contractorName ?? "—"}</td>
                         <td className="px-4 py-2.5 text-xs capitalize">{SAMPLE_TYPE_LABELS[sample.sampleType]}</td>
                         <td className="px-4 py-2.5 text-xs">
@@ -553,21 +519,17 @@ export default function Home() {
                         <td className="px-4 py-2.5 text-xs text-muted-foreground">{new Date(sample.receivedAt).toLocaleDateString()}</td>
                         {user?.role === "admin" && (
                           <td className="px-4 py-2.5">
-                            {(sample as { deletedAt?: unknown }).deletedAt ? (
-                              <span className="text-xs text-muted-foreground">—</span>
-                            ) : (
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                className="h-7 px-2 text-red-600 hover:text-red-700"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setSampleToDelete({ id: sample.id, sampleCode: sample.sampleCode });
-                                }}
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </Button>
-                            )}
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-7 px-2 text-red-600 hover:text-red-700"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSampleToDelete({ id: sample.id, sampleCode: sample.sampleCode });
+                              }}
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </Button>
                           </td>
                         )}
                       </tr>

@@ -1,14 +1,6 @@
-import { and, eq, isNull, sql } from "drizzle-orm";
-import {
-  contractors,
-  contracts,
-  deletionRequests,
-  distributions,
-  labOrders,
-  samples,
-  users,
-} from "../../drizzle/schema";
-import { addSampleHistory, getDb } from "../db";
+import { eq, sql } from "drizzle-orm";
+import { deletionRequests } from "../../drizzle/schema";
+import { getDb } from "../db";
 
 export async function analyzeDeletionImpact(
   targetTable: string,
@@ -150,84 +142,6 @@ export async function createDeletionRequest(
   }
 }
 
-async function softDeleteTargetRow(
-  db: NonNullable<Awaited<ReturnType<typeof getDb>>>,
-  targetTable: string,
-  targetId: number,
-  reviewedBy: number,
-  now: Date,
-  audit?: { reason: string; category: string }
-) {
-  switch (targetTable) {
-    case "samples": {
-      await db
-        .update(samples)
-        .set({
-          deletedAt: now,
-          deletedBy: reviewedBy,
-          deletionReason: audit?.reason ?? null,
-          deletionCategory: audit?.category ?? null,
-          updatedAt: now,
-        })
-        .where(and(eq(samples.id, targetId), isNull(samples.deletedAt)));
-
-      await db
-        .update(distributions)
-        .set({ deletedAt: now, deletedBy: reviewedBy, updatedAt: now })
-        .where(and(eq(distributions.sampleId, targetId), isNull(distributions.deletedAt)));
-
-      const histNotes = `Category: ${audit?.category ?? "—"}. ${audit?.reason ?? ""}`.slice(0, 65000);
-      await addSampleHistory({
-        sampleId: targetId,
-        userId: reviewedBy,
-        action: "Deleted by Admin",
-        fromStatus: undefined,
-        toStatus: undefined,
-        notes: histNotes,
-      });
-      break;
-    }
-    case "distributions":
-      await db
-        .update(distributions)
-        .set({ deletedAt: now, deletedBy: reviewedBy, updatedAt: now })
-        .where(and(eq(distributions.id, targetId), isNull(distributions.deletedAt)));
-      break;
-    case "lab_orders":
-      await db
-        .update(labOrders)
-        .set({ deletedAt: now, deletedBy: reviewedBy, updatedAt: now })
-        .where(and(eq(labOrders.id, targetId), isNull(labOrders.deletedAt)));
-      break;
-    case "contractors":
-      await db
-        .update(contractors)
-        .set({ deletedAt: now, deletedBy: reviewedBy, updatedAt: now })
-        .where(and(eq(contractors.id, targetId), isNull(contractors.deletedAt)));
-      break;
-    case "contracts":
-      await db
-        .update(contracts)
-        .set({ deletedAt: now, deletedBy: reviewedBy, updatedAt: now })
-        .where(and(eq(contracts.id, targetId), isNull(contracts.deletedAt)));
-      break;
-    case "users":
-      await db
-        .update(users)
-        .set({ deletedAt: now, deletedBy: reviewedBy, updatedAt: now })
-        .where(and(eq(users.id, targetId), isNull(users.deletedAt)));
-      break;
-    default:
-      await db.execute(
-        sql.raw(`
-      UPDATE \`${targetTable}\`
-      SET deletedAt = NOW(), deletedBy = ${reviewedBy}
-      WHERE id = ${targetId} AND deletedAt IS NULL
-    `)
-      );
-  }
-}
-
 export async function approveDeletionRequest(
   requestId: number,
   reviewedBy: number,
@@ -237,6 +151,7 @@ export async function approveDeletionRequest(
     const db = await getDb();
     if (!db) throw new Error("Database connection failed");
 
+    // Get the request
     const request = await db
       .select()
       .from(deletionRequests)
@@ -248,28 +163,28 @@ export async function approveDeletionRequest(
     }
 
     const req = request[0];
-    if (req.status !== "pending") {
-      return { success: false, error: "Request already processed" };
-    }
 
-    const now = new Date();
-
+    // Update request to approved
     await db
       .update(deletionRequests)
       .set({
         status: "approved",
         reviewedBy,
-        reviewedAt: now,
+        reviewedAt: new Date(),
         reviewComment: comment,
       })
       .where(eq(deletionRequests.id, requestId));
 
-    await softDeleteTargetRow(db, req.targetTable, req.targetId, reviewedBy, now, {
-      reason: req.reason,
-      category: req.reasonCategory,
-    });
+    // Execute soft delete
+    await db.execute(sql.raw(`
+      UPDATE ${req.targetTable} 
+      SET deletedAt = NOW(), deletedBy = ${reviewedBy} 
+      WHERE id = ${req.targetId}
+    `));
 
     console.log(`[deletionService] Approved and soft-deleted ${req.targetTable}:${req.targetId}`);
+
+    // TODO: Send notification to requester
 
     return { success: true };
   } catch (e) {
@@ -287,6 +202,7 @@ export async function rejectDeletionRequest(
     const db = await getDb();
     if (!db) throw new Error("Database connection failed");
 
+    // Update request to rejected
     await db
       .update(deletionRequests)
       .set({
@@ -298,6 +214,8 @@ export async function rejectDeletionRequest(
       .where(eq(deletionRequests.id, requestId));
 
     console.log(`[deletionService] Rejected deletion request #${requestId}`);
+
+    // TODO: Send notification to requester
 
     return { success: true };
   } catch (e) {

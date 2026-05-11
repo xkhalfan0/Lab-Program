@@ -13,7 +13,7 @@ import { handleUserSSE, handleSectorSSE } from "../sse";
 import { registerPdfRoutes } from "../pdfGenerator";
 import adminImportRouter from "../routes/admin-import.js";
 import { sdk } from "./sdk";
-import { addSampleHistory, createAuditLog, getSampleByIdIncludingDeleted, softDeleteSample } from "../db";
+import { createAuditLog, getSampleByIdIncludingDeleted, softDeleteSample } from "../db";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -62,16 +62,7 @@ async function startServer() {
         return res.status(400).json({ success: false, error: "Sample already deleted" });
       }
 
-      await softDeleteSample(sampleId, user.id, {
-        deletionReason: "Direct admin delete from dashboard / API",
-        deletionCategory: "admin_direct",
-      });
-      await addSampleHistory({
-        sampleId,
-        userId: user.id,
-        action: "Deleted by Admin",
-        notes: "Direct admin delete (API). Category: admin_direct.",
-      });
+      await softDeleteSample(sampleId, user.id);
       await createAuditLog({
         userId: user.id,
         userName: user.name ?? "Unknown",

@@ -17,7 +17,6 @@ import ConcreteTest from "./pages/ConcreteTest";
 import ConcreteReport from "./pages/ConcreteReport";
 import UserManagement from "./pages/UserManagement";
 import AdminDeletionRequests from "./pages/AdminDeletionRequests";
-import DeletionLog from "./pages/DeletionLog";
 import SampleDetail from "./pages/SampleDetail";
 import TestTypesManagement from "./pages/TestTypesManagement";
 import TestRouter from "./pages/tests/TestRouter";
@@ -98,7 +97,6 @@ const ROUTE_ROLES: Record<string, string[]> = {
   "/manager-dashboard": ["admin", "lab_manager", "supervisor", "sample_manager"],
   "/users": ["admin"],
   "/admin/deletion-requests": ["admin", "lab_manager"],
-  "/admin/deletion-log": ["admin", "lab_manager"],
   "/tests-management": ["admin"],
 };
 
@@ -209,9 +207,6 @@ function Router() {
         {() => (
           <ProtectedRoute component={AdminDeletionRequests} path="/admin/deletion-requests" />
         )}
-      </Route>
-      <Route path="/admin/deletion-log">
-        {() => <ProtectedRoute component={DeletionLog} path="/admin/deletion-log" />}
       </Route>
       <Route path="/tests-management">
         {() => <ProtectedRoute component={TestTypesManagement} path="/tests-management" />}
