@@ -1052,11 +1052,22 @@ export async function updateCertificate(id: number, data: Partial<typeof certifi
 export async function createNotification(data: typeof notifications.$inferInsert) {
   const db = await getDb();
   if (!db) return;
-  const result = await db.insert(notifications).values(data);
+  const insertValues = {
+    userId: data.userId,
+    sampleId: data.sampleId ?? null,
+    title: data.title,
+    message: data.message,
+    type: data.type ?? "info",
+    targetRole: data.targetRole ?? null,
+    sectorId: data.sectorId ?? null,
+    notificationType: data.notificationType ?? null,
+    isRead: data.isRead ?? false,
+  };
+  const result = await db.insert(notifications).values(insertValues as any).$dynamic();
   // Broadcast via SSE to the relevant user/sector
   try {
     const { broadcastToUser, broadcastToSector, broadcastToRole } = await import("./sse");
-    const payload = { ...data, id: (result as any).insertId, createdAt: data.createdAt ?? new Date() };
+    const payload = { ...insertValues, id: (result as any).insertId, createdAt: new Date() };
     if (data.userId && data.userId > 0) {
       broadcastToUser(data.userId, payload);
     } else if (data.sectorId) {
@@ -1094,7 +1105,15 @@ export async function markAllNotificationsRead(userId: number) {
 export async function addSampleHistory(data: typeof sampleHistory.$inferInsert) {
   const db = await getDb();
   if (!db) return;
-  await db.insert(sampleHistory).values(data);
+  const insertValues = {
+    sampleId: data.sampleId,
+    userId: data.userId,
+    action: data.action,
+    fromStatus: data.fromStatus ?? null,
+    toStatus: data.toStatus ?? null,
+    notes: data.notes ?? null,
+  };
+  await db.insert(sampleHistory).values(insertValues as any).$dynamic();
 }
 
 export async function getSampleHistory(sampleId: number) {
@@ -1654,7 +1673,25 @@ export async function generateOrderCode(): Promise<string> {
 export async function createLabOrder(data: InsertLabOrder) {
   const db = await getDb();
   if (!db) throw new Error("DB not available");
-  await db.insert(labOrders).values(data);
+  const insertValues = {
+    orderCode: data.orderCode,
+    sampleId: data.sampleId,
+    contractNumber: data.contractNumber ?? null,
+    contractName: data.contractName ?? null,
+    contractorName: data.contractorName ?? null,
+    sampleType: data.sampleType ?? null,
+    location: data.location ?? null,
+    castingDate: data.castingDate ?? null,
+    notes: data.notes ?? null,
+    createdById: data.createdById,
+    distributedById: data.distributedById ?? null,
+    distributedAt: data.distributedAt ?? null,
+    assignedTechnicianId: data.assignedTechnicianId ?? null,
+    priority: data.priority ?? "normal",
+    status: data.status ?? "pending",
+    completedAt: data.completedAt ?? null,
+  };
+  await db.insert(labOrders).values(insertValues as any).$dynamic();
   const result = await db
     .select()
     .from(labOrders)
@@ -1667,7 +1704,8 @@ export async function createLabOrderItems(items: InsertLabOrderItem[]) {
   const db = await getDb();
   if (!db) throw new Error("DB not available");
   if (items.length === 0) return [];
-  await db.insert(labOrderItems).values(items);
+  // Drizzle bulk insert — no raw SQL. Omit `id`; DB auto-increment applies.
+  await db.insert(labOrderItems).values(items as any).$dynamic();
   return db
     .select()
     .from(labOrderItems)
