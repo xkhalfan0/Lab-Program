@@ -383,7 +383,7 @@ export async function createSample(data: InsertSample) {
     // Drizzle `db.execute(sql)` accepts only one argument; bind `?` via mysql2 (same pool as Drizzle).
     await db.$client.promise().execute(
       `
-    INSERT INTO samples (${columns.join(", ")}) 
+    INSERT INTO samples (${columns.map((c) => `\`${c}\``).join(", ")}) 
     VALUES (${placeholders})
   `,
       values
