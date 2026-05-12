@@ -263,3 +263,4 @@ pnpm run dev
 ## More technical details
 
 For servers, reverse proxies, full database backups, and advanced options, see **`DEPLOYMENT.md`** in this same folder.
+# Rebuild Tue, May 12, 2026  9:28:47 AM
