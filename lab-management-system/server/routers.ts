@@ -1,4 +1,5 @@
 import bcrypt from "bcryptjs";
+import { randomBytes } from "node:crypto";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { COOKIE_NAME } from "@shared/const";
@@ -670,21 +671,28 @@ export const appRouter = router({
             sectorNameEn = sectorData.nameEn;
           }
         }
+
         const createdSamples = [];
-        // Generate a shared batchId for all samples in this batch
-        const batchId = `BATCH-${new Date().getFullYear()}-${Date.now().toString(36).toUpperCase().slice(-6)}`;
+        // Shared batch id for all rows in this mutation (varchar(32) on samples.batchId)
+        const y = new Date().getFullYear();
+        const batchTime = Date.now().toString(36).toUpperCase().slice(-5);
+        const batchRand = randomBytes(3).toString("hex").toUpperCase();
+        let batchId = `BATCH-${y}-${batchTime}${batchRand}`;
+        if (batchId.length > 32) {
+          batchId = batchId.slice(0, 32);
+        }
         for (const item of input.items) {
           const sampleCode = await generateSampleCode();
           const sample = await createSample({
             sampleCode,
-            contractId: input.contractId,
-            contractNumber,
-            contractName,
-            contractorName,
+            contractId: input.contractId ?? null,
+            contractNumber: contractNumber ?? null,
+            contractName: contractName ?? null,
+            contractorName: contractorName ?? null,
             sampleType: input.sampleType as any,
             sector: input.sector as any,
-            sectorNameAr,
-            sectorNameEn,
+            sectorNameAr: sectorNameAr ?? null,
+            sectorNameEn: sectorNameEn ?? null,
             quantity: item.quantity,
             condition: input.condition,
             notes: input.notes ?? null,
@@ -698,6 +706,12 @@ export const appRouter = router({
             receivedById: ctx.user.id,
             receivedAt: new Date(),
           });
+          if (!sample?.id) {
+            throw new TRPCError({
+              code: "INTERNAL_SERVER_ERROR",
+              message: `Batch create failed after ${createdSamples.length} sample(s); last code: ${sampleCode}`,
+            });
+          }
           await addSampleHistory({
             sampleId: sample!.id,
             userId: ctx.user.id,

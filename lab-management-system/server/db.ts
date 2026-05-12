@@ -232,14 +232,16 @@ export async function generateSampleCode(): Promise<string> {
   const db = await getDb();
   if (!db) return `LAB-${new Date().getFullYear()}-0001`;
   const year = new Date().getFullYear();
-  // Use the highest existing code suffix (not COUNT) to avoid duplicate
-  // sample codes when rows are deleted or historical imports create gaps.
+  const pattern = `^LAB-${year}-[0-9]{1,8}$`;
+  // Only consider well-formed LAB-YYYY-NNNN codes so a bad historical row cannot blow the MAX suffix.
   const result = await db
     .select({
       maxSuffix: sql<number>`COALESCE(MAX(CAST(SUBSTRING_INDEX(${samples.sampleCode}, '-', -1) AS UNSIGNED)), 0)`,
     })
     .from(samples)
-    .where(sql`${samples.sampleCode} LIKE ${`LAB-${year}-%`}`);
+    .where(
+      and(sql`${samples.sampleCode} REGEXP ${pattern}`, sql`${samples.sampleCode} LIKE ${`LAB-${year}-%`}`)
+    );
   const next = (result[0]?.maxSuffix ?? 0) + 1;
   return `LAB-${year}-${String(next).padStart(4, "0")}`;
 }
@@ -314,55 +316,41 @@ function sampleRowSelect() {
   return SAMPLE_ROW_BASE;
 }
 
-/** Columns allowed on INSERT for new samples — never soft-delete / audit fields. */
-const SAMPLE_CREATE_INSERT_KEYS = [
-  "sampleCode",
-  "contractId",
-  "contractNumber",
-  "contractName",
-  "contractorName",
-  "sampleType",
-  "sector",
-  "sectorNameAr",
-  "sectorNameEn",
-  "quantity",
-  "condition",
-  "notes",
-  "status",
-  "requestedTestTypeId",
-  "testSubType",
-  "sampleSubType",
-  "testTypeName",
-  "batchId",
-  "location",
-  "nominalCubeSize",
-  "castingDate",
-  "receivedById",
-  "receivedAt",
-  "managerReadAt",
-  "createdAt",
-  "updatedAt",
-] as const;
-
-function buildSampleCreateInsertValues(data: InsertSample): Record<string, unknown> {
-  const src = data as Record<string, unknown>;
-  const out: Record<string, unknown> = {};
-  for (const key of SAMPLE_CREATE_INSERT_KEYS) {
-    const v = src[key];
-    if (v !== undefined) {
-      out[key] = v;
-    }
-  }
-  return out;
-}
-
 export async function createSample(data: InsertSample) {
   const db = await getDb();
   if (!db) throw new Error("DB not available");
 
-  const insertValues = buildSampleCreateInsertValues(data);
+  // Explicit column list only — never pass soft-delete / audit columns so Drizzle
+  // cannot emit them in INSERT (avoids placeholder/param mismatch vs. DB).
+  await db.insert(samples).values({
+    sampleCode: data.sampleCode,
+    contractId: data.contractId ?? null,
+    contractNumber: data.contractNumber ?? null,
+    contractName: data.contractName ?? null,
+    contractorName: data.contractorName ?? null,
+    sampleType: data.sampleType,
+    sector: data.sector,
+    sectorNameAr: data.sectorNameAr ?? null,
+    sectorNameEn: data.sectorNameEn ?? null,
+    quantity: data.quantity,
+    condition: data.condition,
+    notes: data.notes ?? null,
+    status: data.status,
+    requestedTestTypeId: data.requestedTestTypeId ?? null,
+    testSubType: data.testSubType ?? null,
+    sampleSubType: data.sampleSubType ?? null,
+    testTypeName: data.testTypeName ?? null,
+    batchId: data.batchId ?? null,
+    location: data.location ?? null,
+    nominalCubeSize: data.nominalCubeSize ?? null,
+    castingDate: data.castingDate ?? null,
+    receivedById: data.receivedById,
+    receivedAt: data.receivedAt,
+    managerReadAt: data.managerReadAt ?? null,
+    ...(data.createdAt !== undefined ? { createdAt: data.createdAt } : {}),
+    ...(data.updatedAt !== undefined ? { updatedAt: data.updatedAt } : {}),
+  });
 
-  await db.insert(samples).values(insertValues as typeof samples.$inferInsert);
   const result = await db
     .select(sampleRowSelect())
     .from(samples)
