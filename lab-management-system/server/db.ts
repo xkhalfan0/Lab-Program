@@ -1098,11 +1098,22 @@ export async function createNotification(data: typeof notifications.$inferInsert
     notificationType: data.notificationType ?? null,
     isRead: data.isRead ?? false,
   };
-  const result = await db.insert(notifications).values(insertValues as any).$dynamic();
+  const columns = Object.keys(insertValues) as (keyof typeof insertValues)[];
+  const values = columns.map((col) => insertValues[col]);
+  const placeholders = columns.map(() => "?").join(", ");
+  const [insertHeader] = await db.$client.promise().execute(
+    `INSERT INTO notifications (${columns.map((c) => `\`${c}\``).join(", ")}) 
+     VALUES (${placeholders})`,
+    values
+  );
   // Broadcast via SSE to the relevant user/sector
   try {
     const { broadcastToUser, broadcastToSector, broadcastToRole } = await import("./sse");
-    const payload = { ...insertValues, id: (result as any).insertId, createdAt: new Date() };
+    const payload = {
+      ...insertValues,
+      id: (insertHeader as { insertId: number }).insertId,
+      createdAt: new Date(),
+    };
     if (data.userId && data.userId > 0) {
       broadcastToUser(data.userId, payload);
     } else if (data.sectorId) {
@@ -1148,7 +1159,14 @@ export async function addSampleHistory(data: typeof sampleHistory.$inferInsert) 
     toStatus: data.toStatus ?? null,
     notes: data.notes ?? null,
   };
-  await db.insert(sampleHistory).values(insertValues as any).$dynamic();
+  const columns = Object.keys(insertValues) as (keyof typeof insertValues)[];
+  const values = columns.map((col) => insertValues[col]);
+  const placeholders = columns.map(() => "?").join(", ");
+  await db.$client.promise().execute(
+    `INSERT INTO sample_history (${columns.map((c) => `\`${c}\``).join(", ")}) 
+     VALUES (${placeholders})`,
+    values
+  );
 }
 
 export async function getSampleHistory(sampleId: number) {
@@ -1723,7 +1741,14 @@ export async function createLabOrder(data: InsertLabOrder) {
     status: data.status ?? "pending",
     completedAt: data.completedAt ?? null,
   };
-  await db.insert(labOrders).values(insertValues as any).$dynamic();
+  const columns = Object.keys(insertValues) as (keyof typeof insertValues)[];
+  const values = columns.map((col) => insertValues[col]);
+  const placeholders = columns.map(() => "?").join(", ");
+  await db.$client.promise().execute(
+    `INSERT INTO lab_orders (${columns.map((c) => `\`${c}\``).join(", ")}) 
+   VALUES (${placeholders})`,
+    values
+  );
   const result = await db
     .select()
     .from(labOrders)
@@ -1736,8 +1761,16 @@ export async function createLabOrderItems(items: InsertLabOrderItem[]) {
   const db = await getDb();
   if (!db) throw new Error("DB not available");
   if (items.length === 0) return [];
-  // Drizzle bulk insert — no raw SQL. Omit `id`; DB auto-increment applies.
-  await db.insert(labOrderItems).values(items as any).$dynamic();
+  const omitKeys = new Set(["id", "createdAt", "updatedAt"]);
+  const columns = (Object.keys(items[0]) as (keyof InsertLabOrderItem)[]).filter((k) => !omitKeys.has(k as string));
+  const placeholders = columns.map(() => "?").join(", ");
+  const rowPlaceholders = items.map(() => `(${placeholders})`).join(", ");
+  const values = items.flatMap((item) => columns.map((col) => item[col]));
+  await db.$client.promise().execute(
+    `INSERT INTO lab_order_items (${columns.map((c) => `\`${c}\``).join(", ")}) 
+      VALUES ${rowPlaceholders}`,
+    values
+  );
   return db
     .select()
     .from(labOrderItems)
