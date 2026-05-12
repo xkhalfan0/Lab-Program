@@ -8,7 +8,7 @@ import {
   samples,
   users,
 } from "../../drizzle/schema";
-import { addSampleHistory, getDb } from "../db";
+import { addSampleHistory, getDb, mysqlRawInsertRow } from "../db";
 
 export async function analyzeDeletionImpact(
   targetTable: string,
@@ -118,23 +118,19 @@ export async function createDeletionRequest(
     // Run impact analysis
     const impact = await analyzeDeletionImpact(targetTable, targetId);
 
-    // Insert deletion request
-    const result = await db.insert(deletionRequests).values({
+    const header = await mysqlRawInsertRow(db, "deletion_requests", {
       requestedBy,
       targetTable,
       targetId,
       reason,
-      reasonCategory: reasonCategory as any,
+      reasonCategory: reasonCategory as string,
       impactAnalysis: JSON.stringify(impact),
       status: "pending",
     });
 
-    // Get the inserted ID properly
-    const insertResult = result as any;
-    const requestId = insertResult.insertId || insertResult[0]?.insertId;
-
+    const requestId = header.insertId;
     if (!requestId) {
-      console.error("[deletionService] Failed to get insertId from result:", result);
+      console.error("[deletionService] Failed to get insertId from header:", header);
       return { success: false, error: "Failed to create deletion request" };
     }
 

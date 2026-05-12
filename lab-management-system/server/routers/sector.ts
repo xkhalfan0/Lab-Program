@@ -5,7 +5,7 @@
  * The sector portal sends this token as Authorization: Bearer <token> header.
  */
 import { router, publicProcedure } from "../_core/trpc";
-import { getDb } from "../db";
+import { getDb, mysqlRawInsertRow } from "../db";
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import bcrypt from "bcryptjs";
@@ -317,8 +317,8 @@ export const sectorRouter = router({
         .limit(1);
 
       if (existing.length === 0) {
-        await db.insert(sectorReportReads).values({
-          sectorKey: ctx.sectorKey as any,
+        await mysqlRawInsertRow(db, "sector_report_reads", {
+          sectorKey: ctx.sectorKey as string,
           reportType: "test_result",
           reportId: input.resultId,
         });
@@ -473,8 +473,8 @@ export const sectorRouter = router({
         .limit(1);
 
       if (existing.length === 0) {
-        await db.insert(sectorReportReads).values({
-          sectorKey: ctx.sectorKey as any,
+        await mysqlRawInsertRow(db, "sector_report_reads", {
+          sectorKey: ctx.sectorKey as string,
           reportType: "clearance",
           reportId: input.clearanceId,
         });
@@ -640,8 +640,7 @@ export const sectorRouter = router({
         }
       }
 
-      // Insert clearance request
-      await db.insert(clearanceRequests).values({
+      await mysqlRawInsertRow(db, "clearance_requests", {
         requestCode: code,
         contractId: input.contractId,
         contractorId: input.contractId, // use contractId as fallback
@@ -848,8 +847,8 @@ export const sectorRouter = router({
           ))
           .limit(1);
         if (existing.length === 0) {
-          await db.insert(sectorReportReads).values({
-            sectorKey: ctx.sectorKey as any,
+          await mysqlRawInsertRow(db, "sector_report_reads", {
+            sectorKey: ctx.sectorKey as string,
             reportType: "test_result",
             reportId: input.refId,
           });
@@ -877,8 +876,8 @@ export const sectorRouter = router({
           ))
           .limit(1);
         if (existing.length === 0) {
-          await db.insert(sectorReportReads).values({
-            sectorKey: ctx.sectorKey as any,
+          await mysqlRawInsertRow(db, "sector_report_reads", {
+            sectorKey: ctx.sectorKey as string,
             reportType: "clearance",
             reportId: input.refId,
           });

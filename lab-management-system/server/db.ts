@@ -2,6 +2,7 @@ import { and, desc, eq, gte, inArray, isNotNull, isNull, lte, sql } from "drizzl
 import { drizzle } from "drizzle-orm/mysql2";
 import { alias } from "drizzle-orm/mysql-core";
 import { createPool } from "mysql2";
+import type { ResultSetHeader } from "mysql2/promise";
 import {
   InsertUser,
   attachments,
@@ -84,6 +85,37 @@ export async function getDb() {
   return _db;
 }
 
+/** Drop `undefined` so optional columns use DB defaults; optional `omitKeys` for bulk patterns. */
+function rowForMysqlInsert(row: Record<string, unknown>, omitKeys?: Set<string>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(row)) {
+    if (omitKeys?.has(k)) continue;
+    if (v !== undefined) out[k] = v;
+  }
+  return out;
+}
+
+/** Single-row INSERT via mysql2 (same pool as Drizzle); backtick-quoted identifiers. */
+export async function mysqlRawInsertRow(
+  db: NonNullable<Awaited<ReturnType<typeof getDb>>>,
+  tableName: string,
+  row: Record<string, unknown>,
+  omitKeys?: Set<string>
+): Promise<ResultSetHeader> {
+  const insertValues = rowForMysqlInsert(row, omitKeys);
+  const columns = Object.keys(insertValues);
+  if (columns.length === 0) {
+    throw new Error(`mysqlRawInsertRow(${tableName}): no columns after filtering`);
+  }
+  const bindValues = columns.map((col) => insertValues[col]);
+  const placeholders = columns.map(() => "?").join(", ");
+  const [header] = await db.$client.promise().execute(
+    `INSERT INTO ${tableName} (${columns.map((c) => `\`${c}\``).join(", ")}) VALUES (${placeholders})`,
+    bindValues
+  );
+  return header as ResultSetHeader;
+}
+
 // ─── Users ────────────────────────────────────────────────────────────────────
 export async function upsertUser(user: InsertUser): Promise<void> {
   if (!user.openId) throw new Error("User openId is required for upsert");
@@ -114,7 +146,17 @@ export async function upsertUser(user: InsertUser): Promise<void> {
   if (!values.lastSignedIn) values.lastSignedIn = new Date();
   if (Object.keys(updateSet).length === 0) updateSet.lastSignedIn = new Date();
 
-  await db.insert(users).values(values).onDuplicateKeyUpdate({ set: updateSet });
+  const insertRow = rowForMysqlInsert(values as unknown as Record<string, unknown>);
+  const columns = Object.keys(insertRow);
+  const bindValues = columns.map((col) => insertRow[col]);
+  const placeholders = columns.map(() => "?").join(", ");
+  const updates = Object.keys(updateSet)
+    .map((k) => `\`${k}\` = VALUES(\`${k}\`)`)
+    .join(", ");
+  await db.$client.promise().execute(
+    `INSERT INTO users (${columns.map((c) => `\`${c}\``).join(", ")}) VALUES (${placeholders}) ON DUPLICATE KEY UPDATE ${updates}`,
+    bindValues
+  );
 }
 
 export async function getUserByOpenId(openId: string) {
@@ -170,7 +212,7 @@ export async function createInternalUser(data: {
   if (!db) throw new Error("DB not available");
   // openId is required by schema - use username as unique identifier
   const openId = `local:${data.username}`;
-  await db.insert(users).values({
+  await mysqlRawInsertRow(db, "users", {
     openId,
     name: data.name,
     username: data.username,
@@ -711,7 +753,7 @@ export async function getDailyWork(fromDate: Date, toDate: Date) {
 export async function createDistribution(data: typeof distributions.$inferInsert) {
   const db = await getDb();
   if (!db) throw new Error("DB not available");
-  await db.insert(distributions).values(data);
+  await mysqlRawInsertRow(db, "distributions", data as unknown as Record<string, unknown>);
   const result = await db
     .select()
     .from(distributions)
@@ -911,7 +953,7 @@ export async function markDistributionTaskRead(id: number) {
 export async function createTestResult(data: typeof testResults.$inferInsert) {
   const db = await getDb();
   if (!db) throw new Error("DB not available");
-  await db.insert(testResults).values(data);
+  await mysqlRawInsertRow(db, "test_results", data as unknown as Record<string, unknown>);
   const result = await db
     .select()
     .from(testResults)
@@ -962,7 +1004,7 @@ export async function updateTestResult(
 export async function createReview(data: typeof reviews.$inferInsert) {
   const db = await getDb();
   if (!db) throw new Error("DB not available");
-  await db.insert(reviews).values(data);
+  await mysqlRawInsertRow(db, "reviews", data as unknown as Record<string, unknown>);
   const result = await db
     .select()
     .from(reviews)
@@ -986,7 +1028,7 @@ export async function getReviewsBySample(sampleId: number) {
 export async function createAttachment(data: typeof attachments.$inferInsert) {
   const db = await getDb();
   if (!db) throw new Error("DB not available");
-  await db.insert(attachments).values(data);
+  await mysqlRawInsertRow(db, "attachments", data as unknown as Record<string, unknown>);
   const result = await db
     .select()
     .from(attachments)
@@ -1010,7 +1052,7 @@ export async function getAttachmentsBySample(sampleId: number) {
 export async function createCertificate(data: typeof certificates.$inferInsert) {
   const db = await getDb();
   if (!db) throw new Error("DB not available");
-  await db.insert(certificates).values(data);
+  await mysqlRawInsertRow(db, "certificates", data as unknown as Record<string, unknown>);
   const result = await db
     .select()
     .from(certificates)
@@ -1210,7 +1252,7 @@ export async function getCubesByGroup(groupId: number) {
 export async function createConcreteGroup(data: InsertConcreteTestGroup) {
   const db = await getDb();
   if (!db) throw new Error('DB not available');
-  await db.insert(concreteTestGroups).values(data);
+  await mysqlRawInsertRow(db, "concrete_test_groups", data as unknown as Record<string, unknown>);
   const result = await db.select().from(concreteTestGroups)
     .where(eq(concreteTestGroups.distributionId, data.distributionId))
     .orderBy(desc(concreteTestGroups.createdAt)).limit(1);
@@ -1225,7 +1267,9 @@ export async function upsertConcreteCube(data: InsertConcreteCube & { id?: numbe
     const r = await db.select().from(concreteCubes).where(eq(concreteCubes.id, data.id)).limit(1);
     return r[0];
   } else {
-    await db.insert(concreteCubes).values(data);
+    const cubeRow = { ...data } as Record<string, unknown>;
+    delete cubeRow.id;
+    await mysqlRawInsertRow(db, "concrete_cubes", cubeRow);
     const r = await db.select().from(concreteCubes)
       .where(eq(concreteCubes.groupId, data.groupId))
       .orderBy(desc(concreteCubes.createdAt)).limit(1);
@@ -1378,8 +1422,7 @@ export async function getTestTypeById(id: number) {
 export async function createTestType(data: typeof testTypes.$inferInsert) {
   const db = await getDb();
   if (!db) throw new Error("DB not available");
-  const [result] = await db.insert(testTypes).values(data);
-  return result;
+  return mysqlRawInsertRow(db, "test_types", data as unknown as Record<string, unknown>);
 }
 
 export async function updateTestType(id: number, data: Partial<typeof testTypes.$inferInsert>) {
@@ -1445,7 +1488,7 @@ export async function getContractsWithContractor() {
 export async function createContract(data: typeof contracts.$inferInsert) {
   const db = await getDb();
   if (!db) throw new Error("DB not available");
-  await db.insert(contracts).values(data);
+  await mysqlRawInsertRow(db, "contracts", data as unknown as Record<string, unknown>);
   const result = await db.select().from(contracts).where(eq(contracts.contractNumber, data.contractNumber)).limit(1);
   return result[0];
 }
@@ -1479,8 +1522,7 @@ export async function getContractorById(id: number) {
 export async function createContractor(data: typeof contractors.$inferInsert) {
   const db = await getDb();
   if (!db) throw new Error("DB not available");
-  const [result] = await db.insert(contractors).values(data);
-  return result;
+  return mysqlRawInsertRow(db, "contractors", data as unknown as Record<string, unknown>);
 }
 
 export async function updateContractor(id: number, data: Partial<typeof contractors.$inferInsert>) {
@@ -1500,8 +1542,7 @@ export async function deleteContractor(id: number) {
 export async function createSpecializedTestResult(data: typeof specializedTestResults.$inferInsert) {
   const db = await getDb();
   if (!db) throw new Error("DB not available");
-  const [result] = await db.insert(specializedTestResults).values(data);
-  return result;
+  return mysqlRawInsertRow(db, "specialized_test_results", data as unknown as Record<string, unknown>);
 }
 
 export async function updateSpecializedTestResult(id: number, data: Partial<typeof specializedTestResults.$inferInsert>) {
@@ -1555,8 +1596,7 @@ export async function getClearanceRequestByCode(code: string) {
 export async function createClearanceRequest(data: InsertClearanceRequest) {
   const db = await getDb();
   if (!db) throw new Error("DB not available");
-  const result = await db.insert(clearanceRequests).values(data);
-  return result[0];
+  return mysqlRawInsertRow(db, "clearance_requests", data as unknown as Record<string, unknown>);
 }
 export async function updateClearanceRequest(id: number, data: Partial<typeof clearanceRequests.$inferInsert>) {
   const db = await getDb();
@@ -1595,8 +1635,7 @@ export async function createAuditLog(data: {
 }) {
   const db = await getDb();
   if (!db) return;
-  const { auditLog } = await import("../drizzle/schema");
-  await db.insert(auditLog).values({
+  await mysqlRawInsertRow(db, "audit_log", {
     userId: data.userId,
     userName: data.userName,
     action: data.action,
@@ -1689,8 +1728,7 @@ export async function getSectorByKey(key: string) {
 export async function createSector(data: { sectorKey: string; nameAr: string; nameEn: string; description?: string }) {
   const db = await getDb();
   if (!db) return;
-  const { sectors } = await import("../drizzle/schema");
-  await db.insert(sectors).values({ ...data, isActive: true });
+  await mysqlRawInsertRow(db, "sectors", { ...data, isActive: true });
 }
 export async function updateSector(id: number, data: { nameAr?: string; nameEn?: string; description?: string; isActive?: boolean }) {
   const db = await getDb();
