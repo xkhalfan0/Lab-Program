@@ -352,24 +352,42 @@ export async function createSample(data: InsertSample) {
   try {
     console.log("[createSample] insertValues keys:", Object.keys(insertValues));
     console.log("[createSample] insertValues object:", JSON.stringify(insertValues, null, 2));
-    const [result] = await db.execute(sql`
-      INSERT INTO samples (
-        sampleCode, contractId, contractNumber, contractName, contractorName,
-        sampleType, sector, sectorNameAr, sectorNameEn, quantity, condition,
-        notes, status, requestedTestTypeId, testSubType, sampleSubType,
-        testTypeName, batchId, location, nominalCubeSize, castingDate,
-        receivedById, receivedAt, managerReadAt
-      ) VALUES (
-        ${insertValues.sampleCode}, ${insertValues.contractId}, ${insertValues.contractNumber},
-        ${insertValues.contractName}, ${insertValues.contractorName}, ${insertValues.sampleType},
-        ${insertValues.sector}, ${insertValues.sectorNameAr}, ${insertValues.sectorNameEn},
-        ${insertValues.quantity}, ${insertValues.condition}, ${insertValues.notes},
-        ${insertValues.status}, ${insertValues.requestedTestTypeId}, ${insertValues.testSubType},
-        ${insertValues.sampleSubType}, ${insertValues.testTypeName}, ${insertValues.batchId},
-        ${insertValues.location}, ${insertValues.nominalCubeSize}, ${insertValues.castingDate},
-        ${insertValues.receivedById}, ${insertValues.receivedAt}, ${insertValues.managerReadAt}
-      )
-    `);
+    const columns = [
+      "sampleCode",
+      "contractId",
+      "contractNumber",
+      "contractName",
+      "contractorName",
+      "sampleType",
+      "sector",
+      "sectorNameAr",
+      "sectorNameEn",
+      "quantity",
+      "condition",
+      "notes",
+      "status",
+      "requestedTestTypeId",
+      "testSubType",
+      "sampleSubType",
+      "testTypeName",
+      "batchId",
+      "location",
+      "nominalCubeSize",
+      "castingDate",
+      "receivedById",
+      "receivedAt",
+      "managerReadAt",
+    ] as const;
+    const values = columns.map((col) => insertValues[col]);
+    const placeholders = columns.map(() => "?").join(", ");
+    // Drizzle `db.execute(sql)` accepts only one argument; bind `?` via mysql2 (same pool as Drizzle).
+    await db.$client.promise().execute(
+      `
+    INSERT INTO samples (${columns.join(", ")}) 
+    VALUES (${placeholders})
+  `,
+      values
+    );
     console.log("[createSample] Insert completed");
   } catch (error) {
     console.error("[createSample] Insert FAILED:", error);
