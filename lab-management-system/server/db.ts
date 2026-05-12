@@ -316,12 +316,13 @@ function sampleRowSelect() {
 }
 
 export async function createSample(data: InsertSample) {
+  console.log("[createSample] Called with sampleCode:", data.sampleCode);
   const db = await getDb();
   if (!db) throw new Error("DB not available");
 
   // Explicit column list only — never pass soft-delete / audit columns so Drizzle
   // cannot emit them in INSERT (avoids placeholder/param mismatch vs. DB).
-  await db.insert(samples).values({
+  const insertValues = {
     sampleCode: data.sampleCode,
     contractId: data.contractId ?? null,
     contractNumber: data.contractNumber ?? null,
@@ -346,7 +347,16 @@ export async function createSample(data: InsertSample) {
     receivedById: data.receivedById,
     receivedAt: data.receivedAt,
     managerReadAt: data.managerReadAt ?? null,
-  });
+  };
+  console.log("[createSample] Inserting with these fields:", Object.keys(insertValues));
+
+  try {
+    await db.insert(samples).values(insertValues);
+    console.log("[createSample] Insert completed");
+  } catch (error) {
+    console.error("[createSample] Insert FAILED:", error);
+    throw error;
+  }
 
   const result = await db
     .select(sampleRowSelect())
