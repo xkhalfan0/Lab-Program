@@ -1791,12 +1791,89 @@ ${testSummaries.length > 0 ? testSummaries.join("\n\n") : "لم تُجرَ اخ�
           submittedAt: new Date(),
           testedBy: ctx.user.name ?? ctx.user.username ?? group.testedBy ?? undefined,
         });
+
+        const submittedGroup = (await getConcreteGroupById(input.groupId))!;
+        const cubes = await getCubesByGroup(input.groupId);
+        const rawValues = cubes
+          .map((c) => parseFloat(c.compressiveStrengthMpa ?? "0"))
+          .filter((v) => v > 0);
+        if (rawValues.length === 0) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "No cube strength readings to submit",
+          });
+        }
+
+        const dist = await getDistributionById(submittedGroup.distributionId);
+        const minAcc =
+          dist?.minAcceptable != null && dist.minAcceptable !== ""
+            ? parseFloat(String(dist.minAcceptable))
+            : submittedGroup.minAcceptable != null && submittedGroup.minAcceptable !== ""
+              ? parseFloat(String(submittedGroup.minAcceptable))
+              : null;
+        const maxAcc =
+          dist?.maxAcceptable != null && dist.maxAcceptable !== ""
+            ? parseFloat(String(dist.maxAcceptable))
+            : submittedGroup.maxAcceptable != null && submittedGroup.maxAcceptable !== ""
+              ? parseFloat(String(submittedGroup.maxAcceptable))
+              : null;
+
+        const stats = calculateStats(rawValues, minAcc, maxAcc);
+        if (!stats) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "Could not calculate test statistics" });
+        }
+
+        const chartsData = {
+          labels: rawValues.map((_, i) => `Cube ${i + 1}`),
+          values: rawValues,
+          average: stats.average,
+          min: minAcc,
+          max: maxAcc,
+          complianceStatus: stats.complianceStatus,
+          passingCount: stats.passingCount,
+          totalCount: stats.totalCount,
+          testAge: submittedGroup.testAge,
+          concreteGroupId: submittedGroup.id,
+          source: "concrete_cubes",
+        };
+
+        await updateDistributionStatus(submittedGroup.distributionId, "completed");
+        await updateSampleStatus(submittedGroup.sampleId, "processed");
+
+        await addSampleHistory({
+          sampleId: submittedGroup.sampleId,
+          userId: ctx.user.id,
+          action: "Concrete test results submitted",
+          fromStatus: "distributed",
+          toStatus: "processed",
+          notes: `${submittedGroup.testAge}-day concrete cube test submitted for review`,
+        });
+
+        // Bridge into test_results (schema has no testType/testValue; mirror testResults.submit)
+        await createTestResult({
+          distributionId: submittedGroup.distributionId,
+          sampleId: submittedGroup.sampleId,
+          technicianId: ctx.user.id,
+          rawValues,
+          unit: "MPa",
+          testNotes: `Concrete ${submittedGroup.testAge}-day compressive strength — ${cubes.length} cube(s). Avg ${submittedGroup.avgCompressiveStrength ?? stats.average} MPa.`,
+          average: stats.average.toString(),
+          stdDeviation: stats.stdDeviation.toString(),
+          ...(stats.percentage != null ? { percentage: stats.percentage.toString() } : {}),
+          minValue: stats.minValue.toString(),
+          maxValue: stats.maxValue.toString(),
+          complianceStatus: stats.complianceStatus,
+          chartsData,
+          status: "processed",
+          processedAt: new Date(),
+        });
+
         // Notify sample managers
         await notifyUsersByRole(
           "sample_manager",
           "New Concrete Test Results Ready",
-          `Concrete cube results for ${group.testAge}-day test are ready for review (Sample: ${group.contractorName})`,
-          group.sampleId,
+          `Concrete cube results for ${submittedGroup.testAge}-day test are ready for review (Sample: ${submittedGroup.contractorName})`,
+          submittedGroup.sampleId,
           "action_required"
         );
         return { success: true };
