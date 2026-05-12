@@ -314,13 +314,55 @@ function sampleRowSelect() {
   return SAMPLE_ROW_BASE;
 }
 
+/** Columns allowed on INSERT for new samples — never soft-delete / audit fields. */
+const SAMPLE_CREATE_INSERT_KEYS = [
+  "sampleCode",
+  "contractId",
+  "contractNumber",
+  "contractName",
+  "contractorName",
+  "sampleType",
+  "sector",
+  "sectorNameAr",
+  "sectorNameEn",
+  "quantity",
+  "condition",
+  "notes",
+  "status",
+  "requestedTestTypeId",
+  "testSubType",
+  "sampleSubType",
+  "testTypeName",
+  "batchId",
+  "location",
+  "nominalCubeSize",
+  "castingDate",
+  "receivedById",
+  "receivedAt",
+  "managerReadAt",
+  "createdAt",
+  "updatedAt",
+] as const;
+
+function buildSampleCreateInsertValues(data: InsertSample): Record<string, unknown> {
+  const src = data as Record<string, unknown>;
+  const out: Record<string, unknown> = {};
+  for (const key of SAMPLE_CREATE_INSERT_KEYS) {
+    const v = src[key];
+    if (v !== undefined) {
+      out[key] = v;
+    }
+  }
+  return out;
+}
+
 export async function createSample(data: InsertSample) {
   const db = await getDb();
   if (!db) throw new Error("DB not available");
 
-  const { deletedAt, deletedBy, deletionReason, deletionCategory, ...cleanData } = data as any;
+  const insertValues = buildSampleCreateInsertValues(data);
 
-  await db.insert(samples).values(cleanData);
+  await db.insert(samples).values(insertValues as typeof samples.$inferInsert);
   const result = await db
     .select(sampleRowSelect())
     .from(samples)
