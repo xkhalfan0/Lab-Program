@@ -40,10 +40,9 @@ function samplesHasSoftDeleteColumns(): boolean {
 async function initSamplesSoftDeleteColumnFlag(db: ReturnType<typeof drizzle>) {
   if (_samplesSoftDeleteColumnsExist !== null) return;
   try {
+    // Parameterized string literals (TABLE_NAME / COLUMN_NAME are string values in information_schema).
     const raw = await db.execute(
-      sql.raw(
-        "SELECT COUNT(*) AS c FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'samples' AND COLUMN_NAME = 'deletedAt'"
-      )
+      sql`SELECT COUNT(*) AS c FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ${"samples"} AND COLUMN_NAME = ${"deletedAt"}`
     );
     const rows = (raw as unknown as [Array<{ c?: number | bigint }>, unknown])[0];
     _samplesSoftDeleteColumnsExist = Number(rows?.[0]?.c ?? 0) > 0;

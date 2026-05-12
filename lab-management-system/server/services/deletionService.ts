@@ -70,12 +70,11 @@ export async function analyzeDeletionImpact(
   // Query each related table
   for (const rel of relationsToCheck) {
     try {
+      const tid = Number(targetId);
       const result = await db.execute(
-        sql.raw(`
-        SELECT COUNT(*) as count 
-        FROM ${rel.table} 
-        WHERE ${rel.column} = ${targetId}
-      `)
+        sql.raw(
+          `SELECT COUNT(*) AS count FROM \`${rel.table}\` WHERE \`${rel.column}\` = ${Number.isFinite(tid) ? tid : 0}`
+        )
       );
 
       const count = (result as any)[0][0].count;
