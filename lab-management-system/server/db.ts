@@ -351,7 +351,7 @@ export async function createSample(data: InsertSample) {
   console.log("[createSample] Inserting with these fields:", Object.keys(insertValues));
 
   try {
-    await db.insert(samples).values(insertValues);
+    await db.insert(samples).values(insertValues as any);
     console.log("[createSample] Insert completed");
   } catch (error) {
     console.error("[createSample] Insert FAILED:", error);
