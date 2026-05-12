@@ -346,8 +346,6 @@ export async function createSample(data: InsertSample) {
     receivedById: data.receivedById,
     receivedAt: data.receivedAt,
     managerReadAt: data.managerReadAt ?? null,
-    ...(data.createdAt !== undefined ? { createdAt: data.createdAt } : {}),
-    ...(data.updatedAt !== undefined ? { updatedAt: data.updatedAt } : {}),
   });
 
   const result = await db
