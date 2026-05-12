@@ -1085,6 +1085,7 @@ export async function updateCertificate(id: number, data: Partial<typeof certifi
 
 // ─── Notifications ────────────────────────────────────────────────────────────
 export async function createNotification(data: typeof notifications.$inferInsert) {
+  console.log("[createNotification] Starting with data:", data);
   const db = await getDb();
   if (!db) return;
   const insertValues = {
@@ -1102,10 +1103,11 @@ export async function createNotification(data: typeof notifications.$inferInsert
   const values = columns.map((col) => insertValues[col]);
   const placeholders = columns.map(() => "?").join(", ");
   const [insertHeader] = await db.$client.promise().execute(
-    `INSERT INTO notifications (${columns.map((c) => `\`${c}\``).join(", ")}) 
+    `INSERT INTO notifications (${columns.map((c) => `\`${c}\``).join(", ")})
      VALUES (${placeholders})`,
     values
   );
+  console.log("[createNotification] Insert completed");
   // Broadcast via SSE to the relevant user/sector
   try {
     const { broadcastToUser, broadcastToSector, broadcastToRole } = await import("./sse");
@@ -1149,6 +1151,7 @@ export async function markAllNotificationsRead(userId: number) {
 
 // ─── Sample History ───────────────────────────────────────────────────────────
 export async function addSampleHistory(data: typeof sampleHistory.$inferInsert) {
+  console.log("[addSampleHistory] Starting with data:", data);
   const db = await getDb();
   if (!db) return;
   const insertValues = {
@@ -1163,10 +1166,11 @@ export async function addSampleHistory(data: typeof sampleHistory.$inferInsert) 
   const values = columns.map((col) => insertValues[col]);
   const placeholders = columns.map(() => "?").join(", ");
   await db.$client.promise().execute(
-    `INSERT INTO sample_history (${columns.map((c) => `\`${c}\``).join(", ")}) 
+    `INSERT INTO sample_history (${columns.map((c) => `\`${c}\``).join(", ")})
      VALUES (${placeholders})`,
     values
   );
+  console.log("[addSampleHistory] Insert completed");
 }
 
 export async function getSampleHistory(sampleId: number) {
@@ -1758,6 +1762,7 @@ export async function createLabOrder(data: InsertLabOrder) {
 }
 
 export async function createLabOrderItems(items: InsertLabOrderItem[]) {
+  console.log("[createLabOrderItems] Starting with", items.length, "items");
   const db = await getDb();
   if (!db) throw new Error("DB not available");
   if (items.length === 0) return [];
@@ -1767,10 +1772,11 @@ export async function createLabOrderItems(items: InsertLabOrderItem[]) {
   const rowPlaceholders = items.map(() => `(${placeholders})`).join(", ");
   const values = items.flatMap((item) => columns.map((col) => item[col]));
   await db.$client.promise().execute(
-    `INSERT INTO lab_order_items (${columns.map((c) => `\`${c}\``).join(", ")}) 
+    `INSERT INTO lab_order_items (${columns.map((c) => `\`${c}\``).join(", ")})
       VALUES ${rowPlaceholders}`,
     values
   );
+  console.log("[createLabOrderItems] Insert completed");
   return db
     .select()
     .from(labOrderItems)
