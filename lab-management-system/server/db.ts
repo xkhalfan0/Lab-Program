@@ -348,19 +348,11 @@ export async function createSample(data: InsertSample) {
     receivedAt: data.receivedAt,
     managerReadAt: data.managerReadAt ?? null,
   };
-  console.log("[createSample] Inserting with these fields:", Object.keys(insertValues));
 
   try {
-    await db.insert(samples).values({
-      ...insertValues,
-      id: undefined,
-      deletedAt: undefined,
-      deletedBy: undefined,
-      deletionReason: undefined,
-      deletionCategory: undefined,
-      createdAt: undefined,
-      updatedAt: undefined,
-    } as any);
+    console.log("[createSample] insertValues keys:", Object.keys(insertValues));
+    console.log("[createSample] insertValues object:", JSON.stringify(insertValues, null, 2));
+    await db.insert(samples).values(insertValues as any).$dynamic();
     console.log("[createSample] Insert completed");
   } catch (error) {
     console.error("[createSample] Insert FAILED:", error);
