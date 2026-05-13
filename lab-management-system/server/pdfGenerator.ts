@@ -29,6 +29,9 @@ export function registerPdfRoutes(app: Router) {
 
       const page = await browser.newPage();
 
+      // Ensure @media print rules from stylesheets apply to PDF output
+      await page.emulateMediaType("print");
+
       // Set content and wait for fonts/images to load
       await page.setContent(html, { waitUntil: "networkidle0" });
 

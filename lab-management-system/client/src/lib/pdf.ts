@@ -56,8 +56,8 @@ export async function generatePdf(options: PdfOptions): Promise<boolean> {
 }
 
 /**
- * Capture the inner HTML of a DOM element and send it to the PDF generator.
- * Injects the current page's stylesheets for proper rendering.
+ * Serialize a DOM element (including its root tag/classes) and send it to the PDF generator.
+ * Injects the current page's stylesheet links and inline <style> blocks for rendering.
  */
 export async function generatePdfFromElement(
   element: HTMLElement,
@@ -73,6 +73,10 @@ export async function generatePdfFromElement(
     .map((el) => el.outerHTML)
     .join("\n");
 
+  // Use outerHTML so classes on the captured root (e.g. lab-print-root) are included.
+  // innerHTML only serializes children, which broke @media print rules scoped to that wrapper.
+  const fragment = element.outerHTML;
+
   const html = `<!DOCTYPE html>
 <html dir="${document.documentElement.dir || "rtl"}" lang="${document.documentElement.lang || "ar"}">
 <head>
@@ -87,7 +91,7 @@ export async function generatePdfFromElement(
   </style>
 </head>
 <body>
-  ${element.innerHTML}
+  ${fragment}
 </body>
 </html>`;
 

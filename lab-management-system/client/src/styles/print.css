@@ -1,12 +1,17 @@
 /**
- * Global print rules for lab reports (scoped under .lab-print-root).
- * Import after index.css so these win over generic Tailwind screen styles.
+ * Global print rules for lab reports.
+ *
+ * Uses direct class selectors on tables/cells (not only under .lab-print-root) so borders
+ * still apply when HTML is serialized for server PDF: generatePdfFromElement used to use
+ * innerHTML only, which omitted the printRef wrapper — see client/src/lib/pdf.ts (outerHTML).
+ *
+ * Import after index.css.
  */
 
 @media print {
   @page {
     size: A4;
-    margin: 10mm;
+    margin: 15mm;
   }
 
   html,
@@ -15,14 +20,19 @@
     padding: 0 !important;
   }
 
-  /* Printable report surface — keep badges / status colors where needed */
-  .lab-print-root {
-    background: #fff !important;
-    -webkit-print-color-adjust: exact;
+  body {
     print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
   }
 
-  /* App chrome (when printing from inside dashboard) */
+  /* Printable surface (when wrapper is present) */
+  .lab-print-root {
+    background: #fff !important;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+
+  /* App chrome (printing from inside dashboard) */
   [data-sidebar],
   aside,
   nav,
@@ -34,57 +44,60 @@
     display: none !important;
   }
 
-  /* Strong borders for lab tables inside reports */
-  .lab-print-root table.metadata-table,
-  .lab-print-root table.metadata-table th,
-  .lab-print-root table.metadata-table td,
-  .lab-print-root table.signatures-table,
-  .lab-print-root table.signatures-table th,
-  .lab-print-root table.signatures-table td,
-  .lab-print-root table.lab-results-table,
-  .lab-print-root table.lab-results-table th,
-  .lab-print-root table.lab-results-table td {
+  /* ── Lab report tables: direct selectors (no parent scope required) ── */
+  table.metadata-table,
+  table.signatures-table,
+  table.lab-results-table {
     border: 1px solid #000 !important;
-  }
-
-  .lab-print-root table {
     border-collapse: collapse !important;
     width: 100% !important;
   }
 
-  .lab-print-root table.metadata-table th,
-  .lab-print-root table.lab-results-table th {
+  table.metadata-table th,
+  table.metadata-table td,
+  table.signatures-table th,
+  table.signatures-table td,
+  table.lab-results-table th,
+  table.lab-results-table td {
+    border: 1px solid #000 !important;
+    padding: 8px !important;
+  }
+
+  table.metadata-table th,
+  table.lab-results-table th {
     background-color: #f3f4f6 !important;
     font-weight: 700 !important;
   }
 
-  .lab-print-root .signatures-table td.signature-column {
+  td.signature-column,
+  th.signature-column {
+    border: 1px solid #000 !important;
+    padding: 20px 10px !important;
+    text-align: center !important;
+    vertical-align: top !important;
     width: 33.333%;
-    vertical-align: top;
-    text-align: center;
-    padding: 12px 8px 16px !important;
   }
 
-  .lab-print-root .signature-line {
+  .signature-line {
     min-height: 28px;
   }
 
-  .lab-print-root tr {
+  tr {
     page-break-inside: avoid;
   }
 
-  .lab-print-root h1,
-  .lab-print-root h2,
-  .lab-print-root h3,
-  .lab-print-root h4 {
+  h1,
+  h2,
+  h3,
+  h4 {
     page-break-after: avoid;
   }
 
-  .lab-print-root .report-page {
+  .report-page {
     page-break-inside: avoid;
   }
 
-  .lab-print-root * {
+  * {
     box-shadow: none !important;
     text-shadow: none !important;
   }
