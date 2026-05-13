@@ -9,6 +9,7 @@ import { trpc } from "@/lib/trpc";
 import { Loader2, Printer, X, CheckCircle, XCircle, Globe, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { FlexibleResultsTable, type Column } from "@/components/reports/FlexibleResultsTable";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function fmt(v: any, dec = 2) {
@@ -55,6 +56,45 @@ function renderBlockSection(formData: any, isAr: boolean) {
     ? ["رقم البلوكة", "تاريخ الفحص", "الطول (مم)", "العرض (مم)", "المساحة (مم²)", "الحمل (كن)", "المقاومة (N/mm²)", "النتيجة"]
     : ["Block Ref.", "Date Tested", "Length (mm)", "Width (mm)", "Area (mm²)", "Load (kN)", "Strength (N/mm²)", "Result"];
 
+  const dataRows = blocks
+    .filter((b: any) => b.strengthMpa && b.strengthMpa > 0)
+    .map((b: any, i: number) => ({ ...b, _rowIndex: i }));
+
+  const columns: Column[] = [
+    {
+      header: headers[0],
+      field: "blockRef",
+      align: "center",
+      render: (v, row) => (
+        <span className="font-mono">{String((row as any).blockRef || `B${(row as any)._rowIndex + 1}`)}</span>
+      ),
+    },
+    {
+      header: headers[1],
+      field: "dateTested",
+      align: "center",
+      render: (v) => (v ? fmtDate(v as string, isAr ? "ar" : "en") : "—"),
+    },
+    { header: headers[2], field: "lengthMm", type: "number", decimals: 0, align: "right", render: (v, row) => fmt((row as any).lengthMm ?? (row as any).length, 0) },
+    { header: headers[3], field: "widthMm", type: "number", decimals: 0, align: "right", render: (v, row) => fmt((row as any).widthMm ?? (row as any).width, 0) },
+    { header: headers[4], field: "grossAreaMm2", type: "number", decimals: 0, align: "right", render: (v, row) => fmt((row as any).grossAreaMm2 ?? (row as any).grossArea, 0) },
+    { header: headers[5], field: "loadKN", type: "number", decimals: 1, align: "right" },
+    { header: headers[6], field: "strengthMpa", align: "right", render: (_, row) => <span className="font-bold">{fmt((row as any).strengthMpa, 1)}</span> },
+    {
+      header: headers[7],
+      field: "result",
+      align: "center",
+      render: (_, row) => {
+        const r = (row as any).result;
+        const passTxt = isAr ? "مطابق" : "PASS";
+        const failTxt = isAr ? "غير مطابق" : "FAIL";
+        if (r === "pass") return <span className="text-emerald-800 font-bold">{passTxt}</span>;
+        if (r === "fail") return <span className="text-red-800 font-bold">{failTxt}</span>;
+        return <span className="text-gray-500">—</span>;
+      },
+    },
+  ];
+
   return (
     <div className="mb-6">
       {/* Block type header */}
@@ -76,29 +116,9 @@ function renderBlockSection(formData: any, isAr: boolean) {
       </div>
 
       {/* Results table */}
-      <table className="w-full text-xs border-collapse mb-2">
-        <thead>
-          <tr className="bg-gray-100">
-            {headers.map(h => <th key={h} className="border border-gray-300 px-1.5 py-1 text-center font-semibold">{h}</th>)}
-          </tr>
-        </thead>
-        <tbody>
-          {blocks.filter((b: any) => b.strengthMpa && b.strengthMpa > 0).map((b: any, i: number) => (
-            <tr key={i} className={i % 2 === 0 ? "bg-white" : "bg-gray-50"}>
-              <td className="border border-gray-300 px-1.5 py-1 text-center font-mono">{b.blockRef || `B${i + 1}`}</td>
-              <td className="border border-gray-300 px-1.5 py-1 text-center">{b.dateTested ? fmtDate(b.dateTested, isAr ? "ar" : "en") : "—"}</td>
-              <td className="border border-gray-300 px-1.5 py-1 text-center">{fmt(b.lengthMm ?? b.length, 0)}</td>
-              <td className="border border-gray-300 px-1.5 py-1 text-center">{fmt(b.widthMm ?? b.width, 0)}</td>
-              <td className="border border-gray-300 px-1.5 py-1 text-center">{fmt(b.grossAreaMm2 ?? b.grossArea, 0)}</td>
-              <td className="border border-gray-300 px-1.5 py-1 text-center">{fmt(b.loadKN, 1)}</td>
-              <td className="border border-gray-300 px-1.5 py-1 text-center font-bold">{fmt(b.strengthMpa, 1)}</td>
-              <td className={`border border-gray-300 px-1.5 py-1 text-center font-bold ${b.result === "pass" ? "text-green-700" : b.result === "fail" ? "text-red-600" : "text-gray-500"}`}>
-                {b.result === "pass" ? (isAr ? "مطابق" : "PASS") : b.result === "fail" ? (isAr ? "غير مطابق" : "FAIL") : "—"}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <div className="mb-2">
+        <FlexibleResultsTable columns={columns} rows={dataRows} />
+      </div>
 
       {/* Average */}
       <div className="flex justify-end">

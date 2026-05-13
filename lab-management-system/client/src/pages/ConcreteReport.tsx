@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Printer, X, Download, Loader2 } from "lucide-react";
 import { generatePdfFromElement } from "@/lib/pdf";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { FlexibleResultsTable, type Column } from "@/components/reports/FlexibleResultsTable";
 
 // --- Lab print branding (override via Vite env for deployment-specific details) ---
 const LAB_PRINT_BRANDING = {
@@ -296,6 +297,103 @@ function ReportPage({
         ? avg >= requiredMpa
         : null;
 
+  const padCount = Math.max(0, 3 - cubes.length);
+  const concreteResultRows: Record<string, unknown>[] = [
+    ...cubesWithAge.map((cube, idx) => ({
+      ...cube,
+      testAgeFallback: testAge,
+      densityDisplay: fmtDensity(cube.densityKgM3),
+      avgStrengthCell:
+        idx === cubesWithAge.length - 1 && avg !== null ? (Math.round(avg * 2) / 2).toFixed(1) : "",
+    })),
+    ...Array.from({ length: padCount }, (_, i) => ({
+      _padded: true,
+      markNo: cubes.length + i + 1,
+      cubeId: "",
+      dateTested: "",
+      actualAge: null,
+      effectiveAge: null,
+      length: "",
+      width: "",
+      height: "",
+      massKg: "",
+      densityDisplay: "",
+      maxLoadKN: "",
+      compressiveStrengthMpa: "",
+      avgStrengthCell: "",
+      fractureType: "",
+      isFail: false,
+      isPass: false,
+      testAgeFallback: testAge,
+    })),
+  ];
+
+  const concreteCubeColumns: Column[] = [
+    { header: "Mark No.", field: "markNo", align: "center" },
+    { header: "Cube ID", field: "cubeId", align: "center", render: (v, row) => (row._padded ? "" : String(v ?? "")) },
+    {
+      header: "Date Tested",
+      field: "dateTested",
+      align: "center",
+      render: (v, row) => (row._padded ? "" : fmtDate(v as string)),
+    },
+    {
+      header: "Test Age, Days",
+      field: "actualAge",
+      align: "center",
+      render: (_, row) => {
+        if (row._padded) return "";
+        const actualAge = row.actualAge as number | null;
+        const effectiveAge = row.effectiveAge as number;
+        const tf = row.testAgeFallback as number;
+        if (actualAge !== null && actualAge !== undefined) {
+          return (
+            <span
+              title={effectiveAge !== actualAge ? `Evaluated as ${effectiveAge}-day band` : undefined}
+              style={effectiveAge !== actualAge ? { color: "#c2410c" } : {}}
+            >
+              {actualAge}
+              {effectiveAge !== actualAge ? `→${effectiveAge}` : ""}
+            </span>
+          );
+        }
+        return String(tf);
+      },
+    },
+    { header: "Length (mm)", field: "length", type: "number", decimals: 0, align: "right" },
+    { header: "Width (mm)", field: "width", type: "number", decimals: 0, align: "right" },
+    { header: "Height (mm)", field: "height", type: "number", decimals: 0, align: "right" },
+    { header: "Mass (kg) sat.", field: "massKg", type: "number", decimals: 3, align: "right" },
+    { header: "Density (kg/m³) sat.", field: "densityDisplay", align: "right", render: (v, row) => (row._padded ? "" : String(v ?? "")) },
+    {
+      header: "Max. Load (kN)",
+      field: "maxLoadKN",
+      align: "right",
+      render: (v, row) => (row._padded ? "" : <span className="font-semibold">{fmt(v as string, 1)}</span>),
+    },
+    {
+      header: "Compressive Strength (N/mm²)",
+      field: "compressiveStrengthMpa",
+      align: "center",
+      render: (_, row) => {
+        if (row._padded) return "";
+        const strength = fmtStrength(row.compressiveStrengthMpa as string);
+        const isFail = row.isFail as boolean;
+        const isPass = row.isPass as boolean;
+        const s = parseFloat(String(row.compressiveStrengthMpa ?? "0"));
+        const cls = isFail && s > 0 ? "text-red-700" : isPass && s > 0 ? "text-green-700" : "";
+        return <span className={`font-bold ${cls}`}>{strength}</span>;
+      },
+    },
+    {
+      header: "Avg. Strength (N/mm²)",
+      field: "avgStrengthCell",
+      align: "center",
+      render: (v, row) => (row._padded ? "" : <span className="font-bold">{String(v ?? "")}</span>),
+    },
+    { header: "Fracture", field: "fractureType", align: "center", render: (v, row) => (row._padded ? "" : String(v ?? "")) },
+  ];
+
   const reportDateStr = new Date().toLocaleDateString(ar ? "ar-AE" : "en-GB");
   const footer = ar
     ? {
@@ -454,75 +552,20 @@ function ReportPage({
         </tbody>
       </table>
 
-      {/* Results Table */}
-      <table className="w-full border-collapse border border-black text-xs mb-3">
-        <thead>
-          <tr className="bg-gray-100">
-            <th className="border border-black px-1 py-1 text-center" rowSpan={2}>Mark<br />No.</th>
-            <th className="border border-black px-1 py-1 text-center" rowSpan={2}>Cube ID</th>
-            <th className="border border-black px-1 py-1 text-center" rowSpan={2}>Date<br />Tested</th>
-            <th className="border border-black px-1 py-1 text-center" rowSpan={2}>Test<br />Age,<br />Days</th>
-            <th className="border border-black px-1 py-1 text-center" colSpan={3}>Average Dimensions, mm</th>
-            <th className="border border-black px-1 py-1 text-center" rowSpan={2}>Mass of<br />Specimen,<br />Saturated-kg</th>
-            <th className="border border-black px-1 py-1 text-center" rowSpan={2}>Density,<br />Saturated-<br />kg/m³</th>
-            <th className="border border-black px-1 py-1 text-center" rowSpan={2}>Max. Load<br />at Failure,<br />kN</th>
-            <th className="border border-black px-1 py-1 text-center" rowSpan={2}>Compressive<br />Strength,<br />N/mm²</th>
-            <th className="border border-black px-1 py-1 text-center" rowSpan={2}>Avg.<br />Compressive<br />Strength, N/mm²</th>
-            <th className="border border-black px-1 py-1 text-center" rowSpan={2}>Type of<br />Fracture</th>
-          </tr>
-          <tr className="bg-gray-100">
-            <th className="border border-black px-1 py-1 text-center">Length</th>
-            <th className="border border-black px-1 py-1 text-center">Width</th>
-            <th className="border border-black px-1 py-1 text-center">Height</th>
-          </tr>
-        </thead>
-        <tbody>
-          {cubesWithAge.map((cube, idx) => {
-            const isLast = idx === cubesWithAge.length - 1;
-            const strength = fmtStrength(cube.compressiveStrengthMpa);
-            const density = fmtDensity(cube.densityKgM3);
-            const { isFail, isPass, actualAge, effectiveAge } = cube;
-            const rowBg = isFail ? "bg-red-50" : isPass ? "bg-green-50" : "";
-            return (
-              <tr key={cube.id ?? idx} className={rowBg}>
-                <td className="border border-black px-1 py-1 text-center">{cube.markNo}</td>
-                <td className="border border-black px-1 py-1 text-center">{cube.cubeId ?? ""}</td>
-                <td className="border border-black px-1 py-1 text-center">{fmtDate(cube.dateTested)}</td>
-                <td className="border border-black px-1 py-1 text-center">
-                  {actualAge !== null ? (
-                    <span title={effectiveAge !== actualAge ? `Evaluated as ${effectiveAge}-day band` : undefined}
-                      style={effectiveAge !== actualAge ? { color: '#c2410c' } : {}}>
-                      {actualAge}{effectiveAge !== actualAge ? `→${effectiveAge}` : ''}
-                    </span>
-                  ) : group.testAge}
-                </td>
-                <td className="border border-black px-1 py-1 text-center">{fmt(cube.length, 0)}</td>
-                <td className="border border-black px-1 py-1 text-center">{fmt(cube.width, 0)}</td>
-                <td className="border border-black px-1 py-1 text-center">{fmt(cube.height, 0)}</td>
-                <td className="border border-black px-1 py-1 text-center">{fmt(cube.massKg, 3)}</td>
-                <td className="border border-black px-1 py-1 text-center">{density}</td>
-                <td className="border border-black px-1 py-1 text-center font-semibold">{fmt(cube.maxLoadKN, 1)}</td>
-                <td className={`border border-black px-1 py-1 text-center font-bold ${isFail ? "text-red-700" : isPass ? "text-green-700" : ""}`}>
-                  {strength}
-                </td>
-                <td className="border border-black px-1 py-1 text-center font-bold">
-                  {isLast && avg !== null ? (Math.round(avg * 2) / 2).toFixed(1) : ""}
-                </td>
-                <td className="border border-black px-1 py-1 text-center">{cube.fractureType ?? ""}</td>
-              </tr>
-            );
-          })}
-          {/* Empty rows to match original format */}
-          {cubes.length < 3 && Array.from({ length: 3 - cubes.length }).map((_, i) => (
-            <tr key={`empty-${i}`}>
-              <td className="border border-black px-1 py-2 text-center">{cubes.length + i + 1}</td>
-              {Array.from({ length: 12 }).map((_, j) => (
-                <td key={j} className="border border-black px-1 py-2"></td>
-              ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      {/* Results */}
+      <div className="mb-3">
+        <FlexibleResultsTable
+          columns={concreteCubeColumns}
+          rows={concreteResultRows}
+          rowClassName={(row) => {
+            if (row._padded) return "";
+            const s = parseFloat(String(row.compressiveStrengthMpa ?? "0"));
+            if (row.isFail && s > 0) return "bg-red-50";
+            if (row.isPass && s > 0) return "bg-green-50";
+            return "";
+          }}
+        />
+      </div>
 
       {/* Comments — user notes from test form only (no hidden metadata / auto system notes) */}
       <div className="border border-slate-400 rounded-sm p-3 mb-3 min-h-[4.5rem] bg-slate-50/90 print:bg-white">

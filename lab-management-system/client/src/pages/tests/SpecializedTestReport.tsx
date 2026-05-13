@@ -9,6 +9,7 @@ import { trpc } from "@/lib/trpc";
 import { Loader2, Printer, X, CheckCircle, XCircle, Globe, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { FlexibleResultsTable, type Column, formDataToKeyValueRows, keyValueColumns } from "@/components/reports/FlexibleResultsTable";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function fmt(v: any, dec = 2) {
@@ -91,45 +92,66 @@ function renderConcreteCore(fd: any, isAr: boolean, castingDateMs?: number | nul
           </div>
         )}
       </div>
-      <table className="w-full text-xs border-collapse">
-      <thead>
-        <tr className="bg-gray-100">
-          {headers.map(h => <th key={h} className="border border-gray-300 px-1.5 py-1 text-center font-semibold">{h}</th>)}
-        </tr>
-      </thead>
-      <tbody>
-        {rows.map((r: any, i: number) => {
-          const eqStrength = r.equivalentCubeStrength ?? r.correctedStrength;
-          const isLDOne = r.ld !== undefined && r.ld >= 1.0 && r.ld < 2.0;
-          const isLDTwo = r.ld !== undefined && r.ld >= 2.0;
-          // Length: use lengthAfterCap if available, otherwise length
-          const displayLength = r.length ?? r.lengthAfterCap;
-          return (
-            <tr key={i} className={i % 2 === 0 ? "bg-white" : "bg-gray-50"}>
-              <td className="border border-gray-300 px-1.5 py-1 text-center">{r.coreNo ?? (i + 1)}</td>
-              <td className="border border-gray-300 px-1.5 py-1 text-center">{r.location || "—"}</td>
-              {hasAge && <td className="border border-gray-300 px-1.5 py-1 text-center">{calcAge(r.testDateMs) ?? "—"}</td>}
-              <td className="border border-gray-300 px-1.5 py-1 text-center">{fmt(r.diameter, 0)}</td>
-              <td className="border border-gray-300 px-1.5 py-1 text-center">{displayLength ? fmt(displayLength, 0) : "—"}</td>
-              <td className="border border-gray-300 px-1.5 py-1 text-center">{r.density != null ? r.density : "—"}</td>
-              <td className="border border-gray-300 px-1.5 py-1 text-center">{fmt(r.ld ?? r.ldRatio)}</td>
-              <td className="border border-gray-300 px-1.5 py-1 text-center">
-                {isLDOne || Number(r.correctionFactor) >= 0.999 ? "1.000" : fmt(r.correctionFactor)}
-              </td>
-              <td className="border border-gray-300 px-1.5 py-1 text-center">{fmt(r.maxLoad ?? r.maxLoadKN)}</td>
-              <td className="border border-gray-300 px-1.5 py-1 text-center">{fmtStr(r.coreStrength)}</td>
-              <td className="border border-gray-300 px-1.5 py-1 text-center font-bold">
-                {fmtStr(eqStrength)}
-                {isLDTwo && <sup className="text-amber-600 text-[9px] ml-0.5" title={isAr ? "قوة أسطوانة" : "Cylinder strength"}>cyl</sup>}
-              </td>
-              <td className={`border border-gray-300 px-1.5 py-1 text-center font-bold ${r.result === "pass" ? "text-green-700" : "text-red-600"}`}>
-                {r.result === "pass" ? (isAr ? "مطابق" : "PASS") : r.result === "fail" ? (isAr ? "غير مطابق" : "FAIL") : "—"}
-              </td>
-            </tr>
-          );
-        })}
-      </tbody>
-    </table>
+      <FlexibleResultsTable
+        columns={[
+          { header: headers[0], field: "coreNo", align: "center", render: (v, row) => String((row as any).coreNo ?? ((row as any)._idx + 1)) },
+          { header: headers[1], field: "location", align: "center", render: (v) => String(v || "—") },
+          ...(hasAge
+            ? [{ header: headers[2], field: "_ageDays", align: "center" } as Column]
+            : []),
+          { header: headers[hasAge ? 3 : 2], field: "diameter", type: "number", decimals: 0, align: "right" },
+          { header: headers[hasAge ? 4 : 3], field: "_lengthMm", align: "right", render: (_, row) => {
+            const displayLength = (row as any).length ?? (row as any).lengthAfterCap;
+            return displayLength ? fmt(displayLength, 0) : "—";
+          }},
+          { header: headers[hasAge ? 5 : 4], field: "density", align: "center", render: (v) => (v != null ? String(v) : "—") },
+          { header: headers[hasAge ? 6 : 5], field: "ld", align: "center", render: (_, row) => fmt((row as any).ld ?? (row as any).ldRatio) },
+          { header: headers[hasAge ? 7 : 6], field: "correctionFactor", align: "center", render: (_, row) => {
+            const r = row as any;
+            const isLDOne = r.ld !== undefined && r.ld >= 1.0 && r.ld < 2.0;
+            return isLDOne || Number(r.correctionFactor) >= 0.999 ? "1.000" : fmt(r.correctionFactor);
+          }},
+          { header: headers[hasAge ? 8 : 7], field: "maxLoad", align: "right", render: (_, row) => fmt((row as any).maxLoad ?? (row as any).maxLoadKN) },
+          { header: headers[hasAge ? 9 : 8], field: "coreStrength", align: "right", render: (v) => fmtStr(v) },
+          {
+            header: headers[hasAge ? 10 : 9],
+            field: "_eq",
+            align: "center",
+            render: (_, row) => {
+              const r = row as any;
+              const eqStrength = r.equivalentCubeStrength ?? r.correctedStrength;
+              const isLDTwo = r.ld !== undefined && r.ld >= 2.0;
+              return (
+                <span className="font-bold">
+                  {fmtStr(eqStrength)}
+                  {isLDTwo && (
+                    <sup className="text-amber-600 text-[9px] ms-0.5" title={isAr ? "قوة أسطوانة" : "Cylinder strength"}>
+                      cyl
+                    </sup>
+                  )}
+                </span>
+              );
+            },
+          },
+          {
+            header: headers[headers.length - 1],
+            field: "result",
+            type: "status",
+            align: "center",
+            render: (_, row) => {
+              const r = (row as any).result;
+              if (r === "pass") return <span className="text-emerald-800 font-bold">{isAr ? "مطابق" : "PASS"}</span>;
+              if (r === "fail") return <span className="text-red-800 font-bold">{isAr ? "غير مطابق" : "FAIL"}</span>;
+              return "—";
+            },
+          },
+        ]}
+        rows={rows.map((r: any, i: number) => ({
+          ...r,
+          _idx: i,
+          _ageDays: hasAge ? (calcAge(r.testDateMs) ?? "—") : undefined,
+        }))}
+      />
     </>
   );
 }
@@ -185,6 +207,27 @@ function renderConcreteBlocks(fd: any, isAr: boolean) {
   const headers = isAr
     ? ["المرجع", "التاريخ", "الطول", "العرض", "الوزن (غ)", "الحمل (كن)", "المساحة", "القوة", "CF", "القوة المصححة", "النتيجة"]
     : ["Block Ref", "Date Tested", "L (mm)", "W (mm)", "Weight (g)", "Load (kN)", "Gross Area (mm²)", "Strength (N/mm²)", "CF", "Corrected Strength (N/mm²)", "Result"];
+
+  const passFailRenderBlocks = (_: unknown, row: Record<string, unknown>) => {
+    const b = row as any;
+    if (b.result === "pass") return <span className="text-emerald-800 font-bold">{isAr ? "مطابق" : "PASS"}</span>;
+    if (b.result === "fail") return <span className="text-red-800 font-bold">{isAr ? "راسب" : "FAIL"}</span>;
+    return "—";
+  };
+  const blockColumns: Column[] = [
+    { header: headers[0], field: "blockRef", align: "center", render: (_v, row) => String((row as any).blockRef ?? ((row as any)._bi + 1)) },
+    { header: headers[1], field: "dateTested", align: "center", render: (v) => String(v || "—") },
+    { header: headers[2], field: "lengthMm", align: "center", render: (_v, row) => String((row as any).lengthMm ?? "—") },
+    { header: headers[3], field: "widthMm", align: "center", render: (_v, row) => String((row as any).widthMm ?? "—") },
+    { header: headers[4], field: "weightG", align: "center", render: (_v, row) => String((row as any).weightG ?? "—") },
+    { header: headers[5], field: "loadKN", align: "center", render: (_v, row) => ((row as any).loadKN != null ? fmt((row as any).loadKN, 1) : "—") },
+    { header: headers[6], field: "grossAreaMm2", align: "center", render: (_v, row) => String((row as any).grossAreaMm2 ?? "—") },
+    { header: headers[7], field: "strengthMpa", align: "center", render: (v) => <span className="font-semibold">{fmtS(v)}</span> },
+    { header: headers[8], field: "_cf", align: "center", render: (_v, row) => <span className="text-blue-800">{fmtS(getBlockCf(row as any))}</span> },
+    { header: headers[9], field: "_corr", align: "center", render: (_v, row) => <span className="font-bold">{fmtS(getCorrectedStrength(row as any))}</span> },
+    { header: headers[10], field: "result", align: "center", render: passFailRenderBlocks },
+  ];
+
   return (
     <div className="text-xs space-y-3">
       <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
@@ -223,34 +266,7 @@ function renderConcreteBlocks(fd: any, isAr: boolean) {
           </div>
         )}
       </div>
-      {blocks.length > 0 && (
-        <table className="w-full text-xs border-collapse">
-          <thead>
-            <tr className="bg-gray-100">
-              {headers.map(h => <th key={h} className="border border-gray-300 px-1 py-1 font-semibold text-center">{h}</th>)}
-            </tr>
-          </thead>
-          <tbody>
-            {blocks.map((b: any, i: number) => (
-              <tr key={i} className={i % 2 === 0 ? "bg-white" : "bg-gray-50"}>
-                <td className="border border-gray-300 px-1 py-1 text-center font-mono">{b.blockRef ?? i + 1}</td>
-                <td className="border border-gray-300 px-1 py-1 text-center">{b.dateTested || "—"}</td>
-                <td className="border border-gray-300 px-1 py-1 text-center">{b.lengthMm ?? "—"}</td>
-                <td className="border border-gray-300 px-1 py-1 text-center">{b.widthMm ?? "—"}</td>
-                <td className="border border-gray-300 px-1 py-1 text-center">{b.weightG ?? "—"}</td>
-                <td className="border border-gray-300 px-1 py-1 text-center">{b.loadKN != null ? fmt(b.loadKN, 1) : "—"}</td>
-                <td className="border border-gray-300 px-1 py-1 text-center">{b.grossAreaMm2 ?? "—"}</td>
-                <td className="border border-gray-300 px-1 py-1 text-center font-semibold">{fmtS(b.strengthMpa)}</td>
-                <td className="border border-gray-300 px-1 py-1 text-center text-blue-700">{fmtS(getBlockCf(b))}</td>
-                <td className="border border-gray-300 px-1 py-1 text-center font-bold">{fmtS(getCorrectedStrength(b))}</td>
-                <td className={`border border-gray-300 px-1 py-1 text-center font-bold ${b.result === "pass" ? "text-green-700" : "text-red-600"}`}>
-                  {b.result === "pass" ? (isAr ? "مطابق" : "PASS") : b.result === "fail" ? (isAr ? "راسب" : "FAIL") : "—"}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
+      {blocks.length > 0 && <FlexibleResultsTable columns={blockColumns} rows={blocks.map((b: any, i: number) => ({ ...b, _bi: i }))} />}
       <div className="flex flex-wrap gap-3 justify-end text-xs">
         <span className="font-semibold">
           {isAr ? "متوسط القوة المصححة:" : "Average Corrected Strength:"} {fmtS(avgCorrectedStrength)} N/mm²
@@ -269,34 +285,32 @@ function renderSteelRebar(fd: any, isAr: boolean) {
   const headers = isAr
     ? ["رقم القضيب", "القطر (مم)", "الوزن/م (كغ)", "حمل الخضوع (كن)", "مقاومة الخضوع (MPa)", "حمل UTS (كن)", "UTS (MPa)", "الاستطالة (%)", "الانحناء", "النتيجة"]
     : ["Bar No.", "Dia (mm)", "Weight/m (kg)", "Yield Load (kN)", "Yield Strength (MPa)", "UTS Load (kN)", "UTS (MPa)", "Elong. (%)", "Bend", "Result"];
+  const bendResult = (_: unknown, row: Record<string, unknown>) => {
+    const r = row as any;
+    if (r.bendResult === "pass") return <span className="text-emerald-800 font-bold">{isAr ? "مطابق" : "PASS"}</span>;
+    if (r.bendResult === "fail") return <span className="text-red-800 font-bold">{isAr ? "غير مطابق" : "FAIL"}</span>;
+    return "—";
+  };
+  const overallResult = (_: unknown, row: Record<string, unknown>) => {
+    const r = row as any;
+    if (r.overallResult === "pass") return <span className="text-emerald-800 font-bold">{isAr ? "مطابق" : "PASS"}</span>;
+    if (r.overallResult === "fail") return <span className="text-red-800 font-bold">{isAr ? "غير مطابق" : "FAIL"}</span>;
+    return "—";
+  };
+  const steelCols: Column[] = [
+    { header: headers[0], field: "_i", align: "center", render: (_v, row) => String((row as any)._i + 1) },
+    { header: headers[1], field: "diameter", type: "number", decimals: 0, align: "right" },
+    { header: headers[2], field: "weightPerMeter", type: "number", decimals: 2, align: "right" },
+    { header: headers[3], field: "yieldLoadKN", type: "number", decimals: 2, align: "right" },
+    { header: headers[4], field: "yieldStrength", type: "number", decimals: 2, align: "right" },
+    { header: headers[5], field: "utsLoadKN", type: "number", decimals: 2, align: "right" },
+    { header: headers[6], field: "uts", type: "number", decimals: 2, align: "right" },
+    { header: headers[7], field: "elongation", type: "number", decimals: 2, align: "right" },
+    { header: headers[8], field: "bendResult", align: "center", render: bendResult },
+    { header: headers[9], field: "overallResult", align: "center", render: overallResult },
+  ];
   return (
-    <table className="w-full text-xs border-collapse">
-      <thead>
-        <tr className="bg-gray-100">
-          {headers.map(h => <th key={h} className="border border-gray-300 px-1.5 py-1 text-center font-semibold">{h}</th>)}
-        </tr>
-      </thead>
-      <tbody>
-        {rows.map((r: any, i: number) => (
-          <tr key={i} className={i % 2 === 0 ? "bg-white" : "bg-gray-50"}>
-            <td className="border border-gray-300 px-1.5 py-1 text-center">{i + 1}</td>
-            <td className="border border-gray-300 px-1.5 py-1 text-center">{fmt(r.diameter, 0)}</td>
-            <td className="border border-gray-300 px-1.5 py-1 text-center">{fmt(r.weightPerMeter)}</td>
-            <td className="border border-gray-300 px-1.5 py-1 text-center">{fmt(r.yieldLoadKN)}</td>
-            <td className="border border-gray-300 px-1.5 py-1 text-center">{fmt(r.yieldStrength)}</td>
-            <td className="border border-gray-300 px-1.5 py-1 text-center">{fmt(r.utsLoadKN)}</td>
-            <td className="border border-gray-300 px-1.5 py-1 text-center">{fmt(r.uts)}</td>
-            <td className="border border-gray-300 px-1.5 py-1 text-center">{fmt(r.elongation)}</td>
-            <td className={`border border-gray-300 px-1.5 py-1 text-center font-bold ${r.bendResult === "pass" ? "text-green-700" : "text-red-600"}`}>
-              {r.bendResult === "pass" ? (isAr ? "مطابق" : "PASS") : r.bendResult === "fail" ? (isAr ? "غير مطابق" : "FAIL") : "—"}
-            </td>
-            <td className={`border border-gray-300 px-1.5 py-1 text-center font-bold ${r.overallResult === "pass" ? "text-green-700" : "text-red-600"}`}>
-              {r.overallResult === "pass" ? (isAr ? "مطابق" : "PASS") : r.overallResult === "fail" ? (isAr ? "غير مطابق" : "FAIL") : "—"}
-            </td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
+    <FlexibleResultsTable columns={steelCols} rows={rows.map((r: any, i: number) => ({ ...r, _i: i }))} />
   );
 }
 
@@ -345,29 +359,39 @@ function renderSieveAnalysis(fd: any, isAr: boolean) {
           )}
         </div>
       )}
-      <table className="w-full text-xs border-collapse">
-        <thead>
-          <tr className="bg-gray-100">
-            {headers.map(h => <th key={h} className="border border-gray-300 px-2 py-1 text-center font-semibold">{h}</th>)}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((s: any, i: number) => (
-            <tr key={i} className={i % 2 === 0 ? "bg-white" : "bg-gray-50"}>
-              <td className="border border-gray-300 px-2 py-1 text-center font-semibold">{s.sieve ?? s.size}</td>
-              <td className="border border-gray-300 px-2 py-1 text-center">{s.massRetained ?? fmt(s.retained)}</td>
-              <td className="border border-gray-300 px-2 py-1 text-center">{s.pctRetained !== undefined ? s.pctRetained.toFixed(1) : fmt(s.percentRetained)}</td>
-              <td className="border border-gray-300 px-2 py-1 text-center">{s.cumRetained !== undefined ? s.cumRetained.toFixed(1) : fmt(s.cumRetained)}</td>
-              <td className="border border-gray-300 px-2 py-1 text-center font-semibold">{s.cumPassing !== undefined ? s.cumPassing.toFixed(1) : fmt(s.percentPassing)}</td>
-              <td className="border border-gray-300 px-2 py-1 text-center text-blue-700">{s.lower ?? s.lowerLimit ?? "—"}</td>
-              <td className="border border-gray-300 px-2 py-1 text-center text-blue-700">{s.upper ?? s.upperLimit ?? "—"}</td>
-              <td className={`border border-gray-300 px-2 py-1 text-center font-bold ${s.withinLimits ? "text-green-700" : s.withinLimits === false ? "text-red-600" : "text-gray-500"}`}>
-                {s.withinLimits === true ? "✓" : s.withinLimits === false ? "✗" : "—"}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <FlexibleResultsTable
+        columns={[
+          { header: headers[0], field: "sieve", align: "center", render: (_, row) => <span className="font-semibold">{String((row as any).sieve ?? (row as any).size ?? "")}</span> },
+          { header: headers[1], field: "massRetained", align: "right", render: (_, row) => String((row as any).massRetained ?? fmt((row as any).retained)) },
+          { header: headers[2], field: "pctRetained", align: "right", render: (_, row) => {
+            const s = row as any;
+            return s.pctRetained !== undefined ? s.pctRetained.toFixed(1) : fmt(s.percentRetained);
+          }},
+          { header: headers[3], field: "cumRetained", align: "right", render: (_, row) => {
+            const s = row as any;
+            return s.cumRetained !== undefined ? s.cumRetained.toFixed(1) : fmt(s.cumRetained);
+          }},
+          { header: headers[4], field: "cumPassing", align: "right", render: (_, row) => {
+            const s = row as any;
+            const v = s.cumPassing !== undefined ? s.cumPassing.toFixed(1) : fmt(s.percentPassing);
+            return <span className="font-semibold">{v}</span>;
+          }},
+          { header: headers[5], field: "lower", align: "center", render: (_, row) => <span className="text-blue-800">{String((row as any).lower ?? (row as any).lowerLimit ?? "—")}</span> },
+          { header: headers[6], field: "upper", align: "center", render: (_, row) => <span className="text-blue-800">{String((row as any).upper ?? (row as any).upperLimit ?? "—")}</span> },
+          {
+            header: headers[7],
+            field: "withinLimits",
+            align: "center",
+            render: (_, row) => {
+              const s = row as any;
+              if (s.withinLimits === true) return <span className="text-emerald-800 font-bold">✓</span>;
+              if (s.withinLimits === false) return <span className="text-red-800 font-bold">✗</span>;
+              return <span className="text-gray-500">—</span>;
+            },
+          },
+        ]}
+        rows={rows}
+      />
       {fd.finesModulus !== undefined && (
         <div className="text-xs bg-blue-50 border border-blue-100 rounded px-3 py-1.5">
           <span className="font-semibold text-blue-700">{isAr ? "معامل النعومة (FM):" : "Fineness Modulus (FM):"}</span>
@@ -384,28 +408,18 @@ function renderSoilProctor(fd: any, isAr: boolean) {
   const headers = isAr
     ? ["النقطة", "قالب+تربة (غ)", "القالب (غ)", "التربة (غ)", "الكثافة الرطبة (غ/سم³)", "نسبة الرطوبة (%)", "الكثافة الجافة (غ/سم³)"]
     : ["Point", "Mould+Soil (g)", "Mould (g)", "Soil (g)", "Wet Density (g/cm³)", "Water Content (%)", "Dry Density (g/cm³)"];
+  const proctorCols: Column[] = [
+    { header: headers[0], field: "_pt", align: "center", render: (_v, row) => String((row as any)._pt) },
+    { header: headers[1], field: "mouldSoil", type: "number", decimals: 2, align: "right" },
+    { header: headers[2], field: "mouldWeight", type: "number", decimals: 2, align: "right" },
+    { header: headers[3], field: "soilWeight", type: "number", decimals: 2, align: "right" },
+    { header: headers[4], field: "wetDensity", type: "number", decimals: 2, align: "right" },
+    { header: headers[5], field: "waterContent", type: "number", decimals: 2, align: "right" },
+    { header: headers[6], field: "dryDensity", type: "number", decimals: 2, align: "right", render: (v) => <span className="font-semibold">{fmt(v)}</span> },
+  ];
   return (
     <>
-      <table className="w-full text-xs border-collapse mb-4">
-        <thead>
-          <tr className="bg-gray-100">
-            {headers.map(h => <th key={h} className="border border-gray-300 px-2 py-1 text-center font-semibold">{h}</th>)}
-          </tr>
-        </thead>
-        <tbody>
-          {points.map((p: any, i: number) => (
-            <tr key={i} className={i % 2 === 0 ? "bg-white" : "bg-gray-50"}>
-              <td className="border border-gray-300 px-2 py-1 text-center">{i + 1}</td>
-              <td className="border border-gray-300 px-2 py-1 text-center">{fmt(p.mouldSoil)}</td>
-              <td className="border border-gray-300 px-2 py-1 text-center">{fmt(p.mouldWeight)}</td>
-              <td className="border border-gray-300 px-2 py-1 text-center">{fmt(p.soilWeight)}</td>
-              <td className="border border-gray-300 px-2 py-1 text-center">{fmt(p.wetDensity)}</td>
-              <td className="border border-gray-300 px-2 py-1 text-center">{fmt(p.waterContent)}</td>
-              <td className="border border-gray-300 px-2 py-1 text-center font-semibold">{fmt(p.dryDensity)}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <FlexibleResultsTable columns={proctorCols} rows={points.map((p: any, i: number) => ({ ...p, _pt: i + 1 }))} />
       <div className="grid grid-cols-3 gap-4 text-xs">
         <div className="bg-blue-50 border border-blue-200 rounded p-3 text-center">
           <p className="text-blue-600 font-semibold">{isAr ? "أقصى كثافة جافة (MDD)" : "Max Dry Density (MDD)"}</p>
@@ -429,29 +443,21 @@ function renderAsphaltMarshall(fd: any, isAr: boolean) {
   const headers = isAr
     ? ["العينة", "نسبة البيتومين (%)", "الكثافة الكلية", "الثبات (كن)", "الانسياب (مم)", "VMA (%)", "VFA (%)", "الفراغات الهوائية (%)"]
     : ["Spec.", "Bitumen (%)", "Bulk Density", "Stability (kN)", "Flow (mm)", "VMA (%)", "VFA (%)", "Air Voids (%)"];
+  const marshallCols: Column[] = [
+    { header: headers[0], field: "_i", align: "center", render: (_v, row) => String((row as any)._i + 1) },
+    { header: headers[1], field: "bitumenContent", type: "number", decimals: 2, align: "right" },
+    { header: headers[2], field: "bulkDensity", type: "number", decimals: 2, align: "right" },
+    { header: headers[3], field: "stability", type: "number", decimals: 2, align: "right" },
+    { header: headers[4], field: "flow", type: "number", decimals: 2, align: "right" },
+    { header: headers[5], field: "vma", type: "number", decimals: 2, align: "right" },
+    { header: headers[6], field: "vfa", type: "number", decimals: 2, align: "right" },
+    { header: headers[7], field: "airVoids", type: "number", decimals: 2, align: "right" },
+  ];
   return (
     <>
-      <table className="w-full text-xs border-collapse mb-4">
-        <thead>
-          <tr className="bg-gray-100">
-            {headers.map(h => <th key={h} className="border border-gray-300 px-1.5 py-1 text-center font-semibold">{h}</th>)}
-          </tr>
-        </thead>
-        <tbody>
-          {specimens.map((s: any, i: number) => (
-            <tr key={i} className={i % 2 === 0 ? "bg-white" : "bg-gray-50"}>
-              <td className="border border-gray-300 px-1.5 py-1 text-center">{i + 1}</td>
-              <td className="border border-gray-300 px-1.5 py-1 text-center">{fmt(s.bitumenContent)}</td>
-              <td className="border border-gray-300 px-1.5 py-1 text-center">{fmt(s.bulkDensity)}</td>
-              <td className="border border-gray-300 px-1.5 py-1 text-center">{fmt(s.stability)}</td>
-              <td className="border border-gray-300 px-1.5 py-1 text-center">{fmt(s.flow)}</td>
-              <td className="border border-gray-300 px-1.5 py-1 text-center">{fmt(s.vma)}</td>
-              <td className="border border-gray-300 px-1.5 py-1 text-center">{fmt(s.vfa)}</td>
-              <td className="border border-gray-300 px-1.5 py-1 text-center">{fmt(s.airVoids)}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <div className="mb-4">
+        <FlexibleResultsTable columns={marshallCols} rows={specimens.map((s: any, i: number) => ({ ...s, _i: i }))} />
+      </div>
       {fd.obc && (
         <div className="bg-amber-50 border border-amber-200 rounded p-3 text-xs text-center">
           <span className="font-semibold text-amber-800">
@@ -502,30 +508,28 @@ function renderConcreteFoam(fd: any, isAr: boolean) {
       {hasCubes && (
         <>
           <p className="text-xs font-semibold text-gray-600">{isAr ? "نتائج المكعبات" : "Cube Results"}</p>
-          <table className="w-full text-xs border-collapse">
-            <thead>
-              <tr className="bg-gray-100">
-                {[isAr ? "رقم" : "No.", isAr ? "العمر (يوم)" : "Age (days)", isAr ? "الحمل (كن)" : "Load (kN)", isAr ? "المساحة (مم²)" : "Area (mm²)", isAr ? "المقاومة (N/mm²)" : "Strength (N/mm²)", isAr ? "الكثافة (kg/m³)" : "Density (kg/m³)", isAr ? "النتيجة" : "Result"].map(h => (
-                  <th key={h} className="border border-gray-300 px-1.5 py-1 text-center font-semibold">{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {cubes.map((c: any, i: number) => (
-                <tr key={i} className={i % 2 === 0 ? "bg-white" : "bg-gray-50"}>
-                  <td className="border border-gray-300 px-1.5 py-1 text-center">{i + 1}</td>
-                  <td className="border border-gray-300 px-1.5 py-1 text-center">{c.age ?? "—"}</td>
-                  <td className="border border-gray-300 px-1.5 py-1 text-center">{c.maxLoad ?? "—"}</td>
-                  <td className="border border-gray-300 px-1.5 py-1 text-center">{c.area ? Number(c.area).toFixed(0) : "—"}</td>
-                  <td className="border border-gray-300 px-1.5 py-1 text-center font-bold">{c.strength ? Number(c.strength).toFixed(2) : "—"}</td>
-                  <td className="border border-gray-300 px-1.5 py-1 text-center">{c.density ? Number(c.density).toFixed(0) : "—"}</td>
-                  <td className={`border border-gray-300 px-1.5 py-1 text-center font-bold ${c.result === "pass" ? "text-green-700" : c.result === "fail" ? "text-red-600" : "text-gray-500"}`}>
-                    {c.result === "pass" ? (isAr ? "مطابق" : "PASS") : c.result === "fail" ? (isAr ? "غير مطابق" : "FAIL") : "—"}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <FlexibleResultsTable
+            columns={[
+              { header: isAr ? "رقم" : "No.", field: "_i", align: "center", render: (_v, row) => String((row as any)._i + 1) },
+              { header: isAr ? "العمر (يوم)" : "Age (days)", field: "age", align: "center", render: (v) => String(v ?? "—") },
+              { header: isAr ? "الحمل (كن)" : "Load (kN)", field: "maxLoad", align: "right", render: (v) => String(v ?? "—") },
+              { header: isAr ? "المساحة (مم²)" : "Area (mm²)", field: "area", align: "right", render: (v) => (v ? Number(v).toFixed(0) : "—") },
+              { header: isAr ? "المقاومة (N/mm²)" : "Strength (N/mm²)", field: "strength", align: "right", render: (v) => <span className="font-bold">{v ? Number(v).toFixed(2) : "—"}</span> },
+              { header: isAr ? "الكثافة (kg/m³)" : "Density (kg/m³)", field: "density", align: "right", render: (v) => (v ? Number(v).toFixed(0) : "—") },
+              {
+                header: isAr ? "النتيجة" : "Result",
+                field: "result",
+                align: "center",
+                render: (_, row) => {
+                  const r = (row as any).result;
+                  if (r === "pass") return <span className="text-emerald-800 font-bold">{isAr ? "مطابق" : "PASS"}</span>;
+                  if (r === "fail") return <span className="text-red-800 font-bold">{isAr ? "غير مطابق" : "FAIL"}</span>;
+                  return <span className="text-gray-500">—</span>;
+                },
+              },
+            ]}
+            rows={cubes.map((c: any, i: number) => ({ ...c, _i: i }))}
+          />
         </>
       )}
 
@@ -533,30 +537,28 @@ function renderConcreteFoam(fd: any, isAr: boolean) {
       {hasDensity && (
         <>
           <p className="text-xs font-semibold text-gray-600">{isAr ? "عينات الكثافة" : "Density Specimens"}</p>
-          <table className="w-full text-xs border-collapse">
-            <thead>
-              <tr className="bg-gray-100">
-                {[isAr ? "رقم" : "No.", isAr ? "الوزن الرطب (غ)" : "Wet Wt (g)", isAr ? "الوزن الجاف (غ)" : "Dry Wt (g)", isAr ? "الكثافة الطازجة (kg/m³)" : "Fresh Density (kg/m³)", isAr ? "الكثافة الجافة (kg/m³)" : "Dry Density (kg/m³)", isAr ? "الرطوبة (%)" : "Moisture (%)", isAr ? "النتيجة" : "Result"].map(h => (
-                  <th key={h} className="border border-gray-300 px-1.5 py-1 text-center font-semibold">{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {densitySpecimens.map((d: any, i: number) => (
-                <tr key={i} className={i % 2 === 0 ? "bg-white" : "bg-gray-50"}>
-                  <td className="border border-gray-300 px-1.5 py-1 text-center">{i + 1}</td>
-                  <td className="border border-gray-300 px-1.5 py-1 text-center">{d.wetWeight ?? "—"}</td>
-                  <td className="border border-gray-300 px-1.5 py-1 text-center">{d.dryWeight ?? "—"}</td>
-                  <td className="border border-gray-300 px-1.5 py-1 text-center">{d.freshDensity ? Number(d.freshDensity).toFixed(0) : "—"}</td>
-                  <td className="border border-gray-300 px-1.5 py-1 text-center font-bold">{d.dryDensity ? Number(d.dryDensity).toFixed(0) : "—"}</td>
-                  <td className="border border-gray-300 px-1.5 py-1 text-center">{d.moistureContent ? Number(d.moistureContent).toFixed(1) : "—"}</td>
-                  <td className={`border border-gray-300 px-1.5 py-1 text-center font-bold ${d.result === "pass" ? "text-green-700" : d.result === "fail" ? "text-red-600" : "text-gray-500"}`}>
-                    {d.result === "pass" ? (isAr ? "مطابق" : "PASS") : d.result === "fail" ? (isAr ? "غير مطابق" : "FAIL") : "—"}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <FlexibleResultsTable
+            columns={[
+              { header: isAr ? "رقم" : "No.", field: "_i", align: "center", render: (_v, row) => String((row as any)._i + 1) },
+              { header: isAr ? "الوزن الرطب (غ)" : "Wet Wt (g)", field: "wetWeight", align: "right", render: (v) => String(v ?? "—") },
+              { header: isAr ? "الوزن الجاف (غ)" : "Dry Wt (g)", field: "dryWeight", align: "right", render: (v) => String(v ?? "—") },
+              { header: isAr ? "الكثافة الطازجة (kg/m³)" : "Fresh Density (kg/m³)", field: "freshDensity", align: "right", render: (v) => (v ? Number(v).toFixed(0) : "—") },
+              { header: isAr ? "الكثافة الجافة (kg/m³)" : "Dry Density (kg/m³)", field: "dryDensity", align: "right", render: (v) => <span className="font-bold">{v ? Number(v).toFixed(0) : "—"}</span> },
+              { header: isAr ? "الرطوبة (%)" : "Moisture (%)", field: "moistureContent", align: "right", render: (v) => (v ? Number(v).toFixed(1) : "—") },
+              {
+                header: isAr ? "النتيجة" : "Result",
+                field: "result",
+                align: "center",
+                render: (_, row) => {
+                  const r = (row as any).result;
+                  if (r === "pass") return <span className="text-emerald-800 font-bold">{isAr ? "مطابق" : "PASS"}</span>;
+                  if (r === "fail") return <span className="text-red-800 font-bold">{isAr ? "غير مطابق" : "FAIL"}</span>;
+                  return <span className="text-gray-500">—</span>;
+                },
+              },
+            ]}
+            rows={densitySpecimens.map((d: any, i: number) => ({ ...d, _i: i }))}
+          />
         </>
       )}
     </div>
@@ -685,22 +687,13 @@ function renderCementSettingTime(fd: any, isAr: boolean) {
 
       {/* Readings Table */}
       {validReadings.length > 0 && (
-        <table className="w-full text-xs border-collapse">
-          <thead>
-            <tr className="bg-gray-100">
-              <th className="border border-gray-300 px-2 py-1 text-center">{isAr ? "الوقت (دقيقة)" : "Time (min)"}</th>
-              <th className="border border-gray-300 px-2 py-1 text-center">{isAr ? "الاختراق (مم)" : "Penetration (mm)"}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {validReadings.map((r: any, i: number) => (
-              <tr key={i} className={i % 2 === 0 ? "bg-white" : "bg-gray-50"}>
-                <td className="border border-gray-300 px-2 py-1 text-center">{r.time}</td>
-                <td className="border border-gray-300 px-2 py-1 text-center">{r.pen}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <FlexibleResultsTable
+          columns={[
+            { header: isAr ? "الوقت (دقيقة)" : "Time (min)", field: "time", type: "number", decimals: 2, align: "right" },
+            { header: isAr ? "الاختراق (مم)" : "Penetration (mm)", field: "pen", type: "number", decimals: 2, align: "right" },
+          ]}
+          rows={validReadings}
+        />
       )}
     </div>
   );
@@ -751,37 +744,52 @@ function renderInterlock(fd: any, isAr: boolean) {
       </div>
       {/* Results Table */}
       {blocks.length > 0 && (
-        <table className="w-full text-xs border-collapse mb-3">
-          <thead>
-            <tr className="bg-gray-100">
-              {headers.map((h: string) => <th key={h} className="border border-gray-300 px-1.5 py-1 text-center font-semibold">{h}</th>)}
-            </tr>
-          </thead>
-          <tbody>
-            {blocks.map((b: any, i: number) => (
-              <tr key={i} className={i % 2 === 0 ? "bg-white" : "bg-gray-50"}>
-                <td className="border border-gray-300 px-1.5 py-1 text-center font-mono">{b.blockRef}</td>
-                <td className="border border-gray-300 px-1.5 py-1 text-center">{b.thickness ?? "—"}</td>
-                <td className="border border-gray-300 px-1.5 py-1 text-center">{b.maxLoadKN != null ? Number(b.maxLoadKN).toFixed(1) : "—"}</td>
-                <td className="border border-gray-300 px-1.5 py-1 text-center">{b.area != null ? Math.round(b.area) : "—"}</td>
-                <td className="border border-gray-300 px-1.5 py-1 text-center">{b.strengthMpa != null ? Number(b.strengthMpa).toFixed(1) : "—"}</td>
-                <td className="border border-gray-300 px-1.5 py-1 text-center text-blue-700">
-                  {THICKNESS_FACTOR_RPT[Number(b.thickness)] ?? defaultTf}
-                </td>
-                <td className="border border-gray-300 px-1.5 py-1 text-center font-bold">
-                  {b.correctedStrengthMpa != null
-                    ? Number(b.correctedStrengthMpa).toFixed(1)
-                    : b.strengthMpa != null
-                      ? (Number(b.strengthMpa) * (THICKNESS_FACTOR_RPT[Number(b.thickness)] ?? defaultTf)).toFixed(1)
-                      : "—"}
-                </td>
-                <td className={`border border-gray-300 px-1.5 py-1 text-center font-bold ${b.result === "pass" ? "text-green-700" : b.result === "fail" ? "text-red-600" : "text-gray-500"}`}>
-                  {b.result === "pass" ? (isAr ? "مطابق" : "PASS") : b.result === "fail" ? (isAr ? "غير مطابق" : "FAIL") : "—"}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <div className="mb-3">
+          <FlexibleResultsTable
+            columns={[
+              { header: headers[0], field: "blockRef", align: "center", render: (v) => <span className="font-mono">{String(v ?? "")}</span> },
+              { header: headers[1], field: "thickness", align: "center", render: (v) => String(v ?? "—") },
+              { header: headers[2], field: "maxLoadKN", align: "right", render: (v) => (v != null ? Number(v).toFixed(1) : "—") },
+              { header: headers[3], field: "area", align: "right", render: (v) => (v != null ? String(Math.round(Number(v))) : "—") },
+              { header: headers[4], field: "strengthMpa", align: "right", render: (v) => (v != null ? Number(v).toFixed(1) : "—") },
+              {
+                header: headers[5],
+                field: "_cf",
+                align: "center",
+                render: (_, row) => (
+                  <span className="text-blue-800">{THICKNESS_FACTOR_RPT[Number((row as any).thickness)] ?? defaultTf}</span>
+                ),
+              },
+              {
+                header: headers[6],
+                field: "_corrStr",
+                align: "center",
+                render: (_, row) => {
+                  const b = row as any;
+                  const t =
+                    b.correctedStrengthMpa != null
+                      ? Number(b.correctedStrengthMpa).toFixed(1)
+                      : b.strengthMpa != null
+                        ? (Number(b.strengthMpa) * (THICKNESS_FACTOR_RPT[Number(b.thickness)] ?? defaultTf)).toFixed(1)
+                        : "—";
+                  return <span className="font-bold">{t}</span>;
+                },
+              },
+              {
+                header: headers[7],
+                field: "result",
+                align: "center",
+                render: (_, row) => {
+                  const b = row as any;
+                  if (b.result === "pass") return <span className="text-emerald-800 font-bold">{isAr ? "مطابق" : "PASS"}</span>;
+                  if (b.result === "fail") return <span className="text-red-800 font-bold">{isAr ? "غير مطابق" : "FAIL"}</span>;
+                  return <span className="text-gray-500">—</span>;
+                },
+              },
+            ]}
+            rows={blocks}
+          />
+        </div>
       )}
       {/* Summary */}
       <div className="flex justify-end">
@@ -836,6 +844,56 @@ function renderConcreteBeam(fd: any, isAr: boolean, castingDateMs?: number | nul
     if (zone === "outside_5pct") return isAr ? "خارج (ضمن 5%)" : "Outside (within 5%)";
     return isAr ? "مستبعد" : "Discarded";
   };
+
+  const beamRows = allRows.map((r: any, i: number) => ({ ...r, _i: i }));
+  const beamCols: Column[] = [
+    { header: headers[0], field: "beamNo", align: "center", render: (_, row) => String((row as any).beamNo ?? ((row as any)._i + 1)) },
+    { header: headers[1], field: "location", align: "center", render: (v) => String(v || "—") },
+    { header: headers[2], field: "width", align: "center", render: (v) => String(v ?? "—") },
+    { header: headers[3], field: "depth", align: "center", render: (v) => String(v ?? "—") },
+    { header: headers[4], field: "maxLoad", align: "center", render: (v) => String(v ?? "—") },
+    {
+      header: headers[5],
+      field: "fractureZone",
+      align: "center",
+      render: (_, row) => fractureZoneLabel((row as any).fractureZone ?? "middle_third", isAr),
+    },
+    {
+      header: headers[6],
+      field: "mor",
+      align: "center",
+      render: (_, row) => {
+        const r = row as any;
+        if (r.discarded) return isAr ? "مستبعد" : "Discarded";
+        return r.mor !== undefined ? Number(r.mor).toFixed(3) : "—";
+      },
+    },
+    ...(hasAge
+      ? ([
+          {
+            header: headers[7],
+            field: "_age",
+            align: "center",
+            render: (_, row) => {
+              const age = calcAge((row as any).testDateMs ?? null);
+              return age ?? "—";
+            },
+          },
+        ] as Column[])
+      : []),
+    {
+      header: headers[headers.length - 1],
+      field: "result",
+      align: "center",
+      render: (_, row) => {
+        const r = row as any;
+        if (r.discarded) return <span className="text-orange-600 font-bold">{isAr ? "مستبعد" : "Discarded"}</span>;
+        if (r.result === "pass") return <span className="text-emerald-800 font-bold">{isAr ? "مطابق" : "PASS"}</span>;
+        if (r.result === "fail") return <span className="text-red-800 font-bold">{isAr ? "غير مطابق" : "FAIL"}</span>;
+        return <span className="text-gray-500">—</span>;
+      },
+    },
+  ];
 
   return (
     <div className="space-y-4">
@@ -904,46 +962,11 @@ function renderConcreteBeam(fd: any, isAr: boolean, castingDateMs?: number | nul
 
       {/* Results Table */}
       {allRows.length > 0 && (
-        <table className="w-full text-xs border-collapse">
-          <thead>
-            <tr className="bg-gray-100">
-              {headers.map((h: string) => (
-                <th key={h} className="border border-gray-300 px-2 py-1 text-center font-semibold">{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {allRows.map((r: any, i: number) => {
-              const isDiscarded = r.discarded;
-              const age = hasAge ? calcAge(r.testDateMs ?? null) : null;
-              return (
-                <tr key={i} className={`${isDiscarded ? "opacity-40 bg-gray-50" : i % 2 === 0 ? "bg-white" : "bg-gray-50"}`}>
-                  <td className="border border-gray-300 px-2 py-1 text-center font-mono font-semibold">{r.beamNo ?? (i + 1)}</td>
-                  <td className="border border-gray-300 px-2 py-1 text-center">{r.location || "—"}</td>
-                  <td className="border border-gray-300 px-2 py-1 text-center">{r.width ?? "—"}</td>
-                  <td className="border border-gray-300 px-2 py-1 text-center">{r.depth ?? "—"}</td>
-                  <td className="border border-gray-300 px-2 py-1 text-center">{r.maxLoad ?? "—"}</td>
-                  <td className="border border-gray-300 px-2 py-1 text-center">{fractureZoneLabel(r.fractureZone ?? "middle_third", isAr)}</td>
-                  <td className="border border-gray-300 px-2 py-1 text-center font-semibold">
-                    {isDiscarded ? (isAr ? "مستبعد" : "Discarded") : r.mor !== undefined ? Number(r.mor).toFixed(3) : "—"}
-                  </td>
-                  {hasAge && <td className="border border-gray-300 px-2 py-1 text-center">{age ?? "—"}</td>}
-                  <td className={`border border-gray-300 px-2 py-1 text-center font-bold ${
-                    isDiscarded ? "text-orange-600" :
-                    r.result === "pass" ? "text-green-700" :
-                    r.result === "fail" ? "text-red-600" : "text-gray-500"
-                  }`}>
-                    {isDiscarded
-                      ? (isAr ? "مستبعد" : "Discarded")
-                      : r.result === "pass" ? (isAr ? "مطابق" : "PASS")
-                      : r.result === "fail" ? (isAr ? "غير مطابق" : "FAIL")
-                      : "—"}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+        <FlexibleResultsTable
+          columns={beamCols}
+          rows={beamRows}
+          rowClassName={(row) => ((row as any).discarded ? "opacity-40 bg-gray-50" : "")}
+        />
       )}
 
       {/* Summary */}
@@ -968,16 +991,30 @@ function renderConcreteBeam(fd: any, isAr: boolean, castingDateMs?: number | nul
 }
 
 function renderGeneric(fd: any, isAr: boolean) {
+  const kvRows = formDataToKeyValueRows(fd as Record<string, unknown>);
+  if (kvRows.length === 0) {
+    return (
+      <div className="text-xs border border-amber-200 bg-amber-50 rounded p-4 text-amber-900">
+        <p className="font-semibold mb-1">
+          {isAr ? "تنسيق التقرير غير متاح لهذا النوع بعد" : "Formatted report is not available for this test type yet"}
+        </p>
+        <p className="text-[11px] text-amber-800">
+          {isAr
+            ? "تم حفظ النتائج بنجاح، لكن عرض التقرير التفصيلي يحتاج إضافة قالب عرض مخصص."
+            : "Results are saved successfully, but detailed rendering requires a dedicated report template."}
+        </p>
+      </div>
+    );
+  }
   return (
-    <div className="text-xs border border-amber-200 bg-amber-50 rounded p-4 text-amber-900">
-      <p className="font-semibold mb-1">
-        {isAr ? "تنسيق التقرير غير متاح لهذا النوع بعد" : "Formatted report is not available for this test type yet"}
+    <div className="space-y-2">
+      <p className="text-[11px] text-gray-600">
+        {isAr ? "ملخص البيانات المحفوظة (قيم مسطحة):" : "Saved data summary (flat values):"}
       </p>
-      <p className="text-[11px] text-amber-800">
-        {isAr
-          ? "تم حفظ النتائج بنجاح، لكن عرض التقرير التفصيلي يحتاج إضافة قالب عرض مخصص."
-          : "Results are saved successfully, but detailed rendering requires a dedicated report template."}
-      </p>
+      <FlexibleResultsTable
+        columns={keyValueColumns(isAr ? "الخاصية" : "Property", isAr ? "القيمة" : "Value")}
+        rows={kvRows as Record<string, unknown>[]}
+      />
     </div>
   );
 }
@@ -1047,29 +1084,29 @@ function renderConcreteCubes(fd: any, isAr: boolean) {
           </div>
         ) : null}
       </div>
-      <table className="w-full text-xs border-collapse mb-4">
-        <thead>
-          <tr className="bg-gray-100">
-            {headers.map(h => <th key={h} className="border border-gray-300 px-1.5 py-1 text-center font-semibold">{h}</th>)}
-          </tr>
-        </thead>
-        <tbody>
-          {cubes.map((c: any, i: number) => (
-            <tr key={i} className={i % 2 === 0 ? "bg-white" : "bg-gray-50"}>
-              <td className="border border-gray-300 px-1.5 py-1 text-center">{c.cubeNo ?? (i + 1)}</td>
-              <td className="border border-gray-300 px-1.5 py-1 text-center">{c.location || "—"}</td>
-              <td className="border border-gray-300 px-1.5 py-1 text-center">{c.cubeSize ?? 150}</td>
-              <td className="border border-gray-300 px-1.5 py-1 text-center">{fmt(c.maxLoad)}</td>
-              <td className="border border-gray-300 px-1.5 py-1 text-center">{fmt(c.area, 0)}</td>
-              <td className="border border-gray-300 px-1.5 py-1 text-center">{fmt(c.cubeStrength)}</td>
-              <td className="border border-gray-300 px-1.5 py-1 text-center font-bold">{fmt(c.correctedStrength)}</td>
-              <td className={`border border-gray-300 px-1.5 py-1 text-center font-bold ${c.result === "pass" ? "text-green-700" : "text-red-600"}`}>
-                {c.result === "pass" ? (isAr ? "مطابق" : "PASS") : c.result === "fail" ? (isAr ? "غير مطابق" : "FAIL") : "—"}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <FlexibleResultsTable
+        columns={[
+          { header: headers[0], field: "cubeNo", align: "center", render: (v, row) => String((row as any).cubeNo ?? ((row as any)._ci + 1)) },
+          { header: headers[1], field: "location", align: "center", render: (v) => String(v || "—") },
+          { header: headers[2], field: "cubeSize", align: "center", render: (v) => String(v ?? 150) },
+          { header: headers[3], field: "maxLoad", align: "center", render: (v) => fmt(v as string) },
+          { header: headers[4], field: "area", align: "center", render: (v) => fmt(v as string, 0) },
+          { header: headers[5], field: "cubeStrength", align: "center", render: (v) => fmt(v as string) },
+          { header: headers[6], field: "correctedStrength", align: "center", render: (v) => <span className="font-bold">{fmt(v as string)}</span> },
+          {
+            header: headers[7],
+            field: "result",
+            align: "center",
+            render: (_, row) => {
+              const c = row as any;
+              if (c.result === "pass") return <span className="text-emerald-800 font-bold">{isAr ? "مطابق" : "PASS"}</span>;
+              if (c.result === "fail") return <span className="text-red-800 font-bold">{isAr ? "غير مطابق" : "FAIL"}</span>;
+              return "—";
+            },
+          },
+        ]}
+        rows={cubes.map((c: any, i: number) => ({ ...c, _ci: i }))}
+      />
       {avgStrength != null && (
         <div className="grid grid-cols-3 gap-3 text-xs">
           <div className="bg-green-50 border border-green-200 rounded p-2 text-center">
@@ -1300,24 +1337,24 @@ export default function SpecializedTestReport() {
               </div>
             </div>
             {vals.length > 0 && (
-              <table className="w-full text-[10px] border-collapse border border-gray-300">
-                <thead>
-                  <tr className="bg-gray-100">
-                    <th className="border border-gray-300 px-2 py-1">#</th>
-                    {labels.map((lab, i) => (
-                      <th key={i} className="border border-gray-300 px-2 py-1">{lab}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr>
-                    <td className="border border-gray-300 px-2 py-1 font-medium">{isAr ? "قيمة" : "Value"}</td>
-                    {vals.map((v, i) => (
-                      <td key={i} className="border border-gray-300 px-2 py-1 text-center">{v}</td>
-                    ))}
-                  </tr>
-                </tbody>
-              </table>
+              <FlexibleResultsTable
+                className="text-[10px]"
+                columns={[
+                  { header: "#", field: "_label", align: "center" },
+                  ...labels.map((lab, i) => ({
+                    header: lab,
+                    field: `v${i}`,
+                    align: "center" as const,
+                    render: (_x: unknown, row: Record<string, unknown>) => String(row[`v${i}`] ?? ""),
+                  })),
+                ]}
+                rows={[
+                  {
+                    _label: isAr ? "قيمة" : "Value",
+                    ...Object.fromEntries(vals.map((v, i) => [`v${i}`, v])),
+                  },
+                ]}
+              />
             )}
             {lr.testNotes && (
               <p className="mt-4 text-[10px] text-gray-700 whitespace-pre-wrap border-t pt-2">{lr.testNotes}</p>
