@@ -333,6 +333,79 @@ function renderSteelRebar(fd: any, isAr: boolean) {
 }
 
 function renderSieveAnalysis(fd: any, isAr: boolean) {
+  if (fd.testMode === "blend" && Array.isArray(fd.sieveData)) {
+    const std =
+      fd.blendStandard === "BS_1199_A"
+        ? isAr
+          ? "BS 1199:76 النوع أ — رمل لياسة"
+          : "BS 1199:76 Type A — Plaster Sand"
+        : isAr
+          ? "ASTM C 144 — رمل بناء"
+          : "ASTM C 144 — Masonry Sand";
+    const rows = fd.sieveData as Array<Record<string, unknown>>;
+    const passes = fd.passesSpec === true;
+    const cols: Column[] = [
+      { header: isAr ? "حد أعلى" : "Spec upper", field: "upperLimit", align: "center" },
+      { header: isAr ? "حد أدنى" : "Spec lower", field: "lowerLimit", align: "center" },
+      {
+        header: isAr ? "الخليط" : "Blend",
+        field: "blend",
+        align: "center",
+        render: (v) => <span className="font-bold text-amber-900">{v != null ? String(v) : "—"}</span>,
+      },
+      { header: isAr ? "أبيض — مستخدم %" : "White — Used %", field: "whiteSandUsed", align: "center" },
+      {
+        header: isAr ? "أبيض — أصلي % مار" : "White — Orig. pass %",
+        field: "whiteSandOriginalPass",
+        align: "center",
+        render: (_, row) =>
+          String((row as any).whiteSandOriginalPass ?? (row as any).whiteSandOriginal ?? "—"),
+      },
+      { header: isAr ? "أسود — مستخدم %" : "Black — Used %", field: "blackSandUsed", align: "center" },
+      {
+        header: isAr ? "أسود — أصلي % مار" : "Black — Orig. pass %",
+        field: "blackSandOriginalPass",
+        align: "center",
+        render: (_, row) =>
+          String((row as any).blackSandOriginalPass ?? (row as any).blackSandOriginal ?? "—"),
+      },
+      { header: isAr ? "المنخل (مم)" : "Sieve (mm)", field: "sieveMm", align: "center" },
+      {
+        header: isAr ? "ضمن الحد" : "OK",
+        field: "_ok",
+        align: "center",
+        render: (_, row) => {
+          const blend = Number((row as any).blend);
+          const lo = Number((row as any).lowerLimit);
+          const hi = Number((row as any).upperLimit);
+          if (!Number.isFinite(blend) || !Number.isFinite(lo) || !Number.isFinite(hi)) return "—";
+          return blend >= lo && blend <= hi ? (
+            <span className="text-emerald-700 font-bold">✓</span>
+          ) : (
+            <span className="text-red-700 font-bold">✗</span>
+          );
+        },
+      },
+    ];
+    return (
+      <div className="space-y-3">
+        <div className="text-xs font-semibold text-blue-700 bg-blue-50 border border-blue-200 rounded px-3 py-1.5">
+          {isAr ? "وضع الخليط — رمل أبيض + أسود" : "Blend mode — white + black sand"}
+          <div className="text-[11px] font-normal text-blue-800/90 mt-0.5">{std}</div>
+        </div>
+        <FlexibleResultsTable columns={cols} rows={rows} />
+        <div className="text-xs font-semibold">
+          {isAr ? "النتيجة الإجمالية:" : "Overall:"}{" "}
+          {passes ? (
+            <span className="text-emerald-700">{isAr ? "مطابق" : "PASS"}</span>
+          ) : (
+            <span className="text-red-700">{isAr ? "غير مطابق" : "FAIL"}</span>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   // Support both legacy 'sieves' and new 'rows' field names
   const rows = fd.rows ?? fd.sieves ?? [];
   const gradingType = fd.gradingType ?? "";

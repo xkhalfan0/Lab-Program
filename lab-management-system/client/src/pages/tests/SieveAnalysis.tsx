@@ -90,6 +90,91 @@ const ASTM_GRADING_KEYS = [
   "MORTAR_SAND",
 ] as const satisfies readonly GradingType[];
 
+// ─── Blended sand (White + Black) — ASTM C144 vs BS 1199:76 Type A ───────────
+type BlendStandardKey = "ASTM_C144" | "BS_1199_A";
+
+/** Spec limits per row: [upper %, lower %] passing per sieve. */
+const BLEND_SIEVE_STACK: Record<BlendStandardKey, { sieveMm: string; upperLimit: number; lowerLimit: number }[]> = {
+  ASTM_C144: [
+    { sieveMm: "9.5", upperLimit: 100, lowerLimit: 100 },
+    { sieveMm: "4.75", upperLimit: 100, lowerLimit: 95 },
+    { sieveMm: "2.36", upperLimit: 100, lowerLimit: 70 },
+    { sieveMm: "1.18", upperLimit: 75, lowerLimit: 40 },
+    { sieveMm: "0.6", upperLimit: 40, lowerLimit: 20 },
+    { sieveMm: "0.3", upperLimit: 25, lowerLimit: 10 },
+    { sieveMm: "0.15", upperLimit: 10, lowerLimit: 0 },
+  ],
+  BS_1199_A: [
+    { sieveMm: "5", upperLimit: 100, lowerLimit: 100 },
+    { sieveMm: "2.36", upperLimit: 88, lowerLimit: 80 },
+    { sieveMm: "1.18", upperLimit: 86, lowerLimit: 70 },
+    { sieveMm: "0.6", upperLimit: 90, lowerLimit: 55 },
+    { sieveMm: "0.3", upperLimit: 62, lowerLimit: 5 },
+    { sieveMm: "0.15", upperLimit: 17, lowerLimit: 0 },
+    { sieveMm: "0.075", upperLimit: 3.8, lowerLimit: 0 },
+  ],
+};
+
+interface BlendSieveRow {
+  sieveMm: string;
+  upperLimit: number;
+  lowerLimit: number;
+  whiteSandUsed: string;
+  whiteSandOriginalPass: string;
+  blackSandUsed: string;
+  blackSandOriginalPass: string;
+}
+
+function emptyBlendRows(standard: BlendStandardKey): BlendSieveRow[] {
+  return BLEND_SIEVE_STACK[standard].map(r => ({
+    sieveMm: r.sieveMm,
+    upperLimit: r.upperLimit,
+    lowerLimit: r.lowerLimit,
+    whiteSandUsed: "",
+    whiteSandOriginalPass: "",
+    blackSandUsed: "",
+    blackSandOriginalPass: "",
+  }));
+}
+
+/**
+ * The Blend = White Used % + Black Used % (Excel-style).
+ */
+function calculateBlend(whiteUsedStr: string, blackUsedStr: string): number {
+  const white = parseFloat(whiteUsedStr) || 0;
+  const black = parseFloat(blackUsedStr) || 0;
+  return white + black;
+}
+
+function mergeBlendRowsFromSaved(
+  standard: BlendStandardKey,
+  saved: Array<Record<string, unknown>>,
+): BlendSieveRow[] {
+  const template = emptyBlendRows(standard);
+  const bySieve = new Map(saved.map(r => [String(r.sieveMm ?? r.sieve), r]));
+  return template.map(row => {
+    const s = bySieve.get(row.sieveMm);
+    if (!s) return row;
+    return {
+      ...row,
+      whiteSandUsed: s.whiteSandUsed != null && s.whiteSandUsed !== "" ? String(s.whiteSandUsed) : "",
+      whiteSandOriginalPass:
+        s.whiteSandOriginalPass != null && s.whiteSandOriginalPass !== ""
+          ? String(s.whiteSandOriginalPass)
+          : s.whiteSandOriginal != null && s.whiteSandOriginal !== ""
+            ? String(s.whiteSandOriginal)
+            : "",
+      blackSandUsed: s.blackSandUsed != null && s.blackSandUsed !== "" ? String(s.blackSandUsed) : "",
+      blackSandOriginalPass:
+        s.blackSandOriginalPass != null && s.blackSandOriginalPass !== ""
+          ? String(s.blackSandOriginalPass)
+          : s.blackSandOriginal != null && s.blackSandOriginal !== ""
+            ? String(s.blackSandOriginal)
+            : "",
+    };
+  });
+}
+
 interface SieveRow {
   sieve: string;
   massRetained: string;
@@ -151,6 +236,20 @@ export default function SieveAnalysis() {
   const [saving, setSaving] = useState(false);
   const [submitted, setSubmitted] = useState(false);
 
+  const [testMode, setTestMode] = useState<"single" | "blend">("single");
+  const [blendStandard, setBlendStandard] = useState<BlendStandardKey>("ASTM_C144");
+  const [blendRows, setBlendRows] = useState<BlendSieveRow[]>(() => emptyBlendRows("ASTM_C144"));
+
+  const updateBlendRow = (
+    sieveMm: string,
+    field: "whiteSandUsed" | "whiteSandOriginalPass" | "blackSandUsed" | "blackSandOriginalPass",
+    value: string,
+  ) => {
+    setBlendRows(prev =>
+      prev.map(row => (row.sieveMm === sieveMm ? { ...row, [field]: value } : row)),
+    );
+  };
+
   // Keep grading type consistent with BS/ASTM list (avoids Radix Select crash if value ∉ items)
   useEffect(() => {
     if (isMortarSandDist) return;
@@ -177,6 +276,15 @@ export default function SieveAnalysis() {
   useEffect(() => {
     if (!existing?.formData) return;
     const fd = existing.formData as Record<string, unknown>;
+    if (fd.testMode === "blend") {
+      setTestMode("blend");
+      const std = fd.blendStandard === "BS_1199_A" ? "BS_1199_A" : "ASTM_C144";
+      setBlendStandard(std);
+      const saved = Array.isArray(fd.sieveData) ? (fd.sieveData as Array<Record<string, unknown>>) : [];
+      setBlendRows(mergeBlendRowsFromSaved(std, saved));
+    } else {
+      setTestMode("single");
+    }
     let std: "BS" | "ASTM" | null =
       fd.sieveStandard === "BS" || fd.sieveStandard === "ASTM" ? fd.sieveStandard : null;
     const gt0 = fd.gradingType as GradingType | undefined;
@@ -227,6 +335,38 @@ export default function SieveAnalysis() {
   }));
   const computedRows = computeSieveData(rows, totalMass, limits);
 
+  const blendAllUsedFilled =
+    testMode === "blend" &&
+    blendRows.every(r => r.whiteSandUsed.trim() !== "" && r.blackSandUsed.trim() !== "");
+  const blendAnyUsed =
+    testMode === "blend" &&
+    blendRows.some(
+      r =>
+        r.whiteSandUsed.trim() !== "" ||
+        r.blackSandUsed.trim() !== "" ||
+        r.whiteSandOriginalPass.trim() !== "" ||
+        r.blackSandOriginalPass.trim() !== "",
+    );
+  const blendWithinSpec =
+    testMode === "blend" &&
+    blendRows.every(row => {
+      const blend = calculateBlend(row.whiteSandUsed, row.blackSandUsed);
+      return blend >= row.lowerLimit && blend <= row.upperLimit;
+    });
+  const passesBlendSpec = blendAllUsedFilled && blendWithinSpec;
+
+  const blendChartData =
+    testMode === "blend"
+      ? blendRows.map(row => ({
+          sieveLabel: row.sieveMm,
+          whiteUsed: parseFloat(row.whiteSandUsed) || 0,
+          blackUsed: parseFloat(row.blackSandUsed) || 0,
+          blend: calculateBlend(row.whiteSandUsed, row.blackSandUsed),
+          specUpper: row.upperLimit,
+          specLower: row.lowerLimit,
+        }))
+      : [];
+
   // Fineness Modulus (for sand)
   const fmSieves = ["4.75", "2.36", "1.18", "0.6", "0.3", "0.15"];
   const fm = computedRows
@@ -235,8 +375,13 @@ export default function SieveAnalysis() {
 
   const allWithinLimits = computedRows.every(r => r.withinLimits !== false);
   const anyComputed = computedRows.some(r => r.cumPassing !== undefined);
-  const overallResult: "pass" | "fail" | "pending" =
+  const singleOverallResult: "pass" | "fail" | "pending" =
     !anyComputed ? "pending" : allWithinLimits ? "pass" : "fail";
+
+  const blendOverallResult: "pass" | "fail" | "pending" =
+    !blendAnyUsed ? "pending" : !blendAllUsedFilled ? "pending" : passesBlendSpec ? "pass" : "fail";
+
+  const overallResult = testMode === "blend" ? blendOverallResult : singleOverallResult;
 
   // Chart data
   const chartData = computedRows.map(r => ({
@@ -245,6 +390,25 @@ export default function SieveAnalysis() {
     [ar ? "الحد الأدنى" : "Lower Limit"]: r.lower,
     [ar ? "الحد الأعلى" : "Upper Limit"]: r.upper,
   }));
+
+  const blendPassingKey = ar ? "الخليط % مار" : "Blend %";
+  const blendWhiteKey = ar ? "رمل أبيض (مستخدم %)" : "White sand (Used %)";
+  const blendBlackKey = ar ? "رمل أسود (مستخدم %)" : "Black sand (Used %)";
+  const blendUpperKey = ar ? "حد أعلى المواصفة" : "Spec upper";
+  const blendLowerKey = ar ? "حد أدنى المواصفة" : "Spec lower";
+
+  const blendChartDataLocalized =
+    testMode === "blend"
+      ? blendChartData.map(d => ({
+          ...d,
+          [blendPassingKey]: d.blend,
+          [blendWhiteKey]: d.whiteUsed,
+          [blendBlackKey]: d.blackUsed,
+          [blendUpperKey]: d.specUpper,
+          [blendLowerKey]: d.specLower,
+          sieve: d.sieveLabel,
+        }))
+      : [];
 
   const saveResult = trpc.specializedTests.save.useMutation({
     onSuccess: (_, vars) => {
@@ -264,13 +428,27 @@ export default function SieveAnalysis() {
       toast.error(lang === "ar" ? "معرف العينة مفقود" : "Sample ID missing");
       return;
     }
-    if (status === "submitted" && !anyComputed) {
-      toast.error(ar ? "يرجى إدخال كتل المناخل" : "Please enter sieve masses");
-      return;
+    if (testMode === "single") {
+      if (status === "submitted" && !anyComputed) {
+        toast.error(ar ? "يرجى إدخال كتل المناخل" : "Please enter sieve masses");
+        return;
+      }
+    } else {
+      if (status === "submitted" && !blendAllUsedFilled) {
+        toast.error(
+          ar ? "أدخل نسب الاستخدام للرمل الأبيض والأسود في كل منخل" : "Enter White and Black Used % for every sieve row",
+        );
+        return;
+      }
+      if (status === "submitted" && !passesBlendSpec) {
+        toast.error(ar ? "الخليط خارج حدود المواصفة" : "Blend is outside specification limits");
+        return;
+      }
     }
     setSaving(true);
     try {
       const isFineGrading =
+        testMode === "blend" ||
         gradingType.startsWith("FINE") ||
         gradingType.includes("FINE") ||
         gradingType.includes("SAND") ||
@@ -278,31 +456,68 @@ export default function SieveAnalysis() {
         gradingType.includes("PLASTER") ||
         gradingType.includes("MASONRY");
       const testTypeCode = isFineGrading ? "AGG_SIEVE_FINE" : "AGG_SIEVE_COARSE";
+
+      const sieveDataBlend = blendRows.map(row => ({
+        sieveMm: row.sieveMm,
+        upperLimit: row.upperLimit,
+        lowerLimit: row.lowerLimit,
+        whiteSandUsed: row.whiteSandUsed,
+        whiteSandOriginalPass: row.whiteSandOriginalPass,
+        blackSandUsed: row.blackSandUsed,
+        blackSandOriginalPass: row.blackSandOriginalPass,
+        blend: calculateBlend(row.whiteSandUsed, row.blackSandUsed),
+      }));
+
       await saveResult.mutateAsync({
         distributionId: distId,
         sampleId: dist.sampleId,
         testTypeCode,
         formTemplate: "sieve_analysis",
-        formData: {
-          sieveStandard,
-          gradingType,
-          mortarSandSubtype:
-            gradingType === "PLASTER_SAND" ? "PLASTER_SAND" : gradingType === "MASONRY_SAND" ? "MASONRY_SAND" : undefined,
-          totalMass,
-          panMass,
-          source,
-          rows: computedRows,
-          finesModulus: isFineGrading ? fm : undefined,
-          overallResult,
-        },
+        formData:
+          testMode === "blend"
+            ? {
+                testMode: "blend" as const,
+                blendStandard,
+                sieveData: sieveDataBlend,
+                passesSpec: passesBlendSpec,
+                overallResult: blendOverallResult,
+                source,
+                totalMass,
+                panMass,
+              }
+            : {
+                sieveStandard,
+                gradingType,
+                mortarSandSubtype:
+                  gradingType === "PLASTER_SAND"
+                    ? "PLASTER_SAND"
+                    : gradingType === "MASONRY_SAND"
+                      ? "MASONRY_SAND"
+                      : undefined,
+                totalMass,
+                panMass,
+                source,
+                rows: computedRows,
+                finesModulus: isFineGrading ? fm : undefined,
+                overallResult,
+                testMode: "single" as const,
+              },
         overallResult,
-        summaryValues: {
-          sieveStandard,
-          gradingType,
-          totalMass,
-          finesModulus: fm.toFixed(2),
-          overallResult,
-        },
+        summaryValues:
+          testMode === "blend"
+            ? {
+                testMode: "blend",
+                blendStandard,
+                passesSpec: passesBlendSpec,
+                overallResult: blendOverallResult,
+              }
+            : {
+                sieveStandard,
+                gradingType,
+                totalMass,
+                finesModulus: fm.toFixed(2),
+                overallResult,
+              },
         notes,
         status,
       });
@@ -350,7 +565,7 @@ export default function SieveAnalysis() {
         <SampleInfoCard
           dist={dist}
           extraFields={[
-            { label: "نوع الركام", value: dist?.testSubType },
+            { label: "Aggregate type / نوع الركام", value: dist?.testSubType },
           ]}
         />
         {/* Header */}
@@ -402,8 +617,48 @@ export default function SieveAnalysis() {
             <CardTitle className="text-base">{ar ? "معلومات الاختبار" : "Test Information"}</CardTitle>
           </CardHeader>
           <CardContent>
+            <div className="mb-4 pb-4 border-b border-slate-200">
+              <Label className="text-sm font-medium text-slate-800">
+                {ar ? "إعدادات الاختبار" : "Test configuration"}
+              </Label>
+              <div className="flex flex-wrap gap-6 mt-2">
+                <label className="flex items-center gap-2 cursor-pointer text-sm">
+                  <input
+                    type="radio"
+                    name="sieveTestMode"
+                    value="single"
+                    checked={testMode === "single"}
+                    disabled={submitted}
+                    onChange={() => setTestMode("single")}
+                    className="h-4 w-4"
+                  />
+                  {ar ? "ركام واحد (كتل مناخل)" : "Single aggregate (mass retained)"}
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer text-sm">
+                  <input
+                    type="radio"
+                    name="sieveTestMode"
+                    value="blend"
+                    checked={testMode === "blend"}
+                    disabled={submitted}
+                    onChange={() => {
+                      setTestMode("blend");
+                      setBlendRows(emptyBlendRows(blendStandard));
+                    }}
+                    className="h-4 w-4"
+                  />
+                  {ar ? "خليط رملين (أبيض + أسود)" : "Two-sand blend (White + Black)"}
+                </label>
+              </div>
+              <p className="text-xs text-slate-500 mt-2">
+                {ar
+                  ? "الخلايا الخضراء = إدخال الفني. عمود «الخليط» = مجموع نسب الاستخدام (تلقائي)."
+                  : "Green cells = technician inputs. “The Blend” column = sum of Used % (automatic)."}
+              </p>
+            </div>
+
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              {isMortarSandDist && (
+              {testMode === "single" && isMortarSandDist && (
                 <div className="col-span-2 md:col-span-4">
                   <Label className="text-xs text-slate-500 mb-1 block">
                     {ar ? "رمل الملاط — المعيار" : "Mortar sand — standard"}
@@ -431,6 +686,7 @@ export default function SieveAnalysis() {
                   </Select>
                 </div>
               )}
+              {testMode === "single" && (
               <div>
                 <Label className="text-xs text-slate-500 mb-1 block">
                   {ar ? "المواصفة" : "Sieve standard"}
@@ -456,6 +712,8 @@ export default function SieveAnalysis() {
                   </SelectContent>
                 </Select>
               </div>
+              )}
+              {testMode === "single" && (
               <div>
                 <Label className="text-xs text-slate-500 mb-1 block">
                   {ar ? "نوع الركام / التدرج" : "Aggregate Type / Grading"}
@@ -476,18 +734,47 @@ export default function SieveAnalysis() {
                   </SelectContent>
                 </Select>
               </div>
+              )}
+              {testMode === "blend" && (
+                <div className="col-span-2 md:col-span-4">
+                  <Label className="text-xs text-slate-500 mb-1 block">
+                    {ar ? "جدول حدود المواصفة" : "Specification limits table"}
+                  </Label>
+                  <Select
+                    value={blendStandard}
+                    disabled={submitted}
+                    onValueChange={v => {
+                      const std = v as BlendStandardKey;
+                      setBlendStandard(std);
+                      setBlendRows(emptyBlendRows(std));
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="ASTM_C144">ASTM C 144 — Masonry Sand</SelectItem>
+                      <SelectItem value="BS_1199_A">BS 1199:76 Type A — Plaster Sand</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+              {testMode === "single" && (
               <div>
                 <Label className="text-xs text-slate-500 mb-1 block">
                   {ar ? "كتلة العينة الكلية (جم)" : "Total Sample Mass (g)"}
                 </Label>
                 <Input value={totalMassStr} onChange={e => setTotalMassStr(e.target.value)} className="font-mono" placeholder="1000" />
               </div>
+              )}
+              {testMode === "single" && (
               <div>
                 <Label className="text-xs text-slate-500 mb-1 block">
                   {ar ? "كتلة الصينية (جم)" : "Pan Mass (g)"}
                 </Label>
                 <Input value={panMass} onChange={e => setPanMass(e.target.value)} className="font-mono" placeholder="—" />
               </div>
+              )}
               <div>
                 <Label className="text-xs text-slate-500 mb-1 block">
                   {ar ? "المصدر / المحجر" : "Source / Quarry"}
@@ -505,6 +792,239 @@ export default function SieveAnalysis() {
           </CardContent>
         </Card>
 
+        {testMode === "blend" ? (
+          <div className="space-y-6">
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">
+                  {ar ? "خليط الرمل — جدول المناخل" : "Sand blend — sieve worksheet"}
+                </CardTitle>
+                <p className="text-xs text-slate-500">
+                  {blendStandard === "ASTM_C144" ? "ASTM C 144 — Masonry Sand" : "BS 1199:76 Type A — Plaster Sand"}
+                </p>
+              </CardHeader>
+              <CardContent>
+                <div className="overflow-x-auto">
+                  <table className="w-full border-collapse border border-slate-300 text-xs min-w-[720px]">
+                    <thead>
+                      <tr className="bg-slate-100">
+                        <th rowSpan={2} className="border border-slate-300 px-2 py-1 align-middle bg-slate-50">
+                          {ar ? "حد أعلى المواصفة" : "Spec upper limit"}
+                        </th>
+                        <th rowSpan={2} className="border border-slate-300 px-2 py-1 align-middle bg-slate-50">
+                          {ar ? "حد أدنى المواصفة" : "Spec lower limit"}
+                        </th>
+                        <th rowSpan={2} className="border border-slate-300 px-2 py-1 align-middle bg-yellow-100">
+                          {ar ? "الخليط (محسوب)" : "The Blend (calculated)"}
+                        </th>
+                        <th colSpan={2} className="border border-slate-300 px-2 py-1 bg-blue-50 text-center">
+                          {ar ? "رمل أبيض" : "White sand"}
+                        </th>
+                        <th colSpan={2} className="border border-slate-300 px-2 py-1 bg-slate-200 text-center">
+                          {ar ? "رمل أسود" : "Black sand"}
+                        </th>
+                        <th rowSpan={2} className="border border-slate-300 px-2 py-1 align-middle">
+                          {ar ? "حجم المنخل (مم)" : "Test sieve (mm)"}
+                        </th>
+                        <th rowSpan={2} className="border border-slate-300 px-1 py-1 align-middle w-10">
+                          ✓
+                        </th>
+                      </tr>
+                      <tr className="bg-slate-50">
+                        <th className="border border-slate-300 px-1 py-1 bg-green-100">{ar ? "مستخدم %" : "Used %"}</th>
+                        <th className="border border-slate-300 px-1 py-1 bg-green-100">
+                          {ar ? "أصلي % مار" : "Original grad pass %"}
+                        </th>
+                        <th className="border border-slate-300 px-1 py-1 bg-green-100">{ar ? "مستخدم %" : "Used %"}</th>
+                        <th className="border border-slate-300 px-1 py-1 bg-green-100">
+                          {ar ? "أصلي % مار" : "Original grad pass %"}
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {blendRows.map(row => {
+                        const blendVal = calculateBlend(row.whiteSandUsed, row.blackSandUsed);
+                        const bothUsed =
+                          row.whiteSandUsed.trim() !== "" && row.blackSandUsed.trim() !== "";
+                        const blendOk =
+                          bothUsed && blendVal >= row.lowerLimit && blendVal <= row.upperLimit;
+                        const blendDisplay =
+                          row.whiteSandUsed.trim() === "" && row.blackSandUsed.trim() === ""
+                            ? "—"
+                            : blendVal.toFixed(1);
+                        return (
+                          <tr key={row.sieveMm}>
+                            <td className="border border-slate-300 px-2 py-1 text-center bg-slate-50 font-mono">
+                              {row.upperLimit}
+                            </td>
+                            <td className="border border-slate-300 px-2 py-1 text-center bg-slate-50 font-mono">
+                              {row.lowerLimit}
+                            </td>
+                            <td className="border border-slate-300 px-2 py-1 text-center font-bold bg-yellow-50 font-mono">
+                              {blendDisplay}
+                            </td>
+                            <td className="border border-slate-300 px-1 py-1 bg-green-50">
+                              <Input
+                                type="number"
+                                value={row.whiteSandUsed}
+                                onChange={e => updateBlendRow(row.sieveMm, "whiteSandUsed", e.target.value)}
+                                placeholder={ar ? "مستخدم" : "Used"}
+                                className="h-8 w-20 bg-white text-xs font-mono"
+                                disabled={submitted}
+                              />
+                            </td>
+                            <td className="border border-slate-300 px-1 py-1 bg-green-50">
+                              <Input
+                                type="number"
+                                value={row.whiteSandOriginalPass}
+                                onChange={e => updateBlendRow(row.sieveMm, "whiteSandOriginalPass", e.target.value)}
+                                placeholder="%"
+                                className="h-8 w-20 bg-white text-xs font-mono"
+                                disabled={submitted}
+                              />
+                            </td>
+                            <td className="border border-slate-300 px-1 py-1 bg-green-50">
+                              <Input
+                                type="number"
+                                value={row.blackSandUsed}
+                                onChange={e => updateBlendRow(row.sieveMm, "blackSandUsed", e.target.value)}
+                                placeholder={ar ? "مستخدم" : "Used"}
+                                className="h-8 w-20 bg-white text-xs font-mono"
+                                disabled={submitted}
+                              />
+                            </td>
+                            <td className="border border-slate-300 px-1 py-1 bg-green-50">
+                              <Input
+                                type="number"
+                                value={row.blackSandOriginalPass}
+                                onChange={e => updateBlendRow(row.sieveMm, "blackSandOriginalPass", e.target.value)}
+                                placeholder="%"
+                                className="h-8 w-20 bg-white text-xs font-mono"
+                                disabled={submitted}
+                              />
+                            </td>
+                            <td className="border border-slate-300 px-2 py-1 text-center font-mono font-semibold">
+                              {row.sieveMm}
+                            </td>
+                            <td className="border border-slate-300 px-1 py-1 text-center">
+                              {!bothUsed ? (
+                                "—"
+                              ) : blendOk ? (
+                                <span className="text-emerald-600 font-bold">✓</span>
+                              ) : (
+                                <span className="text-red-600 font-bold">✗</span>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+                {blendAllUsedFilled && (
+                  <div className="mt-3 flex flex-wrap items-center gap-3 text-sm">
+                    <PassFailBadge result={passesBlendSpec ? "pass" : "fail"} lang={lang} />
+                    <span className="text-slate-600">
+                      {passesBlendSpec
+                        ? ar
+                          ? "جميع قيم الخليط ضمن حدود المواصفة."
+                          : "All blend values are within specification limits."
+                        : ar
+                          ? "قيمة خليط واحدة على الأقل خارج الحدود."
+                          : "At least one blend value is outside the limits."}
+                    </span>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">{ar ? "منحنى التدرج" : "Grading curve"}</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {blendAnyUsed ? (
+                  <ResponsiveContainer width="100%" height={400}>
+                    <LineChart data={blendChartDataLocalized} margin={{ top: 8, right: 20, left: 8, bottom: 24 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                      <XAxis
+                        dataKey="sieve"
+                        tick={{ fontSize: 10 }}
+                        label={{
+                          value: ar ? "حجم المنخل (مم)" : "Sieve size (mm)",
+                          position: "insideBottom",
+                          offset: -14,
+                          fontSize: 11,
+                        }}
+                      />
+                      <YAxis
+                        domain={[0, 100]}
+                        tick={{ fontSize: 10 }}
+                        label={{
+                          value: ar ? "% مار" : "% passing",
+                          angle: -90,
+                          position: "insideLeft",
+                          fontSize: 11,
+                        }}
+                      />
+                      <Tooltip formatter={(v: number) => `${Number(v).toFixed(1)}%`} />
+                      <Legend wrapperStyle={{ fontSize: 11 }} />
+                      <Line
+                        type="monotone"
+                        dataKey={blendLowerKey}
+                        stroke="#94a3b8"
+                        strokeDasharray="5 5"
+                        dot={false}
+                        strokeWidth={1.5}
+                        name={blendLowerKey}
+                      />
+                      <Line
+                        type="monotone"
+                        dataKey={blendUpperKey}
+                        stroke="#94a3b8"
+                        strokeDasharray="5 5"
+                        dot={false}
+                        strokeWidth={1.5}
+                        name={blendUpperKey}
+                      />
+                      <Line
+                        type="monotone"
+                        dataKey={blendWhiteKey}
+                        stroke="#3b82f6"
+                        strokeWidth={2}
+                        dot={{ r: 3 }}
+                        name={blendWhiteKey}
+                      />
+                      <Line
+                        type="monotone"
+                        dataKey={blendBlackKey}
+                        stroke="#374151"
+                        strokeWidth={2}
+                        dot={{ r: 3 }}
+                        name={blendBlackKey}
+                      />
+                      <Line
+                        type="monotone"
+                        dataKey={blendPassingKey}
+                        stroke="#ef4444"
+                        strokeWidth={3}
+                        dot={{ r: 4 }}
+                        name={blendPassingKey}
+                      />
+                    </LineChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="h-64 flex items-center justify-center text-slate-400 text-sm">
+                    <div className="text-center">
+                      <FlaskConical size={32} className="mx-auto mb-2 opacity-30" />
+                      <p>{ar ? "أدخل نسب الاستخدام لرسم المنحنى" : "Enter Used % values to plot the curve"}</p>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Sieve Table */}
           <Card>
@@ -675,6 +1195,7 @@ export default function SieveAnalysis() {
             </CardContent>
           </Card>
         </div>
+        )}
 
         {/* Spec Reference */}
         <Card className="bg-slate-50 border-slate-200">
@@ -682,6 +1203,22 @@ export default function SieveAnalysis() {
             <div className="flex items-start gap-2">
               <Info size={14} className="text-slate-500 mt-0.5 shrink-0" />
               <div className="text-xs text-slate-600 space-y-1">
+                {testMode === "blend" ? (
+                  <>
+                    <p className="font-semibold text-slate-700">
+                      {ar ? "المواصفة المرجعية:" : "Reference standard:"}{" "}
+                      {blendStandard === "ASTM_C144"
+                        ? "ASTM C 144 — Masonry Sand"
+                        : "BS 1199:76 Type A — Plaster Sand"}
+                    </p>
+                    <p>
+                      {ar
+                        ? "يُحسب «الخليط» تلقائياً كمجموع نسب الاستخدام للرمل الأبيض والأسود. تُقارن القيم بحدود المواصفة في كل منخل."
+                        : "“The Blend” is the sum of White and Black Used %. Values are compared to the specification upper and lower limits at each sieve."}
+                    </p>
+                  </>
+                ) : (
+                  <>
                 <p className="font-semibold text-slate-700">
                   {ar ? "المواصفة المرجعية:" : "Reference Standard:"}{" "}
                   {sieveStandard === "ASTM" ? "ASTM C33 / C136" : "BS 882 / BS EN 12620"} — {gradingLabel(gradingType)}
@@ -705,19 +1242,33 @@ export default function SieveAnalysis() {
                     {ar ? "✓ يشمل منخل 5.0مم للركام الناعم" : "✓ Includes 5.0mm sieve for fine aggregate"}
                   </p>
                 )}
+                  </>
+                )}
               </div>
             </div>
           </CardContent>
         </Card>
 
         {/* Overall Result */}
-        {anyComputed && (
+        {((testMode === "single" && anyComputed) || (testMode === "blend" && blendAnyUsed)) && (
           <ResultBanner
             result={overallResult}
-            testName={ar
-              ? `تحليل المناخل — ${gradingLabel(gradingType)}`
-              : `Sieve Analysis — ${gradingLabel(gradingType)}`}
-            standard="BS 882 / ASTM C136"
+            testName={
+              testMode === "blend"
+                ? ar
+                  ? `تحليل المناخل — خليط رمل (أبيض + أسود)`
+                  : `Sieve Analysis — sand blend (white + black)`
+                : ar
+                  ? `تحليل المناخل — ${gradingLabel(gradingType)}`
+                  : `Sieve Analysis — ${gradingLabel(gradingType)}`
+            }
+            standard={
+              testMode === "blend"
+                ? blendStandard === "ASTM_C144"
+                  ? "ASTM C 144"
+                  : "BS 1199:76 Type A"
+                : "BS 882 / ASTM C136"
+            }
           />
         )}
 
