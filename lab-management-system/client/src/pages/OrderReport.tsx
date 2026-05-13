@@ -120,30 +120,20 @@ function sectorLabel(val: string | null | undefined, lang: string) {
   return SECTOR_LABELS[val]?.[lang as "ar" | "en"] ?? val;
 }
 
-// ─── InfoRow ──────────────────────────────────────────────────────────────────
-function InfoRow({ label, value }: { label: string; value: unknown }) {
-  return (
-    <div className="flex gap-1">
-      <span className="text-gray-500 shrink-0">{label}:</span>
-      <span className="font-semibold text-gray-900">{safeText(value)}</span>
-    </div>
-  );
-}
-
 // ─── SignatureBox ─────────────────────────────────────────────────────────────
 function SignatureBox({ label, name, date }: { label: string; name?: string | null; date?: string | null }) {
   return (
-    <div className="border border-gray-400 rounded p-3 text-center min-h-[70px] flex flex-col justify-between">
+    <td className="signature-column align-top text-center border border-gray-400 rounded-sm p-2 text-xs min-h-[70px]">
       <p className="text-[9px] font-bold text-gray-600 uppercase tracking-wide mb-2">{label}</p>
-      <div className="flex-1 flex items-center justify-center">
+      <div className="signature-line flex items-center justify-center min-h-[32px] mb-1">
         {name ? (
           <p className="text-xs font-bold text-gray-800 italic">{name}</p>
         ) : (
           <div className="w-full border-b border-dashed border-gray-400 mb-1" />
         )}
       </div>
-      {date && <p className="text-[9px] text-gray-500 mt-1">{date}</p>}
-    </div>
+      {date ? <p className="text-[9px] text-gray-500 mt-1">{date}</p> : null}
+    </td>
   );
 }
 
@@ -402,12 +392,32 @@ function TestSection({ item, distWithResult, lang, index }: {
       <div className="p-4">
         {/* Distribution info */}
         {dist && (
-          <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-[10px] mb-4 pb-3 border-b border-gray-200">
-            <InfoRow label={isAr ? "رمز التوزيع" : "Distribution Code"} value={dist.distributionCode} />
-            <InfoRow label={isAr ? "تاريخ التكليف" : "Assigned Date"} value={fmtDate(dist.createdAt, lang)} />
-            {dist.standardRef && <InfoRow label={isAr ? "المعيار" : "Standard"} value={dist.standardRef} />}
-            {dist.notes && <InfoRow label={t("notes", lang)} value={dist.notes} />}
-          </div>
+          <table className="metadata-table w-full border-collapse text-[10px] mb-4 pb-3 border-b border-gray-200">
+            <tbody>
+              <tr>
+                <td className="border border-gray-200 px-2 py-1 text-gray-500 w-[18%]">{isAr ? "رمز التوزيع" : "Distribution Code"}</td>
+                <td className="border border-gray-200 px-2 py-1 font-semibold text-gray-900 w-[32%]">{safeText(dist.distributionCode)}</td>
+                <td className="border border-gray-200 px-2 py-1 text-gray-500 w-[18%]">{isAr ? "تاريخ التكليف" : "Assigned Date"}</td>
+                <td className="border border-gray-200 px-2 py-1 font-semibold text-gray-900 w-[32%]">{fmtDate(dist.createdAt, lang)}</td>
+              </tr>
+              {dist.standardRef ? (
+                <tr>
+                  <td className="border border-gray-200 px-2 py-1 text-gray-500">{isAr ? "المعيار" : "Standard"}</td>
+                  <td className="border border-gray-200 px-2 py-1 font-semibold text-gray-900" colSpan={3}>
+                    {safeText(dist.standardRef)}
+                  </td>
+                </tr>
+              ) : null}
+              {dist.notes ? (
+                <tr>
+                  <td className="border border-gray-200 px-2 py-1 text-gray-500 align-top">{t("notes", lang)}</td>
+                  <td className="border border-gray-200 px-2 py-1 font-semibold text-gray-900" colSpan={3}>
+                    {safeText(dist.notes)}
+                  </td>
+                </tr>
+              ) : null}
+            </tbody>
+          </table>
         )}
 
         {/* Test results */}
@@ -451,11 +461,15 @@ function TestSection({ item, distWithResult, lang, index }: {
         {/* Mini signatures for this test */}
         {(testedBy || managerName || qcName) && (
           <div className="mt-4 pt-3 border-t border-gray-200">
-            <div className="grid grid-cols-3 gap-3">
-              <SignatureBox label={t("testedBy", lang)} name={testedBy} />
-              <SignatureBox label={t("reviewedBy", lang)} name={managerName} date={fmtDate(managerDate, lang)} />
-              <SignatureBox label={t("approvedBy", lang)} name={qcName} date={fmtDate(qcDate, lang)} />
-            </div>
+            <table className="signatures-table w-full border-collapse text-xs">
+              <tbody>
+                <tr>
+                  <SignatureBox label={t("testedBy", lang)} name={testedBy} />
+                  <SignatureBox label={t("reviewedBy", lang)} name={managerName} date={fmtDate(managerDate, lang)} />
+                  <SignatureBox label={t("approvedBy", lang)} name={qcName} date={fmtDate(qcDate, lang)} />
+                </tr>
+              </tbody>
+            </table>
           </div>
         )}
       </div>
@@ -589,7 +603,7 @@ export default function OrderReport() {
       <div className="bg-gray-200 print:bg-white min-h-screen py-6 print:py-0" dir={isAr ? "rtl" : "ltr"}>
         <div
           ref={printRef}
-          className="mx-auto bg-white shadow-lg print:shadow-none"
+          className="lab-print-root mx-auto bg-white shadow-lg print:shadow-none"
           style={{ width: "210mm", minHeight: "297mm", padding: "12mm 15mm 18mm 15mm", fontFamily: "Arial, sans-serif", fontSize: "10px" }}
         >
           {/* ── Header ── */}
@@ -649,20 +663,52 @@ export default function OrderReport() {
                 {isAr ? "معلومات الطلب والعينة" : "Order & Sample Information"}
               </h2>
             </div>
-            <div className="grid grid-cols-2 gap-x-8 gap-y-1.5 p-4 text-[10px]">
-              <InfoRow label={t("orderNo", lang)} value={order.orderCode} />
-              <InfoRow label={t("sampleCode", lang)} value={order.sampleCode ?? sample?.sampleCode} />
-              <InfoRow label={t("contractNo", lang)} value={order.contractNumber} />
-              <InfoRow label={t("project", lang)} value={order.contractName} />
-              <InfoRow label={t("contractor", lang)} value={order.contractorName} />
-              <InfoRow label={t("sampleType", lang)} value={sampleTypeLabel(order.sampleType, lang)} />
-              <InfoRow label={t("location", lang)} value={order.location ?? sample?.location} />
-              <InfoRow label={t("sector", lang)} value={sectorLabel(sample?.sector, lang)} />
-              {order.castingDate && <InfoRow label={t("castingDate", lang)} value={fmtDate(order.castingDate, lang)} />}
-              <InfoRow label={t("receivedAt", lang)} value={fmtDate(sample?.receivedAt ?? order.createdAt, lang)} />
-              <InfoRow label={t("reportDate", lang)} value={fmtDate(new Date(), lang)} />
-              {order.notes && <InfoRow label={t("notes", lang)} value={order.notes} />}
-            </div>
+            <table className="metadata-table w-full border-collapse text-[10px]">
+              <tbody>
+                {(() => {
+                  const pairs: [string, unknown][] = [
+                    [t("orderNo", lang), order.orderCode],
+                    [t("sampleCode", lang), order.sampleCode ?? sample?.sampleCode],
+                    [t("contractNo", lang), order.contractNumber],
+                    [t("project", lang), order.contractName],
+                    [t("contractor", lang), order.contractorName],
+                    [t("sampleType", lang), sampleTypeLabel(order.sampleType, lang)],
+                    [t("location", lang), order.location ?? sample?.location],
+                    [t("sector", lang), sectorLabel(sample?.sector, lang)],
+                    ...(order.castingDate ? [[t("castingDate", lang), fmtDate(order.castingDate, lang)]] as [string, unknown][] : []),
+                    [t("receivedAt", lang), fmtDate(sample?.receivedAt ?? order.createdAt, lang)],
+                    [t("reportDate", lang), fmtDate(new Date(), lang)],
+                  ];
+                  const rows: typeof pairs[] = [];
+                  for (let i = 0; i < pairs.length; i += 2) rows.push(pairs.slice(i, i + 2));
+                  return rows.map((pair, ri) => {
+                    const [a, b] = [pair[0], pair[1]];
+                    return (
+                      <tr key={ri}>
+                        <td className="border border-gray-200 px-2 py-1.5 text-gray-500 w-[18%]">{a[0]}</td>
+                        <td className="border border-gray-200 px-2 py-1.5 font-semibold text-gray-900 w-[32%]">{safeText(a[1])}</td>
+                        {b ? (
+                          <>
+                            <td className="border border-gray-200 px-2 py-1.5 text-gray-500 w-[18%]">{b[0]}</td>
+                            <td className="border border-gray-200 px-2 py-1.5 font-semibold text-gray-900 w-[32%]">{safeText(b[1])}</td>
+                          </>
+                        ) : (
+                          <td className="border border-gray-200 px-2 py-1.5" colSpan={2} />
+                        )}
+                      </tr>
+                    );
+                  });
+                })()}
+                {order.notes ? (
+                  <tr>
+                    <td className="border border-gray-200 px-2 py-1.5 text-gray-500 align-top">{t("notes", lang)}</td>
+                    <td className="border border-gray-200 px-2 py-1.5 font-semibold text-gray-900" colSpan={3}>
+                      {safeText(order.notes)}
+                    </td>
+                  </tr>
+                ) : null}
+              </tbody>
+            </table>
           </div>
 
           {/* ── Tests Summary Table ── */}
@@ -670,7 +716,7 @@ export default function OrderReport() {
             <div className="bg-gray-100 px-4 py-2 border-b border-gray-300">
               <h2 className="text-xs font-bold text-gray-800 uppercase tracking-wide">{t("summary", lang)}</h2>
             </div>
-            <table className="w-full text-[10px] border-collapse">
+            <table className="metadata-table w-full text-[10px] border-collapse">
               <thead>
                 <tr className="bg-gray-50">
                   <th className="border border-gray-200 px-2 py-1.5 text-center w-8">#</th>
@@ -747,22 +793,26 @@ export default function OrderReport() {
             <h3 className="text-xs font-bold text-gray-700 uppercase mb-4 text-center tracking-wide">
               {t("signatures", lang)}
             </h3>
-            <div className="grid grid-cols-3 gap-6">
-              <SignatureBox
-                label={t("testedBy", lang)}
-                name={distsWithResults[0]?.specResult?.testedBy ?? distsWithResults[0]?.concreteGroups?.[0]?.testedBy ?? null}
-              />
-              <SignatureBox
-                label={t("reviewedBy", lang)}
-                name={managerReview ? (managerReview as any).signature ?? null : null}
-                date={managerReview ? fmtDate((managerReview as any).reviewedAt, lang) : null}
-              />
-              <SignatureBox
-                label={t("approvedBy", lang)}
-                name={qcReview ? (qcReview as any).signature ?? null : null}
-                date={qcReview ? fmtDate((qcReview as any).reviewedAt, lang) : null}
-              />
-            </div>
+            <table className="signatures-table w-full border-collapse text-xs">
+              <tbody>
+                <tr>
+                  <SignatureBox
+                    label={t("testedBy", lang)}
+                    name={distsWithResults[0]?.specResult?.testedBy ?? distsWithResults[0]?.concreteGroups?.[0]?.testedBy ?? null}
+                  />
+                  <SignatureBox
+                    label={t("reviewedBy", lang)}
+                    name={managerReview ? (managerReview as any).signature ?? null : null}
+                    date={managerReview ? fmtDate((managerReview as any).reviewedAt, lang) : null}
+                  />
+                  <SignatureBox
+                    label={t("approvedBy", lang)}
+                    name={qcReview ? (qcReview as any).signature ?? null : null}
+                    date={qcReview ? fmtDate((qcReview as any).reviewedAt, lang) : null}
+                  />
+                </tr>
+              </tbody>
+            </table>
           </div>
 
           {/* ── Footer ── */}

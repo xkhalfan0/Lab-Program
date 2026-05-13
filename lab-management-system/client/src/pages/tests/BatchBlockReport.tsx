@@ -24,23 +24,14 @@ function fmtDate(d?: string | Date | null, lang = "ar") {
   });
 }
 
-function InfoRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex gap-2">
-      <span className="text-gray-500 min-w-[90px]">{label}:</span>
-      <span className="font-medium text-gray-900">{value || "—"}</span>
-    </div>
-  );
-}
-
 function SignatureBox({ label, name, date }: { label: string; name?: string; date?: string }) {
   return (
-    <div className="border border-gray-300 rounded p-3 text-center">
-      <p className="text-gray-500 text-xs mb-3">{label}</p>
-      <div className="border-b border-gray-400 mb-1 h-8" />
-      {name && <p className="text-xs font-medium text-gray-800">{name}</p>}
-      {date && <p className="text-xs text-gray-500">{date}</p>}
-    </div>
+    <td className="signature-column align-top text-center border border-gray-300 px-2 py-2 text-xs">
+      <p className="text-gray-600 text-[10px] font-bold uppercase mb-1">{label}</p>
+      <div className="signature-line border-b border-gray-800 min-h-[28px] mb-1 mx-1" />
+      {name ? <p className="text-xs font-semibold text-gray-800">{name}</p> : null}
+      {date ? <p className="text-[9px] text-gray-500 mt-1">{date}</p> : null}
+    </td>
   );
 }
 
@@ -237,7 +228,7 @@ export default function BatchBlockReport() {
       <div className="bg-gray-200 print:bg-white min-h-screen py-6 print:py-0" dir={isAr ? "rtl" : "ltr"}>
         <div
           ref={printRef}
-          className="mx-auto bg-white shadow-lg print:shadow-none"
+          className="lab-print-root mx-auto bg-white shadow-lg print:shadow-none"
           style={{ width: "210mm", minHeight: "297mm", padding: "15mm 15mm 20mm 15mm", fontFamily: "Arial, sans-serif", fontSize: "10px" }}
         >
           {/* Header */}
@@ -289,31 +280,43 @@ export default function BatchBlockReport() {
           </div>
 
           {/* Sample Info */}
-          <div className="border border-gray-200 rounded mb-5">
-            <div className="bg-gray-50 border-b border-gray-200 px-4 py-2 grid grid-cols-3 gap-4 text-xs">
-              <div className="flex flex-col items-center">
-                <span className="text-gray-400 text-[10px] uppercase tracking-wide">{isAr ? "رقم الدفعة" : "Batch No."}</span>
-                <span className="font-mono font-bold text-gray-900 text-sm">{batchId}</span>
-              </div>
-              <div className="flex flex-col items-center border-x border-gray-200">
-                <span className="text-gray-400 text-[10px] uppercase tracking-wide">{isAr ? "عدد الأنواع" : "Block Types"}</span>
-                <span className="font-mono font-bold text-blue-700 text-sm">{batchData.length}</span>
-              </div>
-              <div className="flex flex-col items-center">
-                <span className="text-gray-400 text-[10px] uppercase tracking-wide">{isAr ? "تاريخ الاستلام" : "Received Date"}</span>
-                <span className="font-semibold text-gray-900">{fmtDate(firstSample?.receivedAt, lang)}</span>
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-x-8 gap-y-2 p-4 text-xs">
-              <div className="space-y-2">
-                <InfoRow label={isAr ? "المقاول" : "Contractor"} value={firstSample?.contractorName ?? "—"} />
-                <InfoRow label={isAr ? "رقم العقد" : "Contract No."} value={firstSample?.contractNumber ?? "—"} />
-              </div>
-              <div className="space-y-2">
-                <InfoRow label={isAr ? "اسم المشروع" : "Project Name"} value={firstSample?.contractName ?? "—"} />
-                <InfoRow label={isAr ? "القطاع" : "Sector"} value={firstSample?.sector ? (firstSample.sector as string).replace("_", " ").toUpperCase() : "—"} />
-              </div>
-            </div>
+          <div className="border border-gray-200 rounded mb-5 overflow-hidden">
+            <table className="metadata-table w-full border-collapse text-xs bg-gray-50">
+              <tbody>
+                <tr>
+                  <td className="border border-gray-200 px-2 py-2 text-center align-top w-1/3">
+                    <span className="text-gray-400 text-[10px] uppercase tracking-wide block mb-1">{isAr ? "رقم الدفعة" : "Batch No."}</span>
+                    <span className="font-mono font-bold text-gray-900 text-sm">{batchId}</span>
+                  </td>
+                  <td className="border border-gray-200 px-2 py-2 text-center align-top w-1/3">
+                    <span className="text-gray-400 text-[10px] uppercase tracking-wide block mb-1">{isAr ? "عدد الأنواع" : "Block Types"}</span>
+                    <span className="font-mono font-bold text-blue-700 text-sm">{batchData.length}</span>
+                  </td>
+                  <td className="border border-gray-200 px-2 py-2 text-center align-top w-1/3">
+                    <span className="text-gray-400 text-[10px] uppercase tracking-wide block mb-1">{isAr ? "تاريخ الاستلام" : "Received Date"}</span>
+                    <span className="font-semibold text-gray-900">{fmtDate(firstSample?.receivedAt, lang)}</span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+            <table className="metadata-table w-full border-collapse text-xs">
+              <tbody>
+                <tr>
+                  <td className="border border-gray-200 px-2 py-1 text-gray-500 w-[22%]">{isAr ? "المقاول" : "Contractor"}</td>
+                  <td className="border border-gray-200 px-2 py-1 font-medium text-gray-900 w-[28%]">{firstSample?.contractorName ?? "—"}</td>
+                  <td className="border border-gray-200 px-2 py-1 text-gray-500 w-[22%]">{isAr ? "اسم المشروع" : "Project Name"}</td>
+                  <td className="border border-gray-200 px-2 py-1 font-medium text-gray-900 w-[28%]">{firstSample?.contractName ?? "—"}</td>
+                </tr>
+                <tr>
+                  <td className="border border-gray-200 px-2 py-1 text-gray-500">{isAr ? "رقم العقد" : "Contract No."}</td>
+                  <td className="border border-gray-200 px-2 py-1 font-medium text-gray-900">{firstSample?.contractNumber ?? "—"}</td>
+                  <td className="border border-gray-200 px-2 py-1 text-gray-500">{isAr ? "القطاع" : "Sector"}</td>
+                  <td className="border border-gray-200 px-2 py-1 font-medium text-gray-900">
+                    {firstSample?.sector ? (firstSample.sector as string).replace("_", " ").toUpperCase() : "—"}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
           </div>
 
           {/* Sections per block type */}
@@ -349,11 +352,15 @@ export default function BatchBlockReport() {
 
           {/* Signatures */}
           <div className="mt-8 pt-4 border-t border-gray-300">
-            <div className="grid grid-cols-3 gap-6 text-xs">
-              <SignatureBox label={isAr ? "الفاحص" : "Tested By"} name={allResults[0]?.testedBy ?? undefined} />
-              <SignatureBox label={isAr ? "المراجع" : "Reviewed By"} />
-              <SignatureBox label={isAr ? "المعتمد" : "Approved By"} />
-            </div>
+            <table className="signatures-table w-full border-collapse text-xs">
+              <tbody>
+                <tr>
+                  <SignatureBox label={isAr ? "الفاحص" : "Tested By"} name={allResults[0]?.testedBy ?? undefined} />
+                  <SignatureBox label={isAr ? "المراجع" : "Reviewed By"} />
+                  <SignatureBox label={isAr ? "المعتمد" : "Approved By"} />
+                </tr>
+              </tbody>
+            </table>
           </div>
 
           {/* Footer */}

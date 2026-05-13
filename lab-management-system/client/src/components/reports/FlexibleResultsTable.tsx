@@ -190,7 +190,7 @@ export function FlexibleResultsTable({
 }: FlexibleResultsTableProps) {
   return (
     <table
-      className={`w-full border-collapse text-black ${tableClassName} ${className}`.trim()}
+      className={`lab-results-table w-full border-collapse text-black ${tableClassName} ${className}`.trim()}
       style={{ borderSpacing: 0 }}
     >
       <thead>

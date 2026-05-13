@@ -457,7 +457,7 @@ function ReportPage({
       </div>
 
       {/* Project Info Grid */}
-      <table className="w-full border-collapse border border-black mb-2 text-xs">
+      <table className="metadata-table w-full border-collapse border border-black mb-2 text-xs">
         <tbody>
           <tr>
             <td className="border border-black px-2 py-1 w-1/4">CONTRACT NO:</td>
@@ -487,7 +487,7 @@ function ReportPage({
       </table>
 
       {/* Source/Batch/Slump row */}
-      <table className="w-full border-collapse border border-black mb-2 text-xs">
+      <table className="metadata-table w-full border-collapse border border-black mb-2 text-xs">
         <tbody>
           <tr>
             <td className="border border-black px-2 py-1 w-1/4">SOURCE/SUPPLIER :</td>
@@ -499,7 +499,7 @@ function ReportPage({
       </table>
 
       {/* Class / Slump row */}
-      <table className="w-full border-collapse border border-black mb-3 text-xs">
+      <table className="metadata-table w-full border-collapse border border-black mb-3 text-xs">
         <tbody>
           <tr>
             <td className="border border-black px-2 py-1 w-2/3">
@@ -585,40 +585,44 @@ function ReportPage({
       </div>
 
       {/* Signatures */}
-      <div className="grid grid-cols-3 gap-3 text-[10px] mb-3 print:mb-2">
-        {[
-          {
-            label: sig.tested,
-            role: sig.roleT,
-            name: testedDisplay,
-            signedAt: testedSignedAt,
-          },
-          {
-            label: sig.reviewed,
-            role: sig.roleM,
-            name: managerDisplay,
-            signedAt: managerSignedAt,
-          },
-          {
-            label: sig.approved,
-            role: sig.roleQ,
-            name: qcDisplay,
-            signedAt: qcSignedAt,
-          },
-        ].map((col, i) => (
-          <div key={i} className="text-center px-1 border border-slate-300 rounded-sm py-2 bg-white">
-            <p className="font-bold text-slate-900">{col.label}</p>
-            <p className="text-slate-600 text-[9px] mt-0.5">{col.role}</p>
-            <div className="border-b border-slate-900 h-9 mb-1.5 mt-2 mx-1" aria-hidden />
-            <p className="font-semibold text-slate-900 text-[11px]">{col.name}</p>
-            {col.signedAt ? (
-              <p className="text-slate-500 italic mt-1 leading-tight">
-                {sig.dig} {fmtDateTime(col.signedAt, lang)}
-              </p>
-            ) : null}
-          </div>
-        ))}
-      </div>
+      <table className="signatures-table w-full border-collapse text-[10px] mb-3 print:mb-2">
+        <tbody>
+          <tr>
+            {[
+              {
+                label: sig.tested,
+                role: sig.roleT,
+                name: testedDisplay,
+                signedAt: testedSignedAt,
+              },
+              {
+                label: sig.reviewed,
+                role: sig.roleM,
+                name: managerDisplay,
+                signedAt: managerSignedAt,
+              },
+              {
+                label: sig.approved,
+                role: sig.roleQ,
+                name: qcDisplay,
+                signedAt: qcSignedAt,
+              },
+            ].map((col, i) => (
+              <td key={i} className="signature-column align-top text-center border border-slate-300 px-1 py-2 bg-white">
+                <p className="font-bold text-slate-900">{col.label}</p>
+                <p className="text-slate-600 text-[9px] mt-0.5">{col.role}</p>
+                <div className="signature-line border-b border-slate-900 h-9 mb-1.5 mt-2 mx-1" aria-hidden />
+                <p className="font-semibold text-slate-900 text-[11px]">{col.name}</p>
+                {col.signedAt ? (
+                  <p className="text-slate-500 italic mt-1 leading-tight">
+                    {sig.dig} {fmtDateTime(col.signedAt, lang)}
+                  </p>
+                ) : null}
+              </td>
+            ))}
+          </tr>
+        </tbody>
+      </table>
 
       {/* Auto-note when technician manually overrides withinSpec for cubes below auto threshold */}
       {(() => {
@@ -793,7 +797,7 @@ export default function ConcreteReport() {
       </div>
 
       {/* Report Content */}
-      <div ref={printRef} className="bg-gray-200 print:bg-white min-h-screen py-6 print:py-0">
+      <div ref={printRef} className="lab-print-root bg-gray-200 print:bg-white min-h-screen py-6 print:py-0">
         {(groups as any[]).length === 0 ? (
           <div className="text-center py-20 text-gray-500">
             No test results found. Please enter results first.

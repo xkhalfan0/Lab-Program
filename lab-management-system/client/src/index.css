@@ -370,8 +370,5 @@
     text-shadow: none !important;
   }
 
-  /* Keep table borders visible */
-  table, th, td {
-    border-color: #ccc !important;
-  }
+  /* Do not override borders inside .lab-print-root — see styles/print.css */
 }
