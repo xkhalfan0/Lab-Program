@@ -33,6 +33,21 @@ const LD_CORRECTION_TABLE = [
   { ld: 2.00, cf: 1.00 },
 ] as const;
 
+/** Density from immersion weights (kg/m³); rounded to nearest 10 kg/m³. */
+function calculateDensityFromWeights(
+  weightInAir: number,
+  weightInAirSSD: number,
+  weightInWater: number
+): number | null {
+  if (!weightInAir || !weightInAirSSD || !weightInWater) return null;
+  if (weightInAir <= 0 || weightInAirSSD <= 0 || weightInWater <= 0) return null;
+  const denominator = weightInAirSSD - weightInWater;
+  if (denominator === 0 || !Number.isFinite(denominator)) return null;
+  const raw = (weightInAir / denominator) * 1000;
+  if (!Number.isFinite(raw)) return null;
+  return Math.round(raw / 10) * 10;
+}
+
 function getLDCorrectionFactor(ld: number): { cf: number; isCylinderStrength: boolean; noCorrection: boolean } {
   // Priority 1: no-correction range — MUST be checked before table
   if (ld >= 0.96 && ld <= 1.04) {
@@ -64,6 +79,9 @@ interface CoreRow {
   length: string;          // Total length (mm)
   lengthAfterCap: string;  // Length after capping (mm)
   mass: string;            // Mass (g)
+  weightInAir: string;     // Weight in air (g)
+  weightInAirSSD: string;  // Weight in air SSD (g)
+  weightInWater: string;   // Weight in water (g)
   maxLoad: string;
   area?: number;
   ld?: number;
@@ -76,6 +94,41 @@ interface CoreRow {
   result?: "pass" | "fail" | "pending";
 }
 
+/** Core strength N/mm² from max load (kN) and cross-section area (mm²). */
+function calculateCoreStrength(maxLoadKN: number, areaSquareMM: number): number | null {
+  if (!maxLoadKN || !areaSquareMM) return null;
+  const v = (maxLoadKN * 1000) / areaSquareMM;
+  return Number.isFinite(v) ? v : null;
+}
+
+/** Returns an error message if weight fields are partially filled or inconsistent. */
+function validateCoreWeights(row: CoreRow, ar: boolean): string | null {
+  const a = row.weightInAir?.trim();
+  const s = row.weightInAirSSD?.trim();
+  const w = row.weightInWater?.trim();
+  const any = Boolean(a || s || w);
+  if (!any) return null;
+  const na = a ? parseFloat(a) : NaN;
+  const ns = s ? parseFloat(s) : NaN;
+  const nw = w ? parseFloat(w) : NaN;
+  if (!a || !s || !w) {
+    return ar ? "أدخل الأوزان الثلاثة معاً أو اتركها فارغة" : "Enter all three weight fields together, or leave all empty";
+  }
+  if (![na, ns, nw].every(n => Number.isFinite(n) && n > 0)) {
+    return ar ? "الأوزان يجب أن تكون أرقاماً موجبة" : "All weights must be positive numbers";
+  }
+  if (ns < na) {
+    return ar ? "وزن SSD يجب أن يكون ≥ وزن الهواء" : "Weight in Air (SSD) should be ≥ Weight in Air";
+  }
+  if (nw >= na) {
+    return ar ? "وزن الماء يجب أن يكون < وزن الهواء" : "Weight in Water should be < Weight in Air";
+  }
+  if (ns - nw === 0) {
+    return ar ? "SSD − وزن الماء يجب أن يكون ≠ 0" : "SSD − water weight must be non-zero for density";
+  }
+  return null;
+}
+
 function newRow(index: number): CoreRow {
   return {
     id: `row_${Date.now()}_${index}`,
@@ -85,6 +138,9 @@ function newRow(index: number): CoreRow {
     length: "",
     lengthAfterCap: "",
     mass: "",
+    weightInAir: "",
+    weightInAirSSD: "",
+    weightInWater: "",
     maxLoad: "",
   };
 }
@@ -94,44 +150,61 @@ function computeRow(row: CoreRow, specifiedCubeStrength: number): CoreRow {
   const l = parseFloat(row.lengthAfterCap || row.length);
   const load = parseFloat(row.maxLoad);
   if (!d || !l || !load) {
-    // Can still compute density even without load
     const dOnly = parseFloat(row.diameter);
     const lOnly = parseFloat(row.length || row.lengthAfterCap);
     const massG = parseFloat(row.mass);
-    if (dOnly && lOnly && massG) {
-      const areaOnly = Math.PI * (dOnly / 2) ** 2; // mm²
-      const volMm3 = areaOnly * lOnly;              // mm³
-      const volM3 = volMm3 * 1e-9;                  // m³
+    const wAir = parseFloat(row.weightInAir || "");
+    const wSsd = parseFloat(row.weightInAirSSD || "");
+    const wWat = parseFloat(row.weightInWater || "");
+    const fromW = calculateDensityFromWeights(wAir, wSsd, wWat);
+    let density: number | undefined = fromW ?? undefined;
+    if (fromW == null && dOnly && lOnly && massG) {
+      const areaOnly = Math.PI * (dOnly / 2) ** 2;
+      const volMm3 = areaOnly * lOnly;
+      const volM3 = volMm3 * 1e-9;
       const massKg = massG / 1000;
       const densityRaw = massKg / volM3;
-      const density = Math.round(densityRaw / 10) * 10; // round to nearest 10
+      density = Math.round(densityRaw / 10) * 10;
+    }
+    if (density != null && dOnly && lOnly) {
+      const areaOnly = Math.PI * (dOnly / 2) ** 2;
       return { ...row, area: Math.round(areaOnly), density };
     }
+    if (density != null) return { ...row, density };
     return row;
   }
   const area = Math.PI * (d / 2) ** 2;
   const ld = l / d;
   const { cf, isCylinderStrength, noCorrection } = getLDCorrectionFactor(ld);
-  const coreStr = (load * 1000) / area;
+  const coreStrRaw = calculateCoreStrength(load, area);
+  const coreStr = coreStrRaw != null ? coreStrRaw : 0;
   const eqCubeStr = coreStr * cf;
   // When L/D >= 2.0: result is cylinder strength (not equivalent cube strength)
   // BS EN 12504-1: at L/D=2, CF=1.0 and result is treated as cylinder strength
   // BS EN 13791 Method A: Eq. cube strength ≥ 0.85 × fck
   // ORIGINAL used 1.0 × fck — too strict. Valid cores were failing.
   const required = specifiedCubeStrength * 0.85;
-  const coreStrRounded = Math.round(coreStr * 10) / 10;
+  const coreStrRounded = coreStrRaw != null ? Math.round(coreStrRaw * 10) / 10 : 0;
   const eqCubeStrRounded = Math.round(eqCubeStr * 10) / 10;
 
-  // Density calculation
-  const massG = parseFloat(row.mass);
+  // Density: prefer immersion weights when all three valid; else mass / volume
+  const wAir = parseFloat(row.weightInAir || "");
+  const wSsd = parseFloat(row.weightInAirSSD || "");
+  const wWat = parseFloat(row.weightInWater || "");
   let density: number | undefined;
-  const lForDensity = parseFloat(row.length || row.lengthAfterCap);
-  if (massG && lForDensity && d) {
-    const volMm3 = area * lForDensity;
-    const volM3 = volMm3 * 1e-9;
-    const massKg = massG / 1000;
-    const densityRaw = massKg / volM3;
-    density = Math.round(densityRaw / 10) * 10;
+  const fromWeights = calculateDensityFromWeights(wAir, wSsd, wWat);
+  if (fromWeights != null) {
+    density = fromWeights;
+  } else {
+    const massG = parseFloat(row.mass);
+    const lForDensity = parseFloat(row.length || row.lengthAfterCap);
+    if (massG && lForDensity && d) {
+      const volMm3 = area * lForDensity;
+      const volM3 = volMm3 * 1e-9;
+      const massKg = massG / 1000;
+      const densityRaw = massKg / volM3;
+      density = Math.round(densityRaw / 10) * 10;
+    }
   }
 
   return {
@@ -140,7 +213,7 @@ function computeRow(row: CoreRow, specifiedCubeStrength: number): CoreRow {
     ld: parseFloat(ld.toFixed(2)),
     correctionFactor: parseFloat(cf.toFixed(3)),
     density,
-    coreStrength: coreStrRounded,
+    coreStrength: load ? coreStrRounded : undefined,
     equivalentCubeStrength: eqCubeStrRounded,
     isCylinderStrength,
     noLDCorrection: noCorrection,
@@ -212,6 +285,9 @@ export default function ConcreteCore() {
         length: String(c.length || ""),
         lengthAfterCap: String(c.lengthAfterCap || ""),
         mass: String(c.mass || ""),
+        weightInAir: String(c.weightInAir ?? ""),
+        weightInAirSSD: String(c.weightInAirSSD ?? ""),
+        weightInWater: String(c.weightInWater ?? ""),
         maxLoad: String(c.maxLoad || ""),
       })));
     }
@@ -244,6 +320,13 @@ export default function ConcreteCore() {
     if (!dist?.sampleId) {
       toast.error(lang === "ar" ? "معرف العينة مفقود" : "Sample ID missing");
       return;
+    }
+    for (const r of rows) {
+      const wErr = validateCoreWeights(r, ar);
+      if (wErr) {
+        toast.error(wErr);
+        return;
+      }
     }
     if (status === "submitted" && validRows.length === 0) {
       toast.error(ar ? "الرجاء إدخال نتيجة لب واحدة على الأقل" : "Please enter at least one core result");
@@ -473,6 +556,9 @@ export default function ConcreteCore() {
                     { en: "Length (mm)", ar: "الطول (مم)" },
                     { en: "L after cap (mm)", ar: "الطول بعد التغطية (مم)" },
                     { en: "Mass (g)", ar: "الكتلة (غ)" },
+                    { en: "Weight in Air (g)", ar: "الوزن في الهواء (غ)" },
+                    { en: "Weight in Air (SSD) (g)", ar: "الوزن في الهواء SSD (غ)" },
+                    { en: "Weight in Water (g)", ar: "الوزن في الماء (غ)" },
                     { en: "Density (kg/m³)", ar: "الكثافة (كغ/م³)" },
                     { en: "Max Load (kN)", ar: "الحمل الأقصى (كن)" },
                     { en: "Area (mm²)", ar: "المساحة (مم²)" },
@@ -543,6 +629,33 @@ export default function ConcreteCore() {
                         value={row.mass}
                         onChange={e => updateRow(row.id, "mass", e.target.value)}
                         className="h-7 text-xs w-20 text-center font-mono"
+                        placeholder="—"
+                        disabled={submitted}
+                      />
+                    </td>
+                    <td className="border border-slate-200 px-1 py-1">
+                      <Input
+                        value={row.weightInAir}
+                        onChange={e => updateRow(row.id, "weightInAir", e.target.value)}
+                        className="h-7 text-xs w-[4.5rem] text-center font-mono"
+                        placeholder="—"
+                        disabled={submitted}
+                      />
+                    </td>
+                    <td className="border border-slate-200 px-1 py-1">
+                      <Input
+                        value={row.weightInAirSSD}
+                        onChange={e => updateRow(row.id, "weightInAirSSD", e.target.value)}
+                        className="h-7 text-xs w-[4.5rem] text-center font-mono"
+                        placeholder="—"
+                        disabled={submitted}
+                      />
+                    </td>
+                    <td className="border border-slate-200 px-1 py-1">
+                      <Input
+                        value={row.weightInWater}
+                        onChange={e => updateRow(row.id, "weightInWater", e.target.value)}
+                        className="h-7 text-xs w-[4.5rem] text-center font-mono"
                         placeholder="—"
                         disabled={submitted}
                       />

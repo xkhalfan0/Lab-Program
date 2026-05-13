@@ -50,9 +50,74 @@ function renderConcreteCore(fd: any, isAr: boolean, castingDateMs?: number | nul
   const endConditionLabel = endCondition === "grinded" ? (isAr ? "مطحون" : "Grinded")
     : endCondition === "capped" ? (isAr ? "مغطى" : "Capped")
     : (isAr ? "كما حفر" : "As-Drilled");
-  const headers = isAr
-    ? ["رقم الكور", "الموقع", ...(hasAge ? ["العمر (يوم)"] : []), "القطر (مم)", "الطول (مم)", "الكثافة (kg/m³)", "نسبة L/D", "معامل التصحيح", "الحمل (كن)", "مقاومة الكور (N/mm²)", "قوة المكعب المكافئة (N/mm²)", "النتيجة"]
-    : ["Core No.", "Location", ...(hasAge ? ["Age (Days)"] : []), "Dia. (mm)", "Length (mm)", "Density (kg/m³)", "L/D", "C.F.", "Load (kN)", "Core Strength (N/mm²)", "Eq. Cube Strength (N/mm²)", "Result"];
+  const L = (en: string, ars: string) => (isAr ? ars : en);
+
+  const coreColumns: Column[] = [
+    { header: L("Core No.", "رقم الكور"), field: "coreNo", align: "center", render: (v, row) => String((row as any).coreNo ?? ((row as any)._idx + 1)) },
+    { header: L("Location", "الموقع"), field: "location", align: "center", render: (v) => String(v || "—") },
+    ...(hasAge ? [{ header: L("Age (Days)", "العمر (يوم)"), field: "_ageDays", align: "center" } as Column] : []),
+    { header: L("Dia. (mm)", "القطر (مم)"), field: "diameter", type: "number", decimals: 0, align: "right" },
+    {
+      header: L("Length (mm)", "الطول (مم)"),
+      field: "_lengthMm",
+      align: "right",
+      render: (_, row) => {
+        const displayLength = (row as any).length ?? (row as any).lengthAfterCap;
+        return displayLength ? fmt(displayLength, 0) : "—";
+      },
+    },
+    { header: L("Mass (g)", "الكتلة (غ)"), field: "mass", align: "right", render: (v) => (v != null && v !== "" ? fmt(String(v), 2) : "—") },
+    { header: L("Weight in Air (g)", "الوزن في الهواء (غ)"), field: "weightInAir", align: "right", render: (v) => (v != null && v !== "" ? fmt(String(v), 2) : "—") },
+    { header: L("Weight in Air (SSD) (g)", "الوزن في الهواء SSD (غ)"), field: "weightInAirSSD", align: "right", render: (v) => (v != null && v !== "" ? fmt(String(v), 2) : "—") },
+    { header: L("Weight in Water (g)", "الوزن في الماء (غ)"), field: "weightInWater", align: "right", render: (v) => (v != null && v !== "" ? fmt(String(v), 2) : "—") },
+    { header: L("Density (kg/m³)", "الكثافة (كغ/م³)"), field: "density", align: "center", render: (v) => (v != null && v !== "" ? String(v) : "—") },
+    { header: L("L/D", "نسبة L/D"), field: "ld", align: "center", render: (_, row) => fmt((row as any).ld ?? (row as any).ldRatio) },
+    {
+      header: L("C.F.", "معامل التصحيح"),
+      field: "correctionFactor",
+      align: "center",
+      render: (_, row) => {
+        const r = row as any;
+        const isLDOne = r.ld !== undefined && r.ld >= 1.0 && r.ld < 2.0;
+        return isLDOne || Number(r.correctionFactor) >= 0.999 ? "1.000" : fmt(r.correctionFactor);
+      },
+    },
+    { header: L("Load (kN)", "الحمل (كن)"), field: "maxLoad", align: "right", render: (_, row) => fmt((row as any).maxLoad ?? (row as any).maxLoadKN) },
+    { header: L("Core Strength (N/mm²)", "مقاومة الكور (N/mm²)"), field: "coreStrength", align: "right", render: (v) => fmtStr(v) },
+    {
+      header: L("Eq. Cube Strength (N/mm²)", "قوة المكعب المكافئة (N/mm²)"),
+      field: "_eq",
+      align: "center",
+      render: (_, row) => {
+        const r = row as any;
+        const eqStrength = r.equivalentCubeStrength ?? r.correctedStrength;
+        const isLDTwo = r.ld !== undefined && r.ld >= 2.0;
+        return (
+          <span className="font-bold">
+            {fmtStr(eqStrength)}
+            {isLDTwo && (
+              <sup className="text-amber-600 text-[9px] ms-0.5" title={isAr ? "قوة أسطوانة" : "Cylinder strength"}>
+                cyl
+              </sup>
+            )}
+          </span>
+        );
+      },
+    },
+    {
+      header: L("Result", "النتيجة"),
+      field: "result",
+      type: "status",
+      align: "center",
+      render: (_, row) => {
+        const r = (row as any).result;
+        if (r === "pass") return <span className="text-emerald-800 font-bold">{isAr ? "مطابق" : "PASS"}</span>;
+        if (r === "fail") return <span className="text-red-800 font-bold">{isAr ? "غير مطابق" : "FAIL"}</span>;
+        return "—";
+      },
+    },
+  ];
+
   return (
     <>
       {/* Summary header */}
@@ -93,59 +158,7 @@ function renderConcreteCore(fd: any, isAr: boolean, castingDateMs?: number | nul
         )}
       </div>
       <FlexibleResultsTable
-        columns={[
-          { header: headers[0], field: "coreNo", align: "center", render: (v, row) => String((row as any).coreNo ?? ((row as any)._idx + 1)) },
-          { header: headers[1], field: "location", align: "center", render: (v) => String(v || "—") },
-          ...(hasAge
-            ? [{ header: headers[2], field: "_ageDays", align: "center" } as Column]
-            : []),
-          { header: headers[hasAge ? 3 : 2], field: "diameter", type: "number", decimals: 0, align: "right" },
-          { header: headers[hasAge ? 4 : 3], field: "_lengthMm", align: "right", render: (_, row) => {
-            const displayLength = (row as any).length ?? (row as any).lengthAfterCap;
-            return displayLength ? fmt(displayLength, 0) : "—";
-          }},
-          { header: headers[hasAge ? 5 : 4], field: "density", align: "center", render: (v) => (v != null ? String(v) : "—") },
-          { header: headers[hasAge ? 6 : 5], field: "ld", align: "center", render: (_, row) => fmt((row as any).ld ?? (row as any).ldRatio) },
-          { header: headers[hasAge ? 7 : 6], field: "correctionFactor", align: "center", render: (_, row) => {
-            const r = row as any;
-            const isLDOne = r.ld !== undefined && r.ld >= 1.0 && r.ld < 2.0;
-            return isLDOne || Number(r.correctionFactor) >= 0.999 ? "1.000" : fmt(r.correctionFactor);
-          }},
-          { header: headers[hasAge ? 8 : 7], field: "maxLoad", align: "right", render: (_, row) => fmt((row as any).maxLoad ?? (row as any).maxLoadKN) },
-          { header: headers[hasAge ? 9 : 8], field: "coreStrength", align: "right", render: (v) => fmtStr(v) },
-          {
-            header: headers[hasAge ? 10 : 9],
-            field: "_eq",
-            align: "center",
-            render: (_, row) => {
-              const r = row as any;
-              const eqStrength = r.equivalentCubeStrength ?? r.correctedStrength;
-              const isLDTwo = r.ld !== undefined && r.ld >= 2.0;
-              return (
-                <span className="font-bold">
-                  {fmtStr(eqStrength)}
-                  {isLDTwo && (
-                    <sup className="text-amber-600 text-[9px] ms-0.5" title={isAr ? "قوة أسطوانة" : "Cylinder strength"}>
-                      cyl
-                    </sup>
-                  )}
-                </span>
-              );
-            },
-          },
-          {
-            header: headers[headers.length - 1],
-            field: "result",
-            type: "status",
-            align: "center",
-            render: (_, row) => {
-              const r = (row as any).result;
-              if (r === "pass") return <span className="text-emerald-800 font-bold">{isAr ? "مطابق" : "PASS"}</span>;
-              if (r === "fail") return <span className="text-red-800 font-bold">{isAr ? "غير مطابق" : "FAIL"}</span>;
-              return "—";
-            },
-          },
-        ]}
+        columns={coreColumns}
         rows={rows.map((r: any, i: number) => ({
           ...r,
           _idx: i,
