@@ -344,10 +344,9 @@
     margin: 0 !important;
   }
 
-  /* Ensure good contrast for print */
+  /* Print: white paper; do not force body text color — it overrides PASS/FAIL greens & tinted text */
   body {
     background: white !important;
-    color: black !important;
     font-size: 11pt;
   }
 

@@ -25,11 +25,11 @@
     -webkit-print-color-adjust: exact;
   }
 
-  /* Printable surface (when wrapper is present) */
+  /* Printable surface: ask engine to keep backgrounds & accent colors */
   .lab-print-root {
     background: #fff !important;
-    print-color-adjust: exact;
-    -webkit-print-color-adjust: exact;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
   }
 
   /* App chrome (printing from inside dashboard) */
@@ -44,14 +44,27 @@
     display: none !important;
   }
 
-  /* ── Lab report tables: class + report-page fallbacks ── */
+  /* Full-width data tables only — keep small header tables (e.g. ref box) auto-sized */
   table.metadata-table,
   table.signatures-table,
-  table.lab-results-table,
-  .report-page table {
+  table.lab-results-table {
     border: 0.5pt solid #000 !important;
     border-collapse: collapse !important;
     width: 100% !important;
+  }
+
+  table.metadata-table {
+    table-layout: fixed !important;
+  }
+
+  .report-page > .flex.justify-end table,
+  table.report-ref-table {
+    width: auto !important;
+    max-width: 100%;
+  }
+
+  .report-page table {
+    border-collapse: collapse !important;
   }
 
   table.metadata-table th,
@@ -100,6 +113,8 @@
 
   .report-page {
     page-break-inside: avoid;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
   }
 
   * {

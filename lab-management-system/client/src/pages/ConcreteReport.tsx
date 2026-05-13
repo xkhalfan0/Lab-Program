@@ -422,13 +422,21 @@ function ReportPage({
   return (
     <div
       className="report-page bg-white p-8 print:p-6 flex flex-col"
-      style={{ fontFamily: "Arial, sans-serif", fontSize: "11px", minHeight: "297mm", width: "210mm" }}
+      style={{
+        fontFamily: "'IBM Plex Sans Arabic', Arial, Helvetica, sans-serif",
+        fontSize: "11px",
+        minHeight: "297mm",
+        width: "210mm",
+      }}
     >
       <LabReportHeader lang={lang} />
 
       {/* Top Reference Box */}
       <div className="flex justify-end mb-3">
-        <table className="border-collapse border border-black text-center" style={{ minWidth: "160px" }}>
+        <table
+          className="report-ref-table border-collapse border border-black text-center"
+          style={{ minWidth: "160px" }}
+        >
           <tbody>
             <tr>
               <td className="border border-black px-3 py-1 font-bold text-xs">{sig.ref}</td>
@@ -451,8 +459,8 @@ function ReportPage({
         {sig.labTitle}
       </div>
 
-      {/* Subtitle */}
-      <div className="text-center font-bold text-[11px] border border-slate-900 py-1.5 mb-4">
+      {/* Subtitle — same band style as main title for print/screen parity */}
+      <div className="text-center font-bold text-[11px] border border-slate-900 py-1.5 mb-4 bg-slate-100">
         COMPRESSIVE STRENGTH OF CONCRETE CUBES TO BS 1881; PART 114 &amp; 116: 1983
       </div>
 
@@ -568,7 +576,7 @@ function ReportPage({
       </div>
 
       {/* Comments — user notes from test form only (no hidden metadata / auto system notes) */}
-      <div className="border border-slate-400 rounded-sm p-3 mb-3 min-h-[4.5rem] bg-slate-50/90 print:bg-white">
+      <div className="border border-slate-400 rounded-sm p-3 mb-3 min-h-[4.5rem] bg-slate-50/90">
         <div className="font-bold text-slate-900 text-xs mb-1.5">{footer.remarksTitle}</div>
         <p
           className={`text-xs leading-relaxed whitespace-pre-wrap ${
@@ -579,7 +587,7 @@ function ReportPage({
         </p>
       </div>
 
-      <div className="text-[10px] text-slate-500 border border-slate-200 rounded-sm px-2 py-1.5 mb-3 bg-slate-50/60 print:bg-white italic">
+      <div className="text-[10px] text-slate-500 border border-slate-200 rounded-sm px-2 py-1.5 mb-3 bg-slate-50/60 italic">
         <p>{footer.fractureNote}</p>
         <p className="mt-0.5">{footer.curingNote}</p>
       </div>
@@ -642,7 +650,7 @@ function ReportPage({
         );
       })()}
       {/* Spec Limits Summary */}
-      <div className="text-xs border border-slate-400 rounded-sm p-2.5 mb-3 bg-slate-50/70 print:bg-white space-y-1.5">
+      <div className="text-xs border border-slate-400 rounded-sm p-2.5 mb-3 bg-slate-50/70 space-y-1.5">
         {requiredMpa !== null && targetMpa !== null && (
           <div className="font-semibold text-slate-800">
             {testAge >= 28 ? (
