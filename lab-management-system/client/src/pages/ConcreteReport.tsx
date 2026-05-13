@@ -4,6 +4,53 @@ import { useRef, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Printer, X, Download, Loader2 } from "lucide-react";
 import { generatePdfFromElement } from "@/lib/pdf";
+import { useLanguage } from "@/contexts/LanguageContext";
+
+// --- Lab print branding (override via Vite env for deployment-specific details) ---
+const LAB_PRINT_BRANDING = {
+  nameEn:
+    (import.meta.env.VITE_LAB_NAME as string | undefined)?.trim() ||
+    "Construction Materials & Engineering Laboratory",
+  nameAr: (import.meta.env.VITE_LAB_NAME_AR as string | undefined)?.trim() || "",
+  address: (import.meta.env.VITE_LAB_ADDRESS as string | undefined)?.trim() || "",
+  phone: (import.meta.env.VITE_LAB_PHONE as string | undefined)?.trim() || "",
+  email: (import.meta.env.VITE_LAB_EMAIL as string | undefined)?.trim() || "",
+  accreditation: (import.meta.env.VITE_LAB_ACCREDITATION as string | undefined)?.trim() || "",
+  logoUrl: (import.meta.env.VITE_LAB_LOGO_URL as string | undefined)?.trim() || "/logo.png",
+};
+
+/** Same marker as ConcreteTest — hidden JSON suffix must never appear on printed reports. */
+const AGE_META_MARKER = "\n__AGE_META__:";
+function stripAgeMetaFromComments(comments: string): string {
+  const i = comments.indexOf(AGE_META_MARKER);
+  if (i === -1) return comments;
+  return comments.slice(0, i).trimEnd();
+}
+
+/**
+ * User-entered remarks from the concrete test form only (group.comments).
+ * Strips persisted age metadata; hides accidental raw JSON blobs.
+ */
+function getUserRemarksForReport(raw: string | null | undefined): string {
+  let s = stripAgeMetaFromComments(String(raw ?? "")).trim();
+  if (!s) return "";
+  if (s.startsWith("{") && s.endsWith("}")) {
+    try {
+      const o = JSON.parse(s) as Record<string, unknown>;
+      if (o && typeof o === "object" && !Array.isArray(o)) {
+        const parts: string[] = [];
+        for (const k of ["remarks", "notes", "comments", "text"]) {
+          const v = o[k];
+          if (typeof v === "string" && v.trim()) parts.push(v.trim());
+        }
+        s = parts.join("\n").trim();
+      }
+    } catch {
+      return "";
+    }
+  }
+  return s.trim();
+}
 
 // --- Helpers ---
 function fmt(val: string | null | undefined, decimals = 2): string {
@@ -34,6 +81,19 @@ function fmtDate(d: Date | string | null | undefined): string {
   const month = String(dt.getMonth() + 1).padStart(2, '0');
   const year = dt.getFullYear();
   return `${day}/${month}/${year}`;
+}
+
+function fmtDateTime(d: Date | string | null | undefined, lang: "en" | "ar"): string {
+  if (!d) return "";
+  const dt = new Date(d);
+  if (isNaN(dt.getTime())) return "";
+  return dt.toLocaleString(lang === "ar" ? "ar-AE" : "en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 // ─── Concrete compliance helpers (age-based) ────────────────────────────────────────────
@@ -79,6 +139,60 @@ function extractTargetFromClass(classStr: string | null | undefined): number | n
   const m = classStr.match(/C(\d+)/i);
   return m ? parseFloat(m[1]) : null;
 }
+
+function LabReportHeader({ lang }: { lang: "en" | "ar" }) {
+  const ar = lang === "ar";
+  const displayName =
+    ar && LAB_PRINT_BRANDING.nameAr ? LAB_PRINT_BRANDING.nameAr : LAB_PRINT_BRANDING.nameEn;
+  const [logoOk, setLogoOk] = useState(!!LAB_PRINT_BRANDING.logoUrl);
+
+  return (
+    <header className="mb-4 pb-3 border-b-2 border-slate-800 print:mb-3">
+      <div className="flex items-start gap-3 justify-between">
+        <div className="flex gap-3 items-start min-w-0 flex-1">
+          {LAB_PRINT_BRANDING.logoUrl && logoOk ? (
+            <img
+              src={LAB_PRINT_BRANDING.logoUrl}
+              alt=""
+              className="h-12 w-auto max-w-[100px] object-contain shrink-0"
+              onError={() => setLogoOk(false)}
+            />
+          ) : null}
+          <div className="min-w-0">
+            <h1 className="text-[13px] font-bold text-slate-900 leading-snug">{displayName}</h1>
+            <div className="mt-1 text-[10px] text-slate-700 space-y-0.5 leading-snug">
+              {LAB_PRINT_BRANDING.address ? <p>{LAB_PRINT_BRANDING.address}</p> : null}
+              {(LAB_PRINT_BRANDING.phone || LAB_PRINT_BRANDING.email) && (
+                <p>
+                  {LAB_PRINT_BRANDING.phone ? (
+                    <span>
+                      {ar ? "هاتف: " : "Tel: "}
+                      {LAB_PRINT_BRANDING.phone}
+                    </span>
+                  ) : null}
+                  {LAB_PRINT_BRANDING.phone && LAB_PRINT_BRANDING.email ? " · " : null}
+                  {LAB_PRINT_BRANDING.email ? (
+                    <span>
+                      {ar ? "البريد: " : "Email: "}
+                      {LAB_PRINT_BRANDING.email}
+                    </span>
+                  ) : null}
+                </p>
+              )}
+              {LAB_PRINT_BRANDING.accreditation ? (
+                <p className="font-medium text-slate-800">
+                  {ar ? "اعتماد: " : "Accreditation: "}
+                  {LAB_PRINT_BRANDING.accreditation}
+                </p>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      </div>
+    </header>
+  );
+}
+
 // ─── Single Report Page (one age group = one page) ────────────────────────────
 function ReportPage({
   group,
@@ -87,6 +201,12 @@ function ReportPage({
   testedByName,
   managerReviewedByName,
   qcReviewedByName,
+  lang,
+  pageIndex,
+  totalPages,
+  testedSignedAt,
+  managerSignedAt,
+  qcSignedAt,
 }: {
   group: any;
   refNo: string;
@@ -94,7 +214,41 @@ function ReportPage({
   testedByName?: string | null;
   managerReviewedByName?: string | null;
   qcReviewedByName?: string | null;
+  lang: "en" | "ar";
+  pageIndex: number;
+  totalPages: number;
+  testedSignedAt?: Date | string | null;
+  managerSignedAt?: Date | string | null;
+  qcSignedAt?: Date | string | null;
 }) {
+  const ar = lang === "ar";
+  const userRemarks = getUserRemarksForReport(group.comments);
+  const remarksDisplay = userRemarks || (ar ? "لا توجد ملاحظات إضافية" : "No additional remarks");
+  const sig = ar
+    ? {
+        tested: "أعدّ التقرير / الفحص",
+        reviewed: "راجع",
+        approved: "اعتمد",
+        roleT: "فني مختبر",
+        roleM: "مدير المختبر",
+        roleQ: "مسؤول الجودة",
+        dig: "تم التوقيع إلكترونياً في",
+        ref: "المرجع",
+        dateLbl: "التاريخ",
+        labTitle: "تقرير اختبار مختبري",
+      }
+    : {
+        tested: "Prepared / Tested By",
+        reviewed: "Reviewed By",
+        approved: "Approved By",
+        roleT: "Laboratory Technician",
+        roleM: "Laboratory Manager",
+        roleQ: "Quality Officer",
+        dig: "Digitally signed on",
+        ref: "Reference",
+        dateLbl: "Date",
+        labTitle: "LABORATORY TEST REPORT",
+      };
   const cubes: any[] = group.cubes ?? [];
   const avg = group.avgCompressiveStrength ? parseFloat(group.avgCompressiveStrength) : null;
   // Use minAcceptable from DB; fallback to extracting from classOfConcrete
@@ -142,40 +296,70 @@ function ReportPage({
         ? avg >= requiredMpa
         : null;
 
+  const reportDateStr = new Date().toLocaleDateString(ar ? "ar-AE" : "en-GB");
+  const footer = ar
+    ? {
+        repro: "لا يجوز إعادة إنتاج هذا التقرير إلا كاملاً دون أي حذف أو تعديل.",
+        cert: "أجريت الاختبارات وفق إجراءات المختبر الموثقة والمعايير والطرق المعتمدة.",
+        page: "صفحة",
+        of: "من",
+        remarksTitle: "ملاحظات / تعليقات",
+        fractureNote: "نوع الكسر: SF — مقبول، USF — غير مقبول",
+        curingNote: "* أجريت المعالجة قبل تسليم العينات للمختبر خارج نطاق سيطرة المختبر.",
+      }
+    : {
+        repro: "This report may not be reproduced except in full without prior written approval from the laboratory.",
+        cert: "Testing was performed in accordance with the laboratory's documented procedures and applicable recognised methods and standards.",
+        page: "Page",
+        of: "of",
+        remarksTitle: "Comments / Remarks",
+        fractureNote: "Type of fracture: SF — Satisfactory, USF — Unsatisfactory",
+        curingNote: "* Curing before delivery to the laboratory was performed outside the control of the laboratory.",
+      };
+
+  const testedDisplay = (testedByName ?? group.testedBy ?? "").trim() || "—";
+  const managerDisplay = (managerReviewedByName ?? "").trim() || "—";
+  const qcDisplay = (qcReviewedByName ?? "").trim() || "—";
+
   return (
-    <div className="report-page bg-white p-8 print:p-6" style={{ fontFamily: "Arial, sans-serif", fontSize: "11px", minHeight: "297mm", width: "210mm" }}>
+    <div
+      className="report-page bg-white p-8 print:p-6 flex flex-col"
+      style={{ fontFamily: "Arial, sans-serif", fontSize: "11px", minHeight: "297mm", width: "210mm" }}
+    >
+      <LabReportHeader lang={lang} />
+
       {/* Top Reference Box */}
-      <div className="flex justify-end mb-1">
+      <div className="flex justify-end mb-3">
         <table className="border-collapse border border-black text-center" style={{ minWidth: "160px" }}>
           <tbody>
             <tr>
-              <td className="border border-black px-3 py-1 font-bold text-xs">Reference</td>
+              <td className="border border-black px-3 py-1 font-bold text-xs">{sig.ref}</td>
             </tr>
             <tr>
               <td className="border border-black px-3 py-2 font-bold text-sm">{refNo}</td>
             </tr>
             <tr>
-              <td className="border border-black px-3 py-1 font-bold text-xs">Date</td>
+              <td className="border border-black px-3 py-1 font-bold text-xs">{sig.dateLbl}</td>
             </tr>
             <tr>
-              <td className="border border-black px-3 py-1 text-xs">{new Date().toLocaleDateString("en-GB")}</td>
+              <td className="border border-black px-3 py-1 text-xs">{reportDateStr}</td>
             </tr>
           </tbody>
         </table>
       </div>
 
       {/* Title */}
-      <div className="text-center font-bold text-base border border-black py-2 mb-1 bg-gray-100">
-        LABORATORY TEST REPORT
+      <div className="text-center font-bold text-base border-2 border-slate-900 py-2.5 mb-2 bg-slate-100">
+        {sig.labTitle}
       </div>
 
       {/* Subtitle */}
-      <div className="text-center font-bold text-xs border border-black py-1 mb-3">
+      <div className="text-center font-bold text-[11px] border border-slate-900 py-1.5 mb-4">
         COMPRESSIVE STRENGTH OF CONCRETE CUBES TO BS 1881; PART 114 &amp; 116: 1983
       </div>
 
       {/* Project Info Grid */}
-      <table className="w-full border-collapse border border-black mb-1 text-xs">
+      <table className="w-full border-collapse border border-black mb-2 text-xs">
         <tbody>
           <tr>
             <td className="border border-black px-2 py-1 w-1/4">CONTRACT NO:</td>
@@ -205,7 +389,7 @@ function ReportPage({
       </table>
 
       {/* Source/Batch/Slump row */}
-      <table className="w-full border-collapse border border-black mb-1 text-xs">
+      <table className="w-full border-collapse border border-black mb-2 text-xs">
         <tbody>
           <tr>
             <td className="border border-black px-2 py-1 w-1/4">SOURCE/SUPPLIER :</td>
@@ -217,7 +401,7 @@ function ReportPage({
       </table>
 
       {/* Class / Slump row */}
-      <table className="w-full border-collapse border border-black mb-1 text-xs">
+      <table className="w-full border-collapse border border-black mb-3 text-xs">
         <tbody>
           <tr>
             <td className="border border-black px-2 py-1 w-2/3">
@@ -271,7 +455,7 @@ function ReportPage({
       </table>
 
       {/* Results Table */}
-      <table className="w-full border-collapse border border-black text-xs mb-1">
+      <table className="w-full border-collapse border border-black text-xs mb-3">
         <thead>
           <tr className="bg-gray-100">
             <th className="border border-black px-1 py-1 text-center" rowSpan={2}>Mark<br />No.</th>
@@ -340,34 +524,57 @@ function ReportPage({
         </tbody>
       </table>
 
-      {/* Comments */}
-      <div className="border border-black p-2 mb-2 min-h-12">
-        <span className="underline font-semibold">Comments/Remarks</span>
-        <p className="mt-1 text-xs">{group.comments ?? ""}</p>
+      {/* Comments — user notes from test form only (no hidden metadata / auto system notes) */}
+      <div className="border border-slate-400 rounded-sm p-3 mb-3 min-h-[4.5rem] bg-slate-50/90 print:bg-white">
+        <div className="font-bold text-slate-900 text-xs mb-1.5">{footer.remarksTitle}</div>
+        <p
+          className={`text-xs leading-relaxed whitespace-pre-wrap ${
+            userRemarks ? "text-slate-900" : "text-slate-500 italic"
+          }`}
+        >
+          {remarksDisplay}
+        </p>
+      </div>
+
+      <div className="text-[10px] text-slate-500 border border-slate-200 rounded-sm px-2 py-1.5 mb-3 bg-slate-50/60 print:bg-white italic">
+        <p>{footer.fractureNote}</p>
+        <p className="mt-0.5">{footer.curingNote}</p>
       </div>
 
       {/* Signatures */}
-      <div className="flex justify-between items-end mb-2">
-        <div className="text-xs text-gray-400 italic">
-          <p>Type of Fracture : SF - Satisfactory, USF - Unsatisfactory</p>
-          <p>* Curing before delivery to lab was performed outside the control of the laboratory</p>
-        </div>
-        <div className="text-right text-xs min-w-[260px]">
-          <div className="grid grid-cols-3 gap-3">
-            <div className="text-center">
-              <p className="font-semibold">Tested By</p>
-              <p className="font-bold mt-1">{testedByName ?? group.testedBy ?? " "}</p>
-            </div>
-            <div className="text-center">
-              <p className="font-semibold">Reviewed By</p>
-              <p className="font-bold mt-1">{managerReviewedByName ?? " "}</p>
-            </div>
-            <div className="text-center">
-              <p className="font-semibold">Approved By</p>
-              <p className="font-bold mt-1">{qcReviewedByName ?? " "}</p>
-            </div>
+      <div className="grid grid-cols-3 gap-3 text-[10px] mb-3 print:mb-2">
+        {[
+          {
+            label: sig.tested,
+            role: sig.roleT,
+            name: testedDisplay,
+            signedAt: testedSignedAt,
+          },
+          {
+            label: sig.reviewed,
+            role: sig.roleM,
+            name: managerDisplay,
+            signedAt: managerSignedAt,
+          },
+          {
+            label: sig.approved,
+            role: sig.roleQ,
+            name: qcDisplay,
+            signedAt: qcSignedAt,
+          },
+        ].map((col, i) => (
+          <div key={i} className="text-center px-1 border border-slate-300 rounded-sm py-2 bg-white">
+            <p className="font-bold text-slate-900">{col.label}</p>
+            <p className="text-slate-600 text-[9px] mt-0.5">{col.role}</p>
+            <div className="border-b border-slate-900 h-9 mb-1.5 mt-2 mx-1" aria-hidden />
+            <p className="font-semibold text-slate-900 text-[11px]">{col.name}</p>
+            {col.signedAt ? (
+              <p className="text-slate-500 italic mt-1 leading-tight">
+                {sig.dig} {fmtDateTime(col.signedAt, lang)}
+              </p>
+            ) : null}
           </div>
-        </div>
+        ))}
       </div>
 
       {/* Auto-note when technician manually overrides withinSpec for cubes below auto threshold */}
@@ -382,15 +589,15 @@ function ReportPage({
         if (manualOverrides.length === 0) return null;
         const strengths = manualOverrides.map(c => fmtStrength(c.compressiveStrengthMpa)).join(", ");
         return (
-          <div className="text-xs italic text-gray-600 border border-gray-400 bg-gray-50 p-2 mb-2">
+          <div className="text-xs italic text-gray-700 border border-amber-200 bg-amber-50/80 p-2 mb-3 rounded-sm">
             ** Results {strengths} N/mm² accepted within specification limits based on technician assessment.
           </div>
         );
       })()}
       {/* Spec Limits Summary */}
-      <div className="text-xs border-t border-black pt-1 space-y-1">
+      <div className="text-xs border border-slate-400 rounded-sm p-2.5 mb-3 bg-slate-50/70 print:bg-white space-y-1.5">
         {requiredMpa !== null && targetMpa !== null && (
-          <div className="font-semibold text-gray-700">
+          <div className="font-semibold text-slate-800">
             {testAge >= 28 ? (
               <>
                 Acceptance (BS EN 12390-3 / 206): average ≥ {targetMpa.toFixed(1)} N/mm²; each cube ≥
@@ -399,39 +606,52 @@ function ReportPage({
             ) : (
               <>
                 Required Strength at {testAge} days ({agePct}% of {targetMpa} N/mm²):
-                <span className="text-blue-700 ml-1">{requiredMpa.toFixed(1)} N/mm²</span>
+                <span className="text-blue-800 ml-1">{requiredMpa.toFixed(1)} N/mm²</span>
               </>
             )}
             {avgPass !== null && (
-              <span className={`ml-3 font-bold ${avgPass ? "text-green-700" : "text-red-600"}`}>
+              <span
+                className={`ml-3 font-bold inline-block rounded px-2 py-0.5 ${
+                  avgPass ? "text-emerald-800 bg-emerald-100/90" : "text-red-800 bg-red-100/90"
+                }`}
+              >
                 {avgPass ? "✓ PASS" : "✗ FAIL"}
               </span>
             )}
           </div>
         )}
-        <div className="flex justify-between">
+        <div className="flex justify-between gap-2 border-t border-slate-300 pt-2">
           <div>
-            <span className="font-semibold">Results Within Specification Limits: </span>
-            <span className="font-bold text-green-700">
+            <span className="font-semibold text-slate-800">Within specification: </span>
+            <span className="font-bold text-emerald-800">
               {withinSpec.map(c => fmtStrength(c.compressiveStrengthMpa)).join(", ")}
               {withinSpec.length > 0 ? " N/mm²" : "—"}
             </span>
           </div>
-          <div>
-            <span className="font-semibold">Results Outside Specification Limits: </span>
-            <span className="font-bold text-red-600">
+          <div className="text-right">
+            <span className="font-semibold text-slate-800">Outside specification: </span>
+            <span className="font-bold text-red-800">
               {outsideSpec.map(c => fmtStrength(c.compressiveStrengthMpa)).join(", ")}
               {outsideSpec.length > 0 ? " N/mm²" : "—"}
             </span>
           </div>
         </div>
       </div>
+
+      <footer className="mt-auto pt-3 border-t border-slate-400 text-[9px] text-slate-600 leading-snug space-y-1">
+        <p className="text-center font-medium">{footer.repro}</p>
+        <p className="text-center">{footer.cert}</p>
+        <p className="text-center pt-1 font-semibold text-slate-800">
+          {footer.page} {pageIndex + 1} {footer.of} {totalPages}
+        </p>
+      </footer>
     </div>
   );
 }
 
 // ─── Main Report Page ─────────────────────────────────────────────────────────
 export default function ConcreteReport() {
+  const { lang } = useLanguage();
   const { distributionId } = useParams<{ distributionId: string }>();
   const distId = parseInt(distributionId ?? "0");
   const printRef = useRef<HTMLDivElement>(null);
@@ -536,7 +756,7 @@ export default function ConcreteReport() {
             No test results found. Please enter results first.
           </div>
         ) : (
-          (groups as any[]).map((group: any, idx: number) => (
+          (groups as any[]).map((group: any, idx: number, arr: any[]) => (
             <div key={group.id} className={`mx-auto mb-6 shadow-lg print:shadow-none print:mb-0 ${idx > 0 ? "print:page-break-before" : ""}`}
               style={{ width: "210mm" }}>
               <ReportPage
@@ -546,6 +766,12 @@ export default function ConcreteReport() {
                 testedByName={distributionAny?.technicianName ?? testResultAny?.testedBy ?? group?.testedBy}
                 managerReviewedByName={testResultAny?.managerReviewedByName ?? null}
                 qcReviewedByName={testResultAny?.qcReviewedByName ?? null}
+                lang={lang}
+                pageIndex={idx}
+                totalPages={arr.length}
+                testedSignedAt={testResultAny?.processedAt ?? null}
+                managerSignedAt={testResultAny?.managerReviewedAt ?? null}
+                qcSignedAt={testResultAny?.qcReviewedAt ?? null}
               />
             </div>
           ))
