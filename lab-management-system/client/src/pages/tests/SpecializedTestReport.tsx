@@ -332,10 +332,35 @@ function renderSteelRebar(fd: any, isAr: boolean) {
   );
 }
 
+function _parseReportBlendNum(v: unknown): number | null {
+  if (v == null || v === "") return null;
+  const n = typeof v === "number" ? v : parseFloat(String(v));
+  return Number.isFinite(n) ? n : null;
+}
+
+/** Match SieveAnalysis.tsx blend formulas for PDF/report. */
+function _reportSieveBlendValue(
+  blendStd: string,
+  row: Record<string, unknown>,
+  masonryWhitePct: string | undefined,
+): number | null {
+  const wOrig = _parseReportBlendNum(row.whiteSandOriginalPass ?? row.whiteSandOriginal);
+  const wRowUsed = _parseReportBlendNum(row.whiteSandUsed);
+  const bUsed = _parseReportBlendNum(row.blackSandUsed);
+  if (blendStd === "BS_1199_A") {
+    if (wOrig === null || wRowUsed === null) return null;
+    return wOrig * (wRowUsed / 100);
+  }
+  const wUsed = _parseReportBlendNum(masonryWhitePct) ?? wRowUsed;
+  if (wUsed === null || bUsed === null) return null;
+  return wUsed + bUsed;
+}
+
 function renderSieveAnalysis(fd: any, isAr: boolean) {
   if (fd.testMode === "blend" && Array.isArray(fd.sieveData)) {
+    const blendStdKey = fd.blendStandard === "BS_1199_A" ? "BS_1199_A" : "ASTM_C144";
     const std =
-      fd.blendStandard === "BS_1199_A"
+      blendStdKey === "BS_1199_A"
         ? isAr
           ? "BS 1199:76 النوع أ — رمل لياسة"
           : "BS 1199:76 Type A — Plaster Sand"
@@ -344,6 +369,8 @@ function renderSieveAnalysis(fd: any, isAr: boolean) {
           : "ASTM C 144 — Masonry Sand";
     const rows = fd.sieveData as Array<Record<string, unknown>>;
     const passes = fd.passesSpec === true;
+    const masonryW =
+      typeof fd.masonryWhiteSandUsedPct === "string" ? fd.masonryWhiteSandUsedPct : undefined;
     const cols: Column[] = [
       { header: isAr ? "حد أعلى" : "Spec upper", field: "upperLimit", align: "center" },
       { header: isAr ? "حد أدنى" : "Spec lower", field: "lowerLimit", align: "center" },
@@ -351,7 +378,11 @@ function renderSieveAnalysis(fd: any, isAr: boolean) {
         header: isAr ? "الخليط" : "Blend",
         field: "blend",
         align: "center",
-        render: (v) => <span className="font-bold text-amber-900">{v != null ? String(v) : "—"}</span>,
+        render: (_, row) => {
+          const b = _reportSieveBlendValue(blendStdKey, row as Record<string, unknown>, masonryW);
+          const display = b !== null ? b.toFixed(1) : row.blend != null ? String(row.blend) : "—";
+          return <span className="font-bold text-amber-900">{display}</span>;
+        },
       },
       { header: isAr ? "أبيض — مستخدم %" : "White — Used %", field: "whiteSandUsed", align: "center" },
       {
@@ -375,11 +406,11 @@ function renderSieveAnalysis(fd: any, isAr: boolean) {
         field: "_ok",
         align: "center",
         render: (_, row) => {
-          const blend = Number((row as any).blend);
-          const lo = Number((row as any).lowerLimit);
-          const hi = Number((row as any).upperLimit);
-          if (!Number.isFinite(blend) || !Number.isFinite(lo) || !Number.isFinite(hi)) return "—";
-          return blend >= lo && blend <= hi ? (
+          const b = _reportSieveBlendValue(blendStdKey, row as Record<string, unknown>, masonryW);
+          const lo = _parseReportBlendNum((row as any).lowerLimit);
+          const hi = _parseReportBlendNum((row as any).upperLimit);
+          if (b === null || lo === null || hi === null) return "—";
+          return b >= lo && b <= hi ? (
             <span className="text-emerald-700 font-bold">✓</span>
           ) : (
             <span className="text-red-700 font-bold">✗</span>
@@ -392,6 +423,12 @@ function renderSieveAnalysis(fd: any, isAr: boolean) {
         <div className="text-xs font-semibold text-blue-700 bg-blue-50 border border-blue-200 rounded px-3 py-1.5">
           {isAr ? "وضع الخليط — رمل أبيض + أسود" : "Blend mode — white + black sand"}
           <div className="text-[11px] font-normal text-blue-800/90 mt-0.5">{std}</div>
+          {blendStdKey === "ASTM_C144" && masonryW != null && masonryW !== "" && (
+            <div className="text-[11px] font-normal text-blue-800/90 mt-1">
+              {isAr ? "رمل أبيض — مستخدم % (موحّد):" : "White sand — Used % (single value):"}{" "}
+              <span className="font-mono font-semibold">{masonryW}</span>
+            </div>
+          )}
         </div>
         <FlexibleResultsTable columns={cols} rows={rows} />
         <div className="text-xs font-semibold">

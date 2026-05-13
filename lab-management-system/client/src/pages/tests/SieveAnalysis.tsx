@@ -137,13 +137,32 @@ function emptyBlendRows(standard: BlendStandardKey): BlendSieveRow[] {
   }));
 }
 
+function parseBlendNum(s: string | undefined | null): number | null {
+  if (s == null || String(s).trim() === "") return null;
+  const n = parseFloat(String(s));
+  return Number.isFinite(n) ? n : null;
+}
+
 /**
- * The Blend = White Used % + Black Used % (Excel-style).
+ * The Blend — ASTM C144: White Used % + Black Used % (per row; white Used is one sheet constant in Excel).
+ * BS 1199 Type A: White Original Pass % × (White Used % / 100).
  */
-function calculateBlend(whiteUsedStr: string, blackUsedStr: string): number {
-  const white = parseFloat(whiteUsedStr) || 0;
-  const black = parseFloat(blackUsedStr) || 0;
-  return white + black;
+function calculateTheBlend(
+  standard: BlendStandardKey,
+  whiteUsed: number | null,
+  whiteOriginalPass: number | null,
+  blackUsed: number | null,
+  _blackOriginalPass: number | null,
+): number | null {
+  if (standard === "ASTM_C144") {
+    if (whiteUsed === null || blackUsed === null) return null;
+    return whiteUsed + blackUsed;
+  }
+  if (standard === "BS_1199_A") {
+    if (whiteOriginalPass === null || whiteUsed === null) return null;
+    return whiteOriginalPass * (whiteUsed / 100);
+  }
+  return null;
 }
 
 function mergeBlendRowsFromSaved(
@@ -173,6 +192,19 @@ function mergeBlendRowsFromSaved(
             : "",
     };
   });
+}
+
+function blendForRow(
+  standard: BlendStandardKey,
+  row: BlendSieveRow,
+  masonryWhiteUsedPctStr: string,
+): number | null {
+  const whiteUsed =
+    standard === "ASTM_C144" ? parseBlendNum(masonryWhiteUsedPctStr) : parseBlendNum(row.whiteSandUsed);
+  const whiteOrig = parseBlendNum(row.whiteSandOriginalPass);
+  const blackUsed = parseBlendNum(row.blackSandUsed);
+  const blackOrig = parseBlendNum(row.blackSandOriginalPass);
+  return calculateTheBlend(standard, whiteUsed, whiteOrig, blackUsed, blackOrig);
 }
 
 interface SieveRow {
@@ -239,6 +271,8 @@ export default function SieveAnalysis() {
   const [testMode, setTestMode] = useState<"single" | "blend">("single");
   const [blendStandard, setBlendStandard] = useState<BlendStandardKey>("ASTM_C144");
   const [blendRows, setBlendRows] = useState<BlendSieveRow[]>(() => emptyBlendRows("ASTM_C144"));
+  /** ASTM C144: single White Used % applied to every row (Excel-style constant, e.g. $E$14). */
+  const [masonryWhiteSandUsedPct, setMasonryWhiteSandUsedPct] = useState("");
 
   const updateBlendRow = (
     sieveMm: string,
@@ -282,8 +316,17 @@ export default function SieveAnalysis() {
       setBlendStandard(std);
       const saved = Array.isArray(fd.sieveData) ? (fd.sieveData as Array<Record<string, unknown>>) : [];
       setBlendRows(mergeBlendRowsFromSaved(std, saved));
+      if (typeof fd.masonryWhiteSandUsedPct === "string" && fd.masonryWhiteSandUsedPct.trim() !== "") {
+        setMasonryWhiteSandUsedPct(fd.masonryWhiteSandUsedPct);
+      } else if (std === "ASTM_C144") {
+        const fromRow = saved.find(r => r.whiteSandUsed != null && String(r.whiteSandUsed).trim() !== "");
+        setMasonryWhiteSandUsedPct(fromRow?.whiteSandUsed != null ? String(fromRow.whiteSandUsed) : "");
+      } else {
+        setMasonryWhiteSandUsedPct("");
+      }
     } else {
       setTestMode("single");
+      setMasonryWhiteSandUsedPct("");
     }
     let std: "BS" | "ASTM" | null =
       fd.sieveStandard === "BS" || fd.sieveStandard === "ASTM" ? fd.sieveStandard : null;
@@ -335,36 +378,50 @@ export default function SieveAnalysis() {
   }));
   const computedRows = computeSieveData(rows, totalMass, limits);
 
-  const blendAllUsedFilled =
+  const blendAllInputsFilled =
     testMode === "blend" &&
-    blendRows.every(r => r.whiteSandUsed.trim() !== "" && r.blackSandUsed.trim() !== "");
+    (blendStandard === "ASTM_C144"
+      ? masonryWhiteSandUsedPct.trim() !== "" &&
+        blendRows.every(
+          r => r.blackSandUsed.trim() !== "" && r.blackSandOriginalPass.trim() !== "",
+        )
+      : blendRows.every(r => r.whiteSandUsed.trim() !== "" && r.whiteSandOriginalPass.trim() !== ""));
   const blendAnyUsed =
     testMode === "blend" &&
-    blendRows.some(
-      r =>
-        r.whiteSandUsed.trim() !== "" ||
-        r.blackSandUsed.trim() !== "" ||
-        r.whiteSandOriginalPass.trim() !== "" ||
-        r.blackSandOriginalPass.trim() !== "",
-    );
+    (masonryWhiteSandUsedPct.trim() !== "" ||
+      blendRows.some(
+        r =>
+          r.whiteSandUsed.trim() !== "" ||
+          r.blackSandUsed.trim() !== "" ||
+          r.whiteSandOriginalPass.trim() !== "" ||
+          r.blackSandOriginalPass.trim() !== "",
+      ));
   const blendWithinSpec =
     testMode === "blend" &&
     blendRows.every(row => {
-      const blend = calculateBlend(row.whiteSandUsed, row.blackSandUsed);
-      return blend >= row.lowerLimit && blend <= row.upperLimit;
+      const b = blendForRow(blendStandard, row, masonryWhiteSandUsedPct);
+      return b !== null && b >= row.lowerLimit && b <= row.upperLimit;
     });
-  const passesBlendSpec = blendAllUsedFilled && blendWithinSpec;
+  const passesBlendSpec = blendAllInputsFilled && blendWithinSpec;
 
   const blendChartData =
     testMode === "blend"
-      ? blendRows.map(row => ({
-          sieveLabel: row.sieveMm,
-          whiteUsed: parseFloat(row.whiteSandUsed) || 0,
-          blackUsed: parseFloat(row.blackSandUsed) || 0,
-          blend: calculateBlend(row.whiteSandUsed, row.blackSandUsed),
-          specUpper: row.upperLimit,
-          specLower: row.lowerLimit,
-        }))
+      ? blendRows.map(row => {
+          const b = blendForRow(blendStandard, row, masonryWhiteSandUsedPct);
+          const wu =
+            blendStandard === "ASTM_C144"
+              ? parseBlendNum(masonryWhiteSandUsedPct) ?? 0
+              : parseBlendNum(row.whiteSandUsed) ?? 0;
+          const bu = parseBlendNum(row.blackSandUsed) ?? 0;
+          return {
+            sieveLabel: row.sieveMm,
+            whiteUsed: wu,
+            blackUsed: bu,
+            blend: b !== null ? Number(b.toFixed(2)) : 0,
+            specUpper: row.upperLimit,
+            specLower: row.lowerLimit,
+          };
+        })
       : [];
 
   // Fineness Modulus (for sand)
@@ -379,7 +436,7 @@ export default function SieveAnalysis() {
     !anyComputed ? "pending" : allWithinLimits ? "pass" : "fail";
 
   const blendOverallResult: "pass" | "fail" | "pending" =
-    !blendAnyUsed ? "pending" : !blendAllUsedFilled ? "pending" : passesBlendSpec ? "pass" : "fail";
+    !blendAnyUsed ? "pending" : !blendAllInputsFilled ? "pending" : passesBlendSpec ? "pass" : "fail";
 
   const overallResult = testMode === "blend" ? blendOverallResult : singleOverallResult;
 
@@ -434,9 +491,15 @@ export default function SieveAnalysis() {
         return;
       }
     } else {
-      if (status === "submitted" && !blendAllUsedFilled) {
+      if (status === "submitted" && !blendAllInputsFilled) {
         toast.error(
-          ar ? "أدخل نسب الاستخدام للرمل الأبيض والأسود في كل منخل" : "Enter White and Black Used % for every sieve row",
+          ar
+            ? blendStandard === "ASTM_C144"
+              ? "أدخل نسبة الرمل الأبيض المستخدمة وجميع أعمدة الرمل الأسود"
+              : "أدخل أعمدة الرمل الأبيض (مستخدم % وأصلي % مار) لكل منخل"
+            : blendStandard === "ASTM_C144"
+              ? "Enter White sand Used % and all Black sand columns for every sieve"
+              : "Enter White sand Used % and Original pass % for every sieve row",
         );
         return;
       }
@@ -457,16 +520,19 @@ export default function SieveAnalysis() {
         gradingType.includes("MASONRY");
       const testTypeCode = isFineGrading ? "AGG_SIEVE_FINE" : "AGG_SIEVE_COARSE";
 
-      const sieveDataBlend = blendRows.map(row => ({
-        sieveMm: row.sieveMm,
-        upperLimit: row.upperLimit,
-        lowerLimit: row.lowerLimit,
-        whiteSandUsed: row.whiteSandUsed,
-        whiteSandOriginalPass: row.whiteSandOriginalPass,
-        blackSandUsed: row.blackSandUsed,
-        blackSandOriginalPass: row.blackSandOriginalPass,
-        blend: calculateBlend(row.whiteSandUsed, row.blackSandUsed),
-      }));
+      const sieveDataBlend = blendRows.map(row => {
+        const blend = blendForRow(blendStandard, row, masonryWhiteSandUsedPct);
+        return {
+          sieveMm: row.sieveMm,
+          upperLimit: row.upperLimit,
+          lowerLimit: row.lowerLimit,
+          whiteSandUsed: blendStandard === "ASTM_C144" ? masonryWhiteSandUsedPct : row.whiteSandUsed,
+          whiteSandOriginalPass: row.whiteSandOriginalPass,
+          blackSandUsed: row.blackSandUsed,
+          blackSandOriginalPass: row.blackSandOriginalPass,
+          blend: blend !== null ? Number(blend.toFixed(2)) : null,
+        };
+      });
 
       await saveResult.mutateAsync({
         distributionId: distId,
@@ -478,6 +544,8 @@ export default function SieveAnalysis() {
             ? {
                 testMode: "blend" as const,
                 blendStandard,
+                masonryWhiteSandUsedPct:
+                  blendStandard === "ASTM_C144" ? masonryWhiteSandUsedPct : undefined,
                 sieveData: sieveDataBlend,
                 passesSpec: passesBlendSpec,
                 overallResult: blendOverallResult,
@@ -644,6 +712,7 @@ export default function SieveAnalysis() {
                     onChange={() => {
                       setTestMode("blend");
                       setBlendRows(emptyBlendRows(blendStandard));
+                      setMasonryWhiteSandUsedPct("");
                     }}
                     className="h-4 w-4"
                   />
@@ -652,8 +721,8 @@ export default function SieveAnalysis() {
               </div>
               <p className="text-xs text-slate-500 mt-2">
                 {ar
-                  ? "الخلايا الخضراء = إدخال الفني. عمود «الخليط» = مجموع نسب الاستخدام (تلقائي)."
-                  : "Green cells = technician inputs. “The Blend” column = sum of Used % (automatic)."}
+                  ? "الخلايا الخضراء = إدخال الفني. عمود «الخليط» يُحسب حسب المعيار (ASTM مجموع مستخدم؛ BS وزن أصلي أبيض)."
+                  : "Green cells = technician inputs. “The Blend” follows the selected standard (ASTM: sum of Used %; BS: weighted white pass)."}
               </p>
             </div>
 
@@ -747,6 +816,7 @@ export default function SieveAnalysis() {
                       const std = v as BlendStandardKey;
                       setBlendStandard(std);
                       setBlendRows(emptyBlendRows(std));
+                      setMasonryWhiteSandUsedPct("");
                     }}
                   >
                     <SelectTrigger>
@@ -804,15 +874,52 @@ export default function SieveAnalysis() {
                 </p>
               </CardHeader>
               <CardContent>
+                <div className="text-sm text-slate-600 mb-3 space-y-2">
+                  {blendStandard === "ASTM_C144" && (
+                    <div className="bg-blue-50 border border-blue-100 rounded-md p-2 text-xs">
+                      <strong className="text-slate-800">{ar ? "رمل بناء:" : "Masonry sand:"}</strong>{" "}
+                      {ar
+                        ? "أدخل نسبة الرمل الأبيض المستخدمة (قيمة واحدة لجميع الصفوف) وأعمدة الرمل الأسود (مستخدم % + أصلي % مار) — الخليط = أبيض مستخدم + أسود مستخدم."
+                        : "Enter one White sand Used % for all rows, then Black sand Used % and Original grad pass % per sieve. The Blend = White Used % + Black Used %."}
+                    </div>
+                  )}
+                  {blendStandard === "BS_1199_A" && (
+                    <div className="bg-blue-50 border border-blue-100 rounded-md p-2 text-xs">
+                      <strong className="text-slate-800">{ar ? "رمل لياسة:" : "Plaster sand:"}</strong>{" "}
+                      {ar
+                        ? "أدخل أعمدة الرمل الأبيض (مستخدم % + أصلي % مار) لكل منخل. أعمدة الرمل الأسود غير مستخدمة في الحساب. الخليط = أصلي أبيض × (مستخدم أبيض ÷ 100)."
+                        : "Enter White sand Used % and Original grad pass % per row. Black columns are not used in the blend. The Blend = White Original pass % × (White Used % ÷ 100)."}
+                    </div>
+                  )}
+                </div>
+
+                {blendStandard === "ASTM_C144" && (
+                  <div className="mb-3 flex flex-wrap items-end gap-2">
+                    <div className="space-y-1">
+                      <Label className="text-xs text-slate-600">
+                        {ar ? "رمل أبيض — مستخدم % (لجميع المناخل)" : "White sand — Used % (all sieves)"}
+                      </Label>
+                      <Input
+                        type="number"
+                        value={masonryWhiteSandUsedPct}
+                        onChange={e => setMasonryWhiteSandUsedPct(e.target.value)}
+                        className="h-9 w-28 font-mono bg-blue-50 border-blue-200"
+                        placeholder="%"
+                        disabled={submitted}
+                      />
+                    </div>
+                  </div>
+                )}
+
                 <div className="overflow-x-auto">
                   <table className="w-full border-collapse border border-slate-300 text-xs min-w-[720px]">
                     <thead>
                       <tr className="bg-slate-100">
                         <th rowSpan={2} className="border border-slate-300 px-2 py-1 align-middle bg-slate-50">
-                          {ar ? "حد أعلى المواصفة" : "Spec upper limit"}
+                          {ar ? "حد أعلى المواصفة" : "Spec upper"}
                         </th>
                         <th rowSpan={2} className="border border-slate-300 px-2 py-1 align-middle bg-slate-50">
-                          {ar ? "حد أدنى المواصفة" : "Spec lower limit"}
+                          {ar ? "حد أدنى المواصفة" : "Spec lower"}
                         </th>
                         <th rowSpan={2} className="border border-slate-300 px-2 py-1 align-middle bg-yellow-100">
                           {ar ? "الخليط (محسوب)" : "The Blend (calculated)"}
@@ -824,34 +931,59 @@ export default function SieveAnalysis() {
                           {ar ? "رمل أسود" : "Black sand"}
                         </th>
                         <th rowSpan={2} className="border border-slate-300 px-2 py-1 align-middle">
-                          {ar ? "حجم المنخل (مم)" : "Test sieve (mm)"}
+                          {ar ? "حجم المنخل (مم)" : "Sieve (mm)"}
                         </th>
                         <th rowSpan={2} className="border border-slate-300 px-1 py-1 align-middle w-10">
                           ✓
                         </th>
                       </tr>
                       <tr className="bg-slate-50">
-                        <th className="border border-slate-300 px-1 py-1 bg-green-100">{ar ? "مستخدم %" : "Used %"}</th>
-                        <th className="border border-slate-300 px-1 py-1 bg-green-100">
-                          {ar ? "أصلي % مار" : "Original grad pass %"}
+                        <th
+                          className={`border border-slate-300 px-1 py-1 ${
+                            blendStandard === "BS_1199_A" ? "bg-green-100" : "bg-blue-50"
+                          }`}
+                        >
+                          {ar ? "مستخدم %" : "Used %"}
                         </th>
-                        <th className="border border-slate-300 px-1 py-1 bg-green-100">{ar ? "مستخدم %" : "Used %"}</th>
-                        <th className="border border-slate-300 px-1 py-1 bg-green-100">
-                          {ar ? "أصلي % مار" : "Original grad pass %"}
+                        <th
+                          className={`border border-slate-300 px-1 py-1 ${
+                            blendStandard === "BS_1199_A" ? "bg-green-100" : "bg-blue-50"
+                          }`}
+                        >
+                          {ar ? "أصلي % مار" : "Original pass %"}
+                        </th>
+                        <th
+                          className={`border border-slate-300 px-1 py-1 ${
+                            blendStandard === "ASTM_C144" ? "bg-green-100" : "bg-slate-200"
+                          }`}
+                        >
+                          {ar ? "مستخدم %" : "Used %"}
+                        </th>
+                        <th
+                          className={`border border-slate-300 px-1 py-1 ${
+                            blendStandard === "ASTM_C144" ? "bg-green-100" : "bg-slate-200"
+                          }`}
+                        >
+                          {ar ? "أصلي % مار" : "Original pass %"}
                         </th>
                       </tr>
                     </thead>
                     <tbody>
                       {blendRows.map(row => {
-                        const blendVal = calculateBlend(row.whiteSandUsed, row.blackSandUsed);
-                        const bothUsed =
-                          row.whiteSandUsed.trim() !== "" && row.blackSandUsed.trim() !== "";
+                        const blendVal = blendForRow(blendStandard, row, masonryWhiteSandUsedPct);
+                        const rowReady =
+                          blendStandard === "ASTM_C144"
+                            ? masonryWhiteSandUsedPct.trim() !== "" &&
+                              row.blackSandUsed.trim() !== "" &&
+                              row.blackSandOriginalPass.trim() !== ""
+                            : row.whiteSandUsed.trim() !== "" && row.whiteSandOriginalPass.trim() !== "";
                         const blendOk =
-                          bothUsed && blendVal >= row.lowerLimit && blendVal <= row.upperLimit;
+                          rowReady &&
+                          blendVal !== null &&
+                          blendVal >= row.lowerLimit &&
+                          blendVal <= row.upperLimit;
                         const blendDisplay =
-                          row.whiteSandUsed.trim() === "" && row.blackSandUsed.trim() === ""
-                            ? "—"
-                            : blendVal.toFixed(1);
+                          blendVal === null ? "—" : Number.isFinite(blendVal) ? blendVal.toFixed(1) : "—";
                         return (
                           <tr key={row.sieveMm}>
                             <td className="border border-slate-300 px-2 py-1 text-center bg-slate-50 font-mono">
@@ -863,51 +995,89 @@ export default function SieveAnalysis() {
                             <td className="border border-slate-300 px-2 py-1 text-center font-bold bg-yellow-50 font-mono">
                               {blendDisplay}
                             </td>
-                            <td className="border border-slate-300 px-1 py-1 bg-green-50">
-                              <Input
-                                type="number"
-                                value={row.whiteSandUsed}
-                                onChange={e => updateBlendRow(row.sieveMm, "whiteSandUsed", e.target.value)}
-                                placeholder={ar ? "مستخدم" : "Used"}
-                                className="h-8 w-20 bg-white text-xs font-mono"
-                                disabled={submitted}
-                              />
+                            <td
+                              className={`border border-slate-300 px-1 py-1 ${
+                                blendStandard === "BS_1199_A" ? "bg-green-50" : "bg-blue-50"
+                              }`}
+                            >
+                              {blendStandard === "BS_1199_A" ? (
+                                <Input
+                                  type="number"
+                                  value={row.whiteSandUsed}
+                                  onChange={e => updateBlendRow(row.sieveMm, "whiteSandUsed", e.target.value)}
+                                  placeholder={ar ? "مستخدم" : "Used"}
+                                  className="h-8 w-20 bg-white text-xs font-mono"
+                                  disabled={submitted}
+                                />
+                              ) : (
+                                <span className="block text-center font-mono text-slate-800 py-1">
+                                  {masonryWhiteSandUsedPct.trim() !== "" ? masonryWhiteSandUsedPct : "—"}
+                                </span>
+                              )}
                             </td>
-                            <td className="border border-slate-300 px-1 py-1 bg-green-50">
-                              <Input
-                                type="number"
-                                value={row.whiteSandOriginalPass}
-                                onChange={e => updateBlendRow(row.sieveMm, "whiteSandOriginalPass", e.target.value)}
-                                placeholder="%"
-                                className="h-8 w-20 bg-white text-xs font-mono"
-                                disabled={submitted}
-                              />
+                            <td
+                              className={`border border-slate-300 px-1 py-1 ${
+                                blendStandard === "BS_1199_A" ? "bg-green-50" : "bg-blue-50"
+                              }`}
+                            >
+                              {blendStandard === "BS_1199_A" ? (
+                                <Input
+                                  type="number"
+                                  value={row.whiteSandOriginalPass}
+                                  onChange={e =>
+                                    updateBlendRow(row.sieveMm, "whiteSandOriginalPass", e.target.value)
+                                  }
+                                  placeholder="%"
+                                  className="h-8 w-20 bg-white text-xs font-mono"
+                                  disabled={submitted}
+                                />
+                              ) : (
+                                <span className="block text-center text-slate-400 py-1">—</span>
+                              )}
                             </td>
-                            <td className="border border-slate-300 px-1 py-1 bg-green-50">
-                              <Input
-                                type="number"
-                                value={row.blackSandUsed}
-                                onChange={e => updateBlendRow(row.sieveMm, "blackSandUsed", e.target.value)}
-                                placeholder={ar ? "مستخدم" : "Used"}
-                                className="h-8 w-20 bg-white text-xs font-mono"
-                                disabled={submitted}
-                              />
+                            <td
+                              className={`border border-slate-300 px-1 py-1 ${
+                                blendStandard === "ASTM_C144" ? "bg-green-50" : "bg-slate-100"
+                              }`}
+                            >
+                              {blendStandard === "ASTM_C144" ? (
+                                <Input
+                                  type="number"
+                                  value={row.blackSandUsed}
+                                  onChange={e => updateBlendRow(row.sieveMm, "blackSandUsed", e.target.value)}
+                                  placeholder={ar ? "مستخدم" : "Used"}
+                                  className="h-8 w-20 bg-white text-xs font-mono"
+                                  disabled={submitted}
+                                />
+                              ) : (
+                                <span className="block text-center text-slate-400 py-1">—</span>
+                              )}
                             </td>
-                            <td className="border border-slate-300 px-1 py-1 bg-green-50">
-                              <Input
-                                type="number"
-                                value={row.blackSandOriginalPass}
-                                onChange={e => updateBlendRow(row.sieveMm, "blackSandOriginalPass", e.target.value)}
-                                placeholder="%"
-                                className="h-8 w-20 bg-white text-xs font-mono"
-                                disabled={submitted}
-                              />
+                            <td
+                              className={`border border-slate-300 px-1 py-1 ${
+                                blendStandard === "ASTM_C144" ? "bg-green-50" : "bg-slate-100"
+                              }`}
+                            >
+                              {blendStandard === "ASTM_C144" ? (
+                                <Input
+                                  type="number"
+                                  value={row.blackSandOriginalPass}
+                                  onChange={e =>
+                                    updateBlendRow(row.sieveMm, "blackSandOriginalPass", e.target.value)
+                                  }
+                                  placeholder="%"
+                                  className="h-8 w-20 bg-white text-xs font-mono"
+                                  disabled={submitted}
+                                />
+                              ) : (
+                                <span className="block text-center text-slate-400 py-1">—</span>
+                              )}
                             </td>
                             <td className="border border-slate-300 px-2 py-1 text-center font-mono font-semibold">
                               {row.sieveMm}
                             </td>
                             <td className="border border-slate-300 px-1 py-1 text-center">
-                              {!bothUsed ? (
+                              {!rowReady ? (
                                 "—"
                               ) : blendOk ? (
                                 <span className="text-emerald-600 font-bold">✓</span>
@@ -921,7 +1091,7 @@ export default function SieveAnalysis() {
                     </tbody>
                   </table>
                 </div>
-                {blendAllUsedFilled && (
+                {blendAllInputsFilled && (
                   <div className="mt-3 flex flex-wrap items-center gap-3 text-sm">
                     <PassFailBadge result={passesBlendSpec ? "pass" : "fail"} lang={lang} />
                     <span className="text-slate-600">
@@ -995,14 +1165,16 @@ export default function SieveAnalysis() {
                         dot={{ r: 3 }}
                         name={blendWhiteKey}
                       />
-                      <Line
-                        type="monotone"
-                        dataKey={blendBlackKey}
-                        stroke="#374151"
-                        strokeWidth={2}
-                        dot={{ r: 3 }}
-                        name={blendBlackKey}
-                      />
+                      {blendStandard === "ASTM_C144" && (
+                        <Line
+                          type="monotone"
+                          dataKey={blendBlackKey}
+                          stroke="#374151"
+                          strokeWidth={2}
+                          dot={{ r: 3 }}
+                          name={blendBlackKey}
+                        />
+                      )}
                       <Line
                         type="monotone"
                         dataKey={blendPassingKey}
@@ -1212,9 +1384,13 @@ export default function SieveAnalysis() {
                         : "BS 1199:76 Type A — Plaster Sand"}
                     </p>
                     <p>
-                      {ar
-                        ? "يُحسب «الخليط» تلقائياً كمجموع نسب الاستخدام للرمل الأبيض والأسود. تُقارن القيم بحدود المواصفة في كل منخل."
-                        : "“The Blend” is the sum of White and Black Used %. Values are compared to the specification upper and lower limits at each sieve."}
+                      {blendStandard === "ASTM_C144"
+                        ? ar
+                          ? "رمل بناء: الخليط = نسبة الرمل الأبيض المستخدمة (موحّدة) + نسبة الرمل الأسود المستخدمة لكل منخل. تُقارن النتيجة بحدود ASTM C 144."
+                          : "Masonry: The Blend = single White Used % + Black Used % per sieve. Results are checked against ASTM C 144 limits."
+                        : ar
+                          ? "رمل لياسة: الخليط = (أصلي أبيض % مار) × (مستخدم أبيض % ÷ 100) لكل منخل. أعمدة الرمل الأسود غير مستخدمة في الحساب. تُقارن النتيجة بحدود BS 1199 النوع أ."
+                          : "Plaster: The Blend = White Original pass % × (White Used % ÷ 100) per sieve. Black columns are not used in the blend. Checked against BS 1199 Type A limits."}
                     </p>
                   </>
                 ) : (
