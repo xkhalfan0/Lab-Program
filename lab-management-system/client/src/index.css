@@ -348,6 +348,7 @@
   body {
     background: white !important;
     font-size: 11pt;
+    /* Do not set color: black !important here — it overrides PASS/FAIL greens and other report accents in print. */
   }
 
   /* Show all tab content when printing */
