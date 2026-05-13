@@ -11,17 +11,16 @@ import { Button } from "@/components/ui/button";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { FlexibleResultsTable, type Column } from "@/components/reports/FlexibleResultsTable";
 
+import { formatCalendarDate } from "@/lib/dateFormat";
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function fmt(v: any, dec = 2) {
   if (v === null || v === undefined || v === "") return "—";
   const n = Number(v);
   return isNaN(n) ? String(v) : n.toFixed(dec);
 }
-function fmtDate(d?: string | Date | null, lang = "ar") {
-  if (!d) return "—";
-  return new Date(d).toLocaleDateString(lang === "ar" ? "ar-AE" : "en-GB", {
-    day: "2-digit", month: "long", year: "numeric",
-  });
+function fmtDate(d?: string | Date | null) {
+  return formatCalendarDate(d);
 }
 
 function SignatureBox({ label, name, date }: { label: string; name?: string; date?: string }) {
@@ -64,7 +63,7 @@ function renderBlockSection(formData: any, isAr: boolean) {
       header: headers[1],
       field: "dateTested",
       align: "center",
-      render: (v) => (v ? fmtDate(v as string, isAr ? "ar" : "en") : "—"),
+      render: (v) => (v ? fmtDate(v as string) : "—"),
     },
     { header: headers[2], field: "lengthMm", type: "number", decimals: 0, align: "right", render: (v, row) => fmt((row as any).lengthMm ?? (row as any).length, 0) },
     { header: headers[3], field: "widthMm", type: "number", decimals: 0, align: "right", render: (v, row) => fmt((row as any).widthMm ?? (row as any).width, 0) },
@@ -253,7 +252,7 @@ export default function BatchBlockReport() {
                 </div>
                 <div className="flex gap-1">
                   <span className="text-gray-500">{isAr ? ":التاريخ" : "Date:"}</span>
-                  <span>{new Date().toLocaleDateString(isAr ? "ar-AE" : "en-GB")}</span>
+                  <span>{formatCalendarDate(new Date())}</span>
                 </div>
               </div>
             </div>
@@ -294,7 +293,7 @@ export default function BatchBlockReport() {
                   </td>
                   <td className="border border-gray-200 px-2 py-2 text-center align-top w-1/3">
                     <span className="text-gray-400 text-[10px] uppercase tracking-wide block mb-1">{isAr ? "تاريخ الاستلام" : "Received Date"}</span>
-                    <span className="font-semibold text-gray-900">{fmtDate(firstSample?.receivedAt, lang)}</span>
+                    <span className="font-semibold text-gray-900">{fmtDate(firstSample?.receivedAt)}</span>
                   </td>
                 </tr>
               </tbody>

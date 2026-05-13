@@ -13,6 +13,7 @@ import { toast } from "sonner";
 import { Plus, Trash2, Send, FlaskConical, Printer, Calendar } from "lucide-react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { formatCalendarDate } from "@/lib/dateFormat";
 
 // ─── Cube size factor → equivalent 150 mm cube strength (BS EN 12390-3 style) ─
 // Reference specimen is 150 mm; smaller cubes tend to read higher, larger slightly lower.
@@ -283,8 +284,8 @@ export default function ConcreteCubes() {
         <SampleInfoCard
           dist={dist}
           extraFields={[
-            { label: "حجم المكعب", value: rows[0]?.cubeSize ? `${rows[0].cubeSize} mm` : "150 mm" },
-            { label: "القوة المحددة", value: specifiedStrength ? `${specifiedStrength} MPa` : null },
+            { label: "Cube size (mm) / حجم المكعب (مم)", value: rows[0]?.cubeSize ? `${rows[0].cubeSize} mm` : "150 mm" },
+            { label: "Specified strength / القوة المحددة (MPa)", value: specifiedStrength ? `${specifiedStrength} MPa` : null },
           ]}
         />
 
@@ -420,25 +421,25 @@ export default function ConcreteCubes() {
           <CardContent>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <div className="bg-slate-50 rounded-lg p-3 border">
-                <p className="text-xs text-slate-500 mb-1">{ar ? "رمز العينة" : "Sample Code"}</p>
+                <p className="text-xs text-slate-500 mb-1">Sample Code / رمز العينة</p>
                 <p className="font-semibold text-slate-800 text-sm">{dist?.sampleCode ?? "—"}</p>
               </div>
               <div className="bg-slate-50 rounded-lg p-3 border">
-                <p className="text-xs text-slate-500 mb-1">{ar ? "تاريخ الاستلام" : "Date Received"}</p>
+                <p className="text-xs text-slate-500 mb-1">Cast date / تاريخ الصب</p>
                 <p className="font-semibold text-slate-800 text-sm">
-                  {castingDate ? castingDate.toLocaleDateString() : (
-                    <span className="text-amber-600 text-xs">{ar ? "غير محدد" : "Not set"}</span>
+                  {castingDate ? formatCalendarDate(castingDate) : (
+                    <span className="text-amber-600 text-xs">Not set / غير محدد</span>
                   )}
                 </p>
               </div>
               <div className={`rounded-lg p-3 border ${sampleAgeDays !== null ? "bg-blue-50 border-blue-200" : "bg-slate-50"}`}>
-                <p className="text-xs text-slate-500 mb-1">{ar ? "عمر العينة (محسوب)" : "Sample Age (calculated)"}</p>
+                <p className="text-xs text-slate-500 mb-1">Sample age (calculated) / عمر العينة (محسوب)</p>
                 <p className={`font-bold text-xl ${sampleAgeDays !== null ? "text-blue-700" : "text-slate-400"}`}>
-                  {sampleAgeDays !== null ? `${sampleAgeDays} ${ar ? "يوم" : "days"}` : "—"}
+                  {sampleAgeDays !== null ? `${sampleAgeDays} days / ${sampleAgeDays} يوم` : "—"}
                 </p>
               </div>
               <div className="bg-slate-50 rounded-lg p-3 border">
-                <p className="text-xs text-slate-500 mb-1">{ar ? "موقع العينة" : "Sample Location"}</p>
+                <p className="text-xs text-slate-500 mb-1">Sample location / موقع العينة</p>
                 <p className="font-semibold text-slate-800 text-sm">{dist?.sampleLocation ?? "—"}</p>
               </div>
             </div>

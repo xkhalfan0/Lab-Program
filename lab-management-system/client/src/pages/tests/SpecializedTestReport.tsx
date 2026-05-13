@@ -10,6 +10,7 @@ import { Loader2, Printer, X, CheckCircle, XCircle, Globe, Download } from "luci
 import { Button } from "@/components/ui/button";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { FlexibleResultsTable, type Column, formDataToKeyValueRows, keyValueColumns } from "@/components/reports/FlexibleResultsTable";
+import { formatCalendarDate } from "@/lib/dateFormat";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function fmt(v: any, dec = 2) {
@@ -17,11 +18,8 @@ function fmt(v: any, dec = 2) {
   const n = Number(v);
   return isNaN(n) ? String(v) : n.toFixed(dec);
 }
-function fmtDate(d?: string | Date | null, lang = "ar") {
-  if (!d) return "—";
-  return new Date(d).toLocaleDateString(lang === "ar" ? "ar-AE" : "en-GB", {
-    day: "2-digit", month: "long", year: "numeric",
-  });
+function fmtDate(d?: string | Date | null) {
+  return formatCalendarDate(d);
 }
 
 /** Optional context for printable report (casting date, foamed-concrete received date). */
@@ -154,7 +152,7 @@ function renderConcreteCore(fd: any, isAr: boolean, castingDateMs?: number | nul
         {fd.castDate && (
           <div className="bg-slate-50 border border-slate-200 rounded p-2 text-center">
             <p className="text-slate-600 font-semibold">{isAr ? "تاريخ الصب" : "Date Cast"}</p>
-            <p className="font-bold text-slate-800">{fmtDate(fd.castDate, isAr ? "ar" : "en")}</p>
+            <p className="font-bold text-slate-800">{fmtDate(fd.castDate)}</p>
           </div>
         )}
         {fd.ageDays != null && (
@@ -506,12 +504,12 @@ function renderConcreteFoam(fd: any, isAr: boolean, extras?: FormReportExtras) {
   const distCreated = extras?.foamDistCreatedAt;
   let receivedDisplay = "—";
   if (sampleRecv != null && String(sampleRecv).trim() !== "") {
-    receivedDisplay = fmtDate(sampleRecv, lang);
+    receivedDisplay = fmtDate(sampleRecv);
   } else if (distCreated != null && String(distCreated).trim() !== "") {
-    receivedDisplay = fmtDate(distCreated, lang);
+    receivedDisplay = fmtDate(distCreated);
   } else if (fd.receivedDate) {
     const raw = String(fd.receivedDate);
-    receivedDisplay = fmtDate(raw.length >= 10 ? raw.slice(0, 10) : raw, lang);
+    receivedDisplay = fmtDate(raw.length >= 10 ? raw.slice(0, 10) : raw);
   }
 
   const ageAtTestRaw = fd.testAgeDays ?? fd.densitySpecimenAgeDays;
@@ -704,9 +702,38 @@ function renderConcreteFoam(fd: any, isAr: boolean, extras?: FormReportExtras) {
 
 function renderCementSettingTime(fd: any, isAr: boolean) {
   const readings = fd.readings ?? [];
+  const spec = fd.spec ?? {};
+
+  const rowElapsedMin = (r: any): number | null => {
+    if (r == null) return null;
+    const hasElapsed =
+      (r.elapsedHours != null && r.elapsedHours !== "") ||
+      (r.elapsedMinutes != null && r.elapsedMinutes !== "");
+    if (hasElapsed) {
+      const h = parseInt(String(r.elapsedHours), 10) || 0;
+      const m = parseInt(String(r.elapsedMinutes), 10) || 0;
+      return h * 60 + m;
+    }
+    const t = parseFloat(r.time);
+    return Number.isFinite(t) ? t : null;
+  };
+
+  const rowNeedle = (r: any): number | null => {
+    if (r == null) return null;
+    if (r.needleReading !== undefined && r.needleReading !== null && r.needleReading !== "") {
+      const n = parseFloat(String(r.needleReading));
+      return Number.isFinite(n) ? n : null;
+    }
+    const p = parseFloat(r.penetration);
+    return Number.isFinite(p) ? p : null;
+  };
+
+  const INITIAL_NEEDLE = 5;
+  const FINAL_NEEDLE = 10;
+
   const validReadings = readings
-    .map((r: any) => ({ time: parseFloat(r.time), pen: parseFloat(r.penetration) }))
-    .filter((r: any) => !isNaN(r.time) && !isNaN(r.pen))
+    .map((r: any) => ({ time: rowElapsedMin(r), pen: rowNeedle(r) }))
+    .filter((r: any) => r.time != null && r.pen != null)
     .sort((a: any, b: any) => a.time - b.time);
 
   const formatTime = (min: number) => {
@@ -716,7 +743,6 @@ function renderCementSettingTime(fd: any, isAr: boolean) {
     return h > 0 ? `${h}h ${m}m` : `${m} min`;
   };
 
-  // Re-compute from readings if stored values are NaN/null/undefined
   function interpolateTimeReport(targetPen: number): number | undefined {
     const sorted = [...validReadings].sort((a: any, b: any) => a.time - b.time);
     for (let i = 0; i < sorted.length - 1; i++) {
@@ -730,39 +756,92 @@ function renderCementSettingTime(fd: any, isAr: boolean) {
         return parseFloat(t.toFixed(0));
       }
     }
-    // Fallback: first reading where pen <= targetPen
     const fallback = sorted.find((r: any) => r.pen <= targetPen);
     return fallback ? fallback.time : undefined;
   }
 
-  const rawInitialSet = fd.initialSettingTime ?? fd.initialSet;
-  const rawFinalSet = fd.finalSettingTime ?? fd.finalSet;
-  // Use stored value if valid number, otherwise re-compute from readings
-  const initialSet = (rawInitialSet !== null && rawInitialSet !== undefined && !isNaN(Number(rawInitialSet)))
-    ? Number(rawInitialSet)
-    : interpolateTimeReport(25);
-  let finalSet = (rawFinalSet !== null && rawFinalSet !== undefined && !isNaN(Number(rawFinalSet)))
-    ? Number(rawFinalSet)
-    : interpolateTimeReport(1);
-  // Additional fallback for final set: last reading with pen <= 1
-  if (finalSet === undefined && validReadings.length > 0) {
-    const sorted = [...validReadings].sort((a: any, b: any) => a.time - b.time);
-    const last = sorted[sorted.length - 1];
-    if (last.pen <= 1) finalSet = last.time;
+  const rawInitialSet = fd.initialSet ?? fd.initialSettingTime;
+  const rawFinalSet = fd.finalSet ?? fd.finalSettingTime;
+  let initialSet =
+    rawInitialSet !== null && rawInitialSet !== undefined && !isNaN(Number(rawInitialSet))
+      ? Number(rawInitialSet)
+      : undefined;
+  let finalSet =
+    rawFinalSet !== null && rawFinalSet !== undefined && !isNaN(Number(rawFinalSet))
+      ? Number(rawFinalSet)
+      : undefined;
+
+  if (initialSet === undefined && readings.length) {
+    const hit = readings.find((r: any) => {
+      const n = rowNeedle(r);
+      return n != null && n >= INITIAL_NEEDLE;
+    });
+    const m = hit ? rowElapsedMin(hit) : null;
+    if (m != null) initialSet = m;
   }
-  const spec = fd.spec ?? {};
+  if (finalSet === undefined && readings.length) {
+    const hit = readings.find((r: any) => {
+      const n = rowNeedle(r);
+      return n != null && n >= FINAL_NEEDLE;
+    });
+    const m = hit ? rowElapsedMin(hit) : null;
+    if (m != null) finalSet = m;
+  }
+
+  const legacyPen = readings.some(
+    (r: any) =>
+      r.penetration != null &&
+      r.penetration !== "" &&
+      (r.needleReading === undefined || r.needleReading === null || r.needleReading === ""),
+  );
+  if (initialSet === undefined && legacyPen) initialSet = interpolateTimeReport(25);
+  if (finalSet === undefined && legacyPen) {
+    finalSet = interpolateTimeReport(1);
+    if (finalSet === undefined && validReadings.length > 0) {
+      const sorted = [...validReadings].sort((a: any, b: any) => a.time - b.time);
+      const last = sorted[sorted.length - 1];
+      if (last.pen <= 1) finalSet = last.time;
+    }
+  }
+
+  const waterPct =
+    fd.standardConsistency ||
+    fd.waterContent ||
+    (fd.computedConsistencyPct != null ? String(Number(fd.computedConsistencyPct).toFixed(1)) : null);
 
   return (
     <div className="space-y-4">
-      {/* Test Info */}
+      {(fd.cementWeight || fd.waterVolume || fd.startingTime) && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs border border-blue-200 bg-blue-50 rounded p-3">
+          <div>
+            <p className="text-blue-800 font-semibold">Cement (g) / وزن الأسمنت</p>
+            <p className="font-bold">{fd.cementWeight ?? "—"}</p>
+          </div>
+          <div>
+            <p className="text-blue-800 font-semibold">Water (ml) / الماء (مل)</p>
+            <p className="font-bold">{fd.waterVolume ?? "—"}</p>
+          </div>
+          <div>
+            <p className="text-blue-800 font-semibold">Consistency % / التطبيع %</p>
+            <p className="font-bold">{waterPct ? `${waterPct}%` : "—"}</p>
+          </div>
+          <div>
+            <p className="text-blue-800 font-semibold">Start / End — البدء / الانتهاء</p>
+            <p className="font-bold font-mono">
+              {fd.startingTime ?? "—"} {fd.endingTime ? `→ ${fd.endingTime}` : ""}
+            </p>
+          </div>
+        </div>
+      )}
+
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
         <div className="bg-gray-50 border rounded p-2 text-center">
           <p className="text-gray-500 font-semibold">{isAr ? "نوع الأسمنت" : "Cement Type"}</p>
           <p className="font-bold text-gray-800">{spec.label ?? fd.cementType ?? "—"}</p>
         </div>
         <div className="bg-gray-50 border rounded p-2 text-center">
-          <p className="text-gray-500 font-semibold">{isAr ? "محتوى الماء" : "Water Content"}</p>
-          <p className="font-bold text-gray-800">{fd.waterContent ? `${fd.waterContent}%` : "—"}</p>
+          <p className="text-gray-500 font-semibold">{isAr ? "الماء للتطبيع %" : "Consistency %"}</p>
+          <p className="font-bold text-gray-800">{waterPct ? `${waterPct}%` : "—"}</p>
         </div>
         <div className="bg-gray-50 border rounded p-2 text-center">
           <p className="text-gray-500 font-semibold">{isAr ? "درجة الحرارة" : "Temperature"}</p>
@@ -774,60 +853,86 @@ function renderCementSettingTime(fd: any, isAr: boolean) {
         </div>
       </div>
 
-      {/* Setting Times Results */}
       <div className="grid grid-cols-2 gap-4">
-        <div className={`rounded-xl p-4 text-center border-2 ${
-          initialSet != null && !isNaN(initialSet) && initialSet >= (spec.initialSetMin ?? 45)
-            ? "bg-emerald-50 border-emerald-300"
-            : initialSet != null && !isNaN(initialSet) ? "bg-red-50 border-red-300" : "bg-gray-50 border-gray-200"
-        }`}>
-          <p className="text-xs font-semibold text-gray-600 mb-1">{isAr ? "زمن الشك الابتدائي" : "Initial Setting Time"}</p>
+        <div
+          className={`rounded-xl p-4 text-center border-2 ${
+            initialSet != null && !isNaN(initialSet) && initialSet >= (spec.initialSetMin ?? 45)
+              ? "bg-emerald-50 border-emerald-300"
+              : initialSet != null && !isNaN(initialSet)
+                ? "bg-red-50 border-red-300"
+                : "bg-gray-50 border-gray-200"
+          }`}
+        >
+          <p className="text-xs font-semibold text-gray-600 mb-1">
+            {isAr ? "زمن الشك الابتدائي" : "Initial Setting Time"}
+          </p>
           <p className="text-3xl font-extrabold text-gray-800">
             {initialSet != null && !isNaN(initialSet) ? formatTime(initialSet) : "—"}
           </p>
+          {fd.initialSetDisplay && (
+            <p className="text-xs text-gray-500 mt-1 font-mono">({fd.initialSetDisplay})</p>
+          )}
           {initialSet != null && !isNaN(initialSet) && (
             <p className="text-xs text-gray-500 mt-1">{isAr ? "الحد الأدنى:" : "Min:"} {spec.initialSetMin ?? "—"} min</p>
           )}
           {initialSet != null && !isNaN(initialSet) && (
-            <p className={`text-xs font-bold mt-1 ${
-              initialSet >= (spec.initialSetMin ?? 45) ? "text-emerald-700" : "text-red-700"
-            }`}>
-              {initialSet >= (spec.initialSetMin ?? 45)
-                ? (isAr ? "✓ مطابق" : "✓ PASS")
-                : (isAr ? "✗ غير مطابق" : "✗ FAIL")}
+            <p
+              className={`text-xs font-bold mt-1 ${
+                initialSet >= (spec.initialSetMin ?? 45) ? "text-emerald-700" : "text-red-700"
+              }`}
+            >
+              {initialSet >= (spec.initialSetMin ?? 45) ? (isAr ? "✓ مطابق" : "✓ PASS") : (isAr ? "✗ غير مطابق" : "✗ FAIL")}
             </p>
           )}
         </div>
-        <div className={`rounded-xl p-4 text-center border-2 ${
-          finalSet != null && !isNaN(finalSet) && finalSet <= (spec.finalSetMax ?? 600)
-            ? "bg-emerald-50 border-emerald-300"
-            : finalSet != null && !isNaN(finalSet) ? "bg-red-50 border-red-300" : "bg-gray-50 border-gray-200"
-        }`}>
-          <p className="text-xs font-semibold text-gray-600 mb-1">{isAr ? "زمن الشك النهائي" : "Final Setting Time"}</p>
+        <div
+          className={`rounded-xl p-4 text-center border-2 ${
+            finalSet != null && !isNaN(finalSet) && finalSet <= (spec.finalSetMax ?? 600)
+              ? "bg-emerald-50 border-emerald-300"
+              : finalSet != null && !isNaN(finalSet)
+                ? "bg-red-50 border-red-300"
+                : "bg-gray-50 border-gray-200"
+          }`}
+        >
+          <p className="text-xs font-semibold text-gray-600 mb-1">
+            {isAr ? "زمن الشك النهائي" : "Final Setting Time"}
+          </p>
           <p className="text-3xl font-extrabold text-gray-800">
             {finalSet != null && !isNaN(finalSet) ? formatTime(finalSet) : "—"}
           </p>
+          {fd.finalSetDisplay && <p className="text-xs text-gray-500 mt-1 font-mono">({fd.finalSetDisplay})</p>}
           {finalSet != null && !isNaN(finalSet) && (
             <p className="text-xs text-gray-500 mt-1">{isAr ? "الحد الأقصى:" : "Max:"} {spec.finalSetMax ?? "600"} min</p>
           )}
           {finalSet != null && !isNaN(finalSet) && (
-            <p className={`text-xs font-bold mt-1 ${
-              finalSet <= (spec.finalSetMax ?? 600) ? "text-emerald-700" : "text-red-700"
-            }`}>
-              {finalSet <= (spec.finalSetMax ?? 600)
-                ? (isAr ? "✓ مطابق" : "✓ PASS")
-                : (isAr ? "✗ غير مطابق" : "✗ FAIL")}
+            <p
+              className={`text-xs font-bold mt-1 ${
+                finalSet <= (spec.finalSetMax ?? 600) ? "text-emerald-700" : "text-red-700"
+              }`}
+            >
+              {finalSet <= (spec.finalSetMax ?? 600) ? (isAr ? "✓ مطابق" : "✓ PASS") : (isAr ? "✗ غير مطابق" : "✗ FAIL")}
             </p>
           )}
         </div>
       </div>
 
-      {/* Readings Table */}
       {validReadings.length > 0 && (
         <FlexibleResultsTable
           columns={[
-            { header: isAr ? "الوقت (دقيقة)" : "Time (min)", field: "time", type: "number", decimals: 2, align: "right" },
-            { header: isAr ? "الاختراق (مم)" : "Penetration (mm)", field: "pen", type: "number", decimals: 2, align: "right" },
+            {
+              header: isAr ? "الوقت (دقيقة)" : "Elapsed (min)",
+              field: "time",
+              type: "number",
+              decimals: 0,
+              align: "right",
+            },
+            {
+              header: isAr ? "قراءة الإبرة" : "Needle / penetration",
+              field: "pen",
+              type: "number",
+              decimals: 2,
+              align: "right",
+            },
           ]}
           rows={validReadings}
         />
@@ -1185,15 +1290,15 @@ function renderConcreteBeam(fd: any, isAr: boolean, castingDateMs?: number | nul
             <p className="text-gray-500 font-semibold">{isAr ? "تاريخ الصب" : "Cast Date"}</p>
             <p className="font-bold text-gray-800">
               {fdCastDate
-                ? new Date(fdCastDate).toLocaleDateString(isAr ? "ar-AE" : "en-GB")
-                : castingDateMs ? new Date(castingDateMs).toLocaleDateString(isAr ? "ar-AE" : "en-GB") : "—"}
+                ? formatCalendarDate(fdCastDate)
+                : castingDateMs ? formatCalendarDate(castingDateMs) : "—"}
             </p>
           </div>
         )}
         {fdTestDate && (
           <div className="bg-gray-50 border border-gray-200 rounded p-2 text-center">
             <p className="text-gray-500 font-semibold">{isAr ? "تاريخ الفحص" : "Date Tested"}</p>
-            <p className="font-bold text-gray-800">{new Date(fdTestDate).toLocaleDateString(isAr ? "ar-AE" : "en-GB")}</p>
+            <p className="font-bold text-gray-800">{formatCalendarDate(fdTestDate)}</p>
           </div>
         )}
         {((fdCastDate || castingDateMs) && fdTestDate) || reportAge !== null ? (
@@ -1293,7 +1398,7 @@ function renderConcreteCubes(fd: any, isAr: boolean) {
       <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3 mb-4 text-xs">
         <div className="bg-blue-50 border border-blue-200 rounded p-2 text-center">
           <p className="text-blue-600 font-semibold">{isAr ? "تاريخ الصب" : "Casting Date"}</p>
-          <p className="font-bold text-blue-800">{castingDate ? castingDate.toLocaleDateString() : "—"}</p>
+          <p className="font-bold text-blue-800">{castingDate ? formatCalendarDate(castingDate) : "—"}</p>
         </div>
         <div className="bg-blue-50 border border-blue-200 rounded p-2 text-center">
           <p className="text-blue-600 font-semibold">{isAr ? "عمر العينة" : "Sample Age"}</p>
@@ -1681,7 +1786,7 @@ export default function SpecializedTestReport() {
                 </div>
                 <div className="flex gap-1">
                   <span className="text-gray-500">{isAr ? ":التاريخ" : "Date:"}</span>
-                  <span>{new Date().toLocaleDateString(isAr ? "ar-AE" : "en-GB")}</span>
+                  <span>{formatCalendarDate(new Date())}</span>
                 </div>
               </div>
             </div>
@@ -1721,7 +1826,7 @@ export default function SpecializedTestReport() {
                   </td>
                   <td className="border border-gray-200 px-2 py-2 text-center align-top w-1/3">
                     <span className="text-gray-400 text-[10px] uppercase tracking-wide block mb-1">{isAr ? "تاريخ الاستلام" : "Received Date"}</span>
-                    <span className="font-semibold text-gray-900">{fmtDate((dist as any)?.receivedAt, lang)}</span>
+                    <span className="font-semibold text-gray-900">{fmtDate((dist as any)?.receivedAt)}</span>
                   </td>
                 </tr>
               </tbody>
@@ -1740,8 +1845,8 @@ export default function SpecializedTestReport() {
                     [isAr ? "اسم المشروع" : "Project Name", String((dist as any)?.contractName ?? result.projectName ?? "—")],
                     [isAr ? "القطاع" : "Sector", (dist as any)?.sector ? String((dist as any).sector).replace("_", " ").toUpperCase() : "—"],
                     [isAr ? "موقع العينة" : "Sample Location", String((dist as any)?.sampleLocation ?? "—")],
-                    [isAr ? "تاريخ الفحص" : "Test Date", fmtDate(result.testDate, lang)],
-                    [isAr ? "تاريخ التقرير" : "Report Date", fmtDate(new Date(), lang)],
+                    [isAr ? "تاريخ الفحص" : "Test Date", fmtDate(result.testDate)],
+                    [isAr ? "تاريخ التقرير" : "Report Date", fmtDate(new Date())],
                   ];
                   const n = Math.max(detailLeft.length, detailRight.length);
                   return Array.from({ length: n }, (_, i) => {
@@ -1831,12 +1936,12 @@ export default function SpecializedTestReport() {
                   <SignatureBox
                     label={isAr ? "المراجع" : "Reviewed By"}
                     name={legacyResult?.managerReviewedByName ?? undefined}
-                    date={legacyResult?.managerReviewedAt ? fmtDate(legacyResult.managerReviewedAt, lang) : undefined}
+                    date={legacyResult?.managerReviewedAt ? fmtDate(legacyResult.managerReviewedAt) : undefined}
                   />
                   <SignatureBox
                     label={isAr ? "المعتمد" : "Approved By"}
                     name={legacyResult?.qcReviewedByName ?? undefined}
-                    date={legacyResult?.qcReviewedAt ? fmtDate(legacyResult.qcReviewedAt, lang) : undefined}
+                    date={legacyResult?.qcReviewedAt ? fmtDate(legacyResult.qcReviewedAt) : undefined}
                   />
                 </tr>
               </tbody>
