@@ -13,10 +13,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { toast } from "sonner";
 import { Send, FlaskConical, Plus, Trash2, Printer } from "lucide-react";
 import { useLanguage } from "@/contexts/LanguageContext";
-import {
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
-  ResponsiveContainer, ReferenceLine,
-} from "recharts";
 
 // ─── Cement Setting Time (BS EN 196-3 / ASTM C191) ───────────────────────────
 const CEMENT_TYPES = {
@@ -80,18 +76,12 @@ const CEMENT_TYPES = {
 
 type CementType = keyof typeof CEMENT_TYPES;
 
-/** Vicat needle reading (0–10 scale or mm index). First row meeting threshold → setting time. */
-const INITIAL_SET_NEEDLE = 5;
-const FINAL_SET_NEEDLE = 10;
-
 interface PenetrationReading {
   id: string;
   needleReading: string;
   elapsedHours: string;
   elapsedMinutes: string;
-  /** Legacy (minutes from water addition) */
   time?: string;
-  /** Legacy penetration (mm) */
   penetration?: string;
 }
 
@@ -99,36 +89,7 @@ function newReading(id: string): PenetrationReading {
   return { id, needleReading: "", elapsedHours: "", elapsedMinutes: "" };
 }
 
-function rowElapsedMinutes(r: PenetrationReading): number | null {
-  const hasElapsed =
-    (r.elapsedHours != null && r.elapsedHours !== "") ||
-    (r.elapsedMinutes != null && r.elapsedMinutes !== "");
-  if (hasElapsed) {
-    const h = parseInt(r.elapsedHours, 10);
-    const m = parseInt(r.elapsedMinutes, 10);
-    if (!Number.isFinite(h) || !Number.isFinite(m)) return null;
-    return h * 60 + m;
-  }
-  if (r.time !== undefined && r.time !== "") {
-    const t = parseFloat(r.time);
-    return Number.isFinite(t) ? t : null;
-  }
-  return null;
-}
-
-function rowNeedleValue(r: PenetrationReading): number | null {
-  if (r.needleReading !== undefined && r.needleReading !== "") {
-    const n = parseFloat(r.needleReading);
-    return Number.isFinite(n) ? n : null;
-  }
-  if (r.penetration !== undefined && r.penetration !== "") {
-    const p = parseFloat(r.penetration);
-    return Number.isFinite(p) ? p : null;
-  }
-  return null;
-}
-
-/** Clock time from start (HH:mm) + elapsed H:M. */
+/** Clock time from start (HH:mm) + elapsed H:M — for table reference only. */
 function calculateActualTime(startTime: string, elapsedHoursStr: string, elapsedMinutesStr: string): string {
   if (!startTime?.includes(":")) return "—";
   const [shRaw, smRaw] = startTime.split(":");
@@ -147,26 +108,11 @@ function calculateActualTime(startTime: string, elapsedHoursStr: string, elapsed
   return `${h12}:${String(m).padStart(2, "0")} ${ampm}`;
 }
 
-function formatElapsedHhMm(readings: PenetrationReading[], pred: (needle: number) => boolean): string {
-  const row = readings.find(r => {
-    const n = rowNeedleValue(r);
-    return n != null && pred(n);
-  });
-  if (!row) return "—";
-  const em = rowElapsedMinutes(row);
-  if (em == null) return "—";
-  const h = Math.floor(em / 60);
-  const m = em % 60;
-  return `${h}:${String(m).padStart(2, "0")}`;
-}
-
-function firstRowElapsedMinutes(readings: PenetrationReading[], pred: (needle: number) => boolean): number | null {
-  const row = readings.find(r => {
-    const n = rowNeedleValue(r);
-    return n != null && pred(n);
-  });
-  if (!row) return null;
-  return rowElapsedMinutes(row);
+function totalMinutesFromParts(hStr: string, mStr: string): number | null {
+  const h = parseInt(hStr, 10);
+  const m = parseInt(mStr, 10);
+  if (!Number.isFinite(h) || !Number.isFinite(m)) return null;
+  return h * 60 + m;
 }
 
 export default function CementSettingTime() {
@@ -189,6 +135,12 @@ export default function CementSettingTime() {
   const [readings, setReadings] = useState<PenetrationReading[]>(() =>
     ["r1", "r2", "r3", "r4", "r5", "r6"].map(id => newReading(id)),
   );
+
+  const [initialSetHours, setInitialSetHours] = useState("");
+  const [initialSetMinutes, setInitialSetMinutes] = useState("");
+  const [finalSetHours, setFinalSetHours] = useState("");
+  const [finalSetMinutes, setFinalSetMinutes] = useState("");
+
   const [saving, setSaving] = useState(false);
   const [submitted, setSubmitted] = useState(false);
 
@@ -201,34 +153,23 @@ export default function CementSettingTime() {
     return (wv / cw) * 100;
   }, [cementWeight, waterVolume]);
 
-  const chartRows = useMemo(() => {
-    return readings
-      .map(r => {
-        const t = rowElapsedMinutes(r);
-        const needle = rowNeedleValue(r);
-        if (t == null || needle == null) return null;
-        return { timeMin: t, needle, label: `${t}` };
-      })
-      .filter((x): x is { timeMin: number; needle: number; label: string } => x != null)
-      .sort((a, b) => a.timeMin - b.timeMin);
-  }, [readings]);
+  const initialSetTotalMinutes = useMemo(
+    () => totalMinutesFromParts(initialSetHours, initialSetMinutes),
+    [initialSetHours, initialSetMinutes],
+  );
+  const finalSetTotalMinutes = useMemo(
+    () => totalMinutesFromParts(finalSetHours, finalSetMinutes),
+    [finalSetHours, finalSetMinutes],
+  );
 
-  const needleMax = useMemo(() => {
-    if (!chartRows.length) return 10;
-    const m = Math.max(10, ...chartRows.map(r => r.needle));
-    return Number.isFinite(m) ? m : 10;
-  }, [chartRows]);
-
-  const initialSetMin = firstRowElapsedMinutes(readings, n => n >= INITIAL_SET_NEEDLE);
-  const finalSetMin = firstRowElapsedMinutes(readings, n => n >= FINAL_SET_NEEDLE);
-
-  const initialSetDisplay = formatElapsedHhMm(readings, n => n >= INITIAL_SET_NEEDLE);
-  const finalSetDisplay = formatElapsedHhMm(readings, n => n >= FINAL_SET_NEEDLE);
+  const initialSetPass =
+    initialSetTotalMinutes != null ? initialSetTotalMinutes >= spec.initialSetMin : null;
+  const finalSetPass = finalSetTotalMinutes != null ? finalSetTotalMinutes <= spec.finalSetMax : null;
 
   const initialSetResult: "pass" | "fail" | "pending" =
-    initialSetMin != null ? (initialSetMin >= spec.initialSetMin ? "pass" : "fail") : "pending";
+    initialSetPass === null ? "pending" : initialSetPass ? "pass" : "fail";
   const finalSetResult: "pass" | "fail" | "pending" =
-    finalSetMin != null ? (finalSetMin <= spec.finalSetMax ? "pass" : "fail") : "pending";
+    finalSetPass === null ? "pending" : finalSetPass ? "pass" : "fail";
 
   const overallResult: "pass" | "fail" | "pending" =
     initialSetResult === "pending" && finalSetResult === "pending"
@@ -264,13 +205,16 @@ export default function CementSettingTime() {
       toast.error(lang === "ar" ? "معرف العينة مفقود" : "Sample ID missing");
       return;
     }
-    if (status === "submitted" && chartRows.length < 2) {
-      toast.error(ar ? "الرجاء إدخال قراءتين صالحتين على الأقل" : "Please enter at least 2 valid readings");
+    if (status === "submitted" && (initialSetTotalMinutes == null || finalSetTotalMinutes == null)) {
+      toast.error(
+        ar ? "أدخل زمن الشك الابتدائي والنهائي (ساعات ودقائق)" : "Enter initial and final setting times (hours and minutes)",
+      );
       return;
     }
     setSaving(true);
     try {
-      const waterContentOut = standardConsistency.trim() || (computedConsistencyPct != null ? String(computedConsistencyPct.toFixed(1)) : "");
+      const waterContentOut =
+        standardConsistency.trim() || (computedConsistencyPct != null ? String(computedConsistencyPct.toFixed(1)) : "");
       await saveResult.mutateAsync({
         distributionId: distId,
         sampleId: dist.sampleId,
@@ -288,20 +232,26 @@ export default function CementSettingTime() {
           testTemp,
           cementBatch,
           readings,
-          initialSet: initialSetMin ?? null,
-          finalSet: finalSetMin ?? null,
-          initialSettingTime: initialSetMin,
-          finalSettingTime: finalSetMin,
-          initialSetDisplay,
-          finalSetDisplay,
+          initialSetHours,
+          initialSetMinutes,
+          initialSetTotalMinutes,
+          finalSetHours,
+          finalSetMinutes,
+          finalSetTotalMinutes,
+          initialSetPass: initialSetTotalMinutes != null ? initialSetTotalMinutes >= spec.initialSetMin : null,
+          finalSetPass: finalSetTotalMinutes != null ? finalSetTotalMinutes <= spec.finalSetMax : null,
+          initialSet: initialSetTotalMinutes,
+          finalSet: finalSetTotalMinutes,
+          initialSettingTime: initialSetTotalMinutes,
+          finalSettingTime: finalSetTotalMinutes,
           overallResult,
           waterContent: waterContentOut,
         },
         overallResult,
         summaryValues: {
           cementType: spec.label,
-          initialSet: initialSetMin,
-          finalSet: finalSetMin,
+          initialSet: initialSetTotalMinutes,
+          finalSet: finalSetTotalMinutes,
           overallResult,
         },
         notes,
@@ -376,7 +326,6 @@ export default function CementSettingTime() {
             <CardTitle className="text-base">{ar ? "معلومات الاختبار" : "Test Information"}</CardTitle>
           </CardHeader>
           <CardContent className="space-y-6 pt-2">
-            {/* Cement sample preparation */}
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
               <h3 className="font-semibold text-slate-800 mb-3 text-sm">
                 Cement Sample Preparation / إعداد العينة الخاصة
@@ -478,211 +427,180 @@ export default function CementSettingTime() {
           </CardContent>
         </Card>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <Card>
-            <CardHeader className="pb-3">
-              <div className="flex items-center justify-between gap-2 flex-wrap">
-                <CardTitle className="text-base">
-                  {ar ? "قراءات الإبرة" : "Penetration / Needle Readings"}
-                </CardTitle>
-                <Button variant="outline" size="sm" onClick={() => setReadings(p => [...p, newReading(`r_${Date.now()}`)])}>
-                  <Plus size={14} className="mr-1" /> {ar ? "إضافة صف" : "Add row"}
-                </Button>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="overflow-x-auto">
-                <table className="w-full border-collapse text-sm border border-slate-300">
-                  <thead>
-                    <tr className="bg-slate-100">
-                      <th className="border border-slate-300 px-2 py-1.5 text-left font-medium text-slate-700">
-                        Needle Reading
-                        <br />
-                        <span className="font-normal text-xs text-slate-500">قراءة الإبرة (0–10)</span>
-                      </th>
-                      <th className="border border-slate-300 px-2 py-1.5 text-left font-medium text-slate-700">
-                        Time Elapsed
-                        <br />
-                        <span className="font-normal text-xs text-slate-500">HOUR : MIN — الوقت المنقضي</span>
-                      </th>
-                      <th className="border border-slate-300 px-2 py-1.5 text-center font-medium text-slate-700">
-                        Time
-                        <br />
-                        <span className="font-normal text-xs text-slate-500">HOUR : MIN — الوقت الفعلي</span>
-                      </th>
-                      <th className="border border-slate-300 w-12" aria-label="delete" />
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {readings.map(r => (
-                      <tr key={r.id}>
-                        <td className="border border-slate-300 px-1 py-1 align-middle">
+        <Card>
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <CardTitle className="text-base">
+                {ar ? "قراءات الإبرة (سجل)" : "Penetration / needle readings (record)"}
+              </CardTitle>
+              <Button variant="outline" size="sm" onClick={() => setReadings(p => [...p, newReading(`r_${Date.now()}`)])}>
+                <Plus size={14} className="mr-1" /> {ar ? "إضافة صف" : "Add row"}
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="overflow-x-auto">
+              <table className="w-full border-collapse text-sm border border-slate-300">
+                <thead>
+                  <tr className="bg-slate-100">
+                    <th className="border border-slate-300 px-2 py-1.5 text-left font-medium text-slate-700">
+                      Needle Reading
+                      <br />
+                      <span className="font-normal text-xs text-slate-500">قراءة الإبرة</span>
+                    </th>
+                    <th className="border border-slate-300 px-2 py-1.5 text-left font-medium text-slate-700">
+                      Time Elapsed
+                      <br />
+                      <span className="font-normal text-xs text-slate-500">HOUR : MIN — الوقت المنقضي</span>
+                    </th>
+                    <th className="border border-slate-300 px-2 py-1.5 text-center font-medium text-slate-700">
+                      Time
+                      <br />
+                      <span className="font-normal text-xs text-slate-500">HOUR : MIN — الوقت الفعلي</span>
+                    </th>
+                    <th className="border border-slate-300 w-12" aria-label="delete" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {readings.map(r => (
+                    <tr key={r.id}>
+                      <td className="border border-slate-300 px-1 py-1 align-middle">
+                        <Input
+                          type="number"
+                          min={0}
+                          value={r.needleReading}
+                          onChange={e => updateReading(r.id, "needleReading", e.target.value)}
+                          placeholder="—"
+                          className="h-8 text-xs w-20 font-mono"
+                        />
+                      </td>
+                      <td className="border border-slate-300 px-1 py-1 align-middle">
+                        <div className="flex items-center gap-1">
                           <Input
                             type="number"
                             min={0}
-                            max={15}
-                            value={r.needleReading}
-                            onChange={e => updateReading(r.id, "needleReading", e.target.value)}
-                            placeholder="0–10"
-                            className="h-8 text-xs w-20 font-mono"
+                            value={r.elapsedHours}
+                            onChange={e => updateReading(r.id, "elapsedHours", e.target.value)}
+                            placeholder="H"
+                            className="h-8 text-xs w-14 font-mono text-center"
                           />
-                        </td>
-                        <td className="border border-slate-300 px-1 py-1 align-middle">
-                          <div className="flex items-center gap-1">
-                            <Input
-                              type="number"
-                              min={0}
-                              value={r.elapsedHours}
-                              onChange={e => updateReading(r.id, "elapsedHours", e.target.value)}
-                              placeholder="H"
-                              className="h-8 text-xs w-14 font-mono text-center"
-                            />
-                            <span className="text-slate-500">:</span>
-                            <Input
-                              type="number"
-                              min={0}
-                              max={59}
-                              value={r.elapsedMinutes}
-                              onChange={e => updateReading(r.id, "elapsedMinutes", e.target.value)}
-                              placeholder="MM"
-                              className="h-8 text-xs w-14 font-mono text-center"
-                            />
-                          </div>
-                        </td>
-                        <td className="border border-slate-300 px-2 py-1 text-center font-mono text-sm text-emerald-700 align-middle">
-                          {calculateActualTime(startingTime, r.elapsedHours, r.elapsedMinutes)}
-                        </td>
-                        <td className="border border-slate-300 px-1 py-1 text-center align-middle">
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 text-red-600"
-                            onClick={() => setReadings(p => p.filter(x => x.id !== r.id))}
-                            disabled={readings.length <= 1}
-                            aria-label={ar ? "حذف" : "Delete"}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              <p className="text-xs text-slate-500 mt-2">
-                {ar
-                  ? `الشك الابتدائي: أول قراءة بإبرة ≥ ${INITIAL_SET_NEEDLE}. الشك النهائي: أول قراءة ≥ ${FINAL_SET_NEEDLE}.`
-                  : `Initial set: first reading with needle ≥ ${INITIAL_SET_NEEDLE}. Final set: first reading with needle ≥ ${FINAL_SET_NEEDLE}.`}
-              </p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base">{ar ? "منحنى القراءة مقابل الزمن" : "Needle reading vs. elapsed time"}</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {chartRows.length >= 2 ? (
-                <ResponsiveContainer width="100%" height={280}>
-                  <LineChart data={chartRows} margin={{ top: 10, right: 10, left: 0, bottom: 24 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                    <XAxis
-                      dataKey="timeMin"
-                      type="number"
-                      domain={["dataMin", "dataMax"]}
-                      tick={{ fontSize: 10 }}
-                      label={{
-                        value: ar ? "الوقت المنقضي (دقيقة)" : "Time elapsed (min)",
-                        position: "insideBottom",
-                        offset: -14,
-                        fontSize: 10,
-                      }}
-                    />
-                    <YAxis
-                      dataKey="needle"
-                      tick={{ fontSize: 10 }}
-                      label={{
-                        value: ar ? "قراءة الإبرة" : "Needle reading",
-                        angle: -90,
-                        position: "insideLeft",
-                        fontSize: 10,
-                      }}
-                      domain={[0, needleMax]}
-                    />
-                    <Tooltip
-                      formatter={(v: number) => [String(v), ar ? "إبرة" : "Needle"]}
-                      labelFormatter={v => `${ar ? "دقيقة" : "min"}: ${v}`}
-                    />
-                    <ReferenceLine
-                      y={INITIAL_SET_NEEDLE}
-                      stroke="#f59e0b"
-                      strokeDasharray="4 4"
-                      label={{
-                        value: ar ? `ابتدائي (≥${INITIAL_SET_NEEDLE})` : `Initial (≥${INITIAL_SET_NEEDLE})`,
-                        position: "right",
-                        fontSize: 9,
-                        fill: "#f59e0b",
-                      }}
-                    />
-                    <ReferenceLine
-                      y={FINAL_SET_NEEDLE}
-                      stroke="#ef4444"
-                      strokeDasharray="4 4"
-                      label={{
-                        value: ar ? `نهائي (≥${FINAL_SET_NEEDLE})` : `Final (≥${FINAL_SET_NEEDLE})`,
-                        position: "right",
-                        fontSize: 9,
-                        fill: "#ef4444",
-                      }}
-                    />
-                    <Line type="monotone" dataKey="needle" stroke="#2563eb" strokeWidth={2} dot={{ fill: "#2563eb", r: 4 }} />
-                  </LineChart>
-                </ResponsiveContainer>
-              ) : (
-                <div className="h-56 flex items-center justify-center text-slate-400 text-sm text-center border border-dashed rounded-lg">
-                  <p>
-                    {ar ? "أدخل قراءتين صالحتين (زمن + إبرة)" : "Enter at least 2 valid rows (elapsed time + needle)"}
-                    <br />
-                    {ar ? "لعرض الرسم البياني" : "to plot the chart"}
-                  </p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 bg-slate-50 border border-slate-300 rounded-lg">
-          <div className="text-center md:border-e md:border-slate-300 md:pe-4">
-            <p className="text-sm text-slate-600 mb-1">
-              Initial Setting Time / زمن الشك الابتدائي
-            </p>
-            <p className="text-2xl font-bold text-emerald-700 font-mono">{initialSetDisplay}</p>
-            <p className="text-xs text-slate-500 mt-1">
-              {initialSetMin != null ? `${formatTimeMin(initialSetMin)} total` : "—"}
-            </p>
+                          <span className="text-slate-500">:</span>
+                          <Input
+                            type="number"
+                            min={0}
+                            max={59}
+                            value={r.elapsedMinutes}
+                            onChange={e => updateReading(r.id, "elapsedMinutes", e.target.value)}
+                            placeholder="MM"
+                            className="h-8 text-xs w-14 font-mono text-center"
+                          />
+                        </div>
+                      </td>
+                      <td className="border border-slate-300 px-2 py-1 text-center font-mono text-sm text-emerald-700 align-middle">
+                        {calculateActualTime(startingTime, r.elapsedHours, r.elapsedMinutes)}
+                      </td>
+                      <td className="border border-slate-300 px-1 py-1 text-center align-middle">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-red-600"
+                          onClick={() => setReadings(p => p.filter(x => x.id !== r.id))}
+                          disabled={readings.length <= 1}
+                          aria-label={ar ? "حذف" : "Delete"}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
             <p className="text-xs text-slate-500 mt-2">
+              {ar
+                ? "جدول اختياري لتوثيق القراءات. زمن الشك الابتدائي والنهائي يُدخل يدوياً أدناه."
+                : "Optional table for recording readings. Initial and final setting times are entered manually below."}
+            </p>
+          </CardContent>
+        </Card>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
+          <div className="border border-slate-300 rounded-lg p-4 bg-white">
+            <label className="block text-sm font-medium text-slate-800 mb-2">
+              Initial Setting Time / زمن الشك الابتدائي
+            </label>
+            <div className="flex gap-2 items-center mb-2">
+              <Input
+                type="number"
+                min={0}
+                value={initialSetHours}
+                onChange={e => setInitialSetHours(e.target.value)}
+                placeholder="H"
+                className="w-20 font-mono"
+              />
+              <span className="text-slate-500">:</span>
+              <Input
+                type="number"
+                min={0}
+                max={59}
+                value={initialSetMinutes}
+                onChange={e => setInitialSetMinutes(e.target.value)}
+                placeholder="MM"
+                className="w-20 font-mono"
+              />
+            </div>
+            <p className="text-xs text-slate-500">
               Requirement: ≥ {spec.initialSetMin} min ({spec.standard})
             </p>
-            {initialSetResult !== "pending" && (
-              <div className="mt-2 flex justify-center">
+            {initialSetTotalMinutes != null && (
+              <div className="mt-2 flex items-center gap-2 flex-wrap">
+                {initialSetPass ? (
+                  <span className="text-emerald-600 font-bold">✓ PASS</span>
+                ) : (
+                  <span className="text-red-600 font-bold">✗ FAIL</span>
+                )}
+                <span className="text-xs text-slate-500">({formatTimeMin(initialSetTotalMinutes)} total)</span>
                 <PassFailBadge result={initialSetResult} />
               </div>
             )}
           </div>
-          <div className="text-center md:ps-4">
-            <p className="text-sm text-slate-600 mb-1">
+
+          <div className="border border-slate-300 rounded-lg p-4 bg-white">
+            <label className="block text-sm font-medium text-slate-800 mb-2">
               Final Setting Time / زمن الشك النهائي
-            </p>
-            <p className="text-2xl font-bold text-red-700 font-mono">{finalSetDisplay}</p>
-            <p className="text-xs text-slate-500 mt-1">
-              {finalSetMin != null ? `${formatTimeMin(finalSetMin)} total` : "—"}
-            </p>
-            <p className="text-xs text-slate-500 mt-2">
+            </label>
+            <div className="flex gap-2 items-center mb-2">
+              <Input
+                type="number"
+                min={0}
+                value={finalSetHours}
+                onChange={e => setFinalSetHours(e.target.value)}
+                placeholder="H"
+                className="w-20 font-mono"
+              />
+              <span className="text-slate-500">:</span>
+              <Input
+                type="number"
+                min={0}
+                max={59}
+                value={finalSetMinutes}
+                onChange={e => setFinalSetMinutes(e.target.value)}
+                placeholder="MM"
+                className="w-20 font-mono"
+              />
+            </div>
+            <p className="text-xs text-slate-500">
               Requirement: ≤ {spec.finalSetMax} min ({formatTimeMin(spec.finalSetMax)} max)
             </p>
-            {finalSetResult !== "pending" && (
-              <div className="mt-2 flex justify-center">
+            {finalSetTotalMinutes != null && (
+              <div className="mt-2 flex items-center gap-2 flex-wrap">
+                {finalSetPass ? (
+                  <span className="text-emerald-600 font-bold">✓ PASS</span>
+                ) : (
+                  <span className="text-red-600 font-bold">✗ FAIL</span>
+                )}
+                <span className="text-xs text-slate-500">({formatTimeMin(finalSetTotalMinutes)} total)</span>
                 <PassFailBadge result={finalSetResult} />
               </div>
             )}

@@ -703,6 +703,8 @@ function renderConcreteFoam(fd: any, isAr: boolean, extras?: FormReportExtras) {
 function renderCementSettingTime(fd: any, isAr: boolean) {
   const readings = fd.readings ?? [];
   const spec = fd.spec ?? {};
+  const minInit = spec.initialSetMin ?? 60;
+  const maxFinal = spec.finalSetMax ?? 600;
 
   const rowElapsedMin = (r: any): number | null => {
     if (r == null) return null;
@@ -727,9 +729,6 @@ function renderCementSettingTime(fd: any, isAr: boolean) {
     const p = parseFloat(r.penetration);
     return Number.isFinite(p) ? p : null;
   };
-
-  const INITIAL_NEEDLE = 5;
-  const FINAL_NEEDLE = 10;
 
   const validReadings = readings
     .map((r: any) => ({ time: rowElapsedMin(r), pen: rowNeedle(r) }))
@@ -760,32 +759,41 @@ function renderCementSettingTime(fd: any, isAr: boolean) {
     return fallback ? fallback.time : undefined;
   }
 
+  const manualInitialMin =
+    fd.initialSetTotalMinutes != null && fd.initialSetTotalMinutes !== "" && !isNaN(Number(fd.initialSetTotalMinutes))
+      ? Number(fd.initialSetTotalMinutes)
+      : null;
+  const manualFinalMin =
+    fd.finalSetTotalMinutes != null && fd.finalSetTotalMinutes !== "" && !isNaN(Number(fd.finalSetTotalMinutes))
+      ? Number(fd.finalSetTotalMinutes)
+      : null;
+
+  const initialClock =
+    fd.initialSetHours != null &&
+    fd.initialSetHours !== "" &&
+    fd.initialSetMinutes != null &&
+    fd.initialSetMinutes !== ""
+      ? `${String(fd.initialSetHours)}:${String(fd.initialSetMinutes).padStart(2, "0")}`
+      : "—";
+  const finalClock =
+    fd.finalSetHours != null &&
+    fd.finalSetHours !== "" &&
+    fd.finalSetMinutes != null &&
+    fd.finalSetMinutes !== ""
+      ? `${String(fd.finalSetHours)}:${String(fd.finalSetMinutes).padStart(2, "0")}`
+      : "—";
+
+  let initialSet: number | undefined =
+    manualInitialMin != null && !isNaN(manualInitialMin) ? manualInitialMin : undefined;
+  let finalSet: number | undefined = manualFinalMin != null && !isNaN(manualFinalMin) ? manualFinalMin : undefined;
+
   const rawInitialSet = fd.initialSet ?? fd.initialSettingTime;
   const rawFinalSet = fd.finalSet ?? fd.finalSettingTime;
-  let initialSet =
-    rawInitialSet !== null && rawInitialSet !== undefined && !isNaN(Number(rawInitialSet))
-      ? Number(rawInitialSet)
-      : undefined;
-  let finalSet =
-    rawFinalSet !== null && rawFinalSet !== undefined && !isNaN(Number(rawFinalSet))
-      ? Number(rawFinalSet)
-      : undefined;
-
-  if (initialSet === undefined && readings.length) {
-    const hit = readings.find((r: any) => {
-      const n = rowNeedle(r);
-      return n != null && n >= INITIAL_NEEDLE;
-    });
-    const m = hit ? rowElapsedMin(hit) : null;
-    if (m != null) initialSet = m;
+  if (initialSet === undefined && rawInitialSet != null && !isNaN(Number(rawInitialSet))) {
+    initialSet = Number(rawInitialSet);
   }
-  if (finalSet === undefined && readings.length) {
-    const hit = readings.find((r: any) => {
-      const n = rowNeedle(r);
-      return n != null && n >= FINAL_NEEDLE;
-    });
-    const m = hit ? rowElapsedMin(hit) : null;
-    if (m != null) finalSet = m;
+  if (finalSet === undefined && rawFinalSet != null && !isNaN(Number(rawFinalSet))) {
+    finalSet = Number(rawFinalSet);
   }
 
   const legacyPen = readings.some(
@@ -803,6 +811,16 @@ function renderCementSettingTime(fd: any, isAr: boolean) {
       if (last.pen <= 1) finalSet = last.time;
     }
   }
+
+  const initialOk =
+    fd.initialSetPass === true ||
+    (initialSet != null && !isNaN(initialSet) && initialSet >= minInit);
+  const initialBad =
+    fd.initialSetPass === false || (initialSet != null && !isNaN(initialSet) && initialSet < minInit);
+  const finalOk =
+    fd.finalSetPass === true || (finalSet != null && !isNaN(finalSet) && finalSet <= maxFinal);
+  const finalBad =
+    fd.finalSetPass === false || (finalSet != null && !isNaN(finalSet) && finalSet > maxFinal);
 
   const waterPct =
     fd.standardConsistency ||
@@ -856,63 +874,51 @@ function renderCementSettingTime(fd: any, isAr: boolean) {
       <div className="grid grid-cols-2 gap-4">
         <div
           className={`rounded-xl p-4 text-center border-2 ${
-            initialSet != null && !isNaN(initialSet) && initialSet >= (spec.initialSetMin ?? 45)
-              ? "bg-emerald-50 border-emerald-300"
-              : initialSet != null && !isNaN(initialSet)
-                ? "bg-red-50 border-red-300"
-                : "bg-gray-50 border-gray-200"
+            initialOk ? "bg-emerald-50 border-emerald-300" : initialBad ? "bg-red-50 border-red-300" : "bg-gray-50 border-gray-200"
           }`}
         >
           <p className="text-xs font-semibold text-gray-600 mb-1">
             {isAr ? "زمن الشك الابتدائي" : "Initial Setting Time"}
           </p>
-          <p className="text-3xl font-extrabold text-gray-800">
+          <p className="text-2xl font-extrabold text-gray-800 font-mono">
             {initialSet != null && !isNaN(initialSet) ? formatTime(initialSet) : "—"}
           </p>
-          {fd.initialSetDisplay && (
-            <p className="text-xs text-gray-500 mt-1 font-mono">({fd.initialSetDisplay})</p>
-          )}
-          {initialSet != null && !isNaN(initialSet) && (
-            <p className="text-xs text-gray-500 mt-1">{isAr ? "الحد الأدنى:" : "Min:"} {spec.initialSetMin ?? "—"} min</p>
-          )}
-          {initialSet != null && !isNaN(initialSet) && (
-            <p
-              className={`text-xs font-bold mt-1 ${
-                initialSet >= (spec.initialSetMin ?? 45) ? "text-emerald-700" : "text-red-700"
-              }`}
-            >
-              {initialSet >= (spec.initialSetMin ?? 45) ? (isAr ? "✓ مطابق" : "✓ PASS") : (isAr ? "✗ غير مطابق" : "✗ FAIL")}
+          {initialClock !== "—" && (
+            <p className="text-sm text-gray-600 mt-1 font-mono">
+              {isAr ? "مدخل:" : "Entered:"} {initialClock}
             </p>
+          )}
+          {initialSet != null && !isNaN(initialSet) && (
+            <p className="text-xs text-gray-500 mt-1">{isAr ? "الحد الأدنى:" : "Min:"} {minInit} min</p>
+          )}
+          {initialOk && (
+            <p className="text-xs font-bold mt-2 text-emerald-700">{isAr ? "✓ مطابق" : "✓ PASS"}</p>
+          )}
+          {initialBad && (
+            <p className="text-xs font-bold mt-2 text-red-700">{isAr ? "✗ غير مطابق" : "✗ FAIL"}</p>
           )}
         </div>
         <div
           className={`rounded-xl p-4 text-center border-2 ${
-            finalSet != null && !isNaN(finalSet) && finalSet <= (spec.finalSetMax ?? 600)
-              ? "bg-emerald-50 border-emerald-300"
-              : finalSet != null && !isNaN(finalSet)
-                ? "bg-red-50 border-red-300"
-                : "bg-gray-50 border-gray-200"
+            finalOk ? "bg-emerald-50 border-emerald-300" : finalBad ? "bg-red-50 border-red-300" : "bg-gray-50 border-gray-200"
           }`}
         >
           <p className="text-xs font-semibold text-gray-600 mb-1">
             {isAr ? "زمن الشك النهائي" : "Final Setting Time"}
           </p>
-          <p className="text-3xl font-extrabold text-gray-800">
+          <p className="text-2xl font-extrabold text-gray-800 font-mono">
             {finalSet != null && !isNaN(finalSet) ? formatTime(finalSet) : "—"}
           </p>
-          {fd.finalSetDisplay && <p className="text-xs text-gray-500 mt-1 font-mono">({fd.finalSetDisplay})</p>}
-          {finalSet != null && !isNaN(finalSet) && (
-            <p className="text-xs text-gray-500 mt-1">{isAr ? "الحد الأقصى:" : "Max:"} {spec.finalSetMax ?? "600"} min</p>
-          )}
-          {finalSet != null && !isNaN(finalSet) && (
-            <p
-              className={`text-xs font-bold mt-1 ${
-                finalSet <= (spec.finalSetMax ?? 600) ? "text-emerald-700" : "text-red-700"
-              }`}
-            >
-              {finalSet <= (spec.finalSetMax ?? 600) ? (isAr ? "✓ مطابق" : "✓ PASS") : (isAr ? "✗ غير مطابق" : "✗ FAIL")}
+          {finalClock !== "—" && (
+            <p className="text-sm text-gray-600 mt-1 font-mono">
+              {isAr ? "مدخل:" : "Entered:"} {finalClock}
             </p>
           )}
+          {finalSet != null && !isNaN(finalSet) && (
+            <p className="text-xs text-gray-500 mt-1">{isAr ? "الحد الأقصى:" : "Max:"} {maxFinal} min</p>
+          )}
+          {finalOk && <p className="text-xs font-bold mt-2 text-emerald-700">{isAr ? "✓ مطابق" : "✓ PASS"}</p>}
+          {finalBad && <p className="text-xs font-bold mt-2 text-red-700">{isAr ? "✗ غير مطابق" : "✗ FAIL"}</p>}
         </div>
       </div>
 
