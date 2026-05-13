@@ -370,5 +370,23 @@
     text-shadow: none !important;
   }
 
-  /* Do not override borders inside .lab-print-root — see styles/print.css */
+  /*
+   * Lab reports: force table borders in print preview.
+   * Tailwind @layer utilities + Chrome print can drop screen borders; element+class
+   * with !important wins. Targets .lab-print-root (report shell) and .report-page (Concrete).
+   */
+  .lab-print-root table,
+  .report-page table {
+    border-collapse: collapse !important;
+  }
+  .lab-print-root th,
+  .lab-print-root td,
+  .report-page th,
+  .report-page td {
+    border-width: 0.5pt !important;
+    border-style: solid !important;
+    border-color: #000 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
 }

@@ -44,11 +44,12 @@
     display: none !important;
   }
 
-  /* ── Lab report tables: direct selectors (no parent scope required) ── */
+  /* ── Lab report tables: class + report-page fallbacks ── */
   table.metadata-table,
   table.signatures-table,
-  table.lab-results-table {
-    border: 1px solid #000 !important;
+  table.lab-results-table,
+  .report-page table {
+    border: 0.5pt solid #000 !important;
     border-collapse: collapse !important;
     width: 100% !important;
   }
@@ -58,8 +59,12 @@
   table.signatures-table th,
   table.signatures-table td,
   table.lab-results-table th,
-  table.lab-results-table td {
-    border: 1px solid #000 !important;
+  table.lab-results-table td,
+  .report-page th,
+  .report-page td {
+    border-width: 0.5pt !important;
+    border-style: solid !important;
+    border-color: #000 !important;
     padding: 8px !important;
   }
 

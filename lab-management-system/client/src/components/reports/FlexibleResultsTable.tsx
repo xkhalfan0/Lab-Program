@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 
 /**
  * Generic print-friendly results table (black borders, border-collapse).
@@ -180,6 +180,22 @@ function renderCell(col: Column, row: Record<string, unknown>): ReactNode {
 const cellBase = "border border-black px-1 py-1 text-xs align-middle";
 const thBase = "border border-black px-1 py-1 text-xs font-semibold bg-gray-100 align-middle";
 
+/** Inline borders so print preview / PDF keep grid lines even if print CSS order fails. */
+const printSafeTable: CSSProperties = {
+  borderSpacing: 0,
+  borderCollapse: "collapse",
+  border: "1px solid #000",
+};
+const printSafeCell: CSSProperties = {
+  borderWidth: 1,
+  borderStyle: "solid",
+  borderColor: "#000",
+};
+const printSafeTh: CSSProperties = {
+  ...printSafeCell,
+  backgroundColor: "#f3f4f6",
+};
+
 export function FlexibleResultsTable({
   columns,
   rows,
@@ -191,7 +207,7 @@ export function FlexibleResultsTable({
   return (
     <table
       className={`lab-results-table w-full border-collapse text-black ${tableClassName} ${className}`.trim()}
-      style={{ borderSpacing: 0 }}
+      style={printSafeTable}
     >
       <thead>
         <tr>
@@ -199,7 +215,7 @@ export function FlexibleResultsTable({
             <th
               key={col.field + col.header}
               className={`${thBase} ${alignClass(col.align)}`}
-              style={col.width ? { width: col.width } : undefined}
+              style={col.width ? { ...printSafeTh, width: col.width } : printSafeTh}
             >
               {col.header}
             </th>
@@ -217,7 +233,7 @@ export function FlexibleResultsTable({
                 <td
                   key={col.field}
                   className={`${cellBase} ${alignClass(effectiveAlign)}`}
-                  style={col.width ? { width: col.width } : undefined}
+                  style={col.width ? { ...printSafeCell, width: col.width } : printSafeCell}
                 >
                   {renderCell(col, row)}
                 </td>
@@ -228,7 +244,7 @@ export function FlexibleResultsTable({
         {(summaryRows ?? []).map((row, si) => (
           <tr key={`sum-${si}`} className="bg-gray-50 font-semibold">
             {columns.map((col) => (
-              <td key={col.field} className={`${cellBase} ${alignClass(col.align)}`}>
+              <td key={col.field} className={`${cellBase} ${alignClass(col.align)}`} style={printSafeCell}>
                 {renderCell(col, row)}
               </td>
             ))}

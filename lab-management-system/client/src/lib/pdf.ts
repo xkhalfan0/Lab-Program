@@ -86,8 +86,15 @@ export async function generatePdfFromElement(
   ${inlineStyles}
   <style>
     @page { margin: 10mm; }
-    body { margin: 0; padding: 0; background: white; }
+    body { margin: 0; padding: 0; background: white; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
     .print\\:hidden { display: none !important; }
+    /* Fallback when linked stylesheets fail to load in isolated PDF HTML */
+    table { border-collapse: collapse !important; }
+    th, td {
+      border: 0.5pt solid #000 !important;
+      border-style: solid !important;
+      border-color: #000 !important;
+    }
   </style>
 </head>
 <body>
