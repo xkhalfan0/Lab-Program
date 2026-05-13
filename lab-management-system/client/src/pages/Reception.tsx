@@ -47,11 +47,6 @@ const SUBTYPES_BY_CODE: Record<string, { value: string; labelAr: string; labelEn
     { value: "hollow_block", labelAr: "بلوك مجوف", labelEn: "Hollow Block" },
     { value: "thermal_block", labelAr: "بلوك حراري", labelEn: "Thermal Block" },
   ],
-  CONC_INTERLOCK: [
-    { value: "interlock_6cm", labelAr: "إنترلوك 6 سم", labelEn: "Interlock 6cm" },
-    { value: "interlock_8cm", labelAr: "إنترلوك 8 سم", labelEn: "Interlock 8cm" },
-    { value: "interlock_10cm", labelAr: "إنترلوك 10 سم", labelEn: "Interlock 10cm" },
-  ],
   STEEL_REBAR: [
     { value: "rebar_T8", labelAr: "T8 - قطر 8مم", labelEn: "T8 - 8mm" },
     { value: "rebar_T10", labelAr: "T10 - قطر 10مم", labelEn: "T10 - 10mm" },
@@ -173,7 +168,7 @@ interface SelectedTest {
 
 // Tests that support multi-subtype selection (each subtype = separate order item)
 const MULTI_SUBTYPE_TESTS = [
-  "CONC_BLOCK", "CONC_INTERLOCK", "CONC_MORTAR_SAND",
+  "CONC_BLOCK", "CONC_MORTAR_SAND",
   "SOIL_SIEVE",
   "STEEL_REBAR", "STEEL_BEND", "STEEL_REBEND", "STEEL_STRUCTURAL", "STEEL_ANCHOR",
   "AGG_SIEVE",
@@ -315,7 +310,7 @@ export default function Reception() {
   const [selectedTests, setSelectedTests] = useState<SelectedTest[]>([]);
   // For subtype selection per test
   const [subtypeFor, setSubtypeFor] = useState<number | null>(null); // testTypeId being configured
-  // For multi-subtype tests (CONC_BLOCK): { testTypeId: { subtypeValue: quantity } }
+  // For multi-subtype tests (CONC_BLOCK, CONC_MORTAR_SAND, …): { testTypeId: { subtypeValue: quantity } }
   const [multiSubtypes, setMultiSubtypes] = useState<MultiSubtypeState>({});
   // Asphalt sample kind: 'hot_bin' = Hot Bin Aggregates, 'mix' = Trial Mix / Fresh Sample
   const [asphaltKind, setAsphaltKind] = useState<"hot_bin" | "mix" | "">("")
@@ -971,7 +966,9 @@ export default function Reception() {
                             {isSelected && !MULTI_SUBTYPE_TESTS.includes(tt.code) && (
                               <div className="mt-2 ms-7 flex items-center gap-2">
                                 <Label className="text-xs text-muted-foreground whitespace-nowrap">
-                                  {lang === "ar" ? "العدد:" : "Qty:"}
+                                  {tt.code === "CONC_INTERLOCK"
+                                    ? (lang === "ar" ? "عدد البلاطات للفحص:" : "No. of blocks to test:")
+                                    : (lang === "ar" ? "العدد:" : "Qty:")}
                                 </Label>
                                 <Input
                                   type="number" min={1} max={999}

@@ -713,22 +713,78 @@ function renderCementSettingTime(fd: any, isAr: boolean) {
 }
 
 function renderInterlock(fd: any, isAr: boolean) {
-  const blocks = (fd.blocks ?? []).filter((b: any) => b.strengthMpa && b.strengthMpa > 0);
+  const getCfRpt = (type: string) => {
+    switch (type) {
+      case "6cm":
+      case "6CM":
+        return 1.06;
+      case "8cm":
+      case "8CM":
+        return 1.18;
+      case "10cm":
+      case "10CM":
+        return 1.24;
+      default:
+        return 1.0;
+    }
+  };
+  const THICKNESS_FACTOR_LEGACY: Record<number, number> = { 60: 0.8, 80: 1.0, 100: 1.2 };
+
+  const blockTypeKey = (fd.blockType ?? fd.interlockType ?? "6cm").toString();
+  const cfSaved = typeof fd.cf === "number" && Number.isFinite(fd.cf) ? fd.cf : getCfRpt(blockTypeKey);
   const spec = fd.spec ?? {};
+  const commonThickness = fd.commonThickness;
+  const commonArea = fd.commonAreaMm2 ?? fd.commonArea;
+  const blocksRaw = fd.blocks ?? [];
+  const blocks = blocksRaw.filter((b: any) => {
+    const load = Number(b.maxLoadKN);
+    if (!load) return false;
+    const area =
+      commonArea != null && commonArea !== ""
+        ? Number(commonArea)
+        : Number(b.area ?? b.areaMm2) > 0
+          ? Number(b.area ?? b.areaMm2)
+          : 0;
+    return area > 0;
+  });
   const avgStrength = fd.avgStrength ?? 0;
   const overallResult = fd.overallResult ?? "pending";
-  const THICKNESS_FACTOR_RPT: Record<number, number> = { 60: 0.80, 80: 1.00, 100: 1.20 };
-  const defaultTf = THICKNESS_FACTOR_RPT[spec.thickness] ?? 1.0;
+
+  const blockTypeLabel =
+    spec.label ??
+    (blockTypeKey === "8CM" || blockTypeKey === "8cm"
+      ? "Interlock 8cm"
+      : blockTypeKey === "10CM" || blockTypeKey === "10cm"
+        ? "Interlock 10cm"
+        : "Interlock 6cm");
+
   const headers = isAr
-    ? ["رقم البلوكة", "السماكة (مم)", "الحمل (كن)", "المساحة (مم²)", "المقاومة (N/mm²)", "CF", "المقاومة المصححة (N/mm²)", "النتيجة"]
-    : ["Block Ref.", "Thickness (mm)", "Load (kN)", "Area (mm²)", "Strength (N/mm²)", "CF", "Corrected Str. (N/mm²)", "Result"];
+    ? ["رقم البلوكة", "الحمل (كن)", "المقاومة (N/mm²)", "المقاومة المصححة (N/mm²)", "النتيجة"]
+    : ["Block Ref.", "Max Load (kN)", "Str. (N/mm²)", "Corr. (N/mm²)", "Result"];
+
   return (
     <div className="text-xs">
       {/* Test Info */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-4">
         <div className="bg-blue-50 border border-blue-200 rounded p-2">
           <p className="text-blue-600 font-semibold">{isAr ? "النوع" : "Block Type"}</p>
-          <p className="font-bold text-blue-800">{spec.label ?? fd.interlockType ?? "—"}</p>
+          <p className="font-bold text-blue-800">{blockTypeLabel}</p>
+        </div>
+        {commonThickness != null && commonThickness !== "" && (
+          <div className="bg-gray-50 border border-gray-200 rounded p-2">
+            <p className="text-gray-500 font-semibold">{isAr ? "السماكة (مم)" : "Thickness (mm)"}</p>
+            <p className="font-bold text-gray-800">{String(commonThickness)}</p>
+          </div>
+        )}
+        {commonArea != null && commonArea !== "" && (
+          <div className="bg-gray-50 border border-gray-200 rounded p-2">
+            <p className="text-gray-500 font-semibold">{isAr ? "المساحة (مم²)" : "Area (mm²)"}</p>
+            <p className="font-bold text-gray-800">{String(commonArea)}</p>
+          </div>
+        )}
+        <div className="bg-slate-50 border border-slate-200 rounded p-2">
+          <p className="text-slate-500 font-semibold">{isAr ? "عامل التصحيح CF" : "Correction factor CF"}</p>
+          <p className="font-bold text-slate-800 font-mono">{Number(cfSaved).toFixed(2)}</p>
         </div>
         {fd.manufacturer && (
           <div className="bg-gray-50 border border-gray-200 rounded p-2">
@@ -761,35 +817,49 @@ function renderInterlock(fd: any, isAr: boolean) {
           <FlexibleResultsTable
             columns={[
               { header: headers[0], field: "blockRef", align: "center", render: (v) => <span className="font-mono">{String(v ?? "")}</span> },
-              { header: headers[1], field: "thickness", align: "center", render: (v) => String(v ?? "—") },
-              { header: headers[2], field: "maxLoadKN", align: "right", render: (v) => (v != null ? Number(v).toFixed(1) : "—") },
-              { header: headers[3], field: "area", align: "right", render: (v) => (v != null ? String(Math.round(Number(v))) : "—") },
-              { header: headers[4], field: "strengthMpa", align: "right", render: (v) => (v != null ? Number(v).toFixed(1) : "—") },
+              { header: headers[1], field: "maxLoadKN", align: "right", render: (v) => (v != null ? Number(v).toFixed(1) : "—") },
               {
-                header: headers[5],
-                field: "_cf",
-                align: "center",
-                render: (_, row) => (
-                  <span className="text-blue-800">{THICKNESS_FACTOR_RPT[Number((row as any).thickness)] ?? defaultTf}</span>
-                ),
-              },
-              {
-                header: headers[6],
-                field: "_corrStr",
-                align: "center",
+                header: headers[2],
+                field: "strengthMpa",
+                align: "right",
                 render: (_, row) => {
                   const b = row as any;
-                  const t =
-                    b.correctedStrengthMpa != null
-                      ? Number(b.correctedStrengthMpa).toFixed(1)
-                      : b.strengthMpa != null
-                        ? (Number(b.strengthMpa) * (THICKNESS_FACTOR_RPT[Number(b.thickness)] ?? defaultTf)).toFixed(1)
-                        : "—";
-                  return <span className="font-bold">{t}</span>;
+                  if (b.strengthMpa != null) return Number(b.strengthMpa).toFixed(1);
+                  const load = Number(b.maxLoadKN);
+                  const area =
+                    commonArea != null && commonArea !== ""
+                      ? Number(commonArea)
+                      : Number(b.area ?? b.areaMm2);
+                  if (!load || !area) return "—";
+                  return ((load * 1000) / area).toFixed(1);
                 },
               },
               {
-                header: headers[7],
+                header: headers[3],
+                field: "correctedStrengthMpa",
+                align: "right",
+                render: (_, row) => {
+                  const b = row as any;
+                  if (b.correctedStrengthMpa != null) return Number(b.correctedStrengthMpa).toFixed(1);
+                  const load = Number(b.maxLoadKN);
+                  const area =
+                    commonArea != null && commonArea !== ""
+                      ? Number(commonArea)
+                      : Number(b.area ?? b.areaMm2);
+                  if (!load || !area) return "—";
+                  const str = (load * 1000) / area;
+                  if (b.strengthMpa != null) {
+                    const isNewFormat = fd.blockType != null || fd.cf != null;
+                    if (isNewFormat) return (Number(b.strengthMpa) * cfSaved).toFixed(1);
+                    const th = Number(b.thickness ?? commonThickness);
+                    const lf = Number.isFinite(th) ? THICKNESS_FACTOR_LEGACY[th] : 1;
+                    return (Number(b.strengthMpa) * (lf ?? 1)).toFixed(1);
+                  }
+                  return (str * cfSaved).toFixed(1);
+                },
+              },
+              {
+                header: headers[4],
                 field: "result",
                 align: "center",
                 render: (_, row) => {
