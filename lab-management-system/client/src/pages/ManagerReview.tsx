@@ -26,14 +26,12 @@ import {
   Building2,
   ClipboardCheck,
   FileText,
-  ExternalLink,
   Clock,
   History,
   ChevronRight,
-  Download,
   Loader2,
 } from "lucide-react";
-import { useState, useEffect, useRef, type ReactElement } from "react";
+import { useState, useEffect, useMemo, type ReactElement } from "react";
 import { toast } from "sonner";
 import { useAuth } from "@/_core/hooks/useAuth";
 
@@ -276,6 +274,49 @@ function TaskStateBadge({ state, lang }: { state: "new" | "incomplete" | "comple
   );
 }
 
+function isConcreteCubeReport(
+  dist: { testType?: string } | undefined,
+  legacyResult: { chartsData?: unknown } | undefined
+): boolean {
+  const src = (legacyResult?.chartsData as { source?: string } | undefined)?.source;
+  if (src === "concrete_cubes") return true;
+  const tt = (dist?.testType ?? "").toLowerCase();
+  return (
+    tt === "conc_cube" ||
+    tt === "concrete_compression" ||
+    tt === "concrete" ||
+    tt.includes("conc_cube")
+  );
+}
+
+/** One URL for “open report” from the manager dialog (matches App.tsx routes). */
+function computeManagerReviewReportUrl(opts: {
+  batchId?: string | null;
+  distId?: number;
+  dist: { testType?: string } | undefined;
+  legacyResult: { chartsData?: unknown } | undefined;
+  hasSpecializedForDistribution: boolean;
+  orderId?: number;
+  hasLegacyResult: boolean;
+}): string | null {
+  const {
+    batchId,
+    distId,
+    dist,
+    legacyResult,
+    hasSpecializedForDistribution,
+    orderId,
+    hasLegacyResult,
+  } = opts;
+  if (batchId) return `/batch-report/${encodeURIComponent(batchId)}`;
+  if (!distId) return null;
+  if (isConcreteCubeReport(dist, legacyResult)) return `/concrete-report/${distId}`;
+  if (hasSpecializedForDistribution) return `/test-report/${distId}`;
+  if (orderId != null) return `/order-report/${orderId}`;
+  if (hasLegacyResult) return `/test-report/${distId}`;
+  return null;
+}
+
 export default function ManagerReview() {
   const { lang } = useLanguage();
   const { user } = useAuth();
@@ -287,8 +328,6 @@ export default function ManagerReview() {
   const [taskFilter, setTaskFilter] = useState<TaskFilter>("new");
   const [showHistory, setShowHistory] = useState(false);
   const [archiveSearch, setArchiveSearch] = useState("");
-  const [isPdfDownloading, setIsPdfDownloading] = useState(false);
-  const reportDialogRef = useRef<HTMLDivElement>(null);
 
   // Auto-fill signature with current user's name
   useEffect(() => {
@@ -409,6 +448,25 @@ export default function ManagerReview() {
   const dist = distributions?.[0];
   const result = results?.[0];
   const specResult = specializedResults?.[0];
+  const specializedForDist = useMemo(() => {
+    if (!dist?.id || !specializedResults?.length) return false;
+    return specializedResults.some((r: { distributionId?: number }) => r.distributionId === dist.id);
+  }, [dist?.id, specializedResults]);
+
+  const reportUrl = useMemo(
+    () =>
+      computeManagerReviewReportUrl({
+        batchId: (selectedSample as { batchId?: string } | null)?.batchId ?? null,
+        distId: dist?.id,
+        dist,
+        legacyResult: result,
+        hasSpecializedForDistribution: specializedForDist,
+        orderId: sampleOrders?.[0]?.id,
+        hasLegacyResult: !!result,
+      }),
+    [selectedSample, dist, result, specializedForDist, sampleOrders]
+  );
+
   // Use specialized result if no legacy result
   const hasResult = !!(result || specResult);
   const isSpecialized = !result && !!specResult;
@@ -427,31 +485,15 @@ export default function ManagerReview() {
     : (result?.complianceStatus ?? "pending");
   const isPass = overallCompliance === "pass";
   const isFail = overallCompliance === "fail";
-  const handleOpenFullReport = () => {
-    const batchId = (selectedSample as any)?.batchId;
-    if (batchId) {
-      // Multi-type block batch: open unified batch report
-      window.open(`/batch-report/${batchId}`, "_blank");
-    } else if (dist?.id) {
-      window.open(`/test-report/${dist.id}`, "_blank");
-    }
-  };
-  const handleOpenOrderReport = () => {
-    if (sampleOrders && sampleOrders.length > 0) {
-      window.open(`/order-report/${sampleOrders[0].id}`, "_blank");
-    }
-  };
 
-  const handleDownloadReportPdf = async () => {
-    if (!dist?.id) return;
-    setIsPdfDownloading(true);
-    try {
-      // Open the report page in a hidden iframe, then capture it
-      const url = `/test-report/${dist.id}`;
-      window.open(url, "_blank");
-    } finally {
-      setIsPdfDownloading(false);
+  const handleOpenReport = () => {
+    if (!reportUrl) {
+      toast.error(
+        lang === "ar" ? "لا يوجد رابط تقرير لهذه العينة" : "No report is available for this sample yet."
+      );
+      return;
     }
+    window.open(reportUrl, "_blank");
   };
 
   const totalActive = newCount + incompleteCount;
@@ -686,9 +728,9 @@ export default function ManagerReview() {
                 ))}
               </div>
 
-              {/* ── Full Report Link ──────────────────────────────────────── */}
+              {/* ── Report (single entry: concrete / specialized / order / legacy / batch) ── */}
               <div className="flex gap-2">
-                {dist?.id &&
+                {reportUrl &&
                   wrapDisabledWithTooltip(
                     dialogSamplePending,
                     dialogSampleDisabledWarning,
@@ -697,25 +739,10 @@ export default function ManagerReview() {
                       size="sm"
                       className="gap-1.5 flex-1"
                       disabled={dialogSamplePending}
-                      onClick={handleOpenFullReport}
+                      onClick={handleOpenReport}
                     >
                       <FileText className="w-3.5 h-3.5" />
-                      {lang === "ar" ? "تقرير الاختبار" : "Test Report"}
-                    </Button>
-                  )}
-                {sampleOrders && sampleOrders.length > 0 &&
-                  wrapDisabledWithTooltip(
-                    dialogSamplePending,
-                    dialogSampleDisabledWarning,
-                    <Button
-                      variant="default"
-                      size="sm"
-                      className="gap-1.5 flex-1 bg-blue-600 hover:bg-blue-700"
-                      disabled={dialogSamplePending}
-                      onClick={handleOpenOrderReport}
-                    >
-                      <ExternalLink className="w-3.5 h-3.5" />
-                      {lang === "ar" ? "التقرير الموحد للطلب" : "Unified Order Report"}
+                      {lang === "ar" ? "فتح التقرير" : "Open report"}
                     </Button>
                   )}
               </div>

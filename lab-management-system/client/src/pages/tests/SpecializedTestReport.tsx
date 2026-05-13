@@ -4,7 +4,7 @@
  * Supports Arabic / English toggle
  */
 import { useParams } from "wouter";
-import { useRef, useState } from "react";
+import { useRef, useState, useEffect } from "react";
 import { trpc } from "@/lib/trpc";
 import { Loader2, Printer, X, CheckCircle, XCircle, Globe, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -1125,7 +1125,7 @@ export default function SpecializedTestReport() {
   const printRef = useRef<HTMLDivElement>(null);
   const distId = parseInt(distributionId ?? "0");
 
-  const { data: result, isLoading } = trpc.specializedTests.getByDistribution.useQuery(
+  const { data: result, isLoading: specLoading } = trpc.specializedTests.getByDistribution.useQuery(
     { distributionId: distId },
     { enabled: !!distId }
   );
@@ -1142,11 +1142,22 @@ export default function SpecializedTestReport() {
     { enabled: !!batchDistId }
   );
 
-  // Fetch legacy testResult for reviewer signatures
-  const { data: legacyResult } = trpc.testResults.getByDistribution.useQuery(
+  // Fetch legacy testResult for reviewer signatures (and legacy-only printable report)
+  const { data: legacyResult, isLoading: legacyLoading } = trpc.testResults.getByDistribution.useQuery(
     { distributionId: distId },
     { enabled: !!distId }
   );
+
+  const pageLoading = specLoading || legacyLoading;
+
+  // Routed Manager Review opens /test-report for concrete; send users to the concrete printable report.
+  useEffect(() => {
+    if (!distId || result) return;
+    const src = (legacyResult?.chartsData as { source?: string } | undefined)?.source;
+    if (src === "concrete_cubes") {
+      window.location.replace(`/concrete-report/${distId}`);
+    }
+  }, [distId, result, legacyResult]);
 
   const handleClose = () => {
     if (window.opener) {
@@ -1183,7 +1194,7 @@ export default function SpecializedTestReport() {
     setIsDownloadLoading(false);
   };
 
-  if (isLoading) {
+  if (pageLoading) {
     return (
       <div className="flex items-center justify-center h-screen">
         <Loader2 className="animate-spin text-slate-400" size={32} />
@@ -1191,7 +1202,16 @@ export default function SpecializedTestReport() {
     );
   }
 
-  if (!result) {
+  if (!result && legacyResult && (legacyResult.chartsData as { source?: string } | null)?.source === "concrete_cubes") {
+    return (
+      <div className="flex flex-col items-center justify-center h-screen gap-3">
+        <Loader2 className="animate-spin text-slate-400" size={32} />
+        <p className="text-sm text-slate-500">{isAr ? "جاري فتح تقرير الخرسانة…" : "Opening concrete report…"}</p>
+      </div>
+    );
+  }
+
+  if (!result && !legacyResult) {
     return (
       <div className="flex flex-col items-center justify-center h-screen gap-4">
         <XCircle className="text-red-400" size={40} />
@@ -1202,6 +1222,109 @@ export default function SpecializedTestReport() {
           {isAr ? "إغلاق" : "Close"}
         </Button>
       </div>
+    );
+  }
+
+  // Legacy numeric test_results only (no specialized_test_results row)
+  if (!result && legacyResult) {
+    const lr = legacyResult as {
+      average?: string | null;
+      unit?: string | null;
+      complianceStatus?: string | null;
+      chartsData?: { values?: number[]; labels?: string[] } | null;
+      testNotes?: string | null;
+    };
+    const cd = (lr.chartsData ?? {}) as { values?: number[]; labels?: string[] };
+    const vals = Array.isArray(cd.values) ? cd.values : [];
+    const labels = Array.isArray(cd.labels) ? cd.labels : vals.map((_, i) => `${isAr ? "قراءة" : "R"}${i + 1}`);
+    const testNameDisplay = isAr
+      ? ((dist as any)?.testNameAr ?? dist?.testName ?? "—")
+      : ((dist as any)?.testNameEn ?? dist?.testName ?? "—");
+    const passed = lr.complianceStatus === "pass";
+    return (
+      <>
+        <div className="print:hidden bg-slate-800 text-white px-6 py-3 flex items-center justify-between sticky top-0 z-10" dir={isAr ? "rtl" : "ltr"}>
+          <Button variant="ghost" className="text-white hover:text-white hover:bg-slate-700 gap-2" onClick={handleClose}>
+            <X className="w-4 h-4" /> {isAr ? "إغلاق" : "Close"}
+          </Button>
+          <span className="text-sm font-medium">
+            {isAr ? "تقرير الاختبار (نتيجة مسجلة)" : "Test Report (legacy)"} — {testNameDisplay}
+          </span>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-white hover:text-white hover:bg-slate-700 gap-1.5 text-xs"
+              onClick={() => setLang(isAr ? "en" : "ar")}
+            >
+              <Globe className="w-3.5 h-3.5" />
+              {isAr ? "English" : "العربية"}
+            </Button>
+            <Button onClick={handleDownload} disabled={isDownloadLoading} variant="ghost" className="text-white hover:text-white hover:bg-slate-700 gap-1.5">
+              {isDownloadLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+              {isAr ? "تحميل PDF" : "Download PDF"}
+            </Button>
+            <Button onClick={handlePrint} disabled={isPdfLoading} className="bg-blue-600 hover:bg-blue-700 gap-2">
+              {isPdfLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Printer className="w-4 h-4" />}
+              {isAr ? "طباعة / حفظ PDF" : "Print / Save PDF"}
+            </Button>
+          </div>
+        </div>
+        <div className="bg-gray-200 print:bg-white min-h-screen py-6 print:py-0" dir={isAr ? "rtl" : "ltr"}>
+          <div
+            ref={printRef}
+            className="mx-auto bg-white shadow-lg print:shadow-none"
+            style={{ width: "210mm", minHeight: "297mm", padding: "15mm", fontFamily: "Arial, sans-serif", fontSize: "10px" }}
+          >
+            <div className="border-b-2 border-gray-900 pb-2 mb-4">
+              <h1 className="text-[15px] font-extrabold">{isAr ? "تقرير نتائج الاختبار" : "Test results report"}</h1>
+              <p className="text-[10px] text-gray-600 mt-1">
+                {(dist as any)?.sampleCode && (
+                  <span className="font-mono me-3">{isAr ? "العينة:" : "Sample:"} {(dist as any).sampleCode}</span>
+                )}
+                {dist?.distributionCode && (
+                  <span className="font-mono">{isAr ? "التوزيع:" : "Distribution:"} {dist.distributionCode}</span>
+                )}
+              </p>
+            </div>
+            <div className="grid grid-cols-2 gap-2 mb-4 text-[11px]">
+              <div className="border border-gray-200 rounded p-2">
+                <span className="text-gray-500">{isAr ? "المتوسط" : "Average"}</span>
+                <p className="font-bold text-lg">{lr.average ?? "—"} {lr.unit ?? ""}</p>
+              </div>
+              <div className="border border-gray-200 rounded p-2">
+                <span className="text-gray-500">{isAr ? "الامتثال" : "Compliance"}</span>
+                <p className={`font-bold ${passed ? "text-green-700" : "text-red-700"}`}>
+                  {lr.complianceStatus ?? "—"}
+                </p>
+              </div>
+            </div>
+            {vals.length > 0 && (
+              <table className="w-full text-[10px] border-collapse border border-gray-300">
+                <thead>
+                  <tr className="bg-gray-100">
+                    <th className="border border-gray-300 px-2 py-1">#</th>
+                    {labels.map((lab, i) => (
+                      <th key={i} className="border border-gray-300 px-2 py-1">{lab}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td className="border border-gray-300 px-2 py-1 font-medium">{isAr ? "قيمة" : "Value"}</td>
+                    {vals.map((v, i) => (
+                      <td key={i} className="border border-gray-300 px-2 py-1 text-center">{v}</td>
+                    ))}
+                  </tr>
+                </tbody>
+              </table>
+            )}
+            {lr.testNotes && (
+              <p className="mt-4 text-[10px] text-gray-700 whitespace-pre-wrap border-t pt-2">{lr.testNotes}</p>
+            )}
+          </div>
+        </div>
+      </>
     );
   }
 
