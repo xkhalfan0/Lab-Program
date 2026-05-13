@@ -63,6 +63,8 @@ export async function getDb() {
     try {
       // Parse the connection URL for mysql2
       const dbUrl = new URL(process.env.DATABASE_URL);
+      // Pool options: mysql2 supports connectTimeout; it does not expose acquireTimeout or a
+      // pool-wide query timeout — use DB session max_execution_time or per-query timeouts if needed.
       const pool = createPool({
         host: dbUrl.hostname,
         port: parseInt(dbUrl.port || "3306"),
@@ -70,10 +72,11 @@ export async function getDb() {
         password: dbUrl.password,
         database: dbUrl.pathname.slice(1), // Remove leading '/'
         waitForConnections: true,
-        connectionLimit: 10,
-        queueLimit: 0,
+        connectionLimit: 20,
+        queueLimit: 50,
         enableKeepAlive: true,
         keepAliveInitialDelay: 0,
+        connectTimeout: 10_000,
       });
       _db = drizzle(pool);
       await initSamplesSoftDeleteColumnFlag(_db);
