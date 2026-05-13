@@ -5,7 +5,7 @@
  * Reception uses a single test code (CONC_FOAM). Strength vs density mode is selected on this form.
  *
  * Strength: compute N/mm² from load, display & compare in kg/cm² (× 10.197).
- * Density: dry density vs user-specified maximum (kg/m³).
+ * Density: oven-dry density from OD sample weights (0–1, 72 h, 96 h) and volume (mm → m³); pass when ≤ required max (kg/m³).
  */
 import { useState, useCallback, useEffect, useMemo } from "react";
 import { useParams, useLocation } from "wouter";
@@ -49,16 +49,17 @@ interface CubeRow {
 interface DensityRow {
   id: string;
   specimenNo: string;
-  length: string;
-  width: string;
-  height: string;
-  wetMass: string;
-  dryMass: string;
-  volume?: number;
-  freshDensity?: number;
-  dryDensity?: number;
-  moistureContent?: number;
-  result?: "pass" | "fail" | "pending";
+  length: number | null;
+  width: number | null;
+  height: number | null;
+  volume: number | null;
+  initialWeight: number | null;
+  weight72hrs: number | null;
+  diff72Pct: number | null;
+  weight96hrs: number | null;
+  diff96Pct: number | null;
+  ovenDryDensity: number | null;
+  result: string | null;
 }
 
 function newCubeRow(index: number, defaultAge: string): CubeRow {
@@ -78,12 +79,35 @@ function newDensityRow(index: number): DensityRow {
   return {
     id: `den_${Date.now()}_${index}`,
     specimenNo: `D${index + 1}`,
-    length: "100",
-    width: "100",
-    height: "100",
-    wetMass: "",
-    dryMass: "",
+    length: 100,
+    width: 100,
+    height: 100,
+    volume: null,
+    initialWeight: null,
+    weight72hrs: null,
+    diff72Pct: null,
+    weight96hrs: null,
+    diff96Pct: null,
+    ovenDryDensity: null,
+    result: null,
   };
+}
+
+function calculateVolumeM3(lengthMm: number, widthMm: number, heightMm: number): number | null {
+  if (!lengthMm || !widthMm || !heightMm) return null;
+  const volumeMm3 = lengthMm * widthMm * heightMm;
+  return volumeMm3 / 1_000_000_000;
+}
+
+function calculateDiffPercent(previous: number, current: number): number | null {
+  if (!previous || !current) return null;
+  return ((previous - current) / previous) * 100;
+}
+
+function calculateOvenDryDensityKgM3(weight96grams: number, volumeM3: number): number | null {
+  if (!weight96grams || !volumeM3) return null;
+  const weightKg = weight96grams / 1000;
+  return weightKg / volumeM3;
 }
 
 function computeCubeRow(row: CubeRow, minStrengthKgCm2: number): CubeRow {
@@ -103,20 +127,42 @@ function computeCubeRow(row: CubeRow, minStrengthKgCm2: number): CubeRow {
   return { ...row, area, strength, strengthNmm2, density, result };
 }
 
-function computeDensityRow(row: DensityRow, maxDryDensityKgM3: number): DensityRow {
-  const l = parseFloat(row.length);
-  const w = parseFloat(row.width);
-  const h = parseFloat(row.height);
-  const wet = parseFloat(row.wetMass);
-  const dry = parseFloat(row.dryMass);
-  if (!l || !w || !h) return { ...row, result: "pending" };
-  const volume = l * w * h * 1e-9;
-  const freshDensity = wet ? parseFloat((wet / volume).toFixed(0)) : undefined;
-  const dryDensity = dry ? parseFloat((dry / volume).toFixed(0)) : undefined;
-  const moistureContent = wet && dry ? parseFloat(((wet - dry) / dry * 100).toFixed(2)) : undefined;
-  const result =
-    dryDensity && maxDryDensityKgM3 > 0 ? (dryDensity <= maxDryDensityKgM3 ? "pass" : "fail") : "pending";
-  return { ...row, volume: parseFloat((volume * 1e6).toFixed(2)), freshDensity, dryDensity, moistureContent, result };
+function computeDensityRow(row: DensityRow, requiredMaxDensity: number | null): DensityRow {
+  const L = row.length;
+  const W = row.width;
+  const H = row.height;
+  const iw = row.initialWeight;
+  const w72 = row.weight72hrs;
+  const w96 = row.weight96hrs;
+
+  const volume =
+    L != null && W != null && H != null && L > 0 && W > 0 && H > 0 ? calculateVolumeM3(L, W, H) : null;
+  const diff72Pct =
+    iw != null && w72 != null && iw > 0 && w72 > 0 ? calculateDiffPercent(iw, w72) : null;
+  const diff96Pct =
+    w72 != null && w96 != null && w72 > 0 && w96 > 0 ? calculateDiffPercent(w72, w96) : null;
+  const ovenDryDensity =
+    w96 != null && volume != null && w96 > 0 && volume > 0 ? calculateOvenDryDensityKgM3(w96, volume) : null;
+
+  let result: string | null = null;
+  if (ovenDryDensity != null && requiredMaxDensity != null && requiredMaxDensity > 0) {
+    result = ovenDryDensity <= requiredMaxDensity ? "PASS" : "FAIL";
+  }
+
+  return { ...row, volume, diff72Pct, diff96Pct, ovenDryDensity, result };
+}
+
+function parseConcreteAgeFromTestSubType(s: string | null | undefined): string | null {
+  if (!s || typeof s !== "string") return null;
+  const t = s.trim();
+  if (!t.startsWith("{")) return null;
+  try {
+    const o = JSON.parse(t) as { concreteAge?: string | number };
+    if (o?.concreteAge != null && String(o.concreteAge).trim() !== "") return String(o.concreteAge).trim();
+  } catch {
+    return null;
+  }
+  return null;
 }
 
 export default function ConcreteFoam() {
@@ -132,7 +178,7 @@ export default function ConcreteFoam() {
   const [gradeLabel, setGradeLabel] = useState("");
   const [requiredStrengthKgCm2, setRequiredStrengthKgCm2] = useState("51.0");
   const [requiredMaxDryDensity, setRequiredMaxDryDensity] = useState("1400");
-  const [receivedDateStr, setReceivedDateStr] = useState("");
+  const [testAge, setTestAge] = useState(28);
   const [cubeRows, setCubeRows] = useState<CubeRow[]>([newCubeRow(0, "28"), newCubeRow(1, "28"), newCubeRow(2, "28")]);
   const [densityRows, setDensityRows] = useState<DensityRow[]>([newDensityRow(0), newDensityRow(1)]);
   const [notes, setNotes] = useState("");
@@ -143,27 +189,32 @@ export default function ConcreteFoam() {
     { enabled: !!distId },
   );
 
-  useEffect(() => {
-    if (!distribution?.receivedAt) return;
-    const d = new Date(distribution.receivedAt as string | Date);
-    if (!Number.isNaN(d.getTime())) {
-      setReceivedDateStr(d.toISOString().split("T")[0]);
-    }
-  }, [distribution?.receivedAt]);
+  /** Age from reception: metadata (if ever exposed) or JSON in testSubType. */
+  const registeredAge = useMemo(() => {
+    const meta = (distribution as { metadata?: { concreteAge?: string | number } } | undefined)?.metadata?.concreteAge;
+    if (meta != null && String(meta).trim() !== "") return String(meta).trim();
+    return parseConcreteAgeFromTestSubType(distribution?.testSubType);
+  }, [distribution]);
 
-  const testAge = useMemo(() => {
-    if (!receivedDateStr) return null;
-    const rd = new Date(`${receivedDateStr}T12:00:00`);
-    if (Number.isNaN(rd.getTime())) return null;
-    const today = new Date();
-    const diffTime = Math.abs(today.getTime() - rd.getTime());
-    return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-  }, [receivedDateStr]);
+  const registeredAgeNum = useMemo(() => {
+    if (registeredAge == null) return null;
+    const n = parseInt(registeredAge, 10);
+    return Number.isFinite(n) && n >= 1 && n <= 9999 ? n : null;
+  }, [registeredAge]);
 
   useEffect(() => {
-    if (testAge == null) return;
+    setTestAge(28);
+  }, [distId]);
+
+  useEffect(() => {
+    if (registeredAgeNum != null) setTestAge(registeredAgeNum);
+  }, [registeredAgeNum]);
+
+  useEffect(() => {
     setCubeRows(prev => prev.map(r => ({ ...r, age: String(testAge) })));
   }, [testAge]);
+
+  const ageLockedFromRegistration = registeredAgeNum != null;
 
   const saveMut = trpc.specializedTests.save.useMutation({
     onSuccess: () => {
@@ -175,9 +226,14 @@ export default function ConcreteFoam() {
 
   const minStrengthKgCm2 = parseFloat(requiredStrengthKgCm2) || 0;
   const maxDryDensityKgM3 = parseFloat(requiredMaxDryDensity) || 0;
+  const densityRequiredMax = maxDryDensityKgM3 > 0 ? maxDryDensityKgM3 : null;
+
+  useEffect(() => {
+    setDensityRows(prev => prev.map(r => computeDensityRow(r, densityRequiredMax)));
+  }, [densityRequiredMax]);
 
   const computedCubes = cubeRows.map(r => computeCubeRow(r, minStrengthKgCm2));
-  const computedDensity = densityRows.map(r => computeDensityRow(r, maxDryDensityKgM3));
+  const computedDensity = densityRows.map(r => computeDensityRow(r, densityRequiredMax));
 
   const validCubes = computedCubes.filter(r => r.strength !== undefined);
   const avgStrength =
@@ -189,22 +245,69 @@ export default function ConcreteFoam() {
   const overallStrengthBadge: "pass" | "fail" | "pending" =
     validCubes.length === 0 ? "pending" : overallStrengthPass ? "pass" : "fail";
 
-  const validDensity = computedDensity.filter(r => r.dryDensity !== undefined);
-  const avgDryDensity =
-    validDensity.length > 0
-      ? parseFloat((validDensity.reduce((s, r) => s + (r.dryDensity || 0), 0) / validDensity.length).toFixed(0))
-      : undefined;
-  const densityPassCount = validDensity.filter(r => r.result === "pass").length;
-  const overallDensityPass = validDensity.length > 0 && densityPassCount === validDensity.length;
+  const validOvenDensity = computedDensity.filter(
+    r => r.ovenDryDensity != null && Number.isFinite(r.ovenDryDensity),
+  );
+  const avgOvenDryDensity =
+    validOvenDensity.length > 0
+      ? Math.round(
+          validOvenDensity.reduce((s, r) => s + (r.ovenDryDensity as number), 0) / validOvenDensity.length,
+        )
+      : null;
+
+  const densityRowsWithVerdict = computedDensity.filter(r => r.result === "PASS" || r.result === "FAIL");
+  const overallDensityResult: "PASS" | "FAIL" | null =
+    densityRowsWithVerdict.length === 0
+      ? null
+      : densityRowsWithVerdict.every(r => r.result === "PASS")
+        ? "PASS"
+        : "FAIL";
+
   const overallDensityBadge: "pass" | "fail" | "pending" =
-    validDensity.length === 0 ? "pending" : overallDensityPass ? "pass" : "fail";
+    overallDensityResult === "PASS" ? "pass" : overallDensityResult === "FAIL" ? "fail" : "pending";
 
   const updateCube = useCallback((id: string, field: keyof CubeRow, value: string) => {
     setCubeRows(prev => prev.map(r => (r.id === id ? { ...r, [field]: value } : r)));
   }, []);
 
-  const updateDensity = useCallback((id: string, field: keyof DensityRow, value: string) => {
-    setDensityRows(prev => prev.map(r => (r.id === id ? { ...r, [field]: value } : r)));
+  const updateDensityRow = useCallback((id: string, field: keyof DensityRow, value: unknown) => {
+    const maxAllowed = parseFloat(requiredMaxDryDensity) || 0;
+    const reqMax = maxAllowed > 0 ? maxAllowed : null;
+    setDensityRows(prev =>
+      prev.map(row => {
+        if (row.id !== id) return row;
+        let patch: Partial<DensityRow> = {};
+        if (field === "specimenNo") {
+          patch = { specimenNo: String(value ?? "") };
+        } else if (
+          field === "id" ||
+          field === "volume" ||
+          field === "diff72Pct" ||
+          field === "diff96Pct" ||
+          field === "ovenDryDensity" ||
+          field === "result"
+        ) {
+          return row;
+        } else {
+          const n =
+            value === "" || value === null || value === undefined
+              ? null
+              : typeof value === "number"
+                ? Number.isFinite(value)
+                  ? value
+                  : null
+                : parseFloat(String(value));
+          const num = n != null && Number.isFinite(n) ? n : null;
+          patch = { [field]: num } as Partial<DensityRow>;
+        }
+        const updated = { ...row, ...patch } as DensityRow;
+        return computeDensityRow(updated, reqMax);
+      }),
+    );
+  }, [requiredMaxDryDensity]);
+
+  const removeDensityRow = useCallback((id: string) => {
+    setDensityRows(prev => prev.filter(r => r.id !== id));
   }, []);
 
   const handleSubmit = () => {
@@ -228,14 +331,15 @@ export default function ConcreteFoam() {
       minStrengthKgCm2,
       maxDensity: maxDryDensityKgM3,
       requiredMaxDryDensityKgM3: maxDryDensityKgM3,
-      receivedDate: receivedDateStr || undefined,
-      testAgeDays: testAge ?? undefined,
+      testAgeDays: testAge,
+      densitySpecimenAgeDays: testAge,
       cubes: computedCubes,
       densitySpecimens: computedDensity,
       avgStrength,
-      avgDryDensity,
+      avgOvenDryDensity,
+      avgDryDensity: avgOvenDryDensity ?? undefined,
       overallStrengthPass,
-      overallDensityPass,
+      overallDensityPass: overallDensityResult === "PASS",
       notes,
       submittedBy: user?.name,
       submittedAt: new Date().toISOString(),
@@ -349,19 +453,34 @@ export default function ConcreteFoam() {
               <Input value={distribution?.testName || "N/A"} disabled />
             </div>
             <div>
-              <Label>{ar ? "تاريخ الاستلام" : "Received Date"}</Label>
-              <Input type="date" value={receivedDateStr} onChange={e => setReceivedDateStr(e.target.value)} />
-              <p className="text-xs text-muted-foreground mt-1">
-                {ar ? "يُستخدم لحساب عمر العينة بالأيام" : "Used to calculate sample age in days"}
-              </p>
-            </div>
-            <div>
-              <Label>{ar ? "عمر العينة (يوم)" : "Sample age (days)"}</Label>
+              <Label className="flex items-center gap-1">
+                {ar ? "عمر العينة (أيام)" : "Sample Age (days)"}
+                <span className="text-red-500">*</span>
+              </Label>
               <Input
-                value={testAge != null ? `${testAge} ${ar ? "يوم" : "days"}` : "—"}
-                disabled
-                className="bg-muted"
+                type="number"
+                min={1}
+                max={9999}
+                inputMode="numeric"
+                value={testAge}
+                readOnly={ageLockedFromRegistration}
+                className={ageLockedFromRegistration ? "bg-muted" : undefined}
+                onChange={(e) => {
+                  if (ageLockedFromRegistration) return;
+                  const n = parseInt(e.target.value, 10);
+                  if (!Number.isFinite(n)) return;
+                  setTestAge(Math.min(9999, Math.max(1, n)));
+                }}
               />
+              {ageLockedFromRegistration ? (
+                <p className="text-xs text-muted-foreground mt-1">
+                  {ar ? "من التسجيل في الاستقبال (من الصب إلى الفحص)" : "From registration (casting to testing)"}
+                </p>
+              ) : (
+                <p className="text-xs text-muted-foreground mt-1">
+                  {ar ? "المدة من الصب حتى الفحص (يُعدّل إن لم يُسجَّل عمر في الاستقبال)" : "Casting to testing (editable if no age was set at reception)"}
+                </p>
+              )}
             </div>
             <div>
               <Label>{ar ? "الفاحص" : "Tested By"}</Label>
@@ -374,7 +493,7 @@ export default function ConcreteFoam() {
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0">
               <CardTitle className="text-base">{ar ? "اختبار مقاومة الضغط" : "Compressive Strength Test"}</CardTitle>
-              <Button variant="outline" size="sm" onClick={() => setCubeRows(prev => [...prev, newCubeRow(prev.length, String(testAge ?? "28"))])}>
+              <Button variant="outline" size="sm" onClick={() => setCubeRows(prev => [...prev, newCubeRow(prev.length, String(testAge))])}>
                 <Plus className="mr-2 h-4 w-4" /> {ar ? "إضافة عينة" : "Add Specimen"}
               </Button>
             </CardHeader>
@@ -404,7 +523,13 @@ export default function ConcreteFoam() {
                           <Input value={row.cubeNo} onChange={e => updateCube(row.id, "cubeNo", e.target.value)} />
                         </td>
                         <td className="p-2">
-                          <Input value={row.age} onChange={e => updateCube(row.id, "age", e.target.value)} type="number" />
+                          <Input
+                            value={row.age}
+                            onChange={e => updateCube(row.id, "age", e.target.value)}
+                            type="number"
+                            readOnly={ageLockedFromRegistration}
+                            className={ageLockedFromRegistration ? "bg-muted" : undefined}
+                          />
                         </td>
                         <td className="p-2">
                           <Input value={row.sideA} onChange={e => updateCube(row.id, "sideA", e.target.value)} type="number" />
@@ -459,65 +584,123 @@ export default function ConcreteFoam() {
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0">
               <CardTitle className="text-base">{ar ? "اختبار الكثافة" : "Density Test"}</CardTitle>
-              <Button variant="outline" size="sm" onClick={() => setDensityRows(prev => [...prev, newDensityRow(prev.length)])}>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  const maxAllowed = parseFloat(requiredMaxDryDensity) || 0;
+                  const reqMax = maxAllowed > 0 ? maxAllowed : null;
+                  setDensityRows(prev => [...prev, computeDensityRow(newDensityRow(prev.length), reqMax)]);
+                }}
+              >
                 <Plus className="mr-2 h-4 w-4" /> {ar ? "إضافة عينة" : "Add Specimen"}
               </Button>
             </CardHeader>
             <CardContent>
+              <p className="text-sm text-muted-foreground mb-3">
+                {ar ? "عمر العينة عند الفحص: " : "Sample age at test: "}
+                <span className="font-semibold text-foreground">{testAge}</span>
+                {ar ? " يوم" : " days"}
+              </p>
               <div className="overflow-x-auto">
-                <table className="w-full text-sm">
+                <table className="w-full text-xs border-collapse">
                   <thead>
-                    <tr className="border-b">
-                      <th className="p-2 text-left">{ar ? "رقم العينة" : "Specimen No."}</th>
-                      <th className="p-2 text-left">{ar ? "الطول (مم)" : "Length (mm)"}</th>
-                      <th className="p-2 text-left">{ar ? "العرض (مم)" : "Width (mm)"}</th>
-                      <th className="p-2 text-left">{ar ? "الارتفاع (مم)" : "Height (mm)"}</th>
-                      <th className="p-2 text-left">{ar ? "الكتلة الرطبة (كجم)" : "Wet Mass (kg)"}</th>
-                      <th className="p-2 text-left">{ar ? "الكتلة الجافة (كجم)" : "Dry Mass (kg)"}</th>
-                      <th className="p-2 text-left">{ar ? "الحجم (سم³)" : "Volume (cm³)"}</th>
-                      <th className="p-2 text-left">{ar ? "الكثافة الطازجة (كجم/م³)" : "Fresh Density (kg/m³)"}</th>
-                      <th className="p-2 text-left">{ar ? "الكثافة الجافة (كجم/م³)" : "Dry Density (kg/m³)"}</th>
-                      <th className="p-2 text-left">{ar ? "محتوى الرطوبة (%)" : "Moisture Content (%)"}</th>
-                      <th className="p-2 text-left">{ar ? "النتيجة" : "Result"}</th>
-                      <th className="p-2 text-left" />
+                    <tr className="bg-slate-100">
+                      <th className="border border-slate-300 px-2 py-1 text-left">{ar ? "رقم العينة" : "Specimen No."}</th>
+                      <th className="border border-slate-300 px-2 py-1 text-center">{ar ? "العمر (يوم)" : "Age (days)"}</th>
+                      <th className="border border-slate-300 px-2 py-1">{ar ? "الطول (مم)" : "Length (mm)"}</th>
+                      <th className="border border-slate-300 px-2 py-1">{ar ? "العرض (مم)" : "Width (mm)"}</th>
+                      <th className="border border-slate-300 px-2 py-1">{ar ? "الارتفاع (مم)" : "Height (mm)"}</th>
+                      <th className="border border-slate-300 px-2 py-1 text-right">{ar ? "الحجم (م³)" : "Volume (m³)"}</th>
+                      <th className="border border-slate-300 px-2 py-1">{ar ? "الوزن الأولي غ (0-1)" : "Initial Wt g (0-1)"}</th>
+                      <th className="border border-slate-300 px-2 py-1">{ar ? "72 س غ (1)" : "Wt 72 Hrs g (1)"}</th>
+                      <th className="border border-slate-300 px-2 py-1 text-right">{ar ? "فرق %" : "Diff %"}</th>
+                      <th className="border border-slate-300 px-2 py-1">{ar ? "96 س غ (2)" : "Wt 96 Hrs g (2)"}</th>
+                      <th className="border border-slate-300 px-2 py-1 text-right">{ar ? "فرق %" : "Diff %"}</th>
+                      <th className="border border-slate-300 px-2 py-1 text-right">{ar ? "كثافة جافة فرن (كجم/م³)" : "Oven dry density (kg/m³)"}</th>
+                      <th className="border border-slate-300 px-2 py-1 text-center">{ar ? "النتيجة" : "Result"}</th>
+                      <th className="border border-slate-300 px-1 py-1 w-10" />
                     </tr>
                   </thead>
                   <tbody>
                     {computedDensity.map(row => (
-                      <tr key={row.id} className="border-b last:border-b-0">
-                        <td className="p-2">
-                          <Input value={row.specimenNo} onChange={e => updateDensity(row.id, "specimenNo", e.target.value)} />
+                      <tr key={row.id}>
+                        <td className="border border-slate-300 px-1 py-1">
+                          <Input
+                            className="h-8 min-w-[4rem]"
+                            value={row.specimenNo}
+                            onChange={e => updateDensityRow(row.id, "specimenNo", e.target.value)}
+                          />
                         </td>
-                        <td className="p-2">
-                          <Input value={row.length} onChange={e => updateDensity(row.id, "length", e.target.value)} type="number" />
+                        <td className="border border-slate-300 px-2 py-1 text-center font-medium text-muted-foreground">{testAge}</td>
+                        <td className="border border-slate-300 px-1 py-1">
+                          <Input
+                            type="number"
+                            className="h-8 w-16"
+                            value={row.length ?? ""}
+                            onChange={e => updateDensityRow(row.id, "length", e.target.value)}
+                          />
                         </td>
-                        <td className="p-2">
-                          <Input value={row.width} onChange={e => updateDensity(row.id, "width", e.target.value)} type="number" />
+                        <td className="border border-slate-300 px-1 py-1">
+                          <Input
+                            type="number"
+                            className="h-8 w-16"
+                            value={row.width ?? ""}
+                            onChange={e => updateDensityRow(row.id, "width", e.target.value)}
+                          />
                         </td>
-                        <td className="p-2">
-                          <Input value={row.height} onChange={e => updateDensity(row.id, "height", e.target.value)} type="number" />
+                        <td className="border border-slate-300 px-1 py-1">
+                          <Input
+                            type="number"
+                            className="h-8 w-16"
+                            value={row.height ?? ""}
+                            onChange={e => updateDensityRow(row.id, "height", e.target.value)}
+                          />
                         </td>
-                        <td className="p-2">
-                          <Input value={row.wetMass} onChange={e => updateDensity(row.id, "wetMass", e.target.value)} type="number" />
+                        <td className="border border-slate-300 px-2 py-1 text-right font-mono text-[11px]">
+                          {row.volume !== null ? row.volume.toFixed(6) : "—"}
                         </td>
-                        <td className="p-2">
-                          <Input value={row.dryMass} onChange={e => updateDensity(row.id, "dryMass", e.target.value)} type="number" />
+                        <td className="border border-slate-300 px-1 py-1">
+                          <Input
+                            type="number"
+                            className="h-8 w-20"
+                            value={row.initialWeight ?? ""}
+                            onChange={e => updateDensityRow(row.id, "initialWeight", e.target.value)}
+                          />
                         </td>
-                        <td className="p-2 font-medium">{row.volume ?? "-"}</td>
-                        <td className="p-2 font-medium">{row.freshDensity ?? "-"}</td>
-                        <td className="p-2 font-medium">{row.dryDensity ?? "-"}</td>
-                        <td className="p-2 font-medium">{row.moistureContent ?? "-"}</td>
-                        <td className="p-2">
-                          <PassFailBadge result={row.result ?? "pending"} />
+                        <td className="border border-slate-300 px-1 py-1">
+                          <Input
+                            type="number"
+                            className="h-8 w-20"
+                            value={row.weight72hrs ?? ""}
+                            onChange={e => updateDensityRow(row.id, "weight72hrs", e.target.value)}
+                          />
                         </td>
-                        <td className="p-2">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-8 w-8 p-0 text-red-600 hover:text-red-700"
-                            onClick={() => setDensityRows(prev => prev.filter(r => r.id !== row.id))}
-                          >
-                            <Trash2 className="h-4 w-4" />
+                        <td className="border border-slate-300 px-2 py-1 text-right font-mono text-[11px] text-orange-600">
+                          {row.diff72Pct !== null ? `${row.diff72Pct.toFixed(1)}%` : "—"}
+                        </td>
+                        <td className="border border-slate-300 px-1 py-1">
+                          <Input
+                            type="number"
+                            className="h-8 w-20"
+                            value={row.weight96hrs ?? ""}
+                            onChange={e => updateDensityRow(row.id, "weight96hrs", e.target.value)}
+                          />
+                        </td>
+                        <td className="border border-slate-300 px-2 py-1 text-right font-mono text-[11px] text-orange-600">
+                          {row.diff96Pct !== null ? `${row.diff96Pct.toFixed(1)}%` : "—"}
+                        </td>
+                        <td className="border border-slate-300 px-2 py-1 text-right font-mono text-[11px]">
+                          {row.ovenDryDensity !== null ? Math.round(row.ovenDryDensity) : "—"}
+                        </td>
+                        <td className="border border-slate-300 px-2 py-1 text-center">
+                          {row.result === "PASS" && <span className="text-green-600 font-bold">✓</span>}
+                          {row.result === "FAIL" && <span className="text-red-600 font-bold">✗</span>}
+                          {!row.result && "—"}
+                        </td>
+                        <td className="border border-slate-300 px-1 py-1">
+                          <Button type="button" variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={() => removeDensityRow(row.id)}>
+                            <Trash2 className="h-4 w-4 text-red-600" />
                           </Button>
                         </td>
                       </tr>
@@ -525,13 +708,18 @@ export default function ConcreteFoam() {
                   </tbody>
                 </table>
               </div>
-              <div className="mt-4 flex flex-wrap justify-end items-center gap-4">
-                <div className="font-medium">
-                  {ar ? `متوسط الكثافة الجافة: ${avgDryDensity ?? "-"} كجم/م³` : `Average Dry Density: ${avgDryDensity ?? "-"} kg/m³`}
+              <div className="mt-4 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 bg-slate-50 p-3 rounded-lg border border-slate-200">
+                <div>
+                  <span className="text-sm text-muted-foreground">
+                    {ar ? "متوسط الكثافة الجافة في الفرن:" : "Average oven dry density:"}
+                  </span>
+                  <span className="ms-2 font-bold text-lg">{avgOvenDryDensity !== null ? `${avgOvenDryDensity} kg/m³` : "—"}</span>
                 </div>
-                <div className="font-medium flex items-center gap-2">
-                  {ar ? "النتيجة الكلية:" : "Overall:"}{" "}
-                  <PassFailBadge result={overallDensityBadge} />
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-muted-foreground">{ar ? "الإجمالي:" : "Overall:"}</span>
+                  {overallDensityResult === "PASS" && <span className="text-green-600 font-bold text-lg">PASS ✓</span>}
+                  {overallDensityResult === "FAIL" && <span className="text-red-600 font-bold text-lg">FAIL ✗</span>}
+                  {!overallDensityResult && <span className="text-muted-foreground">—</span>}
                 </div>
               </div>
             </CardContent>

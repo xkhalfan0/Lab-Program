@@ -24,6 +24,13 @@ function fmtDate(d?: string | Date | null, lang = "ar") {
   });
 }
 
+/** Optional context for printable report (casting date, foamed-concrete received date). */
+type FormReportExtras = {
+  castingDateMs?: number | null;
+  foamReceivedAt?: string | Date | null;
+  foamDistCreatedAt?: string | Date | null;
+};
+
 // ─── Section renderers per formTemplate ───────────────────────────────────────
 function renderConcreteCore(fd: any, isAr: boolean, castingDateMs?: number | null) {
   // Support both field name conventions: cores[] (new) or rows[] (old)
@@ -483,7 +490,8 @@ function renderAsphaltMarshall(fd: any, isAr: boolean) {
   );
 }
 
-function renderConcreteFoam(fd: any, isAr: boolean) {
+function renderConcreteFoam(fd: any, isAr: boolean, extras?: FormReportExtras) {
+  const lang = isAr ? "ar" : "en";
   const cubes = fd.cubes ?? [];
   const densitySpecimens = fd.densitySpecimens ?? [];
   const hasCubes = cubes.length > 0;
@@ -494,18 +502,35 @@ function renderConcreteFoam(fd: any, isAr: boolean) {
   const minStr = fd.minStrengthKgCm2 ?? fd.minStrength;
   const maxDen = fd.requiredMaxDryDensityKgM3 ?? fd.maxDensity;
 
+  const sampleRecv = extras?.foamReceivedAt;
+  const distCreated = extras?.foamDistCreatedAt;
+  let receivedDisplay = "—";
+  if (sampleRecv != null && String(sampleRecv).trim() !== "") {
+    receivedDisplay = fmtDate(sampleRecv, lang);
+  } else if (distCreated != null && String(distCreated).trim() !== "") {
+    receivedDisplay = fmtDate(distCreated, lang);
+  } else if (fd.receivedDate) {
+    const raw = String(fd.receivedDate);
+    receivedDisplay = fmtDate(raw.length >= 10 ? raw.slice(0, 10) : raw, lang);
+  }
+
+  const ageAtTestRaw = fd.testAgeDays ?? fd.densitySpecimenAgeDays;
+  const ageAtTest =
+    ageAtTestRaw != null && ageAtTestRaw !== "" && Number.isFinite(Number(ageAtTestRaw)) ? Number(ageAtTestRaw) : null;
+
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
-        {(fd.receivedDate || fd.testAgeDays != null) && (
-          <div className="bg-slate-50 border rounded p-2 text-center">
-            <p className="text-slate-500 font-semibold">{isAr ? "تاريخ الاستلام / العمر" : "Received / Age"}</p>
-            <p className="font-bold text-slate-800">
-              {fd.receivedDate ? String(fd.receivedDate).slice(0, 10) : "—"}
-              {fd.testAgeDays != null ? ` · ${fd.testAgeDays} ${isAr ? "يوم" : "d"}` : ""}
-            </p>
-          </div>
-        )}
+        <div className="bg-slate-50 border rounded p-2 text-center">
+          <p className="text-slate-500 font-semibold">{isAr ? "تاريخ استلام العينة" : "Sample received"}</p>
+          <p className="font-bold text-slate-800">{receivedDisplay}</p>
+        </div>
+        <div className="bg-slate-50 border rounded p-2 text-center">
+          <p className="text-slate-500 font-semibold">{isAr ? "عمر العينة عند الفحص" : "Age at test"}</p>
+          <p className="font-bold text-slate-800">
+            {ageAtTest != null ? `${ageAtTest} ${isAr ? "يوم" : "days"}` : "—"}
+          </p>
+        </div>
         <div className="bg-gray-50 border rounded p-2 text-center">
           <p className="text-gray-500 font-semibold">{isAr ? "التدرج" : "Grade"}</p>
           <p className="font-bold text-gray-800">{gradeShow}</p>
@@ -526,12 +551,16 @@ function renderConcreteFoam(fd: any, isAr: boolean) {
             </p>
           </div>
         )}
-        {fd.avgDryDensity !== undefined && fd.avgDryDensity !== null && (
-          <div className="bg-purple-50 border border-purple-200 rounded p-2 text-center">
-            <p className="text-purple-600 font-semibold">{isAr ? "متوسط الكثافة الجافة" : "Avg. Dry Density"}</p>
-            <p className="font-bold text-purple-800">{Number(fd.avgDryDensity).toFixed(0)} kg/m³</p>
-          </div>
-        )}
+        {(() => {
+          const avgOven = fd.avgOvenDryDensity ?? fd.avgDryDensity;
+          if (avgOven == null || avgOven === "" || !Number.isFinite(Number(avgOven))) return null;
+          return (
+            <div className="bg-purple-50 border border-purple-200 rounded p-2 text-center">
+              <p className="text-purple-600 font-semibold">{isAr ? "متوسط الكثافة الجافة في الفرن" : "Avg. oven dry density"}</p>
+              <p className="font-bold text-purple-800">{Number(avgOven).toFixed(0)} kg/m³</p>
+            </div>
+          );
+        })()}
         {minStr !== undefined && minStr !== null && minStr !== "" && (
           <div className="bg-gray-50 border rounded p-2 text-center">
             <p className="text-gray-500 font-semibold">{isAr ? "الحد الأدنى للمقاومة" : "Min. strength"}</p>
@@ -584,38 +613,89 @@ function renderConcreteFoam(fd: any, isAr: boolean) {
       {hasDensity && (
         <>
           <p className="text-xs font-semibold text-gray-600">{isAr ? "عينات الكثافة" : "Density Specimens"}</p>
-          <FlexibleResultsTable
-            columns={[
-              { header: isAr ? "رقم" : "No.", field: "_i", align: "center", render: (_v, row) => String((row as any)._i + 1) },
-              {
-                header: isAr ? "الكتلة الرطبة" : "Wet mass",
-                field: "wetMass",
-                align: "right",
-                render: (_v, row) => String((row as any).wetMass ?? (row as any).wetWeight ?? "—"),
-              },
-              {
-                header: isAr ? "الكتلة الجافة" : "Dry mass",
-                field: "dryMass",
-                align: "right",
-                render: (_v, row) => String((row as any).dryMass ?? (row as any).dryWeight ?? "—"),
-              },
-              { header: isAr ? "الكثافة الطازجة (kg/m³)" : "Fresh Density (kg/m³)", field: "freshDensity", align: "right", render: (v) => (v ? Number(v).toFixed(0) : "—") },
-              { header: isAr ? "الكثافة الجافة (kg/m³)" : "Dry Density (kg/m³)", field: "dryDensity", align: "right", render: (v) => <span className="font-bold">{v ? Number(v).toFixed(0) : "—"}</span> },
-              { header: isAr ? "الرطوبة (%)" : "Moisture (%)", field: "moistureContent", align: "right", render: (v) => (v ? Number(v).toFixed(1) : "—") },
-              {
-                header: isAr ? "النتيجة" : "Result",
-                field: "result",
-                align: "center",
-                render: (_, row) => {
-                  const r = (row as any).result;
-                  if (r === "pass") return <span className="text-emerald-800 font-bold">{isAr ? "مطابق" : "PASS"}</span>;
-                  if (r === "fail") return <span className="text-red-800 font-bold">{isAr ? "غير مطابق" : "FAIL"}</span>;
-                  return <span className="text-gray-500">—</span>;
-                },
-              },
-            ]}
-            rows={densitySpecimens.map((d: any, i: number) => ({ ...d, _i: i }))}
-          />
+          <div className="overflow-x-auto border border-slate-200 rounded">
+            <table className="w-full text-[10px] border-collapse">
+              <thead>
+                <tr className="bg-slate-100">
+                  <th className="border border-slate-300 px-1 py-1 text-center">{isAr ? "العينة" : "Specimen"}</th>
+                  <th className="border border-slate-300 px-1 py-1 text-center">{isAr ? "العمر" : "Age (d)"}</th>
+                  <th className="border border-slate-300 px-1 py-1 text-center">{isAr ? "ط" : "L"} (mm)</th>
+                  <th className="border border-slate-300 px-1 py-1 text-center">{isAr ? "ع" : "W"} (mm)</th>
+                  <th className="border border-slate-300 px-1 py-1 text-center">{isAr ? "ار" : "H"} (mm)</th>
+                  <th className="border border-slate-300 px-1 py-1 text-right">{isAr ? "حجم م³" : "Vol. (m³)"}</th>
+                  <th className="border border-slate-300 px-1 py-1 text-right">{isAr ? "وزن 0-1 غ" : "Init. g (0-1)"}</th>
+                  <th className="border border-slate-300 px-1 py-1 text-right">{isAr ? "72 س غ" : "72h g (1)"}</th>
+                  <th className="border border-slate-300 px-1 py-1 text-right">{isAr ? "فرق %" : "Diff %"}</th>
+                  <th className="border border-slate-300 px-1 py-1 text-right">{isAr ? "96 س غ" : "96h g (2)"}</th>
+                  <th className="border border-slate-300 px-1 py-1 text-right">{isAr ? "فرق %" : "Diff %"}</th>
+                  <th className="border border-slate-300 px-1 py-1 text-right">{isAr ? "كثافة فرن" : "Oven dry (kg/m³)"}</th>
+                  <th className="border border-slate-300 px-1 py-1 text-center">{isAr ? "نتيجة" : "Result"}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {densitySpecimens.map((d: any, i: number) => {
+                  const legacy = d.ovenDryDensity == null && d.dryDensity != null;
+                  const L = d.length != null && d.length !== "" ? Number(d.length) : null;
+                  const W = d.width != null && d.width !== "" ? Number(d.width) : null;
+                  const H = d.height != null && d.height !== "" ? Number(d.height) : null;
+                  const vol =
+                    d.volume != null && d.volume !== ""
+                      ? Number(d.volume)
+                      : L != null && W != null && H != null && L > 0 && W > 0 && H > 0
+                        ? (L * W * H) / 1_000_000_000
+                        : null;
+                  const volStr = vol != null && Number.isFinite(vol) ? vol.toFixed(6) : "—";
+                  const iw = d.initialWeight != null ? Number(d.initialWeight) : null;
+                  const w72 = d.weight72hrs != null ? Number(d.weight72hrs) : null;
+                  const w96 = d.weight96hrs != null ? Number(d.weight96hrs) : null;
+                  const d72 = d.diff72Pct != null ? Number(d.diff72Pct) : null;
+                  const d96 = d.diff96Pct != null ? Number(d.diff96Pct) : null;
+                  const oven = d.ovenDryDensity != null ? Number(d.ovenDryDensity) : legacy ? Number(d.dryDensity) : null;
+                  const res = String(d.result ?? "").toUpperCase();
+                  const pass = res === "PASS" || d.result === "pass";
+                  const fail = res === "FAIL" || d.result === "fail";
+                  return (
+                    <tr key={String(d.id ?? `foam-den-${i}`)}>
+                      <td className="border border-slate-300 px-1 py-1 text-center font-mono">{String(d.specimenNo ?? i + 1)}</td>
+                      <td className="border border-slate-300 px-1 py-1 text-center">{ageAtTest != null ? String(ageAtTest) : "—"}</td>
+                      <td className="border border-slate-300 px-1 py-1 text-center">{L != null && Number.isFinite(L) ? L : "—"}</td>
+                      <td className="border border-slate-300 px-1 py-1 text-center">{W != null && Number.isFinite(W) ? W : "—"}</td>
+                      <td className="border border-slate-300 px-1 py-1 text-center">{H != null && Number.isFinite(H) ? H : "—"}</td>
+                      <td className="border border-slate-300 px-1 py-1 text-right font-mono">{volStr}</td>
+                      <td className="border border-slate-300 px-1 py-1 text-right font-mono">
+                        {iw != null && Number.isFinite(iw) ? String(iw) : "—"}
+                      </td>
+                      <td className="border border-slate-300 px-1 py-1 text-right font-mono">
+                        {w72 != null && Number.isFinite(w72) ? String(w72) : "—"}
+                      </td>
+                      <td className="border border-slate-300 px-1 py-1 text-right font-mono text-orange-700">
+                        {d72 != null && Number.isFinite(d72) ? `${d72.toFixed(1)}%` : "—"}
+                      </td>
+                      <td className="border border-slate-300 px-1 py-1 text-right font-mono">
+                        {w96 != null && Number.isFinite(w96) ? String(w96) : "—"}
+                      </td>
+                      <td className="border border-slate-300 px-1 py-1 text-right font-mono text-orange-700">
+                        {d96 != null && Number.isFinite(d96) ? `${d96.toFixed(1)}%` : "—"}
+                      </td>
+                      <td className="border border-slate-300 px-1 py-1 text-right font-mono font-semibold">
+                        {oven != null && Number.isFinite(oven) ? String(Math.round(oven)) : "—"}
+                      </td>
+                      <td className="border border-slate-300 px-1 py-1 text-center">
+                        {pass ? <span className="text-emerald-800 font-bold">✓</span> : null}
+                        {fail ? <span className="text-red-800 font-bold">✗</span> : null}
+                        {!pass && !fail ? <span className="text-gray-400">—</span> : null}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          {densitySpecimens.some((d: any) => d.ovenDryDensity == null && d.dryDensity != null) && (
+            <p className="text-[9px] text-muted-foreground mt-1 italic">
+              {isAr ? "صفوف قديمة: كثافة جافة محسوبة سابقاً." : "Legacy rows: dry density from previous form layout."}
+            </p>
+          )}
         </>
       )}
     </div>
@@ -1254,7 +1334,8 @@ function renderConcreteCubes(fd: any, isAr: boolean) {
   );
 }
 
-function renderFormData(formTemplate: string, formData: any, isAr: boolean, castingDateMs?: number | null) {
+function renderFormData(formTemplate: string, formData: any, isAr: boolean, extras?: FormReportExtras) {
+  const castingDateMs = extras?.castingDateMs;
   switch (formTemplate) {
     case "concrete_cubes": return renderConcreteCubes(formData, isAr);
     case "concrete_blocks":
@@ -1274,7 +1355,7 @@ function renderFormData(formTemplate: string, formData: any, isAr: boolean, cast
     case "soil_proctor": return renderSoilProctor(formData, isAr);
     case "asphalt_marshall": return renderAsphaltMarshall(formData, isAr);
     case "cement_setting_time": return renderCementSettingTime(formData, isAr);
-    case "concrete_foam": return renderConcreteFoam(formData, isAr);
+    case "concrete_foam": return renderConcreteFoam(formData, isAr, extras);
     case "interlock": return renderInterlock(formData, isAr);
     default: return renderGeneric(formData, isAr);
   }
@@ -1686,7 +1767,11 @@ export default function SpecializedTestReport() {
               <h3 className="text-xs font-bold text-gray-700 uppercase border-b border-gray-300 pb-1 mb-3">
                 {isAr ? "النتائج التفصيلية" : "Detailed Results"}
               </h3>
-              {renderFormData(result.formTemplate, formData, isAr, dist?.castingDate ? new Date(dist.castingDate).getTime() : null)}
+              {renderFormData(result.formTemplate, formData, isAr, {
+                castingDateMs: dist?.castingDate ? new Date(dist.castingDate).getTime() : null,
+                foamReceivedAt: dist?.receivedAt ?? null,
+                foamDistCreatedAt: dist?.createdAt ?? null,
+              })}
             </div>
           )}
 
@@ -1820,7 +1905,10 @@ function BatchResultsSection({
             </div>
             <div className="p-3">
               {result ? (
-                renderFormData(template, fd, isAr)
+                renderFormData(template, fd, isAr, {
+                  foamReceivedAt: dist.receivedAt ?? null,
+                  foamDistCreatedAt: dist.createdAt ?? null,
+                })
               ) : (
                 <p className="text-xs text-gray-400 italic py-2">
                   {isAr ? "لا توجد نتائج بعد لهذا النوع" : "No results yet for this type"}
