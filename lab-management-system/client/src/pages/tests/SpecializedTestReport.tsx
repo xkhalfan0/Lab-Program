@@ -488,36 +488,66 @@ function renderConcreteFoam(fd: any, isAr: boolean) {
   const densitySpecimens = fd.densitySpecimens ?? [];
   const hasCubes = cubes.length > 0;
   const hasDensity = densitySpecimens.length > 0;
+  const strengthIsKgCm2 = fd.strengthUnit === "kg/cm2";
+  const strengthUnitLabel = strengthIsKgCm2 ? (isAr ? "كجم/سم²" : "kg/cm²") : "N/mm²";
+  const gradeShow = fd.gradeLabel ?? fd.grade ?? "—";
+  const minStr = fd.minStrengthKgCm2 ?? fd.minStrength;
+  const maxDen = fd.requiredMaxDryDensityKgM3 ?? fd.maxDensity;
 
   return (
     <div className="space-y-4">
-      {/* Grade & Summary */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
-        <div className="bg-gray-50 border rounded p-2 text-center">
-          <p className="text-gray-500 font-semibold">{isAr ? "الدرجة" : "Grade"}</p>
-          <p className="font-bold text-gray-800">{fd.grade || "—"}</p>
-        </div>
-        {fd.avgStrength !== undefined && (
-          <div className="bg-blue-50 border border-blue-200 rounded p-2 text-center">
-            <p className="text-blue-600 font-semibold">{isAr ? "متوسط المقاومة" : "Avg. Strength"}</p>
-            <p className="font-bold text-blue-800">{Number(fd.avgStrength).toFixed(2)} N/mm²</p>
+        {(fd.receivedDate || fd.testAgeDays != null) && (
+          <div className="bg-slate-50 border rounded p-2 text-center">
+            <p className="text-slate-500 font-semibold">{isAr ? "تاريخ الاستلام / العمر" : "Received / Age"}</p>
+            <p className="font-bold text-slate-800">
+              {fd.receivedDate ? String(fd.receivedDate).slice(0, 10) : "—"}
+              {fd.testAgeDays != null ? ` · ${fd.testAgeDays} ${isAr ? "يوم" : "d"}` : ""}
+            </p>
           </div>
         )}
-        {fd.avgDryDensity !== undefined && (
+        <div className="bg-gray-50 border rounded p-2 text-center">
+          <p className="text-gray-500 font-semibold">{isAr ? "التدرج" : "Grade"}</p>
+          <p className="font-bold text-gray-800">{gradeShow}</p>
+        </div>
+        {fd.testMode && (
+          <div className="bg-slate-50 border rounded p-2 text-center">
+            <p className="text-slate-500 font-semibold">{isAr ? "وضع الفحص" : "Test mode"}</p>
+            <p className="font-bold text-slate-800">
+              {fd.testMode === "density" ? (isAr ? "كثافة" : "Density") : isAr ? "مقاومة" : "Strength"}
+            </p>
+          </div>
+        )}
+        {fd.avgStrength !== undefined && fd.avgStrength !== null && (
+          <div className="bg-blue-50 border border-blue-200 rounded p-2 text-center">
+            <p className="text-blue-600 font-semibold">{isAr ? "متوسط المقاومة" : "Avg. Strength"}</p>
+            <p className="font-bold text-blue-800">
+              {Number(fd.avgStrength).toFixed(2)} {strengthUnitLabel}
+            </p>
+          </div>
+        )}
+        {fd.avgDryDensity !== undefined && fd.avgDryDensity !== null && (
           <div className="bg-purple-50 border border-purple-200 rounded p-2 text-center">
             <p className="text-purple-600 font-semibold">{isAr ? "متوسط الكثافة الجافة" : "Avg. Dry Density"}</p>
             <p className="font-bold text-purple-800">{Number(fd.avgDryDensity).toFixed(0)} kg/m³</p>
           </div>
         )}
-        {fd.minStrength !== undefined && (
+        {minStr !== undefined && minStr !== null && minStr !== "" && (
           <div className="bg-gray-50 border rounded p-2 text-center">
-            <p className="text-gray-500 font-semibold">{isAr ? "الحد الأدنى" : "Min. Strength"}</p>
-            <p className="font-bold text-gray-800">{fd.minStrength} N/mm²</p>
+            <p className="text-gray-500 font-semibold">{isAr ? "الحد الأدنى للمقاومة" : "Min. strength"}</p>
+            <p className="font-bold text-gray-800">
+              {minStr} {strengthUnitLabel}
+            </p>
+          </div>
+        )}
+        {maxDen !== undefined && maxDen !== null && maxDen !== "" && (
+          <div className="bg-gray-50 border rounded p-2 text-center">
+            <p className="text-gray-500 font-semibold">{isAr ? "أقصى كثافة جافة" : "Max dry density"}</p>
+            <p className="font-bold text-gray-800">{maxDen} kg/m³</p>
           </div>
         )}
       </div>
 
-      {/* Cubes Table */}
       {hasCubes && (
         <>
           <p className="text-xs font-semibold text-gray-600">{isAr ? "نتائج المكعبات" : "Cube Results"}</p>
@@ -527,7 +557,12 @@ function renderConcreteFoam(fd: any, isAr: boolean) {
               { header: isAr ? "العمر (يوم)" : "Age (days)", field: "age", align: "center", render: (v) => String(v ?? "—") },
               { header: isAr ? "الحمل (كن)" : "Load (kN)", field: "maxLoad", align: "right", render: (v) => String(v ?? "—") },
               { header: isAr ? "المساحة (مم²)" : "Area (mm²)", field: "area", align: "right", render: (v) => (v ? Number(v).toFixed(0) : "—") },
-              { header: isAr ? "المقاومة (N/mm²)" : "Strength (N/mm²)", field: "strength", align: "right", render: (v) => <span className="font-bold">{v ? Number(v).toFixed(2) : "—"}</span> },
+              {
+                header: isAr ? `المقاومة (${strengthUnitLabel})` : `Strength (${strengthUnitLabel})`,
+                field: "strength",
+                align: "right",
+                render: (v) => <span className="font-bold">{v != null && v !== "" ? Number(v).toFixed(2) : "—"}</span>,
+              },
               { header: isAr ? "الكثافة (kg/m³)" : "Density (kg/m³)", field: "density", align: "right", render: (v) => (v ? Number(v).toFixed(0) : "—") },
               {
                 header: isAr ? "النتيجة" : "Result",
@@ -546,15 +581,24 @@ function renderConcreteFoam(fd: any, isAr: boolean) {
         </>
       )}
 
-      {/* Density Specimens Table */}
       {hasDensity && (
         <>
           <p className="text-xs font-semibold text-gray-600">{isAr ? "عينات الكثافة" : "Density Specimens"}</p>
           <FlexibleResultsTable
             columns={[
               { header: isAr ? "رقم" : "No.", field: "_i", align: "center", render: (_v, row) => String((row as any)._i + 1) },
-              { header: isAr ? "الوزن الرطب (غ)" : "Wet Wt (g)", field: "wetWeight", align: "right", render: (v) => String(v ?? "—") },
-              { header: isAr ? "الوزن الجاف (غ)" : "Dry Wt (g)", field: "dryWeight", align: "right", render: (v) => String(v ?? "—") },
+              {
+                header: isAr ? "الكتلة الرطبة" : "Wet mass",
+                field: "wetMass",
+                align: "right",
+                render: (_v, row) => String((row as any).wetMass ?? (row as any).wetWeight ?? "—"),
+              },
+              {
+                header: isAr ? "الكتلة الجافة" : "Dry mass",
+                field: "dryMass",
+                align: "right",
+                render: (_v, row) => String((row as any).dryMass ?? (row as any).dryWeight ?? "—"),
+              },
               { header: isAr ? "الكثافة الطازجة (kg/m³)" : "Fresh Density (kg/m³)", field: "freshDensity", align: "right", render: (v) => (v ? Number(v).toFixed(0) : "—") },
               { header: isAr ? "الكثافة الجافة (kg/m³)" : "Dry Density (kg/m³)", field: "dryDensity", align: "right", render: (v) => <span className="font-bold">{v ? Number(v).toFixed(0) : "—"}</span> },
               { header: isAr ? "الرطوبة (%)" : "Moisture (%)", field: "moistureContent", align: "right", render: (v) => (v ? Number(v).toFixed(1) : "—") },

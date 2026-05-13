@@ -30,10 +30,6 @@ const SUBTYPES_BY_CODE: Record<string, { value: string; labelAr: string; labelEn
     { value: "14_days", labelAr: "14 يوم", labelEn: "14 Days" },
     { value: "28_days", labelAr: "28 يوم", labelEn: "28 Days" },
   ],
-  CONC_FOAM_DENSITY: [
-    { value: "7_days", labelAr: "7 أيام", labelEn: "7 Days" },
-    { value: "28_days", labelAr: "28 يوم", labelEn: "28 Days" },
-  ],
   CONC_BEAM_SMALL: [
     { value: "7_days", labelAr: "7 أيام", labelEn: "7 Days" },
     { value: "28_days", labelAr: "28 يوم", labelEn: "28 Days" },
@@ -153,7 +149,7 @@ const CATEGORIES = [
 ];
 
 // Tests that use casting date
-const CASTING_DATE_TESTS = ["CONC_CUBE", "CONC_FOAM", "CONC_FOAM_DENSITY", "CONC_BEAM_SMALL", "CONC_BEAM_LARGE"];
+const CASTING_DATE_TESTS = ["CONC_CUBE", "CONC_FOAM", "CONC_BEAM_SMALL", "CONC_BEAM_LARGE"];
 
 // ─── Selected test item ───────────────────────────────────────────────────────
 interface SelectedTest {
@@ -348,10 +344,15 @@ export default function Reception() {
    * Sub-types (diameter, course, sand type, …) are not in the DB; they come from SUBTYPES_BY_CODE[code].
    * Technician routing uses `distribution.testType` (code) + TestRouter; reports use `formTemplate`.
    */
+  /** Foamed concrete: one reception line (CONC_FOAM); strength vs density is chosen on the technical form. */
+  const RECEPTION_HIDDEN_TEST_CODES = ["CONC_FOAM_DENSITY", "CONC_FOAM_CUBE"];
+
   const filteredTests = useMemo(() => {
     const active = allTests.filter(tt => tt.isActive);
-    if (!form.sampleType) return active;
-    const base = active.filter(tt => tt.category === form.sampleType);
+    if (!form.sampleType) return active.filter(tt => !RECEPTION_HIDDEN_TEST_CODES.includes(tt.code ?? ""));
+    const base = active
+      .filter(tt => tt.category === form.sampleType)
+      .filter(tt => !RECEPTION_HIDDEN_TEST_CODES.includes(tt.code ?? ""));
     if (form.sampleType === "asphalt") {
       // Hot Bin: show only ASPH_HOTBIN (required); AGG_SG & AGG_FLAKINESS_ELONGATION shown as optional add-ons inside ASPH_HOTBIN card
       if (asphaltKind === "hot_bin") return base.filter(tt => tt.code === HOT_BIN_REQUIRED_CODE);
