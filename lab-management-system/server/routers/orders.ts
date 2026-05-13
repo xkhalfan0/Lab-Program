@@ -12,9 +12,9 @@ import {
   createLabOrderItems,
   createSample,
   generateOrderCode,
-  generateSampleCode,
   notifyUsersByRole,
 } from "../db";
+import { generateSampleCode } from "../utils/codeGenerator";
 
 export const labOrderReceptionCreateInputSchema = z.object({
   contractId: z.number().optional(),

@@ -271,25 +271,6 @@ export async function getTechnicians() {
   return db.select().from(users).where(eq(users.role, "technician"));
 }
 
-// ─── Sample ID Generation ─────────────────────────────────────────────────────
-export async function generateSampleCode(): Promise<string> {
-  const db = await getDb();
-  if (!db) return `LAB-${new Date().getFullYear()}-0001`;
-  const year = new Date().getFullYear();
-  const pattern = `^LAB-${year}-[0-9]{1,8}$`;
-  // Only consider well-formed LAB-YYYY-NNNN codes so a bad historical row cannot blow the MAX suffix.
-  const result = await db
-    .select({
-      maxSuffix: sql<number>`COALESCE(MAX(CAST(SUBSTRING_INDEX(${samples.sampleCode}, '-', -1) AS UNSIGNED)), 0)`,
-    })
-    .from(samples)
-    .where(
-      and(sql`${samples.sampleCode} REGEXP ${pattern}`, sql`${samples.sampleCode} LIKE ${`LAB-${year}-%`}`)
-    );
-  const next = (result[0]?.maxSuffix ?? 0) + 1;
-  return `LAB-${year}-${String(next).padStart(4, "0")}`;
-}
-
 export async function generateDistributionCode(): Promise<string> {
   const db = await getDb();
   if (!db) return `DIST-${new Date().getFullYear()}-001`;

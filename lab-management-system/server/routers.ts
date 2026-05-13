@@ -9,6 +9,7 @@ import { sectorRouter } from "./routers/sector";
 import { dashboardRouter } from "./routers/dashboard";
 import { deletionRouter } from "./routers/deletion";
 import { labOrderReceptionCreateInputSchema, runLabOrderReceptionCreate } from "./routers/orders";
+import { generateSampleCode } from "./utils/codeGenerator";
 import { requireRole } from "./_core/requireRole";
 import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
 import {
@@ -22,7 +23,6 @@ import {
   createTestResult,
   generateCertificateCode,
   generateDistributionCode,
-  generateSampleCode,
   createDistribution,
   reassignDistribution,
   createInternalUser,
