@@ -30,14 +30,6 @@ const SUBTYPES_BY_CODE: Record<string, { value: string; labelAr: string; labelEn
     { value: "14_days", labelAr: "14 يوم", labelEn: "14 Days" },
     { value: "28_days", labelAr: "28 يوم", labelEn: "28 Days" },
   ],
-  CONC_BEAM_SMALL: [
-    { value: "7_days", labelAr: "7 أيام", labelEn: "7 Days" },
-    { value: "28_days", labelAr: "28 يوم", labelEn: "28 Days" },
-  ],
-  CONC_BEAM_LARGE: [
-    { value: "7_days", labelAr: "7 أيام", labelEn: "7 Days" },
-    { value: "28_days", labelAr: "28 يوم", labelEn: "28 Days" },
-  ],
   CONC_BLOCK: [
     { value: "solid_block", labelAr: "بلوك صلب", labelEn: "Solid Block" },
     { value: "hollow_block", labelAr: "بلوك مجوف", labelEn: "Hollow Block" },
@@ -149,7 +141,7 @@ const CATEGORIES = [
 ];
 
 // Tests that use casting date
-const CASTING_DATE_TESTS = ["CONC_CUBE", "CONC_FOAM", "CONC_BEAM_SMALL", "CONC_BEAM_LARGE"];
+const CASTING_DATE_TESTS = ["CONC_CUBE", "CONC_FOAM", "CONC_BEAM"];
 
 // ─── Selected test item ───────────────────────────────────────────────────────
 interface SelectedTest {
@@ -314,6 +306,8 @@ export default function Reception() {
   const [hotBinAddons, setHotBinAddons] = useState<Record<string, boolean>>({});
   // Asphalt Mix course type (global for all mix tests)
   const [asphaltMixCourse, setAsphaltMixCourse] = useState<string>("");
+  /** Foamed concrete (CONC_FOAM): age in days from casting to testing, saved on order item metadata → DB as JSON in testSubType */
+  const [foamConcreteAge, setFoamConcreteAge] = useState("");
   /** Reception: CONC_CUBE nominal face size (stored on sample) */
   const [nominalCubeSize, setNominalCubeSize] = useState("150mm");
   const [, setLocation] = useLocation();
@@ -382,6 +376,7 @@ export default function Reception() {
       setHotBinAddons({});
       setAsphaltMixCourse("");
       setNominalCubeSize("150mm");
+      setFoamConcreteAge("");
       refetch();
     },
     onError: (err) => toast.error(err.message),
@@ -575,6 +570,16 @@ export default function Reception() {
       toast.error(lang === "ar" ? "يرجى إدخال تاريخ الصب" : "Please enter casting date");
       return;
     }
+    const hasFoamOrder = selectedTests.some(t => t.testTypeCode === "CONC_FOAM");
+    if (hasFoamOrder) {
+      const ageN = parseInt(foamConcreteAge, 10);
+      if (!foamConcreteAge.trim() || !Number.isFinite(ageN) || ageN < 1 || ageN > 999) {
+        toast.error(
+          lang === "ar" ? "أدخل عمر الخرسانة بالأيام (1–999) لاختبار الرغوة" : "Enter concrete age in days (1–999) for foamed concrete",
+        );
+        return;
+      }
+    }
     // Convert castingDate (Date object) to ISO string yyyy-mm-dd
     let castingDateISO: string | undefined = undefined;
     if (form.castingDate) {
@@ -638,6 +643,7 @@ export default function Reception() {
         testSubType: t.testSubType,
         quantity: t.quantity,
         unitPrice: t.unitPrice,
+        ...(t.testTypeCode === "CONC_FOAM" ? { metadata: { concreteAge: foamConcreteAge.trim() } } : {}),
       })),
     });
   };
@@ -690,7 +696,7 @@ export default function Reception() {
           </div>
           <Dialog open={open} onOpenChange={(v) => {
             setOpen(v);
-            if (!v) { setForm(emptyForm()); setSelectedTests([]); setSubtypeFor(null); setAsphaltKind(""); setHotBinAddons({}); }
+            if (!v) { setForm(emptyForm()); setSelectedTests([]); setSubtypeFor(null); setAsphaltKind(""); setHotBinAddons({}); setFoamConcreteAge(""); }
           }}>
             <DialogTrigger asChild>
               <Button size="sm" className="gap-1.5">
@@ -1108,6 +1114,28 @@ export default function Reception() {
                   </div>
                 )}
 
+                {selectedTests.some(t => t.testTypeCode === "CONC_FOAM") && (
+                  <div className="space-y-1.5 mt-1">
+                    <Label className="flex items-center gap-1">
+                      {lang === "ar" ? "عمر الخرسانة (أيام)" : "Age of Concrete (days)"}
+                      <span className="text-red-500">*</span>
+                    </Label>
+                    <Input
+                      type="number"
+                      min={1}
+                      max={999}
+                      inputMode="numeric"
+                      value={foamConcreteAge}
+                      onChange={(e) => setFoamConcreteAge(e.target.value)}
+                      placeholder={lang === "ar" ? "مثال: 28" : "e.g., 28"}
+                      required
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      {lang === "ar" ? "المدة من الصب حتى الاختبار" : "Time from casting to testing"}
+                    </p>
+                  </div>
+                )}
+
                 {/* Condition + Priority */}
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1.5">
@@ -1184,7 +1212,15 @@ export default function Reception() {
                       }
                       return (
                         <div key={t.testTypeId} className="flex items-center justify-between text-xs text-green-700">
-                          <span>• {t.testTypeName} {t.testSubType ? `(${t.testSubType})` : ""} × {t.quantity}</span>
+                          <span>
+                            • {t.testTypeName} {t.testSubType ? `(${t.testSubType})` : ""}
+                            {t.testTypeCode === "CONC_FOAM" && foamConcreteAge.trim()
+                              ? lang === "ar"
+                                ? ` — عمر ${foamConcreteAge.trim()} يوم`
+                                : ` — age ${foamConcreteAge.trim()} d`
+                              : ""}{" "}
+                            × {t.quantity}
+                          </span>
                           <span>{(t.unitPrice * t.quantity).toFixed(0)} {lang === "ar" ? "درهم" : "AED"}</span>
                         </div>
                       );
@@ -1204,7 +1240,21 @@ export default function Reception() {
                         ? (lang === "ar" ? `إنشاء أوردر (${selectedTests.length} اختبار)` : `Create Order (${selectedTests.length} test(s))`)
                         : (lang === "ar" ? "اختر اختباراً أولاً" : "Select a test first")}
                   </Button>
-                  <Button type="button" variant="outline" onClick={() => { setOpen(false); setForm(emptyForm()); setSelectedTests([]); setSubtypeFor(null); }}>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      setOpen(false);
+                      setForm(emptyForm());
+                      setSelectedTests([]);
+                      setSubtypeFor(null);
+                      setAsphaltKind("");
+                      setHotBinAddons({});
+                      setAsphaltMixCourse("");
+                      setNominalCubeSize("150mm");
+                      setFoamConcreteAge("");
+                    }}
+                  >
                     {t("common.cancel")}
                   </Button>
                 </div>

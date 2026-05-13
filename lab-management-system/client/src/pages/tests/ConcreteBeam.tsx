@@ -17,7 +17,7 @@
  *     d = depth (mm)
  *     a = distance from fracture to nearest support (mm)
  */
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useParams, useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import DashboardLayout from "@/components/DashboardLayout";
@@ -35,72 +35,99 @@ import { Plus, Trash2, Send, FlaskConical, Info, Printer, UserCheck } from "luci
 import { useAuth } from "@/_core/hooks/useAuth";
 
 import { useLanguage } from "@/contexts/LanguageContext";
-// ─── Beam Size Presets ────────────────────────────────────────────────────────
+// ─── Beam size presets (keys match saved formData + Select values) ───────────
 const BEAM_SIZES = {
-  small: { label: "100×100×500 mm (Span = 300 mm)", width: 100, depth: 100, length: 500, span: 300 },
-  large: { label: "150×150×750 mm (Span = 450 mm)", width: 150, depth: 150, length: 750, span: 450 },
+  "100x100x500": { label: "100×100×500 mm (Span = 300 mm)", width: 100, depth: 100, length: 500, span: 300 },
+  "150x150x750": { label: "150×150×750 mm (Span = 450 mm)", width: 150, depth: 150, length: 750, span: 450 },
 } as const;
 
-type BeamSize = keyof typeof BEAM_SIZES;
-type FractureZone = "middle_third" | "outside_5pct" | "outside_discard";
+type BeamSizeKey = keyof typeof BEAM_SIZES;
+
+function beamSizeKeyFromTestCode(code: string | undefined): BeamSizeKey {
+  if (code === "CONC_BEAM_LARGE") return "150x150x750";
+  if (code === "CONC_BEAM_SMALL") return "100x100x500";
+  return "100x100x500";
+}
+/** Per-row value synced from Test Parameters (same for all beams). */
+type BeamFractureZone = "middle_third" | "outside_middle_third";
+
+/** Legacy persisted row zones (reports / old saves). */
+type LegacyFractureZone = "outside_5pct" | "outside_discard";
 
 interface BeamRow {
   id: string;
   beamNo: string;
-  location: string;
   width: string;
   depth: string;
-  maxLoad: string;
-  fractureZone: FractureZone;
-  fractureDistance: string; // distance from nearest support (mm) — used when outside middle third
+  /** Max load in Newtons (legacy saves used `maxLoad` in kN). */
+  maxLoadN: string;
+  fractureZone: BeamFractureZone | LegacyFractureZone;
   // computed
   mor?: number;
   result?: "pass" | "fail" | "pending";
   discarded?: boolean;
 }
 
-function newRow(index: number, size: BeamSize): BeamRow {
+function newRow(index: number, key: BeamSizeKey, zone: BeamFractureZone): BeamRow {
   return {
     id: `row_${Date.now()}_${index}`,
     beamNo: `B${index + 1}`,
-    location: "",
-    width: String(BEAM_SIZES[size].width),
-    depth: String(BEAM_SIZES[size].depth),
-    maxLoad: "",
-    fractureZone: "middle_third",
-    fractureDistance: "",
+    width: String(BEAM_SIZES[key].width),
+    depth: String(BEAM_SIZES[key].depth),
+    maxLoadN: "",
+    fractureZone: zone,
   };
+}
+
+function readLoadN(row: BeamRow): number | undefined {
+  const n = parseFloat(row.maxLoadN);
+  if (Number.isFinite(n) && n > 0) return n;
+  const legacyKn = parseFloat((row as BeamRow & { maxLoad?: string }).maxLoad ?? "");
+  if (Number.isFinite(legacyKn) && legacyKn > 0) return legacyKn * 1000;
+  return undefined;
+}
+
+/** MOR (MPa) = N/mm² = (P×L)/(b×d²) with P in N, L,b,d in mm (middle third, ASTM C78). */
+function morMiddleThird(loadN: number, spanMm: number, widthMm: number, depthMm: number): number | null {
+  if (!loadN || !spanMm || !widthMm || !depthMm) return null;
+  return (loadN * spanMm) / (widthMm * depthMm * depthMm);
+}
+
+function morOutsideThird(loadN: number, aMm: number, widthMm: number, depthMm: number): number | null {
+  if (!loadN || !aMm || !widthMm || !depthMm) return null;
+  return (3 * loadN * aMm) / (widthMm * depthMm * depthMm);
 }
 
 function computeRow(row: BeamRow, span: number, minMOR: number): BeamRow {
   const b = parseFloat(row.width);
   const d = parseFloat(row.depth);
-  const P = parseFloat(row.maxLoad);
-  if (!b || !d || !P) return { ...row, mor: undefined, result: "pending" };
-
+  const P = readLoadN(row);
   const L = span;
-  let mor: number;
-  let discarded = false;
 
-  if (row.fractureZone === "middle_third") {
-    // Standard formula: MOR = P×L / (b×d²)
-    mor = (P * 1000 * L) / (b * d * d); // P in kN → N
-  } else if (row.fractureZone === "outside_5pct") {
-    const a = parseFloat(row.fractureDistance);
-    if (!a) return { ...row, mor: undefined, result: "pending" };
-    // Check: a must be within 5% of span from nearest support
-    const limit = L * 0.05;
-    if (a > L / 3 + limit) {
-      // Too far outside → discard
-      discarded = true;
-      return { ...row, mor: undefined, result: "pending", discarded: true };
-    }
-    mor = (3 * P * 1000 * a) / (b * d * d);
-  } else {
-    discarded = true;
+  if (row.fractureZone === "outside_middle_third" || row.fractureZone === "outside_discard") {
     return { ...row, mor: undefined, result: "pending", discarded: true };
   }
 
+  if (!b || !d || !P) return { ...row, mor: undefined, result: "pending", discarded: false };
+
+  let mor: number | null = null;
+  let discarded = false;
+
+  if (row.fractureZone === "middle_third") {
+    mor = morMiddleThird(P, L, b, d);
+  } else if (row.fractureZone === "outside_5pct") {
+    const a = parseFloat(String((row as BeamRow & { fractureDistance?: string }).fractureDistance ?? ""));
+    if (!a) return { ...row, mor: undefined, result: "pending", discarded: false };
+    const limit = L * 0.05;
+    if (a > L / 3 + limit) {
+      return { ...row, mor: undefined, result: "pending", discarded: true };
+    }
+    mor = morOutsideThird(P, a, b, d);
+  } else {
+    return { ...row, mor: undefined, result: "pending", discarded: true };
+  }
+
+  if (mor === null) return { ...row, mor: undefined, result: "pending", discarded: false };
   const morRounded = parseFloat(mor.toFixed(3));
   return {
     ...row,
@@ -120,34 +147,51 @@ export default function ConcreteBeam() {
 
   const { data: dist } = trpc.distributions.get.useQuery({ id: distId }, { enabled: !!distId });
 
-  // Determine beam size from test type code
-  const beamSizeFromCode: BeamSize =
-    dist?.testType === "CONC_BEAM_LARGE" ? "large" : "small";
+  // Default geometry until distribution loads; legacy CONC_BEAM_* maps to preset.
+  const beamKeyFromDist = beamSizeKeyFromTestCode(dist?.testType);
 
-  const [beamSize, setBeamSize] = useState<BeamSize>(beamSizeFromCode);
-  const [rows, setRows] = useState<BeamRow[]>([newRow(0, beamSizeFromCode)]);
+  const [beamSize, setBeamSize] = useState<BeamSizeKey>(beamKeyFromDist);
+  const [fractureZone, setFractureZone] = useState<BeamFractureZone>("middle_third");
+  const fractureZoneRef = useRef(fractureZone);
+  fractureZoneRef.current = fractureZone;
+
+  const [rows, setRows] = useState<BeamRow[]>(() => [newRow(0, beamKeyFromDist, "middle_third")]);
   const [minMOR, setMinMOR] = useState(4.48); // MPa — ASTM C 78 @ 90 days
   const [specifiedStrength, setSpecifiedStrength] = useState(4.48); // MPa — Specified Flexural Strength
   const [requiredAge, setRequiredAge] = useState(90); // days — per ASTM C 78
   const [castDate, setCastDate] = useState("");
   const [allowCastDateOverride, setAllowCastDateOverride] = useState(false);
-  const [testDate, setTestDate] = useState("");
+  const [testDate, setTestDate] = useState(() => new Date().toISOString().split("T")[0]);
+  const [age, setAge] = useState<number | null>(null);
   const [sampleLocation, setSampleLocation] = useState("");
   const [notes, setNotes] = useState("");
   const [submitted, setSubmitted] = useState(false);
 
-  // Compute age in days from castDate to testDate
-  const ageDays = castDate && testDate
-    ? Math.round((new Date(testDate).getTime() - new Date(castDate).getTime()) / (1000 * 60 * 60 * 24))
-    : null;
-
-  // Update beam size when dist loads
   useEffect(() => {
-    if (dist?.testType) {
-      const sz: BeamSize = dist.testType === "CONC_BEAM_LARGE" ? "large" : "small";
-      setBeamSize(sz);
-      setRows([newRow(0, sz)]);
+    if (castDate && testDate) {
+      const t0 = new Date(castDate).getTime();
+      const t1 = new Date(testDate).getTime();
+      if (Number.isNaN(t0) || Number.isNaN(t1)) {
+        setAge(null);
+        return;
+      }
+      const diffDays = Math.ceil((t1 - t0) / (1000 * 60 * 60 * 24));
+      setAge(diffDays >= 0 ? diffDays : null);
+    } else {
+      setAge(null);
     }
+  }, [castDate, testDate]);
+
+  useEffect(() => {
+    setRows(prev => prev.map(row => ({ ...row, fractureZone })));
+  }, [fractureZone]);
+
+  // When distribution loads (or legacy beam code), sync preset size and reset rows once per code.
+  useEffect(() => {
+    if (!dist?.testType) return;
+    const key = beamSizeKeyFromTestCode(dist.testType);
+    setBeamSize(key);
+    setRows([newRow(0, key, fractureZoneRef.current)]);
   }, [dist?.testType]);
 
   useEffect(() => {
@@ -203,7 +247,7 @@ export default function ConcreteBeam() {
       await saveMut.mutateAsync({
         distributionId: distId,
         sampleId: dist.sampleId,
-        testTypeCode: dist?.testType ?? "CONC_BEAM_SMALL",
+        testTypeCode: dist?.testType ?? "CONC_BEAM",
         formTemplate: "concrete_beam",
         formData: {
           beamSize,
@@ -211,9 +255,11 @@ export default function ConcreteBeam() {
           specifiedStrength,
           minMOR,
           requiredAge,
+          fractureZone,
           castDate,
           testDate,
-          ageDays,
+          age,
+          ageDays: age,
           sampleLocation,
           rows: computedRows,
           avgMOR,
@@ -237,12 +283,12 @@ export default function ConcreteBeam() {
     setRows(prev => prev.map(r => r.id === id ? { ...r, [field]: value } : r));
   };
 
-  const addRow = () => setRows(prev => [...prev, newRow(prev.length, beamSize)]);
+  const addRow = () => setRows(prev => [...prev, newRow(prev.length, beamSize, fractureZone)]);
   const removeRow = (id: string) => setRows(prev => prev.filter(r => r.id !== id));
-  const beamLabel = (k: BeamSize) => {
+  const beamLabel = (k: BeamSizeKey) => {
     const v = BEAM_SIZES[k];
     if (!ar) return v.label;
-    return k === "small" ? "100×100×500 مم (البحر = 300 مم)" : "150×150×750 مم (البحر = 450 مم)";
+    return k === "100x100x500" ? "100×100×500 مم (البحر = 300 مم)" : "150×150×750 مم (البحر = 450 مم)";
   };
 
   if (!distId || distId === 0) {
@@ -317,6 +363,35 @@ export default function ConcreteBeam() {
             <CardTitle className="text-base">{ar ? "معلمات الاختبار" : "Test Parameters"}</CardTitle>
           </CardHeader>
           <CardContent>
+            <div className="space-y-1.5 mb-4">
+              <Label className="text-base font-medium">{ar ? "مقاس الكمرة" : "Beam Size"}</Label>
+              <Select
+                value={beamSize}
+                onValueChange={(v) => {
+                  const key = v as BeamSizeKey;
+                  setBeamSize(key);
+                  const p = BEAM_SIZES[key];
+                  setRows(prev =>
+                    prev.map(r => ({
+                      ...r,
+                      width: String(p.width),
+                      depth: String(p.depth),
+                    })),
+                  );
+                }}
+              >
+                <SelectTrigger className="max-w-xl">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {(Object.keys(BEAM_SIZES) as BeamSizeKey[]).map(k => (
+                    <SelectItem key={k} value={k}>
+                      {beamLabel(k)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <div className="space-y-1.5">
                 <Label>{ar ? "تاريخ الصب" : "Cast Date"}</Label>
@@ -332,24 +407,15 @@ export default function ConcreteBeam() {
               </div>
               <div className="space-y-1.5">
                 <Label>{ar ? "العمر (يوم)" : "Age (days)"}</Label>
-                <div className="h-9 flex items-center px-3 rounded-md border bg-slate-50 text-sm font-semibold text-slate-700">
-                  {ageDays !== null && ageDays >= 0 ? `${ageDays} ${ar ? "يوم" : "days"}` : "—"}
-                </div>
-              </div>
-              <div className="space-y-1.5 col-span-2">
-                <Label>{ar ? "مقاس الكمرة" : "Beam Size"}</Label>
-                <Select value={beamSize} onValueChange={(v) => {
-                  const sz = v as BeamSize;
-                  setBeamSize(sz);
-                  setRows(prev => prev.map((r, i) => newRow(i, sz)));
-                }}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {Object.entries(BEAM_SIZES).map(([k, v]) => (
-                      <SelectItem key={k} value={k}>{beamLabel(k as BeamSize)}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Input
+                  readOnly
+                  value={age !== null ? String(age) : ""}
+                  placeholder="—"
+                  className="bg-slate-50"
+                />
+                <p className="text-xs text-slate-500">
+                  {ar ? "محسوب من تاريخ الصب إلى تاريخ الفحص" : "Calculated from Cast Date to Date Tested"}
+                </p>
               </div>
               <div className="space-y-1.5">
                 <Label>{ar ? "مقاومة الانعطاف المحددة (MPa)" : "Specified Flexural Strength (MPa)"}</Label>
@@ -386,6 +452,24 @@ export default function ConcreteBeam() {
               <span className="bg-slate-100 rounded px-2 py-1">{ar ? "البحر (L)" : "Span (L)"} = <strong>{preset.span} mm</strong></span>
               <span className="bg-slate-100 rounded px-2 py-1">{ar ? "الثلث الأوسط" : "Middle Third"} = <strong>{preset.span / 3}–{(preset.span * 2) / 3} mm</strong> {ar ? "من المسند" : "from support"}</span>
             </div>
+
+            <div className="space-y-1.5 mt-5 max-w-xl">
+              <Label className="text-base font-medium">{ar ? "منطقة الكسر" : "Fracture Zone"}</Label>
+              <Select value={fractureZone} onValueChange={v => setFractureZone(v as BeamFractureZone)}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="middle_third">{ar ? "الثلث الأوسط ✓" : "Middle Third ✓"}</SelectItem>
+                  <SelectItem value="outside_middle_third">{ar ? "خارج الثلث الأوسط" : "Outside Middle Third"}</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-slate-500">
+                {ar
+                  ? "نفس المنطقة لجميع الكمرات. يتطلب ASTM C78 أن يحدث الكسر في الثلث الأوسط لنتيجة الاعتماد القياسية."
+                  : "Same for all beams. ASTM C78 requires fracture in the middle third for the standard acceptance result."}
+              </p>
+            </div>
           </CardContent>
         </Card>
 
@@ -399,88 +483,77 @@ export default function ConcreteBeam() {
           </CardHeader>
           <CardContent>
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="w-full border-collapse text-sm">
                 <thead>
-                  <tr className="border-b text-xs text-slate-500">
-                    <th className="text-left py-2 pr-2 w-16">{ar ? "رقم الكمرة" : "Beam No."}</th>
-                    <th className="text-left py-2 pr-2">{ar ? "الموقع" : "Location"}</th>
-                    <th className="text-left py-2 pr-2 w-20">{ar ? "العرض (مم)" : "Width (mm)"}</th>
-                    <th className="text-left py-2 pr-2 w-20">{ar ? "العمق (مم)" : "Depth (mm)"}</th>
-                    <th className="text-left py-2 pr-2 w-24">{ar ? "الحمل الأقصى (kN)" : "Max Load (kN)"}</th>
-                    <th className="text-left py-2 pr-2 w-36">{ar ? "منطقة الكسر" : "Fracture Zone"}</th>
-                    <th className="text-left py-2 pr-2 w-24">{ar ? "المسافة a (مم)" : "Dist. a (mm)"}</th>
-                    <th className="text-left py-2 pr-2 w-24">MOR (MPa)</th>
-                    <th className="text-left py-2 pr-2 w-20">{ar ? "النتيجة" : "Result"}</th>
-                    <th className="w-8"></th>
+                  <tr className="bg-slate-100">
+                    <th className="border border-slate-300 px-2 py-1.5 text-left font-medium text-slate-700">{ar ? "رقم الكمرة" : "Beam No."}</th>
+                    <th className="border border-slate-300 px-2 py-1.5 text-left font-medium text-slate-700">{ar ? "العرض (مم)" : "Width (mm)"}</th>
+                    <th className="border border-slate-300 px-2 py-1.5 text-left font-medium text-slate-700">{ar ? "العمق (مم)" : "Depth (mm)"}</th>
+                    <th className="border border-slate-300 px-2 py-1.5 text-left font-medium text-slate-700">{ar ? "الحمل الأقصى (ن)" : "Max Load (N)"}</th>
+                    <th className="border border-slate-300 px-2 py-1.5 text-left font-medium text-slate-700">MOR (MPa)</th>
+                    <th className="border border-slate-300 px-2 py-1.5 text-center font-medium text-slate-700">{ar ? "النتيجة" : "Result"}</th>
+                    <th className="border border-slate-300 px-1 py-1.5 w-10" aria-label={ar ? "حذف" : "Delete"} />
                   </tr>
                 </thead>
                 <tbody>
-                  {computedRows.map((row, idx) => (
-                    <tr key={row.id} className={`border-b ${row.discarded ? "opacity-40" : ""}`}>
-                      <td className="py-2 pr-2">
+                  {computedRows.map(row => (
+                    <tr key={row.id} className={row.discarded ? "opacity-50 bg-slate-50/80" : ""}>
+                      <td className="border border-slate-300 px-1 py-1 align-middle">
                         <Input value={row.beamNo} onChange={e => updateRow(row.id, "beamNo", e.target.value)}
-                          className="h-8 text-xs w-14" />
+                          className="h-8 text-xs w-16" />
                       </td>
-                      <td className="py-2 pr-2">
-                        <Input value={row.location} onChange={e => updateRow(row.id, "location", e.target.value)}
-                          className="h-8 text-xs" placeholder={ar ? "مثال: البحر 3" : "e.g. Span 3"} />
-                      </td>
-                      <td className="py-2 pr-2">
+                      <td className="border border-slate-300 px-1 py-1 align-middle">
                         <Input type="number" value={row.width} onChange={e => updateRow(row.id, "width", e.target.value)}
                           className="h-8 text-xs w-20" />
                       </td>
-                      <td className="py-2 pr-2">
+                      <td className="border border-slate-300 px-1 py-1 align-middle">
                         <Input type="number" value={row.depth} onChange={e => updateRow(row.id, "depth", e.target.value)}
                           className="h-8 text-xs w-20" />
                       </td>
-                      <td className="py-2 pr-2">
-                        <Input type="number" value={row.maxLoad} onChange={e => updateRow(row.id, "maxLoad", e.target.value)}
-                          className="h-8 text-xs w-24" placeholder="kN" />
+                      <td className="border border-slate-300 px-1 py-1 align-middle">
+                        <Input type="number" value={row.maxLoadN} onChange={e => updateRow(row.id, "maxLoadN", e.target.value)}
+                          className="h-8 text-xs w-24" placeholder="N" />
                       </td>
-                      <td className="py-2 pr-2">
-                        <Select value={row.fractureZone}
-                          onValueChange={v => updateRow(row.id, "fractureZone", v)}>
-                          <SelectTrigger className="h-8 text-xs w-36">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="middle_third">{ar ? "الثلث الأوسط ✓" : "Middle Third ✓"}</SelectItem>
-                            <SelectItem value="outside_5pct">{ar ? "خارج الثلث (ضمن 5%)" : "Outside (within 5%)"}</SelectItem>
-                            <SelectItem value="outside_discard">{ar ? "خارج الحدود (استبعاد)" : "Outside (discard)"}</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </td>
-                      <td className="py-2 pr-2">
-                        {row.fractureZone === "outside_5pct" ? (
-                          <Input type="number" value={row.fractureDistance}
-                            onChange={e => updateRow(row.id, "fractureDistance", e.target.value)}
-                            className="h-8 text-xs w-24" placeholder={ar ? "مم" : "mm"} />
-                        ) : (
-                          <span className="text-slate-400 text-xs">—</span>
-                        )}
-                      </td>
-                      <td className="py-2 pr-2 font-mono font-semibold text-slate-700">
+                      <td className="border border-slate-300 px-2 py-1 text-right font-mono font-semibold text-slate-800 align-middle">
                         {row.discarded ? (
                           <Badge variant="outline" className="text-xs text-orange-600 border-orange-300">{ar ? "مستبعدة" : "Discarded"}</Badge>
                         ) : row.mor !== undefined ? row.mor.toFixed(3) : "—"}
                       </td>
-                      <td className="py-2 pr-2">
-                        {!row.discarded && row.result && row.result !== "pending" ? (
-                          <PassFailBadge result={row.result} />
-                        ) : <span className="text-slate-400 text-xs">—</span>}
-                      </td>
-                      <td className="py-2">
-                        {rows.length > 1 && (
-                          <button onClick={() => removeRow(row.id)} className="text-red-400 hover:text-red-600">
-                            <Trash2 size={14} />
-                          </button>
+                      <td className="border border-slate-300 px-2 py-1 text-center align-middle">
+                        {row.discarded ? (
+                          <span className="text-xs font-semibold text-orange-600">{ar ? "مهمل" : "Discarded"}</span>
+                        ) : row.result === "pass" ? (
+                          <PassFailBadge result="pass" />
+                        ) : row.result === "fail" ? (
+                          <PassFailBadge result="fail" />
+                        ) : (
+                          <span className="text-slate-400 text-xs">—</span>
                         )}
+                      </td>
+                      <td className="border border-slate-300 px-1 py-1 text-center align-middle">
+                        {rows.length > 1 ? (
+                          <Button type="button" variant="ghost" size="icon" className="h-8 w-8 text-red-500 hover:text-red-700"
+                            onClick={() => removeRow(row.id)} aria-label={ar ? "حذف الكمرة" : "Remove beam"}>
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        ) : null}
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
+
+            {rows.length > 0 && (
+              <div className="mb-4 mt-4 p-3 bg-blue-50 border border-blue-100 rounded-lg text-sm">
+                <span className="font-medium text-slate-800">{ar ? "منطقة الكسر (جميع الكمرات):" : "Fracture Zone (all beams):"}</span>
+                <span className="ms-2 text-slate-700">
+                  {fractureZone === "middle_third"
+                    ? (ar ? "الثلث الأوسط ✓" : "Middle Third ✓")
+                    : (ar ? "خارج الثلث الأوسط" : "Outside Middle Third")}
+                </span>
+              </div>
+            )}
 
             {/* Summary */}
             {validRows.length > 0 && (

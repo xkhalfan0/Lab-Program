@@ -1017,8 +1017,16 @@ function renderInterlock(fd: any, isAr: boolean) {
 function renderConcreteBeam(fd: any, isAr: boolean, castingDateMs?: number | null) {
   const rows = (fd.rows ?? []).filter((r: any) => !r.discarded && r.mor !== undefined);
   const allRows = fd.rows ?? [];
-  const beamSize = fd.beamSize ?? "small";
-  const span = fd.span ?? (beamSize === "large" ? 450 : 300);
+  const beamSizeRaw = fd.beamSize ?? "small";
+  const beamSize =
+    beamSizeRaw === "large"
+      ? "150x150x750"
+      : beamSizeRaw === "small"
+        ? "100x100x500"
+        : beamSizeRaw;
+  const span =
+    fd.span ??
+    (beamSize === "150x150x750" || beamSizeRaw === "large" ? 450 : 300);
   const specifiedStrength = fd.specifiedStrength;
   const minMOR = fd.minMOR;
   const avgMOR = fd.avgMOR;
@@ -1028,45 +1036,73 @@ function renderConcreteBeam(fd: any, isAr: boolean, castingDateMs?: number | nul
   const BEAM_SIZE_LABELS: Record<string, string> = {
     small: "100×100×500 mm (Span = 300 mm)",
     large: "150×150×750 mm (Span = 450 mm)",
+    "100x100x500": "100×100×500 mm (Span = 300 mm)",
+    "150x150x750": "150×150×750 mm (Span = 450 mm)",
   };
 
-  const calcAge = (testDateMs?: number | null): number | null => {
-    if (!castingDateMs || !testDateMs) return null;
-    return Math.round((testDateMs - castingDateMs) / (1000 * 60 * 60 * 24));
-  };
-
-  // Use castDate/testDate/ageDays stored directly in formData (new format)
   const fdCastDate = fd.castDate ?? null;
   const fdTestDate = fd.testDate ?? null;
   const fdAgeDays = fd.ageDays ?? null;
 
-  const hasAge = !!castingDateMs || !!fdCastDate;
+  const numOrNull = (v: unknown): number | null => {
+    if (v == null || v === "") return null;
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
+  };
+
+  const ageFromDateStrings = (start: string, end: string): number | null => {
+    const t0 = new Date(start).getTime();
+    const t1 = new Date(end).getTime();
+    if (Number.isNaN(t0) || Number.isNaN(t1)) return null;
+    const d = Math.ceil((t1 - t0) / (1000 * 60 * 60 * 24));
+    return d >= 0 ? d : null;
+  };
+
+  let reportAge = numOrNull(fd.age);
+  if (reportAge === null) reportAge = numOrNull(fdAgeDays);
+  if (reportAge === null && fdCastDate && fdTestDate) reportAge = ageFromDateStrings(String(fdCastDate), String(fdTestDate));
+  if (reportAge === null && castingDateMs && fdTestDate) {
+    const d = Math.ceil((new Date(fdTestDate).getTime() - castingDateMs) / (1000 * 60 * 60 * 24));
+    reportAge = d >= 0 ? d : null;
+  }
+
+  const showAgeColumn = !!fdTestDate && (!!fdCastDate || !!castingDateMs);
+
+  const reportFractureZone = String(fd.fractureZone ?? allRows[0]?.fractureZone ?? "middle_third");
+
+  const fractureZoneSummaryLabel = (zone: string, ar: boolean) => {
+    if (zone === "middle_third") return ar ? "الثلث الأوسط ✓" : "Middle Third ✓";
+    if (zone === "outside_middle_third") return ar ? "خارج الثلث الأوسط" : "Outside Middle Third";
+    if (zone === "outside_5pct") return ar ? "خارج (ضمن 5%)" : "Outside (within 5%)";
+    return ar ? "مستبعد" : "Discarded";
+  };
 
   const headers = isAr
-    ? ["رقم الكمرة", "الموقع", "العرض (مم)", "العمق (مم)", "الحمل الأقصى (كن)", "منطقة الكسر", "MOR (N/mm²)", ...(hasAge ? ["العمر (يوم)"] : []), "النتيجة"]
-    : ["Beam No.", "Location", "Width (mm)", "Depth (mm)", "Max Load (kN)", "Fracture Zone", "MOR (N/mm²)", ...(hasAge ? ["Age (days)"] : []), "Result"];
-
-  const fractureZoneLabel = (zone: string, isAr: boolean) => {
-    if (zone === "middle_third") return isAr ? "الثلث الأوسط" : "Middle Third";
-    if (zone === "outside_5pct") return isAr ? "خارج (ضمن 5%)" : "Outside (within 5%)";
-    return isAr ? "مستبعد" : "Discarded";
-  };
+    ? ["رقم الكمرة", "العرض (مم)", "العمق (مم)", "الحمل الأقصى (ن)", "MOR (ميجا باسكال)", ...(showAgeColumn ? ["العمر (يوم)"] : []), "النتيجة"]
+    : ["Beam No.", "Width (mm)", "Depth (mm)", "Max Load (N)", "MOR (MPa)", ...(showAgeColumn ? ["Age (days)"] : []), "Result"];
 
   const beamRows = allRows.map((r: any, i: number) => ({ ...r, _i: i }));
   const beamCols: Column[] = [
     { header: headers[0], field: "beamNo", align: "center", render: (_, row) => String((row as any).beamNo ?? ((row as any)._i + 1)) },
-    { header: headers[1], field: "location", align: "center", render: (v) => String(v || "—") },
-    { header: headers[2], field: "width", align: "center", render: (v) => String(v ?? "—") },
-    { header: headers[3], field: "depth", align: "center", render: (v) => String(v ?? "—") },
-    { header: headers[4], field: "maxLoad", align: "center", render: (v) => String(v ?? "—") },
+    { header: headers[1], field: "width", align: "center", render: (v) => String(v ?? "—") },
+    { header: headers[2], field: "depth", align: "center", render: (v) => String(v ?? "—") },
     {
-      header: headers[5],
-      field: "fractureZone",
+      header: headers[3],
+      field: "maxLoadN",
       align: "center",
-      render: (_, row) => fractureZoneLabel((row as any).fractureZone ?? "middle_third", isAr),
+      render: (_, row) => {
+        const r = row as any;
+        if (r.maxLoadN !== undefined && r.maxLoadN !== null && r.maxLoadN !== "") return String(r.maxLoadN);
+        const leg = r.maxLoad;
+        if (leg !== undefined && leg !== null && leg !== "") {
+          const n = Number(leg);
+          if (Number.isFinite(n)) return String(Math.round(n * 1000));
+        }
+        return "—";
+      },
     },
     {
-      header: headers[6],
+      header: headers[4],
       field: "mor",
       align: "center",
       render: (_, row) => {
@@ -1075,16 +1111,13 @@ function renderConcreteBeam(fd: any, isAr: boolean, castingDateMs?: number | nul
         return r.mor !== undefined ? Number(r.mor).toFixed(3) : "—";
       },
     },
-    ...(hasAge
+    ...(showAgeColumn
       ? ([
           {
-            header: headers[7],
+            header: headers[5],
             field: "_age",
             align: "center",
-            render: (_, row) => {
-              const age = calcAge((row as any).testDateMs ?? null);
-              return age ?? "—";
-            },
+            render: () => (reportAge !== null ? String(reportAge) : "—"),
           },
         ] as Column[])
       : []),
@@ -1143,6 +1176,10 @@ function renderConcreteBeam(fd: any, isAr: boolean, castingDateMs?: number | nul
           <p className="text-gray-500 font-semibold">{isAr ? "المعيار" : "Standard"}</p>
           <p className="font-bold text-gray-800 text-[11px]">{standard}</p>
         </div>
+        <div className="bg-blue-50 border border-blue-200 rounded p-2 text-center">
+          <p className="text-blue-600 font-semibold">{isAr ? "منطقة الكسر (جميع الكمرات)" : "Fracture Zone (all beams)"}</p>
+          <p className="font-bold text-blue-800 text-[11px]">{fractureZoneSummaryLabel(reportFractureZone, isAr)}</p>
+        </div>
         {(castingDateMs || fdCastDate) && (
           <div className="bg-gray-50 border border-gray-200 rounded p-2 text-center">
             <p className="text-gray-500 font-semibold">{isAr ? "تاريخ الصب" : "Cast Date"}</p>
@@ -1159,12 +1196,12 @@ function renderConcreteBeam(fd: any, isAr: boolean, castingDateMs?: number | nul
             <p className="font-bold text-gray-800">{new Date(fdTestDate).toLocaleDateString(isAr ? "ar-AE" : "en-GB")}</p>
           </div>
         )}
-        {(fdAgeDays !== null || hasAge) && (
+        {((fdCastDate || castingDateMs) && fdTestDate) || reportAge !== null ? (
           <div className="bg-blue-50 border border-blue-200 rounded p-2 text-center">
             <p className="text-blue-600 font-semibold">{isAr ? "العمر (يوم)" : "Age (days)"}</p>
-            <p className="font-bold text-blue-800">{fdAgeDays !== null ? fdAgeDays : "—"}</p>
+            <p className="font-bold text-blue-800">{reportAge !== null ? reportAge : "—"}</p>
           </div>
-        )}
+        ) : null}
       </div>
 
       {/* Results Table */}
@@ -1181,11 +1218,11 @@ function renderConcreteBeam(fd: any, isAr: boolean, castingDateMs?: number | nul
         <div className="grid grid-cols-3 gap-3 text-xs">
           <div className="bg-green-50 border border-green-200 rounded p-2 text-center">
             <p className="text-green-600 font-semibold">{isAr ? "متوسط MOR" : "Average MOR"}</p>
-            <p className="font-bold text-green-800 text-lg">{Number(avgMOR).toFixed(3)} N/mm²</p>
+            <p className="font-bold text-green-800 text-lg">{Number(avgMOR).toFixed(3)} {isAr ? "ميجا باسكال" : "MPa"}</p>
           </div>
           <div className="bg-amber-50 border border-amber-200 rounded p-2 text-center">
             <p className="text-amber-600 font-semibold">{isAr ? "الحد الأدنى المطلوب" : "Min. Required"}</p>
-            <p className="font-bold text-amber-800 text-lg">{minMOR ?? "—"} N/mm²</p>
+            <p className="font-bold text-amber-800 text-lg">{minMOR ?? "—"} {isAr ? "ميجا باسكال" : "MPa"}</p>
           </div>
           <div className="bg-gray-50 border border-gray-200 rounded p-2 text-center">
             <p className="text-gray-600 font-semibold">{isAr ? "عدد الكمرات الصالحة" : "Valid Beams"}</p>
