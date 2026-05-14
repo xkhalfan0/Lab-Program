@@ -257,6 +257,8 @@ export default function SieveAnalysis() {
     !blendAnyData ? "pending" : !mixOk || !allPassesFilled ? "pending" : blendWithinSpec ? "pass" : "fail";
 
   const passesBlendSpec = mixOk && allPassesFilled && blendWithinSpec;
+  /** Submit allowed whenever mix is 100% and all sieve pass% entered — failures must be reportable */
+  const submitReady = mixOk && allPassesFilled;
 
   const chartKeys = useMemo(() => {
     const kWhite = ar ? "أبيض % مار" : "White Sand / الرمل الأبيض";
@@ -287,7 +289,17 @@ export default function SieveAnalysis() {
   const saveResult = trpc.specializedTests.save.useMutation({
     onSuccess: (_, vars) => {
       if (vars.status === "submitted") {
-        toast.success(ar ? "تم إرسال النتائج بنجاح" : "Results submitted successfully");
+        const fd = vars.formData as { passesSpec?: boolean } | undefined;
+        const passed = fd?.passesSpec === true;
+        toast.success(
+          passed
+            ? ar
+              ? "تم الإرسال — الخليط مطابق للمواصفة"
+              : "Submitted — blend PASSED specification"
+            : ar
+              ? "تم الإرسال — الخليط غير مطابق (تم التسجيل لمراجعة المقاول)"
+              : "Submitted — blend FAILED specification (recorded for contractor review)",
+        );
         setSubmitted(true);
         // Full navigation so we always leave /test/:id and load the printable report (wouter SPA alone can stay on the form in some cases).
         window.location.assign(`/test-report/${distId}`);
@@ -321,12 +333,6 @@ export default function SieveAnalysis() {
     }
     if (status === "submitted") {
       if (!validateBlend()) return;
-      if (!passesBlendSpec) {
-        toast.error(
-          ar ? "الخليط خارج حدود المواصفة في منخل واحد على الأقل" : "Blend fails specification at one or more sieves",
-        );
-        return;
-      }
     }
 
     const sieveData = rowsWithBlend.map(r => ({
@@ -398,6 +404,29 @@ export default function SieveAnalysis() {
           extraFields={[{ label: "Aggregate type / نوع الركام", value: dist?.testSubType }]}
         />
 
+        {!submitted && submitReady && (
+          <div
+            className={`p-3 rounded-lg border ${
+              passesBlendSpec
+                ? "bg-emerald-50 border-emerald-300 text-emerald-900"
+                : "bg-amber-50 border-amber-300 text-amber-950"
+            }`}
+          >
+            <div className={`flex items-start gap-2 text-sm ${ar ? "flex-row-reverse" : ""}`}>
+              <span className="text-xl shrink-0 leading-none">{passesBlendSpec ? "✓" : "ℹ"}</span>
+              <span className="font-medium leading-snug">
+                {passesBlendSpec
+                  ? ar
+                    ? "الخليط يطابق المواصفة — جاهز للإرسال."
+                    : "Blend meets specification — Ready to submit."
+                  : ar
+                    ? "الخليط لا يطابق المواصفة في منخل واحد على الأقل — يمكنك الإرسال لتسجيل النتيجة لمراجعة المقاول."
+                    : "Blend fails specification at one or more sieves — You can still submit for contractor review."}
+              </span>
+            </div>
+          </div>
+        )}
+
         <div className="flex items-start justify-between flex-wrap gap-3">
           <div className="mb-0 md:mb-0">
             <h1 className="text-2xl font-bold text-slate-900">
@@ -430,7 +459,11 @@ export default function SieveAnalysis() {
                 <Button variant="outline" size="sm" onClick={() => handleSave("draft")} disabled={saving}>
                   {ar ? "حفظ مسودة" : "Save Draft"}
                 </Button>
-                <Button className="bg-blue-600 hover:bg-blue-700" onClick={() => handleSave("submitted")} disabled={saving}>
+                <Button
+                  className="bg-blue-600 hover:bg-blue-700"
+                  onClick={() => handleSave("submitted")}
+                  disabled={saving || !submitReady}
+                >
                   <Send size={14} className={ar ? "ml-1.5" : "mr-1.5"} />
                   {saving ? (ar ? "جاري الإرسال..." : "Submitting...") : (ar ? "إرسال النتائج" : "Submit Results")}
                 </Button>
@@ -776,8 +809,8 @@ export default function SieveAnalysis() {
                 </p>
                 <p>
                   {ar
-                    ? "يُقارن الخليط المحسوب بحدود المواصفة لكل منخل. يجب أن يساوي مجموع نسب الاستخدام 100٪."
-                    : "The calculated blend is checked against upper/lower spec limits per sieve. White + black used % must total 100%."}
+                    ? "يُقارن الخليط المحسوب بحدود المواصفة لكل منخل. مجموع نسب الاستخدام يجب أن يساوي 100٪. يمكن إرسال النتائج حتى عند عدم المطابقة لتسجيلها للمقاول."
+                    : "The blend is checked against spec limits per sieve; white + black used % must total 100%. You may submit even when out of spec so failures are recorded for contractor review."}
                 </p>
               </div>
             </div>
