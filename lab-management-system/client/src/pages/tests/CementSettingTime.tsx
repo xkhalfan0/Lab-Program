@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useParams, useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import DashboardLayout from "@/components/DashboardLayout";
@@ -14,98 +14,77 @@ import { toast } from "sonner";
 import { Send, FlaskConical, Plus, Trash2, Printer } from "lucide-react";
 import { useLanguage } from "@/contexts/LanguageContext";
 
-// ─── Cement Setting Time (BS EN 196-3 / ASTM C191) ───────────────────────────
+// ─── Cement Setting Time (BS EN 196-3) — OPC / MSRC only ─────────────────────
 const CEMENT_TYPES = {
-  "CEM_I_42_5": {
-    label: "CEM I 42.5 (OPC)",
+  OPC: {
+    label: "OPC",
     initialSetMin: 60,
     finalSetMax: 600,
     standard: "BS EN 196-3",
     code: "CEM_SETTING_TIME",
   },
-  "CEM_I_52_5": {
-    label: "CEM I 52.5 (RHPC)",
-    initialSetMin: 45,
-    finalSetMax: 600,
-    standard: "BS EN 196-3",
-    code: "CEM_SETTING_TIME",
-  },
-  "CEM_II_32_5": {
-    label: "CEM II 32.5 (PLC)",
-    initialSetMin: 75,
-    finalSetMax: 600,
-    standard: "BS EN 196-3",
-    code: "CEM_SETTING_TIME",
-  },
-  "CEM_II": {
-    label: "CEM II",
+  MSRC: {
+    label: "MSRC",
     initialSetMin: 60,
     finalSetMax: 600,
     standard: "BS EN 196-3",
-    code: "CEM_SETTING_TIME",
-  },
-  "CEM_III": {
-    label: "CEM III",
-    initialSetMin: 60,
-    finalSetMax: 600,
-    standard: "BS EN 196-3",
-    code: "CEM_SETTING_TIME",
-  },
-  "CEM_IV": {
-    label: "CEM IV",
-    initialSetMin: 60,
-    finalSetMax: 600,
-    standard: "BS EN 196-3",
-    code: "CEM_SETTING_TIME",
-  },
-  "CEM_V": {
-    label: "CEM V",
-    initialSetMin: 60,
-    finalSetMax: 600,
-    standard: "BS EN 196-3",
-    code: "CEM_SETTING_TIME",
-  },
-  "ASTM_TYPE_I": {
-    label: "ASTM Type I/II",
-    initialSetMin: 45,
-    finalSetMax: 375,
-    standard: "ASTM C191",
     code: "CEM_SETTING_TIME",
   },
 } as const;
 
 type CementType = keyof typeof CEMENT_TYPES;
 
+const LEGACY_CEMENT_TO_TYPE: Record<string, CementType> = {
+  OPC: "OPC",
+  MSRC: "MSRC",
+  CEM_I_42_5: "OPC",
+  CEM_I_52_5: "OPC",
+  CEM_II_32_5: "OPC",
+  CEM_II: "OPC",
+  CEM_III: "OPC",
+  CEM_IV: "OPC",
+  CEM_V: "OPC",
+  ASTM_TYPE_I: "OPC",
+};
+
 interface PenetrationReading {
   id: string;
   needleReading: string;
-  elapsedHours: string;
-  elapsedMinutes: string;
-  time?: string;
-  penetration?: string;
+  /** Wall-clock time (HH:mm), technician input */
+  actualTime: string;
 }
 
 function newReading(id: string): PenetrationReading {
-  return { id, needleReading: "", elapsedHours: "", elapsedMinutes: "" };
+  return { id, needleReading: "", actualTime: "" };
 }
 
-/** Clock time from start (HH:mm) + elapsed H:M — for table reference only. */
-function calculateActualTime(startTime: string, elapsedHoursStr: string, elapsedMinutesStr: string): string {
-  if (!startTime?.includes(":")) return "—";
-  const [shRaw, smRaw] = startTime.split(":");
-  const sh = parseInt(shRaw, 10);
-  const sm = parseInt(smRaw, 10);
-  if (!Number.isFinite(sh) || !Number.isFinite(sm)) return "—";
+/** Elapsed H:MM from test start to row actual clock time (24h wrap). */
+function calculateElapsedTime(startTime: string, actualTime: string): string {
+  if (!startTime?.includes(":") || !actualTime?.includes(":")) return "—";
+  const [startH, startM] = startTime.split(":").map(Number);
+  const [actualH, actualM] = actualTime.split(":").map(Number);
+  if (![startH, startM, actualH, actualM].every(n => Number.isFinite(n))) return "—";
+  const startMinutes = startH * 60 + startM;
+  let actualMinutes = actualH * 60 + actualM;
+  if (actualMinutes < startMinutes) actualMinutes += 24 * 60;
+  const diffMinutes = actualMinutes - startMinutes;
+  const hours = Math.floor(diffMinutes / 60);
+  const minutes = diffMinutes % 60;
+  return `${hours}:${String(minutes).padStart(2, "0")}`;
+}
+
+function elapsedRowToActualHHMM(startTime: string, elapsedHoursStr: string, elapsedMinutesStr: string): string {
+  if (!startTime?.includes(":")) return "";
   const eh = parseInt(elapsedHoursStr, 10);
   const em = parseInt(elapsedMinutesStr, 10);
-  if (!Number.isFinite(eh) || !Number.isFinite(em)) return "—";
+  if (!Number.isFinite(eh) || !Number.isFinite(em)) return "";
+  const [sh, sm] = startTime.split(":").map(Number);
+  if (!Number.isFinite(sh) || !Number.isFinite(sm)) return "";
   let total = sh * 60 + sm + eh * 60 + em;
   total = ((total % (24 * 60)) + 24 * 60) % (24 * 60);
   const h24 = Math.floor(total / 60);
   const m = total % 60;
-  const h12 = h24 % 12 === 0 ? 12 : h24 % 12;
-  const ampm = h24 < 12 ? "AM" : "PM";
-  return `${h12}:${String(m).padStart(2, "0")} ${ampm}`;
+  return `${String(h24).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
 }
 
 function totalMinutesFromParts(hStr: string, mStr: string): number | null {
@@ -115,6 +94,25 @@ function totalMinutesFromParts(hStr: string, mStr: string): number | null {
   return h * 60 + m;
 }
 
+function normalizeLoadedReadings(raw: unknown[], startTime: string): PenetrationReading[] {
+  if (!Array.isArray(raw) || raw.length === 0) {
+    return ["r1", "r2", "r3", "r4", "r5", "r6"].map(id => newReading(id));
+  }
+  return raw.map((item: any, i: number) => {
+    const id = String(item?.id ?? `r${i + 1}`);
+    const needle = item?.needleReading != null ? String(item.needleReading) : "";
+    let actual = item?.actualTime != null ? String(item.actualTime) : "";
+    if (!actual && (item?.elapsedHours != null || item?.elapsedMinutes != null)) {
+      actual = elapsedRowToActualHHMM(
+        startTime,
+        String(item.elapsedHours ?? ""),
+        String(item.elapsedMinutes ?? ""),
+      );
+    }
+    return { id, needleReading: needle, actualTime: actual };
+  });
+}
+
 export default function CementSettingTime() {
   const { distributionId } = useParams<{ distributionId: string }>();
   const { lang } = useLanguage();
@@ -122,14 +120,17 @@ export default function CementSettingTime() {
   const [, setLocation] = useLocation();
   const distId = parseInt(distributionId ?? "0");
   const { data: dist } = trpc.distributions.get.useQuery({ id: distId }, { enabled: !!distId });
+  const { data: existing } = trpc.specializedTests.getByDistribution.useQuery(
+    { distributionId: distId },
+    { enabled: !!distId },
+  );
 
-  const [cementType, setCementType] = useState<CementType>("CEM_I_42_5");
-  const [cementWeight, setCementWeight] = useState("500");
+  const [cementType, setCementType] = useState<CementType>("OPC");
+  const [cementWeight, setCementWeight] = useState("");
   const [waterVolume, setWaterVolume] = useState("");
-  const [standardConsistency, setStandardConsistency] = useState("");
-  const [startingTime, setStartingTime] = useState("09:00");
+  const [startingTime, setStartingTime] = useState("");
   const [endingTime, setEndingTime] = useState("");
-  const [testTemp, setTestTemp] = useState("20");
+  const [testTemp, setTestTemp] = useState("");
   const [cementBatch, setCementBatch] = useState("");
   const [notes, setNotes] = useState("");
   const [readings, setReadings] = useState<PenetrationReading[]>(() =>
@@ -138,33 +139,55 @@ export default function CementSettingTime() {
 
   const [initialSetHours, setInitialSetHours] = useState("");
   const [initialSetMinutes, setInitialSetMinutes] = useState("");
-  const [finalSetHours, setFinalSetHours] = useState("");
-  const [finalSetMinutes, setFinalSetMinutes] = useState("");
 
   const [saving, setSaving] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [hydrated, setHydrated] = useState(false);
 
   const spec = CEMENT_TYPES[cementType];
 
-  const computedConsistencyPct = useMemo(() => {
-    const cw = parseFloat(cementWeight);
-    const wv = parseFloat(waterVolume);
-    if (!cw || !wv || cw <= 0) return null;
-    return (wv / cw) * 100;
+  const standardConsistencyPct = useMemo(() => {
+    const cement = parseFloat(cementWeight);
+    const water = parseFloat(waterVolume);
+    if (!cement || !water || cement <= 0) return null;
+    const wc = (water / cement) * 100;
+    return Math.round(wc);
   }, [cementWeight, waterVolume]);
+
+  const computedConsistencyPctRaw = useMemo(() => {
+    const cement = parseFloat(cementWeight);
+    const water = parseFloat(waterVolume);
+    if (!cement || !water || cement <= 0) return null;
+    return (water / cement) * 100;
+  }, [cementWeight, waterVolume]);
+
+  const finalSettingTime = useMemo(() => {
+    if (!startingTime?.includes(":") || !endingTime?.includes(":")) return null;
+    const [startH, startM] = startingTime.split(":").map(Number);
+    const [endH, endM] = endingTime.split(":").map(Number);
+    if (![startH, startM, endH, endM].every(n => Number.isFinite(n))) return null;
+    const startMinutes = startH * 60 + startM;
+    let endMinutes = endH * 60 + endM;
+    if (endMinutes < startMinutes) endMinutes += 24 * 60;
+    const diffMinutes = endMinutes - startMinutes;
+    return {
+      hours: Math.floor(diffMinutes / 60),
+      minutes: diffMinutes % 60,
+      totalMinutes: diffMinutes,
+    };
+  }, [startingTime, endingTime]);
 
   const initialSetTotalMinutes = useMemo(
     () => totalMinutesFromParts(initialSetHours, initialSetMinutes),
     [initialSetHours, initialSetMinutes],
   );
-  const finalSetTotalMinutes = useMemo(
-    () => totalMinutesFromParts(finalSetHours, finalSetMinutes),
-    [finalSetHours, finalSetMinutes],
-  );
+
+  const finalSetTotalMinutes = finalSettingTime?.totalMinutes ?? null;
 
   const initialSetPass =
     initialSetTotalMinutes != null ? initialSetTotalMinutes >= spec.initialSetMin : null;
-  const finalSetPass = finalSetTotalMinutes != null ? finalSetTotalMinutes <= spec.finalSetMax : null;
+  const finalSetPass =
+    finalSetTotalMinutes != null ? finalSetTotalMinutes <= spec.finalSetMax : null;
 
   const initialSetResult: "pass" | "fail" | "pending" =
     initialSetPass === null ? "pending" : initialSetPass ? "pass" : "fail";
@@ -172,11 +195,32 @@ export default function CementSettingTime() {
     finalSetPass === null ? "pending" : finalSetPass ? "pass" : "fail";
 
   const overallResult: "pass" | "fail" | "pending" =
-    initialSetResult === "pending" && finalSetResult === "pending"
+    initialSetTotalMinutes == null || finalSetTotalMinutes == null
       ? "pending"
-      : initialSetResult === "pass" && finalSetResult === "pass"
+      : initialSetPass && finalSetPass
         ? "pass"
         : "fail";
+
+  useEffect(() => {
+    if (hydrated || !existing?.formData) return;
+    const fd = existing.formData as Record<string, unknown>;
+    const ct = fd.cementType != null ? String(fd.cementType) : "OPC";
+    setCementType(LEGACY_CEMENT_TO_TYPE[ct] ?? "OPC");
+    if (fd.cementWeight != null && fd.cementWeight !== "") setCementWeight(String(fd.cementWeight));
+    if (fd.waterVolume != null && fd.waterVolume !== "") setWaterVolume(String(fd.waterVolume));
+    if (typeof fd.startingTime === "string" && fd.startingTime) setStartingTime(fd.startingTime);
+    if (typeof fd.endingTime === "string" && fd.endingTime) setEndingTime(fd.endingTime);
+    if (fd.testTemp != null && fd.testTemp !== "") setTestTemp(String(fd.testTemp));
+    if (typeof fd.cementBatch === "string") setCementBatch(fd.cementBatch);
+    if (typeof existing.notes === "string" && existing.notes) setNotes(existing.notes);
+    if (Array.isArray(fd.readings)) {
+      setReadings(normalizeLoadedReadings(fd.readings as unknown[], String(fd.startingTime ?? "")));
+    }
+    if (fd.initialSetHours != null) setInitialSetHours(String(fd.initialSetHours));
+    if (fd.initialSetMinutes != null) setInitialSetMinutes(String(fd.initialSetMinutes));
+    if (existing.status === "submitted") setSubmitted(true);
+    setHydrated(true);
+  }, [existing, hydrated]);
 
   const saveResult = trpc.specializedTests.save.useMutation({
     onSuccess: (_, vars) => {
@@ -205,16 +249,38 @@ export default function CementSettingTime() {
       toast.error(lang === "ar" ? "معرف العينة مفقود" : "Sample ID missing");
       return;
     }
-    if (status === "submitted" && (initialSetTotalMinutes == null || finalSetTotalMinutes == null)) {
-      toast.error(
-        ar ? "أدخل زمن الشك الابتدائي والنهائي (ساعات ودقائق)" : "Enter initial and final setting times (hours and minutes)",
-      );
-      return;
+    if (status === "submitted") {
+      if (!cementWeight.trim() || !waterVolume.trim()) {
+        toast.error(ar ? "أدخل وزن الأسمنت وحجم الماء" : "Please enter both cement weight and water volume");
+        return;
+      }
+      if (!cementType) {
+        toast.error(ar ? "اختر نوع الأسمنت (MSRC أو OPC)" : "Please select cement type (MSRC or OPC)");
+        return;
+      }
+      if (!startingTime || !endingTime) {
+        toast.error(ar ? "أدخل وقت البدء ووقت الانتهاء" : "Please enter both starting and ending time");
+        return;
+      }
+      if (finalSettingTime == null) {
+        toast.error(ar ? "أوقات غير صالحة لحساب زمن الشك النهائي" : "Invalid times for final setting calculation");
+        return;
+      }
+      if (initialSetTotalMinutes == null) {
+        toast.error(ar ? "أدخل زمن الشك الابتدائي (ساعات ودقائق)" : "Enter initial setting time (hours and minutes)");
+        return;
+      }
     }
     setSaving(true);
     try {
       const waterContentOut =
-        standardConsistency.trim() || (computedConsistencyPct != null ? String(computedConsistencyPct.toFixed(1)) : "");
+        standardConsistencyPct != null ? String(standardConsistencyPct) : "";
+      const readingsOut = readings.map(r => ({
+        id: r.id,
+        needleReading: r.needleReading,
+        actualTime: r.actualTime,
+        elapsedDisplay: calculateElapsedTime(startingTime, r.actualTime),
+      }));
       await saveResult.mutateAsync({
         distributionId: distId,
         sampleId: dist.sampleId,
@@ -225,18 +291,18 @@ export default function CementSettingTime() {
           spec,
           cementWeight,
           waterVolume,
-          standardConsistency,
-          computedConsistencyPct,
+          standardConsistency: standardConsistencyPct,
+          computedConsistencyPct: computedConsistencyPctRaw,
           startingTime,
           endingTime,
           testTemp,
           cementBatch,
-          readings,
+          readings: readingsOut,
           initialSetHours,
           initialSetMinutes,
           initialSetTotalMinutes,
-          finalSetHours,
-          finalSetMinutes,
+          finalSetHours: finalSettingTime != null ? String(finalSettingTime.hours) : "",
+          finalSetMinutes: finalSettingTime != null ? String(finalSettingTime.minutes) : "",
           finalSetTotalMinutes,
           initialSetPass: initialSetTotalMinutes != null ? initialSetTotalMinutes >= spec.initialSetMin : null,
           finalSetPass: finalSetTotalMinutes != null ? finalSetTotalMinutes <= spec.finalSetMax : null,
@@ -246,6 +312,7 @@ export default function CementSettingTime() {
           finalSettingTime: finalSetTotalMinutes,
           overallResult,
           waterContent: waterContentOut,
+          finalSettingCalculatedFromClock: true,
         },
         overallResult,
         summaryValues: {
@@ -333,28 +400,30 @@ export default function CementSettingTime() {
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div className="space-y-1.5">
                   <Label className="text-xs text-slate-600 leading-snug">
-                    Weight of Cement (g) / وزن الأسمنت (جم)
+                    Weight of Cement (g) / وزن الأسمنت (جم) <span className="text-red-500">*</span>
                   </Label>
                   <Input
                     type="number"
                     min={0}
                     value={cementWeight}
                     onChange={e => setCementWeight(e.target.value)}
-                    placeholder="500"
+                    placeholder={ar ? "مثال: 500" : "e.g. 500"}
                     className="font-mono"
+                    required
                   />
                 </div>
                 <div className="space-y-1.5">
                   <Label className="text-xs text-slate-600 leading-snug">
-                    Volume of Water (ml) / حجم الماء المضاف (مل)
+                    Volume of Water (ml) / حجم الماء المضاف (مل) <span className="text-red-500">*</span>
                   </Label>
                   <Input
                     type="number"
                     min={0}
                     value={waterVolume}
                     onChange={e => setWaterVolume(e.target.value)}
-                    placeholder="138"
+                    placeholder={ar ? "مثال: 138" : "e.g. 138"}
                     className="font-mono"
+                    required
                   />
                 </div>
                 <div className="space-y-1.5">
@@ -363,15 +432,14 @@ export default function CementSettingTime() {
                   </Label>
                   <Input
                     type="number"
-                    step="0.1"
-                    value={standardConsistency}
-                    onChange={e => setStandardConsistency(e.target.value)}
-                    className="font-bold font-mono"
-                    placeholder={computedConsistencyPct != null ? computedConsistencyPct.toFixed(1) : ""}
+                    value={standardConsistencyPct ?? ""}
+                    readOnly
+                    className="font-mono bg-slate-100 cursor-not-allowed"
+                    placeholder={ar ? "يُحسب تلقائياً" : "Auto-calculated"}
                   />
                   <p className="text-xs text-slate-500">
-                    {ar ? "محسوب من الماء/أسمنت:" : "Calculated (w/c × 100):"}{" "}
-                    {computedConsistencyPct != null ? `${computedConsistencyPct.toFixed(1)}%` : "—"}
+                    {ar ? "محسوب (ماء/أسمنت × 100)، تقريب لأقرب عدد صحيح:" : "Calculated (w/c × 100), rounded to integer:"}{" "}
+                    {standardConsistencyPct != null ? `${standardConsistencyPct}%` : "—"}
                   </p>
                 </div>
               </div>
@@ -379,17 +447,16 @@ export default function CementSettingTime() {
 
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <div>
-                <Label className="text-xs text-slate-500 mb-1 block">{ar ? "نوع الأسمنت" : "Cement Type"}</Label>
+                <Label className="text-xs text-slate-500 mb-1 block">
+                  {ar ? "نوع الأسمنت" : "Cement Type"} <span className="text-red-500">*</span>
+                </Label>
                 <Select value={cementType} onValueChange={v => setCementType(v as CementType)}>
                   <SelectTrigger>
-                    <SelectValue />
+                    <SelectValue placeholder={ar ? "اختر النوع" : "Select cement type"} />
                   </SelectTrigger>
                   <SelectContent>
-                    {Object.entries(CEMENT_TYPES).map(([k, s]) => (
-                      <SelectItem key={k} value={k}>
-                        {s.label}
-                      </SelectItem>
-                    ))}
+                    <SelectItem value="MSRC">MSRC</SelectItem>
+                    <SelectItem value="OPC">OPC</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -405,12 +472,16 @@ export default function CementSettingTime() {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-1.5">
-                <Label className="text-xs text-slate-600">Starting Time / وقت البدء</Label>
-                <Input type="time" value={startingTime} onChange={e => setStartingTime(e.target.value)} className="font-mono" />
+                <Label className="text-xs text-slate-600">
+                  Starting Time / وقت البدء <span className="text-red-500">*</span>
+                </Label>
+                <Input type="time" value={startingTime} onChange={e => setStartingTime(e.target.value)} className="font-mono" required />
               </div>
               <div className="space-y-1.5">
-                <Label className="text-xs text-slate-600">Ending Time / وقت الانتهاء</Label>
-                <Input type="time" value={endingTime} onChange={e => setEndingTime(e.target.value)} className="font-mono bg-slate-50" />
+                <Label className="text-xs text-slate-600">
+                  Ending Time / وقت الانتهاء <span className="text-red-500">*</span>
+                </Label>
+                <Input type="time" value={endingTime} onChange={e => setEndingTime(e.target.value)} className="font-mono" required />
               </div>
             </div>
 
@@ -421,7 +492,7 @@ export default function CementSettingTime() {
               </div>
               <div className="bg-slate-50 border border-slate-200 rounded-lg p-2">
                 <span className="font-semibold">{ar ? "زمن الشك النهائي:" : "Final set requirement:"}</span> ≤ {spec.finalSetMax}{" "}
-                min ({formatTimeMin(spec.finalSetMax)})
+                min ({formatTimeMin(spec.finalSetMax)}) — {ar ? "يُحسب من الفرق بين وقت الانتهاء والبدء" : "from end − start time"}
               </div>
             </div>
           </CardContent>
@@ -446,17 +517,17 @@ export default function CementSettingTime() {
                     <th className="border border-slate-300 px-2 py-1.5 text-left font-medium text-slate-700">
                       Needle Reading
                       <br />
-                      <span className="font-normal text-xs text-slate-500">قراءة الإبرة</span>
+                      <span className="font-normal text-xs text-slate-500">قراءة الإبرة (0–10)</span>
                     </th>
                     <th className="border border-slate-300 px-2 py-1.5 text-left font-medium text-slate-700">
-                      Time Elapsed
-                      <br />
-                      <span className="font-normal text-xs text-slate-500">HOUR : MIN — الوقت المنقضي</span>
-                    </th>
-                    <th className="border border-slate-300 px-2 py-1.5 text-center font-medium text-slate-700">
                       Time
                       <br />
-                      <span className="font-normal text-xs text-slate-500">HOUR : MIN — الوقت الفعلي</span>
+                      <span className="font-normal text-xs text-slate-500">الوقت الفعلي — HOUR : MIN</span>
+                    </th>
+                    <th className="border border-slate-300 px-2 py-1.5 text-center font-medium text-slate-700">
+                      Time Elapsed
+                      <br />
+                      <span className="font-normal text-xs text-slate-500">الوقت المنقضي — HOUR : MIN</span>
                     </th>
                     <th className="border border-slate-300 w-12" aria-label="delete" />
                   </tr>
@@ -468,36 +539,26 @@ export default function CementSettingTime() {
                         <Input
                           type="number"
                           min={0}
+                          max={10}
+                          step={0.1}
                           value={r.needleReading}
                           onChange={e => updateReading(r.id, "needleReading", e.target.value)}
-                          placeholder="—"
+                          placeholder="0–10"
                           className="h-8 text-xs w-20 font-mono"
+                          disabled={submitted}
                         />
                       </td>
                       <td className="border border-slate-300 px-1 py-1 align-middle">
-                        <div className="flex items-center gap-1">
-                          <Input
-                            type="number"
-                            min={0}
-                            value={r.elapsedHours}
-                            onChange={e => updateReading(r.id, "elapsedHours", e.target.value)}
-                            placeholder="H"
-                            className="h-8 text-xs w-14 font-mono text-center"
-                          />
-                          <span className="text-slate-500">:</span>
-                          <Input
-                            type="number"
-                            min={0}
-                            max={59}
-                            value={r.elapsedMinutes}
-                            onChange={e => updateReading(r.id, "elapsedMinutes", e.target.value)}
-                            placeholder="MM"
-                            className="h-8 text-xs w-14 font-mono text-center"
-                          />
-                        </div>
+                        <Input
+                          type="time"
+                          value={r.actualTime}
+                          onChange={e => updateReading(r.id, "actualTime", e.target.value)}
+                          className="h-8 text-xs w-32 font-mono"
+                          disabled={submitted}
+                        />
                       </td>
-                      <td className="border border-slate-300 px-2 py-1 text-center font-mono text-sm text-emerald-700 align-middle">
-                        {calculateActualTime(startingTime, r.elapsedHours, r.elapsedMinutes)}
+                      <td className="border border-slate-300 px-2 py-1 text-center font-mono text-sm text-blue-600 align-middle">
+                        {calculateElapsedTime(startingTime, r.actualTime)}
                       </td>
                       <td className="border border-slate-300 px-1 py-1 text-center align-middle">
                         <Button
@@ -506,7 +567,7 @@ export default function CementSettingTime() {
                           size="icon"
                           className="h-8 w-8 text-red-600"
                           onClick={() => setReadings(p => p.filter(x => x.id !== r.id))}
-                          disabled={readings.length <= 1}
+                          disabled={readings.length <= 1 || submitted}
                           aria-label={ar ? "حذف" : "Delete"}
                         >
                           <Trash2 className="h-4 w-4" />
@@ -519,8 +580,8 @@ export default function CementSettingTime() {
             </div>
             <p className="text-xs text-slate-500 mt-2">
               {ar
-                ? "جدول اختياري لتوثيق القراءات. زمن الشك الابتدائي والنهائي يُدخل يدوياً أدناه."
-                : "Optional table for recording readings. Initial and final setting times are entered manually below."}
+                ? "أدخل الوقت الفعلي لكل قراءة؛ يُحسب المنقضي من وقت البدء. زمن الشك الابتدائي يُدخل يدوياً؛ النهائي من وقت الانتهاء − البدء."
+                : "Enter actual clock time per row; elapsed is from start time. Initial set is manual; final set is Ending − Starting time."}
             </p>
           </CardContent>
         </Card>
@@ -538,6 +599,7 @@ export default function CementSettingTime() {
                 onChange={e => setInitialSetHours(e.target.value)}
                 placeholder="H"
                 className="w-20 font-mono"
+                disabled={submitted}
               />
               <span className="text-slate-500">:</span>
               <Input
@@ -548,6 +610,7 @@ export default function CementSettingTime() {
                 onChange={e => setInitialSetMinutes(e.target.value)}
                 placeholder="MM"
                 className="w-20 font-mono"
+                disabled={submitted}
               />
             </div>
             <p className="text-xs text-slate-500">
@@ -561,47 +624,35 @@ export default function CementSettingTime() {
                   <span className="text-red-600 font-bold">✗ FAIL</span>
                 )}
                 <span className="text-xs text-slate-500">({formatTimeMin(initialSetTotalMinutes)} total)</span>
-                <PassFailBadge result={initialSetResult} />
+                <PassFailBadge result={initialSetResult} lang={lang} />
               </div>
             )}
           </div>
 
-          <div className="border border-slate-300 rounded-lg p-4 bg-white">
+          <div className="border border-slate-300 rounded-lg p-4 bg-orange-50">
             <label className="block text-sm font-medium text-slate-800 mb-2">
               Final Setting Time / زمن الشك النهائي
             </label>
-            <div className="flex gap-2 items-center mb-2">
-              <Input
-                type="number"
-                min={0}
-                value={finalSetHours}
-                onChange={e => setFinalSetHours(e.target.value)}
-                placeholder="H"
-                className="w-20 font-mono"
-              />
-              <span className="text-slate-500">:</span>
-              <Input
-                type="number"
-                min={0}
-                max={59}
-                value={finalSetMinutes}
-                onChange={e => setFinalSetMinutes(e.target.value)}
-                placeholder="MM"
-                className="w-20 font-mono"
-              />
+            <div className="text-2xl font-bold text-orange-700 font-mono mb-1">
+              {finalSettingTime
+                ? `${finalSettingTime.hours}:${String(finalSettingTime.minutes).padStart(2, "0")}`
+                : "—"}
             </div>
-            <p className="text-xs text-slate-500">
+            <p className="text-xs text-slate-600">
+              {ar ? "محسوب: وقت الانتهاء − وقت البدء" : "Calculated: Ending time − Starting time"}
+            </p>
+            <p className="text-xs text-slate-500 mt-2">
               Requirement: ≤ {spec.finalSetMax} min ({formatTimeMin(spec.finalSetMax)} max)
             </p>
-            {finalSetTotalMinutes != null && (
+            {finalSettingTime != null && (
               <div className="mt-2 flex items-center gap-2 flex-wrap">
                 {finalSetPass ? (
                   <span className="text-emerald-600 font-bold">✓ PASS</span>
                 ) : (
                   <span className="text-red-600 font-bold">✗ FAIL</span>
                 )}
-                <span className="text-xs text-slate-500">({formatTimeMin(finalSetTotalMinutes)} total)</span>
-                <PassFailBadge result={finalSetResult} />
+                <span className="text-xs text-slate-500">({formatTimeMin(finalSettingTime.totalMinutes)} total)</span>
+                <PassFailBadge result={finalSetResult} lang={lang} />
               </div>
             )}
           </div>
@@ -618,7 +669,7 @@ export default function CementSettingTime() {
         <Card>
           <CardContent className="pt-4">
             <Label className="text-xs text-slate-500 mb-1 block">{ar ? "ملاحظات" : "Notes"}</Label>
-            <Textarea value={notes} onChange={e => setNotes(e.target.value)} rows={3} />
+            <Textarea value={notes} onChange={e => setNotes(e.target.value)} rows={3} disabled={submitted} />
           </CardContent>
         </Card>
       </div>

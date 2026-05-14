@@ -816,8 +816,24 @@ function renderCementSettingTime(fd: any, isAr: boolean) {
   const minInit = spec.initialSetMin ?? 60;
   const maxFinal = spec.finalSetMax ?? 600;
 
+  const clockToMinutes = (hhmm: string): number | null => {
+    if (!hhmm?.includes(":")) return null;
+    const [h, m] = hhmm.split(":").map(Number);
+    if (!Number.isFinite(h) || !Number.isFinite(m)) return null;
+    return h * 60 + m;
+  };
+
   const rowElapsedMin = (r: any): number | null => {
     if (r == null) return null;
+    const start = typeof fd.startingTime === "string" ? fd.startingTime : "";
+    if (r.actualTime && start.includes(":")) {
+      const sm = clockToMinutes(start);
+      const am = clockToMinutes(String(r.actualTime));
+      if (sm == null || am == null) return null;
+      let actual = am;
+      if (actual < sm) actual += 24 * 60;
+      return actual - sm;
+    }
     const hasElapsed =
       (r.elapsedHours != null && r.elapsedHours !== "") ||
       (r.elapsedMinutes != null && r.elapsedMinutes !== "");
@@ -892,6 +908,7 @@ function renderCementSettingTime(fd: any, isAr: boolean) {
     fd.finalSetMinutes !== ""
       ? `${String(fd.finalSetHours)}:${String(fd.finalSetMinutes).padStart(2, "0")}`
       : "—";
+  const finalIsClockDerived = fd.finalSettingCalculatedFromClock === true;
 
   let initialSet: number | undefined =
     manualInitialMin != null && !isNaN(manualInitialMin) ? manualInitialMin : undefined;
@@ -933,9 +950,10 @@ function renderCementSettingTime(fd: any, isAr: boolean) {
     fd.finalSetPass === false || (finalSet != null && !isNaN(finalSet) && finalSet > maxFinal);
 
   const waterPct =
-    fd.standardConsistency ||
-    fd.waterContent ||
-    (fd.computedConsistencyPct != null ? String(Number(fd.computedConsistencyPct).toFixed(1)) : null);
+    fd.standardConsistency != null && fd.standardConsistency !== ""
+      ? String(fd.standardConsistency)
+      : fd.waterContent ||
+        (fd.computedConsistencyPct != null ? String(Number(fd.computedConsistencyPct).toFixed(1)) : null);
 
   return (
     <div className="space-y-4">
@@ -1021,7 +1039,14 @@ function renderCementSettingTime(fd: any, isAr: boolean) {
           </p>
           {finalClock !== "—" && (
             <p className="text-sm text-gray-600 mt-1 font-mono">
-              {isAr ? "مدخل:" : "Entered:"} {finalClock}
+              {finalIsClockDerived
+                ? isAr
+                  ? "محسوب (انتهاء − بدء):"
+                  : "Calculated (end − start):"
+                : isAr
+                  ? "مدخل:"
+                  : "Entered:"}{" "}
+              {finalClock}
             </p>
           )}
           {finalSet != null && !isNaN(finalSet) && (
