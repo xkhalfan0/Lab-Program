@@ -10,8 +10,8 @@
 
 @media print {
   @page {
-    size: A4;
-    margin: 15mm;
+    size: A4 portrait;
+    margin: 0.5cm;
   }
 
   html,
@@ -148,6 +148,82 @@
     background-color: #f8fafc !important;
     print-color-adjust: exact;
     -webkit-print-color-adjust: exact;
+  }
+
+  /* Compact typography & layout for lab report body (scoped; keeps signatures readable) */
+  .lab-print-root {
+    padding: 0 !important;
+    margin: 0 !important;
+    font-size: 9pt;
+    line-height: 1.3;
+  }
+
+  .lab-print-root h1 {
+    font-size: 18pt;
+    margin-bottom: 8pt;
+  }
+
+  .lab-print-root h2 {
+    font-size: 14pt;
+    margin-bottom: 6pt;
+  }
+
+  .lab-print-root h3 {
+    font-size: 11pt;
+    margin-bottom: 4pt;
+  }
+
+  .lab-print-root .metadata-table {
+    font-size: 8pt;
+    margin-top: 6pt;
+    margin-bottom: 6pt;
+    page-break-inside: auto;
+  }
+
+  .lab-print-root .metadata-table th,
+  .lab-print-root .metadata-table td {
+    padding: 3pt 4pt !important;
+    line-height: 1.2;
+  }
+
+  .lab-print-root .metadata-table tr {
+    page-break-inside: avoid;
+    page-break-after: auto;
+  }
+
+  .lab-print-root .bg-blue-50.border.border-blue-200.rounded-md {
+    padding: 6pt !important;
+    margin-bottom: 8pt !important;
+  }
+
+  .lab-print-root .space-y-6 > * + * {
+    margin-top: 8pt !important;
+  }
+
+  .lab-print-root .space-y-4 > * + * {
+    margin-top: 6pt !important;
+  }
+
+  .lab-print-root .border-2.rounded-lg {
+    padding: 8pt !important;
+    margin-top: 8pt !important;
+    page-break-before: avoid;
+  }
+
+  .lab-print-root .recharts-wrapper,
+  .lab-print-root .sieve-report-chart {
+    max-height: 200px !important;
+    page-break-before: avoid;
+    page-break-inside: avoid;
+  }
+
+  .lab-print-root .grid.grid-cols-3 {
+    margin-top: 12pt !important;
+    padding-top: 8pt !important;
+  }
+
+  .lab-print-root .text-xs {
+    font-size: 7pt !important;
   }
 
   * {

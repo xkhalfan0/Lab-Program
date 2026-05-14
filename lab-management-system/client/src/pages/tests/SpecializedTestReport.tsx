@@ -12,6 +12,16 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { FlexibleResultsTable, type Column, formDataToKeyValueRows, keyValueColumns } from "@/components/reports/FlexibleResultsTable";
 import { formatCalendarDate } from "@/lib/dateFormat";
 import { calculateFinalBlend, formatDisplaySieveMm } from "@/pages/tests/SieveAnalysis";
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
+} from "recharts";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function fmt(v: any, dec = 2) {
@@ -386,6 +396,94 @@ function _isSandBlendSieveFormData(fd: any): boolean {
   );
 }
 
+/** Grading curve for sand-blend sieve PDF / print (log sieve size). */
+function SieveBlendReportGradingChart({
+  sieveData,
+  wu,
+  bu,
+  isAr,
+}: {
+  sieveData: Array<Record<string, unknown>>;
+  wu: number | null;
+  bu: number | null;
+  isAr: boolean;
+}) {
+  const chartData = sieveData.map(rec => {
+    const mm = _parseReportBlendNum(rec.sieveMm) ?? 0;
+    const sieveLog = Math.max(mm, 0.01);
+    const blend =
+      _parseReportBlendNum(rec.finalBlend) ??
+      calculateFinalBlend(wu, _reportBlendWhitePassPct(rec), bu, _reportBlendBlackPassPct(rec));
+    const wp = _reportBlendWhitePassPct(rec);
+    const bp = _reportBlendBlackPassPct(rec);
+    const lo = _parseReportBlendNum(rec.lowerLimit);
+    const hi = _parseReportBlendNum(rec.upperLimit);
+    return {
+      sieveLog,
+      upperLimit: hi,
+      lowerLimit: lo,
+      whitePass: wp ?? 0,
+      blackPass: bp ?? 0,
+      blend: blend != null ? Number(blend.toFixed(2)) : null,
+    };
+  });
+
+  const kUp = isAr ? "الحد الأعلى" : "Upper Limit / الحد الأعلى";
+  const kLo = isAr ? "الحد الأدنى" : "Lower Limit / الحد الأدنى";
+  const kWhite = isAr ? "الرمل الأبيض" : "White Sand / الرمل الأبيض";
+  const kBlack = isAr ? "الرمل الأسود" : "Black Sand / الرمل الأسود";
+  const kBlend = isAr ? "الخلطة النهائية" : "Final Blend / الخلطة النهائية";
+
+  return (
+    <div className="sieve-report-chart border border-slate-300 rounded-md bg-white p-1 print:p-0" style={{ height: 300 }}>
+      <ResponsiveContainer width="100%" height="100%">
+        <LineChart data={chartData} margin={{ top: 8, right: 12, left: 0, bottom: 28 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+          <XAxis
+            type="number"
+            dataKey="sieveLog"
+            scale="log"
+            domain={[0.05, 10]}
+            tick={{ fontSize: 9 }}
+            tickFormatter={(v: number) => formatDisplaySieveMm(Number(v))}
+            label={{
+              value: isAr ? "مقاس المنخل (مم)" : "Sieve Size (mm) / مقاس المنخل",
+              position: "insideBottom",
+              offset: -18,
+              style: { fontSize: 10 },
+            }}
+          />
+          <YAxis
+            domain={[0, 100]}
+            width={40}
+            tick={{ fontSize: 9 }}
+            label={{
+              value: isAr ? "النسبة المارة %" : "% Passing / النسبة المارة",
+              angle: -90,
+              position: "insideLeft",
+              style: { fontSize: 10 },
+            }}
+          />
+          <Tooltip
+            formatter={(value: unknown) => {
+              const v = Array.isArray(value) ? value[0] : value;
+              const n = typeof v === "number" ? v : Number(v);
+              return n != null && Number.isFinite(n) ? `${n.toFixed(1)}%` : "—";
+            }}
+            contentStyle={{ fontSize: 10 }}
+          />
+          <Legend wrapperStyle={{ fontSize: 9 }} iconSize={8} />
+          <Line type="monotone" dataKey="upperLimit" stroke="#888888" strokeDasharray="5 5" strokeWidth={1.5} dot={false} name={kUp} connectNulls />
+          <Line type="monotone" dataKey="lowerLimit" stroke="#888888" strokeDasharray="5 5" strokeWidth={1.5} dot={false} name={kLo} connectNulls />
+          <Line type="monotone" dataKey="whitePass" stroke="#3b82f6" strokeWidth={2} dot={{ r: 2 }} name={kWhite} />
+          <Line type="monotone" dataKey="blackPass" stroke="#374151" strokeWidth={2} dot={{ r: 2 }} name={kBlack} />
+          <Line type="monotone" dataKey="blend" stroke="#ef4444" strokeWidth={2.5} dot={{ r: 3, fill: "#ef4444" }} name={kBlend} connectNulls />
+        </LineChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
 function renderSieveAnalysis(fd: any, isAr: boolean, extras?: FormReportExtras) {
   if (_isSandBlendSieveFormData(fd)) {
     const stdKey = fd.standard === "BS_1199_A" || fd.blendStandard === "BS_1199_A" ? "BS_1199_A" : "ASTM_C144";
@@ -476,29 +574,29 @@ function renderSieveAnalysis(fd: any, isAr: boolean, extras?: FormReportExtras) 
           <h3 className="font-semibold mb-3 text-sm text-slate-900 border-b border-slate-200 pb-1">
             {L("Sieve Analysis Results / نتائج تحليل المنخل", "نتائج تحليل المنخل / Sieve Analysis Results")}
           </h3>
-          <table className="metadata-table w-full border-collapse text-[10px]">
+          <table className="metadata-table w-full border-collapse text-xs">
             <thead>
               <tr className="bg-slate-100">
-                <th rowSpan={2} className="border border-slate-300 px-2 py-2 text-center align-middle font-semibold">
+                <th rowSpan={2} className="border border-slate-300 px-2 py-1 text-center align-middle font-semibold text-[10px]">
                   {L("Sieve Size (mm)", "مقاس المنخل (مم)")}
                   <br />
                   <span className="font-normal text-[9px] text-slate-600">{L("مقاس المنخل", "Sieve Size")}</span>
                 </th>
-                <th colSpan={2} className="border border-slate-300 px-2 py-2 text-center bg-slate-50 font-semibold">
+                <th colSpan={2} className="border border-slate-300 px-2 py-1 text-center bg-slate-50 font-semibold text-[10px]">
                   {L("Specification Limits (%)", "حدود المواصفات (%)")}
                   <br />
                   <span className="font-normal text-[9px]">{L("حدود المواصفات", "Spec limits")}</span>
                 </th>
-                <th colSpan={2} className="border border-slate-300 px-2 py-2 text-center bg-blue-50 font-semibold">
+                <th colSpan={2} className="border border-slate-300 px-2 py-1 text-center bg-blue-50 font-semibold text-[10px]">
                   {L("White Sand", "الرمل الأبيض")}
                 </th>
-                <th colSpan={2} className="border border-slate-300 px-2 py-2 text-center bg-gray-100 font-semibold">
+                <th colSpan={2} className="border border-slate-300 px-2 py-1 text-center bg-gray-100 font-semibold text-[10px]">
                   {L("Black Sand", "الرمل الأسود")}
                 </th>
-                <th rowSpan={2} className="border border-slate-300 px-2 py-2 text-center bg-yellow-50 align-middle font-semibold">
+                <th rowSpan={2} className="border border-slate-300 px-2 py-1 text-center bg-yellow-50 align-middle font-semibold text-[10px]">
                   {L("Final Blend (%)", "الخلطة النهائية (%)")}
                 </th>
-                <th rowSpan={2} className="border border-slate-300 px-2 py-2 text-center align-middle font-semibold">
+                <th rowSpan={2} className="border border-slate-300 px-2 py-1 text-center align-middle font-semibold text-[10px]">
                   {L("Result", "النتيجة")}
                 </th>
               </tr>
@@ -535,23 +633,23 @@ function renderSieveAnalysis(fd: any, isAr: boolean, extras?: FormReportExtras) 
                 const mm = _parseReportBlendNum(rec.sieveMm);
                 return (
                   <tr key={idx} className={idx % 2 === 0 ? "bg-white" : "bg-slate-50/80"}>
-                    <td className="border border-slate-300 px-2 py-2 text-center font-mono font-bold">
+                    <td className="border border-slate-300 px-2 py-1 text-center font-mono font-bold">
                       {mm != null ? formatDisplaySieveMm(mm) : String(rec.sieveMm ?? "—")}
                     </td>
-                    <td className="border border-slate-300 px-2 py-2 text-center">
+                    <td className="border border-slate-300 px-2 py-1 text-center">
                       {rec.lowerLimit != null && rec.lowerLimit !== "" ? String(rec.lowerLimit) : "—"}
                     </td>
-                    <td className="border border-slate-300 px-2 py-2 text-center">
+                    <td className="border border-slate-300 px-2 py-1 text-center">
                       {rec.upperLimit != null && rec.upperLimit !== "" ? String(rec.upperLimit) : "—"}
                     </td>
-                    <td className="border border-slate-300 px-2 py-2 text-center">{wp != null ? wp.toFixed(1) : "—"}</td>
-                    <td className="border border-slate-300 px-2 py-2 text-center bg-blue-50">{wu != null ? wu.toFixed(0) : "—"}</td>
-                    <td className="border border-slate-300 px-2 py-2 text-center">{bp != null ? bp.toFixed(1) : "—"}</td>
-                    <td className="border border-slate-300 px-2 py-2 text-center bg-gray-50">{bu != null ? bu.toFixed(0) : "—"}</td>
-                    <td className="border border-slate-300 px-2 py-2 text-center font-bold bg-yellow-50">
+                    <td className="border border-slate-300 px-2 py-1 text-center">{wp != null ? wp.toFixed(1) : "—"}</td>
+                    <td className="border border-slate-300 px-2 py-1 text-center bg-blue-50">{wu != null ? wu.toFixed(0) : "—"}</td>
+                    <td className="border border-slate-300 px-2 py-1 text-center">{bp != null ? bp.toFixed(1) : "—"}</td>
+                    <td className="border border-slate-300 px-2 py-1 text-center bg-gray-50">{bu != null ? bu.toFixed(0) : "—"}</td>
+                    <td className="border border-slate-300 px-2 py-1 text-center font-bold bg-yellow-50">
                       {blend != null ? blend.toFixed(1) : "—"}
                     </td>
-                    <td className="border border-slate-300 px-2 py-2 text-center">
+                    <td className="border border-slate-300 px-2 py-1 text-center">
                       {blend != null ? (
                         passes ? (
                           <span className="text-emerald-600 font-bold">{L("✓ PASS", "✓ مطابق")}</span>
@@ -570,36 +668,33 @@ function renderSieveAnalysis(fd: any, isAr: boolean, extras?: FormReportExtras) 
         </div>
 
         <div
-          className="mt-2 p-4 border-2 rounded-lg"
+          className="mt-4 p-3 border-2 rounded-lg"
           style={{
             borderColor: passesSpec ? "#10b981" : "#ef4444",
             backgroundColor: passesSpec ? "#f0fdf4" : "#fef2f2",
           }}
         >
-          <div className={`flex flex-wrap items-start gap-4 ${isAr ? "flex-row-reverse" : ""}`}>
+          <div className={`flex items-center gap-3 ${isAr ? "flex-row-reverse" : ""}`}>
             <div className="shrink-0">
               {passesSpec ? (
-                <div className="w-14 h-14 rounded-full bg-emerald-500 flex items-center justify-center">
+                <div className="w-12 h-12 rounded-full bg-emerald-500 flex items-center justify-center">
                   <span className="text-white text-2xl font-bold">✓</span>
                 </div>
               ) : (
-                <div className="w-14 h-14 rounded-full bg-red-500 flex items-center justify-center">
+                <div className="w-12 h-12 rounded-full bg-red-500 flex items-center justify-center">
                   <span className="text-white text-2xl font-bold">✗</span>
                 </div>
               )}
             </div>
             <div className="min-w-0 flex-1">
-              <h3
-                className="text-base font-bold mb-1"
-                style={{ color: passesSpec ? "#10b981" : "#ef4444" }}
-              >
+              <h3 className="text-lg font-bold mb-1" style={{ color: passesSpec ? "#10b981" : "#ef4444" }}>
                 {passesSpec ? L("ACCEPTED / مقبول", "مقبول / ACCEPTED") : L("REJECTED / مرفوض", "مرفوض / REJECTED")}
               </h3>
-              <p className="text-[11px] text-slate-800">
+              <p className="text-xs leading-tight text-slate-800">
                 {passesSpec
                   ? L(
-                      "The sand blend meets all specification requirements. All sieve sizes are within the specified limits.",
-                      "خليط الرمل يلبي جميع متطلبات المواصفات. جميع أحجام المناخل ضمن الحدود المحددة.",
+                      "The sand blend meets all specification requirements.",
+                      "خليط الرمل يلبي جميع متطلبات المواصفات.",
                     )
                   : L(
                       "The sand blend fails to meet specification requirements. One or more sieve sizes are outside the specified limits.",
@@ -610,18 +705,11 @@ function renderSieveAnalysis(fd: any, isAr: boolean, extras?: FormReportExtras) 
           </div>
         </div>
 
-        <div className="no-print mt-4">
-          <h3 className="font-semibold mb-2 text-sm text-slate-900">
+        <div className="mt-4">
+          <h3 className="font-semibold mb-2 text-base text-slate-900">
             {L("Grading Curve / منحنى التدرج", "منحنى التدرج / Grading Curve")}
           </h3>
-          <div className="border border-slate-300 rounded-md p-4 bg-white">
-            <p className="text-xs text-slate-500 text-center py-6">
-              {L(
-                "Open the sieve test form for an interactive grading curve, or use Print / PDF from this page for tabular results.",
-                "افتح نموذج اختبار المناخل لعرض منحنى التدرج التفاعلي، أو استخدم الطباعة / PDF من هذه الصفحة لنتائج الجدول.",
-              )}
-            </p>
-          </div>
+          <SieveBlendReportGradingChart sieveData={sieveData} wu={wu} bu={bu} isAr={isAr} />
         </div>
 
         <div className="mt-4 text-center text-[9px] text-slate-500 border-t border-slate-200 pt-3">
