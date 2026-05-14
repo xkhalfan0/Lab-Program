@@ -11,7 +11,8 @@ import { Button } from "@/components/ui/button";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { FlexibleResultsTable, type Column, formDataToKeyValueRows, keyValueColumns } from "@/components/reports/FlexibleResultsTable";
 import { formatCalendarDate } from "@/lib/dateFormat";
-import { calculateTheBlend, type BlendStandardKey } from "@/pages/tests/SieveAnalysis";
+import { calculateFinalBlend, formatDisplaySieveMm } from "@/pages/tests/SieveAnalysis";
+import { PassFailBadge } from "@/components/PassFailBadge";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function fmt(v: any, dec = 2) {
@@ -371,23 +372,20 @@ function _reportBlendBlackPassPct(row: Record<string, unknown>): number | null {
 }
 
 /** Weighted blend % passing — matches SieveAnalysis.tsx (saved finalBlend preferred). */
-function _reportFinalBlendForRow(
-  blendStdKey: BlendStandardKey,
-  fd: Record<string, unknown>,
-  row: Record<string, unknown>,
-): number | null {
+function _reportFinalBlendForRow(fd: Record<string, unknown>, row: Record<string, unknown>): number | null {
   const saved = _parseReportBlendNum(row.finalBlend);
   if (saved !== null) return saved;
   const wu = _reportBlendWhiteUsedPct(fd, row);
   const bu = _reportBlendBlackUsedPct(fd, row);
   const wp = _reportBlendWhitePassPct(row);
   const bp = _reportBlendBlackPassPct(row);
-  return calculateTheBlend(blendStdKey, wu, wp, bu, bp);
+  return calculateFinalBlend(wu, wp, bu, bp);
 }
 
 function _isSandBlendSieveFormData(fd: any): boolean {
   if (!Array.isArray(fd?.sieveData) || fd.sieveData.length === 0) return false;
-  if (fd.testMode === "blend" || fd.blendStandard != null || fd.blendFormula === "WEIGHTED_PASS_V1") return true;
+  if (fd.testMode === "blend" || fd.standard != null || fd.blendStandard != null || fd.blendFormula === "WEIGHTED_PASS_V1")
+    return true;
   const r0 = fd.sieveData[0] as Record<string, unknown> | undefined;
   if (!r0) return false;
   return (
@@ -400,15 +398,15 @@ function _isSandBlendSieveFormData(fd: any): boolean {
 
 function renderSieveAnalysis(fd: any, isAr: boolean) {
   if (_isSandBlendSieveFormData(fd)) {
-    const blendStdKey: BlendStandardKey = fd.blendStandard === "BS_1199_A" ? "BS_1199_A" : "ASTM_C144";
-    const std =
-      blendStdKey === "BS_1199_A"
+    const stdKey = fd.standard === "BS_1199_A" || fd.blendStandard === "BS_1199_A" ? "BS_1199_A" : "ASTM_C144";
+    const standardName =
+      stdKey === "BS_1199_A"
         ? isAr
           ? "BS 1199:76 النوع أ — رمل لياسة"
           : "BS 1199:76 Type A — Plaster Sand"
         : isAr
-          ? "ASTM C 144 — رمل بناء"
-          : "ASTM C 144 — Masonry Sand";
+          ? "ASTM C 144 — رمل بناء (رمل مصنع)"
+          : "ASTM C 144 — Masonry Sand (Type: Manufactured Sand)";
     const rows = fd.sieveData as Array<Record<string, unknown>>;
     const passes = fd.passesSpec === true;
     const fdRec = fd as Record<string, unknown>;
@@ -419,11 +417,11 @@ function renderSieveAnalysis(fd: any, isAr: boolean) {
         align: "center",
         render: (_, row) => {
           const mm = _parseReportBlendNum((row as any).sieveMm);
-          return mm !== null ? mm.toFixed(3) : String((row as any).sieveMm ?? "—");
+          return mm !== null ? formatDisplaySieveMm(mm) : String((row as any).sieveMm ?? "—");
         },
       },
-      { header: isAr ? "حد أدنى %" : "Lower Limit %", field: "lowerLimit", align: "center" },
-      { header: isAr ? "حد أعلى %" : "Upper Limit %", field: "upperLimit", align: "center" },
+      { header: isAr ? "حد أدنى %" : "Lower %", field: "lowerLimit", align: "center" },
+      { header: isAr ? "حد أعلى %" : "Upper %", field: "upperLimit", align: "center" },
       {
         header: isAr ? "أبيض % مار" : "White Pass %",
         field: "whitePassPct",
@@ -453,9 +451,9 @@ function renderSieveAnalysis(fd: any, isAr: boolean) {
         field: "finalBlend",
         align: "center",
         render: (_, row) => {
-          const b = _reportFinalBlendForRow(blendStdKey, fdRec, row as Record<string, unknown>);
+          const b = _reportFinalBlendForRow(fdRec, row as Record<string, unknown>);
           return (
-            <span className="font-bold text-amber-900">{b !== null ? b.toFixed(2) : "—"}</span>
+            <span className="font-bold text-amber-900">{b !== null ? b.toFixed(1) : "—"}</span>
           );
         },
       },
@@ -465,7 +463,7 @@ function renderSieveAnalysis(fd: any, isAr: boolean) {
         align: "center",
         render: (_, row) => {
           const rec = row as Record<string, unknown>;
-          const b = _reportFinalBlendForRow(blendStdKey, fdRec, rec);
+          const b = _reportFinalBlendForRow(fdRec, rec);
           const lo = _parseReportBlendNum(rec.lowerLimit);
           const hi = _parseReportBlendNum(rec.upperLimit);
           if (b === null || lo === null || hi === null) return "—";
@@ -481,43 +479,36 @@ function renderSieveAnalysis(fd: any, isAr: boolean) {
     const wu0 = _reportBlendWhiteUsedPct(fdRec, rows[0] ?? {});
     const bu0 = _reportBlendBlackUsedPct(fdRec, rows[0] ?? {});
     return (
-      <div className="space-y-3">
-        <div className="text-xs font-semibold text-blue-700 bg-blue-50 border border-blue-200 rounded px-3 py-1.5 space-y-1">
-          <div>{isAr ? "تحليل المناخل — خليط رمل" : "Sieve Analysis — Sand blend"}</div>
-          <div className="text-[11px] font-normal text-blue-800/90">{std}</div>
-          <div className="text-[11px] font-normal text-blue-800/90">
-            {isAr ? "الخليط:" : "Blend:"}{" "}
-            {isAr ? "رمل أبيض" : "White sand"}{" "}
+      <div className="space-y-4">
+        <div className="p-3 bg-blue-50 border border-blue-200 rounded-md text-sm space-y-1">
+          <p>
+            <strong>{isAr ? "المواصفة:" : "Standard:"}</strong> {standardName}
+          </p>
+          <p className="mt-1">
+            <strong>{isAr ? "تركيب الخليط:" : "Blend Composition:"}</strong>{" "}
+            {isAr ? "رمل أبيض" : "White Sand"}{" "}
             <span className="font-mono font-semibold">{wu0 != null ? wu0.toFixed(0) : "—"}%</span>
             {" + "}
-            {isAr ? "رمل أسود" : "Black sand"}{" "}
+            {isAr ? "رمل أسود" : "Black Sand"}{" "}
             <span className="font-mono font-semibold">{bu0 != null ? bu0.toFixed(0) : "—"}%</span>
-          </div>
+          </p>
+          <p className="text-xs text-slate-600 mt-1">
+            {isAr
+              ? "المعادلة: الخليط = (أبيض% × مار أبيض + أسود% × مار أسود) ÷ 100"
+              : "Formula: Final Blend = (White% × WhitePass + Black% × BlackPass) ÷ 100"}
+          </p>
         </div>
-        <p className="text-[11px] text-slate-600">
-          <strong>{isAr ? "المعادلة:" : "Formula:"}</strong>{" "}
-          {isAr
-            ? "الخليط % = (مستخدم أبيض × مرور أبيض + مستخدم أسود × مرور أسود) ÷ 100"
-            : "Final Blend % = (White Used% × White Pass% + Black Used% × Black Pass%) ÷ 100"}
-        </p>
         <FlexibleResultsTable columns={cols} rows={rows} />
-        <div className="text-xs space-y-1">
-          <div className="font-semibold">
-            {isAr ? "النتيجة الإجمالية:" : "Overall:"}{" "}
-            {passes ? (
-              <span className="text-emerald-700">{isAr ? "مطابق للمواصفة" : "PASS"}</span>
-            ) : (
-              <span className="text-red-700">{isAr ? "غير مطابق" : "FAIL"}</span>
-            )}
-          </div>
-          <p className="text-slate-600">
+        <div className="flex flex-wrap items-center gap-3">
+          <PassFailBadge result={passes ? "pass" : "fail"} lang={isAr ? "ar" : "en"} size="sm" />
+          <p className="text-sm text-slate-700">
             {passes
               ? isAr
                 ? "الخليط يحقق جميع متطلبات المواصفة."
                 : "The blend meets all specification requirements."
               : isAr
                 ? "الخليط لا يحقق المواصفة في منخل واحد على الأقل."
-                : "The blend fails to meet specification requirements at one or more sieves."}
+                : "The blend fails to meet specification requirements."}
           </p>
         </div>
       </div>

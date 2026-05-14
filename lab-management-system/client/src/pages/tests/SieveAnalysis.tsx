@@ -29,7 +29,10 @@ import { useLanguage } from "@/contexts/LanguageContext";
 
 export type BlendStandardKey = "ASTM_C144" | "BS_1199_A";
 
-const ASTM_C144_SIEVES = [
+type SieveSpec = { mm: number; upper: number | null; lower: number | null };
+
+/** ASTM C144 — masonry (manufactured) sand, % passing */
+const ASTM_C144_SPECS: SieveSpec[] = [
   { mm: 6.3, upper: 100, lower: 100 },
   { mm: 4.75, upper: 100, lower: 100 },
   { mm: 2.36, upper: 100, lower: 95 },
@@ -40,50 +43,67 @@ const ASTM_C144_SIEVES = [
   { mm: 0.075, upper: 10, lower: 0 },
 ];
 
-const BS_1199_TYPE_A_SIEVES = [
-  { mm: 5.0, upper: 100, lower: 100 },
-  { mm: 2.36, upper: 90, lower: 80 },
-  { mm: 1.18, upper: 70, lower: 55 },
-  { mm: 0.6, upper: 40, lower: 15 },
-  { mm: 0.3, upper: 25, lower: 5 },
+/** BS 1199:76 Type A — plaster sand; 6.30 mm row has no limits and is omitted from the worksheet */
+const BS_1199_TYPE_A_SPECS: SieveSpec[] = [
+  { mm: 6.3, upper: null, lower: null },
+  { mm: 5.0, upper: 100, lower: 95 },
+  { mm: 2.36, upper: 100, lower: 60 },
+  { mm: 1.18, upper: 100, lower: 30 },
+  { mm: 0.6, upper: 80, lower: 15 },
+  { mm: 0.3, upper: 50, lower: 5 },
   { mm: 0.15, upper: 15, lower: 0 },
-  { mm: 0.075, upper: 10, lower: 0 },
+  { mm: 0.075, upper: 5, lower: 0 },
 ];
 
-const SIEVE_STACK: Record<BlendStandardKey, { mm: number; upper: number; lower: number }[]> = {
-  ASTM_C144: ASTM_C144_SIEVES,
-  BS_1199_A: BS_1199_TYPE_A_SIEVES,
-};
-
-export interface SieveBlendRow {
+export interface SieveRow {
   sieveMm: number;
   upperLimit: number;
   lowerLimit: number;
-  whitePassPct: string;
-  blackPassPct: string;
+  whitePassPct: number | null;
+  blackPassPct: number | null;
 }
 
-function emptyRows(standard: BlendStandardKey): SieveBlendRow[] {
-  return SIEVE_STACK[standard].map(s => ({
-    sieveMm: s.mm,
-    upperLimit: s.upper,
-    lowerLimit: s.lower,
-    whitePassPct: "",
-    blackPassPct: "",
-  }));
+function sieveKey(mm: number): string {
+  return String(Math.round(mm * 1000) / 1000);
 }
 
-function parsePct(s: string): number | null {
-  const t = s.trim();
-  if (t === "") return null;
-  const n = parseFloat(t);
+export function initializeSieveRows(standard: BlendStandardKey): SieveRow[] {
+  const sieves = standard === "ASTM_C144" ? ASTM_C144_SPECS : BS_1199_TYPE_A_SPECS;
+  return sieves
+    .filter(s => s.upper !== null && s.lower !== null)
+    .map(s => ({
+      sieveMm: s.mm,
+      upperLimit: s.upper as number,
+      lowerLimit: s.lower as number,
+      whitePassPct: null,
+      blackPassPct: null,
+    }));
+}
+
+function parseFieldNum(v: unknown): number | null {
+  if (v == null || v === "") return null;
+  const n = typeof v === "number" ? v : parseFloat(String(v));
   return Number.isFinite(n) ? n : null;
 }
 
 /**
- * Final blend % passing = (White Used% × White Pass% + Black Used% × Black Pass%) ÷ 100
- * Same for ASTM C144 and BS 1199 Type A per lab worksheet.
+ * Final blend % passing = (White Used% × White Pass% + Black Used% × Black Pass%) ÷ 100.
+ * Missing pass % is treated as 0 in the weighted sum (used % must both be set).
  */
+export function calculateFinalBlend(
+  whiteUsedPct: number | null,
+  whitePassPct: number | null,
+  blackUsedPct: number | null,
+  blackPassPct: number | null,
+): number | null {
+  if (whiteUsedPct === null || blackUsedPct === null) return null;
+  if (whitePassPct === null && blackPassPct === null) return null;
+  const whitePart = whiteUsedPct * (whitePassPct ?? 0);
+  const blackPart = blackUsedPct * (blackPassPct ?? 0);
+  return (whitePart + blackPart) / 100;
+}
+
+/** @deprecated Prefer calculateFinalBlend — kept for older imports; standard arg ignored */
 export function calculateTheBlend(
   _standard: BlendStandardKey,
   whiteUsedPct: number | null,
@@ -91,47 +111,49 @@ export function calculateTheBlend(
   blackUsedPct: number | null,
   blackPassPct: number | null,
 ): number | null {
-  if (
-    whiteUsedPct === null ||
-    blackUsedPct === null ||
-    whitePassPct === null ||
-    blackPassPct === null
-  ) {
-    return null;
-  }
-  const white = whiteUsedPct * whitePassPct;
-  const black = blackUsedPct * blackPassPct;
-  return (white + black) / 100;
+  return calculateFinalBlend(whiteUsedPct, whitePassPct, blackUsedPct, blackPassPct);
 }
 
-function mergeRowsFromSaved(standard: BlendStandardKey, saved: Array<Record<string, unknown>>): SieveBlendRow[] {
-  const template = emptyRows(standard);
-  const bySieve = new Map<number, Record<string, unknown>>();
+function mergeRowsFromSaved(standard: BlendStandardKey, saved: Array<Record<string, unknown>>): SieveRow[] {
+  const template = initializeSieveRows(standard);
+  const bySieve = new Map<string, Record<string, unknown>>();
   for (const r of saved) {
     const k = Number(r.sieveMm ?? r.sieve ?? NaN);
-    if (Number.isFinite(k)) bySieve.set(k, r);
+    if (Number.isFinite(k)) bySieve.set(sieveKey(k), r);
   }
   return template.map(row => {
-    const s = bySieve.get(row.sieveMm);
+    const s = bySieve.get(sieveKey(row.sieveMm));
     if (!s) return row;
+    const ul = parseFieldNum(s.upperLimit);
+    const ll = parseFieldNum(s.lowerLimit);
     const wp =
-      s.whitePassPct != null && String(s.whitePassPct) !== ""
-        ? String(s.whitePassPct)
-        : s.whiteSandOriginalPass != null && String(s.whiteSandOriginalPass) !== ""
-          ? String(s.whiteSandOriginalPass)
-          : "";
+      parseFieldNum(s.whitePassPct) ??
+      parseFieldNum(s.whiteSandOriginalPass) ??
+      parseFieldNum(s.whiteSandOriginal);
     const bp =
-      s.blackPassPct != null && String(s.blackPassPct) !== ""
-        ? String(s.blackPassPct)
-        : s.blackSandOriginalPass != null && String(s.blackSandOriginalPass) !== ""
-          ? String(s.blackSandOriginalPass)
-          : "";
-    return { ...row, whitePassPct: wp, blackPassPct: bp };
+      parseFieldNum(s.blackPassPct) ??
+      parseFieldNum(s.blackSandOriginalPass) ??
+      parseFieldNum(s.blackSandOriginal);
+    return {
+      ...row,
+      upperLimit: ul ?? row.upperLimit,
+      lowerLimit: ll ?? row.lowerLimit,
+      whitePassPct: wp,
+      blackPassPct: bp,
+    };
   });
 }
 
-function formatSieveMm(mm: number): string {
-  return Number.isInteger(mm) ? String(mm) : mm.toFixed(2).replace(/\.?0+$/, "");
+/** Display sieve opening (mm) for worksheet / chart labels */
+export function formatDisplaySieveMm(mm: number): string {
+  if (Math.abs(mm - 6.3) < 0.02) return "6.3";
+  if (Math.abs(mm - 4.75) < 0.001) return "4.75";
+  if (Math.abs(mm - 5) < 0.001) return "5";
+  if (mm >= 1) {
+    const r = Math.round(mm * 100) / 100;
+    return Number.isInteger(r) ? String(r) : r.toFixed(2).replace(/\.?0+$/, "");
+  }
+  return mm.toFixed(3).replace(/\.?0+$/, "");
 }
 
 export default function SieveAnalysis() {
@@ -149,22 +171,31 @@ export default function SieveAnalysis() {
   );
 
   const [blendStandard, setBlendStandard] = useState<BlendStandardKey>("ASTM_C144");
-  const [whiteUsedPctStr, setWhiteUsedPctStr] = useState("");
-  const [blackUsedPctStr, setBlackUsedPctStr] = useState("");
-  const [sieveRows, setSieveRows] = useState<SieveBlendRow[]>(() => emptyRows("ASTM_C144"));
+  const [whiteUsedPct, setWhiteUsedPct] = useState<number | null>(null);
+  const [blackUsedPct, setBlackUsedPct] = useState<number | null>(null);
+  const [sieveRows, setSieveRows] = useState<SieveRow[]>(() => initializeSieveRows("ASTM_C144"));
   const [source, setSource] = useState("");
   const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [hydrated, setHydrated] = useState(false);
 
-  const whiteUsedPct = parsePct(whiteUsedPctStr);
-  const blackUsedPct = parsePct(blackUsedPctStr);
   const mixTotal = (whiteUsedPct ?? 0) + (blackUsedPct ?? 0);
   const mixOk = whiteUsedPct != null && blackUsedPct != null && Math.abs(mixTotal - 100) < 0.001;
 
-  const updateRow = (idx: number, field: "whitePassPct" | "blackPassPct", value: string) => {
-    setSieveRows(prev => prev.map((row, i) => (i === idx ? { ...row, [field]: value } : row)));
+  const updateRow = (idx: number, field: "whitePassPct" | "blackPassPct", raw: string) => {
+    const t = raw.trim();
+    const n = t === "" ? null : parseFloat(t);
+    const val = n !== null && Number.isFinite(n) ? n : null;
+    setSieveRows(prev => prev.map((row, i) => (i === idx ? { ...row, [field]: val } : row)));
+  };
+
+  const setUsedPct = (which: "white" | "black", raw: string) => {
+    const t = raw.trim();
+    const n = t === "" ? null : parseFloat(t);
+    const val = n !== null && Number.isFinite(n) ? n : null;
+    if (which === "white") setWhiteUsedPct(val);
+    else setBlackUsedPct(val);
   };
 
   useEffect(() => {
@@ -176,23 +207,24 @@ export default function SieveAnalysis() {
   useEffect(() => {
     if (hydrated || !existing?.formData) return;
     const fd = existing.formData as Record<string, unknown>;
-    const std = fd.blendStandard === "BS_1199_A" ? "BS_1199_A" : "ASTM_C144";
+    const std =
+      fd.standard === "BS_1199_A" || fd.blendStandard === "BS_1199_A" ? "BS_1199_A" : "ASTM_C144";
     setBlendStandard(std);
     const savedRows = Array.isArray(fd.sieveData) ? (fd.sieveData as Array<Record<string, unknown>>) : [];
-    if (fd.whiteUsedPct != null && fd.whiteUsedPct !== "") setWhiteUsedPctStr(String(fd.whiteUsedPct));
+    if (fd.whiteUsedPct != null && fd.whiteUsedPct !== "") setWhiteUsedPct(parseFieldNum(fd.whiteUsedPct));
     else if (typeof fd.masonryWhiteSandUsedPct === "string" && fd.masonryWhiteSandUsedPct.trim() !== "") {
-      setWhiteUsedPctStr(fd.masonryWhiteSandUsedPct);
+      setWhiteUsedPct(parseFieldNum(fd.masonryWhiteSandUsedPct));
     } else if (savedRows[0]?.whiteSandUsed != null && String(savedRows[0].whiteSandUsed).trim() !== "") {
-      setWhiteUsedPctStr(String(savedRows[0].whiteSandUsed));
+      setWhiteUsedPct(parseFieldNum(savedRows[0].whiteSandUsed));
     }
-    if (fd.blackUsedPct != null && fd.blackUsedPct !== "") setBlackUsedPctStr(String(fd.blackUsedPct));
+    if (fd.blackUsedPct != null && fd.blackUsedPct !== "") setBlackUsedPct(parseFieldNum(fd.blackUsedPct));
     else if (savedRows[0]?.blackSandUsed != null && String(savedRows[0].blackSandUsed).trim() !== "") {
-      setBlackUsedPctStr(String(savedRows[0].blackSandUsed));
+      setBlackUsedPct(parseFieldNum(savedRows[0].blackSandUsed));
     }
     if (savedRows.length) {
       setSieveRows(mergeRowsFromSaved(std, savedRows));
     } else {
-      setSieveRows(emptyRows(std));
+      setSieveRows(initializeSieveRows(std));
     }
     if (typeof fd.source === "string") setSource(fd.source);
     if (typeof existing.notes === "string" && existing.notes) setNotes(existing.notes);
@@ -202,27 +234,24 @@ export default function SieveAnalysis() {
 
   const rowsWithBlend = useMemo(() => {
     return sieveRows.map(row => {
-      const blend = calculateTheBlend(
-        blendStandard,
-        whiteUsedPct,
-        parsePct(row.whitePassPct),
-        blackUsedPct,
-        parsePct(row.blackPassPct),
-      );
+      const blend = calculateFinalBlend(whiteUsedPct, row.whitePassPct, blackUsedPct, row.blackPassPct);
+      const bothPassEntered = row.whitePassPct !== null && row.blackPassPct !== null;
       const passes =
-        blend !== null && blend >= row.lowerLimit && blend <= row.upperLimit;
+        mixOk &&
+        blend !== null &&
+        bothPassEntered &&
+        blend >= row.lowerLimit &&
+        blend <= row.upperLimit;
       return { ...row, finalBlend: blend, passes };
     });
-  }, [sieveRows, blendStandard, whiteUsedPct, blackUsedPct]);
+  }, [sieveRows, whiteUsedPct, blackUsedPct, mixOk]);
 
-  const allPassesFilled = sieveRows.every(
-    r => parsePct(r.whitePassPct) !== null && parsePct(r.blackPassPct) !== null,
-  );
+  const allPassesFilled = sieveRows.every(r => r.whitePassPct !== null && r.blackPassPct !== null);
   const blendWithinSpec = rowsWithBlend.every(r => r.passes);
   const blendAnyData =
-    whiteUsedPctStr.trim() !== "" ||
-    blackUsedPctStr.trim() !== "" ||
-    sieveRows.some(r => r.whitePassPct.trim() !== "" || r.blackPassPct.trim() !== "");
+    whiteUsedPct != null ||
+    blackUsedPct != null ||
+    sieveRows.some(r => r.whitePassPct !== null || r.blackPassPct !== null);
 
   const overallResult: "pass" | "fail" | "pending" =
     !blendAnyData ? "pending" : !mixOk || !allPassesFilled ? "pending" : blendWithinSpec ? "pass" : "fail";
@@ -230,21 +259,21 @@ export default function SieveAnalysis() {
   const passesBlendSpec = mixOk && allPassesFilled && blendWithinSpec;
 
   const chartKeys = useMemo(() => {
-    const kWhite = ar ? "أبيض % مار" : "White sand pass %";
-    const kBlack = ar ? "أسود % مار" : "Black sand pass %";
-    const kBlend = ar ? "الخليط النهائي %" : "Final blend %";
-    const kUp = ar ? "حد أعلى" : "Upper limit";
-    const kLo = ar ? "حد أدنى" : "Lower limit";
+    const kWhite = ar ? "أبيض % مار" : "White Sand / الرمل الأبيض";
+    const kBlack = ar ? "أسود % مار" : "Black Sand / الرمل الأسود";
+    const kBlend = ar ? "الخليط النهائي %" : "Final Blend / الخلطة النهائية";
+    const kUp = ar ? "الحد الأعلى" : "Upper Limit / الحد الأعلى";
+    const kLo = ar ? "الحد الأدنى" : "Lower Limit / الحد الأدنى";
     return { kWhite, kBlack, kBlend, kUp, kLo };
   }, [ar]);
 
   const chartData = useMemo(() => {
     return rowsWithBlend.map(r => {
-      const wp = parsePct(r.whitePassPct) ?? 0;
-      const bp = parsePct(r.blackPassPct) ?? 0;
+      const wp = r.whitePassPct ?? 0;
+      const bp = r.blackPassPct ?? 0;
       const fb = r.finalBlend;
       return {
-        sieveMm: formatSieveMm(r.sieveMm),
+        sieveMm: formatDisplaySieveMm(r.sieveMm),
         sieveLog: Math.max(r.sieveMm, 0.01),
         [chartKeys.kWhite]: wp,
         [chartKeys.kBlack]: bp,
@@ -303,8 +332,8 @@ export default function SieveAnalysis() {
       sieveMm: r.sieveMm,
       upperLimit: r.upperLimit,
       lowerLimit: r.lowerLimit,
-      whitePassPct: parsePct(r.whitePassPct),
-      blackPassPct: parsePct(r.blackPassPct),
+      whitePassPct: r.whitePassPct,
+      blackPassPct: r.blackPassPct,
       whiteUsedPct,
       blackUsedPct,
       finalBlend: r.finalBlend != null ? Number(r.finalBlend.toFixed(4)) : null,
@@ -320,6 +349,7 @@ export default function SieveAnalysis() {
         formTemplate: "sieve_analysis",
         formData: {
           testMode: "blend" as const,
+          standard: blendStandard,
           blendStandard,
           blendFormula: "WEIGHTED_PASS_V1",
           whiteUsedPct,
@@ -331,6 +361,7 @@ export default function SieveAnalysis() {
         },
         overallResult: passesBlendSpec ? "pass" : status === "submitted" ? "fail" : "pending",
         summaryValues: {
+          standard: blendStandard,
           blendStandard,
           whiteUsedPct,
           blackUsedPct,
@@ -366,20 +397,14 @@ export default function SieveAnalysis() {
         />
 
         <div className="flex items-start justify-between flex-wrap gap-3">
-          <div>
-            <div className="flex items-center gap-2 text-sm text-slate-500 mb-1">
-              <FlaskConical size={16} />
-              <span>{ar ? "الركام / خليط الرمل" : "Aggregates / Sand blend"}</span>
-            </div>
+          <div className="mb-0 md:mb-0">
             <h1 className="text-2xl font-bold text-slate-900">
-              {ar ? "تحليل المناخل — تصميم خليط الرمل" : "Sieve Analysis — Sand Blend Design"}
+              {ar ? "تحليل المناخل — تصميم خليط الرمل" : "Sieve Analysis - Sand Blend Design"}
             </h1>
-            <p className="text-sm text-slate-600">
-              {ar
-                ? "ASTM C136 / BS 882 | اختبار خليط رملين — بناء أو لياسة"
-                : "ASTM C136 / BS 882 | Two-sand blend testing for masonry or plaster sand"}
+            <p className="text-sm text-slate-600 mt-1">
+              {ar ? "اختبار خليط رملين — طريقة ASTM C136" : "Two-sand blend testing (ASTM C136 test method)"}
             </p>
-            <p className="text-slate-500 text-sm mt-1">
+            <p className="text-slate-500 text-sm mt-2">
               {ar ? "التوزيع:" : "Distribution:"} {dist?.distributionCode ?? `DIST-${distId}`}
             </p>
           </div>
@@ -420,7 +445,7 @@ export default function SieveAnalysis() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <Label className="text-xs text-slate-500 mb-1 block">
-                  {ar ? "جدول المواصفة" : "Specification table"}
+                  {ar ? "جدول المواصفة" : "Specification Standard"}
                 </Label>
                 <Select
                   value={blendStandard}
@@ -428,14 +453,16 @@ export default function SieveAnalysis() {
                   onValueChange={v => {
                     const std = v as BlendStandardKey;
                     setBlendStandard(std);
-                    setSieveRows(emptyRows(std));
+                    setSieveRows(initializeSieveRows(std));
                   }}
                 >
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="ASTM_C144">ASTM C 144 — Masonry Sand</SelectItem>
+                    <SelectItem value="ASTM_C144">
+                      ASTM C 144 — Masonry Sand (Type: Manufactured Sand)
+                    </SelectItem>
                     <SelectItem value="BS_1199_A">BS 1199:76 Type A — Plaster Sand</SelectItem>
                   </SelectContent>
                 </Select>
@@ -455,52 +482,65 @@ export default function SieveAnalysis() {
 
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
               <h3 className="font-semibold text-slate-800 mb-3 text-sm">
-                {ar ? "نسب الخليط في المواد" : "Material Blend Proportions"}
+                {ar ? "نسب خلط المواد" : "Material Blend Proportions / نسب خلط المواد"}
               </h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="border border-blue-300 rounded-md p-3 bg-white">
-                  <Label className="font-medium text-blue-800 text-sm">{ar ? "رمل أبيض — مستخدم %" : "White Sand Used %"}</Label>
+                  <Label className="font-medium text-blue-800 text-sm">
+                    {ar ? "نسبة الرمل الأبيض %" : "White Sand Used % / نسبة الرمل الأبيض %"}
+                  </Label>
                   <Input
                     type="number"
                     min={0}
                     max={100}
                     step={0.1}
-                    value={whiteUsedPctStr}
-                    onChange={e => setWhiteUsedPctStr(e.target.value)}
+                    value={whiteUsedPct ?? ""}
+                    onChange={e => setUsedPct("white", e.target.value)}
                     placeholder="e.g. 60"
                     className="mt-2 font-mono"
                     disabled={submitted}
                   />
-                  <p className="text-xs text-slate-500 mt-1">
-                    {ar ? "نسبة الرمل الأبيض في الخليط الكلي" : "Percentage of white sand in total mix"}
-                  </p>
                 </div>
                 <div className="border border-slate-300 rounded-md p-3 bg-white">
-                  <Label className="font-medium text-slate-800 text-sm">{ar ? "رمل أسود — مستخدم %" : "Black Sand Used %"}</Label>
+                  <Label className="font-medium text-slate-800 text-sm">
+                    {ar ? "نسبة الرمل الأسود %" : "Black Sand Used % / نسبة الرمل الأسود %"}
+                  </Label>
                   <Input
                     type="number"
                     min={0}
                     max={100}
                     step={0.1}
-                    value={blackUsedPctStr}
-                    onChange={e => setBlackUsedPctStr(e.target.value)}
+                    value={blackUsedPct ?? ""}
+                    onChange={e => setUsedPct("black", e.target.value)}
                     placeholder="e.g. 40"
                     className="mt-2 font-mono"
                     disabled={submitted}
                   />
-                  <p className="text-xs text-slate-500 mt-1">
-                    {ar ? "نسبة الرمل الأسود في الخليط الكلي" : "Percentage of black sand in total mix"}
-                  </p>
                 </div>
               </div>
-              <div className="mt-3 text-sm">
-                <span className="font-medium text-slate-700">{ar ? "المجموع:" : "Total:"} </span>
-                <span className={mixOk ? "text-emerald-600 font-bold" : "text-red-600 font-bold"}>
+              <div className="mt-3 p-2 rounded bg-white border border-slate-200 text-sm">
+                <span className="font-medium text-slate-700">{ar ? "المجموع:" : "Total / المجموع:"} </span>
+                <span className={mixOk ? "text-emerald-600 font-bold text-lg" : "text-red-600 font-bold text-lg"}>
                   {mixTotal.toFixed(1)}%
                 </span>
-                {!mixOk && (whiteUsedPctStr || blackUsedPctStr) && (
-                  <span className="text-red-600 ms-2">{ar ? "⚠ يجب أن يساوي 100٪" : "⚠ Must equal 100%"}</span>
+                {!mixOk && (whiteUsedPct != null || blackUsedPct != null) && (
+                  <span className="text-red-600 ms-2 text-sm">
+                    {ar ? "⚠ يجب أن يساوي 100٪" : "⚠ Must equal 100% / يجب أن يساوي 100%"}
+                  </span>
                 )}
+              </div>
+              <div className="mt-3 text-xs text-slate-600 space-y-1">
+                <p>
+                  <strong>{ar ? "ملاحظة:" : "Note:"}</strong>{" "}
+                  {ar
+                    ? "الخلايا الخضراء = إدخال الفني. الخلايا الصفراء = حساب تلقائي."
+                    : "Green cells = Technician inputs. Yellow cells = Auto-calculated."}
+                </p>
+                <p className="text-slate-500">
+                  {ar
+                    ? "Green cells = Technician inputs. Yellow cells = Auto-calculated."
+                    : "الخلايا الخضراء = إدخال الفني. الخلايا الصفراء = حساب تلقائي."}
+                </p>
               </div>
             </div>
           </CardContent>
@@ -508,54 +548,60 @@ export default function SieveAnalysis() {
 
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-base">{ar ? "جدول المناخل والخليط" : "Sieve & blend worksheet"}</CardTitle>
+            <CardTitle className="text-base">
+              {ar ? "بيانات التحليل المنخلي" : "Sieve Analysis Data / بيانات التحليل المنخلي"}
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="overflow-x-auto">
-              <table className="w-full border-collapse border border-slate-300 text-xs min-w-[880px]">
+              <table className="w-full border-collapse border border-slate-300 text-xs min-w-[920px]">
                 <thead>
                   <tr className="bg-slate-100">
-                    <th rowSpan={2} className="border border-slate-300 px-2 py-2 align-middle">
-                      {ar ? "المنخل (مم)" : "Sieve (mm)"}
+                    <th rowSpan={2} className="border border-slate-300 px-2 py-2 align-middle text-[10px] leading-tight">
+                      {ar ? "مقاس المنخل (مم)" : "Sieve Size / مقاس المنخل (mm)"}
                     </th>
-                    <th rowSpan={2} className="border border-slate-300 px-2 py-2 bg-slate-50 align-middle">
-                      {ar ? "حد أدنى %" : "Spec Lower %"}
+                    <th rowSpan={2} className="border border-slate-300 px-2 py-2 bg-slate-50 align-middle text-[10px] leading-tight">
+                      {ar ? "الحد الأدنى %" : "Spec Lower / الحد الأدنى %"}
                     </th>
-                    <th rowSpan={2} className="border border-slate-300 px-2 py-2 bg-slate-50 align-middle">
-                      {ar ? "حد أعلى %" : "Spec Upper %"}
+                    <th rowSpan={2} className="border border-slate-300 px-2 py-2 bg-slate-50 align-middle text-[10px] leading-tight">
+                      {ar ? "الحد الأعلى %" : "Spec Upper / الحد الأعلى %"}
                     </th>
-                    <th colSpan={2} className="border border-slate-300 px-2 py-2 bg-blue-100 text-center">
-                      {ar ? "رمل أبيض" : "White Sand"}
+                    <th colSpan={2} className="border border-slate-300 px-2 py-2 bg-blue-100 text-center text-[11px]">
+                      {ar ? "الرمل الأبيض" : "White Sand / الرمل الأبيض"}
                     </th>
-                    <th colSpan={2} className="border border-slate-300 px-2 py-2 bg-slate-200 text-center">
-                      {ar ? "رمل أسود" : "Black Sand"}
+                    <th colSpan={2} className="border border-slate-300 px-2 py-2 bg-slate-200 text-center text-[11px]">
+                      {ar ? "الرمل الأسود" : "Black Sand / الرمل الأسود"}
                     </th>
-                    <th rowSpan={2} className="border border-slate-300 px-2 py-2 bg-yellow-100 align-middle">
-                      {ar ? "الخليط النهائي %" : "Final Blend %"}
+                    <th rowSpan={2} className="border border-slate-300 px-2 py-2 bg-yellow-100 align-middle text-[10px] leading-tight">
+                      {ar ? "الخلطة النهائية %" : "Final Blend / الخلطة النهائية %"}
                     </th>
-                    <th rowSpan={2} className="border border-slate-300 px-2 py-2 align-middle">
-                      {ar ? "النتيجة" : "Result"}
+                    <th rowSpan={2} className="border border-slate-300 px-2 py-2 align-middle text-[10px] leading-tight">
+                      {ar ? "النتيجة" : "Result / النتيجة"}
                     </th>
                   </tr>
-                  <tr className="bg-slate-50">
-                    <th className="border border-slate-300 px-2 py-1 bg-green-100">
-                      {ar ? "أصلي % مار" : "Original Pass %"}
+                  <tr className="bg-slate-50 text-[10px]">
+                    <th className="border border-slate-300 px-1 py-1 bg-green-100 leading-tight">
+                      {ar ? "نسبة المار" : "Original Pass % / نسبة المار"}
                     </th>
-                    <th className="border border-slate-300 px-2 py-1 bg-blue-50">{ar ? "مستخدم %" : "Used %"}</th>
-                    <th className="border border-slate-300 px-2 py-1 bg-green-100">
-                      {ar ? "أصلي % مار" : "Original Pass %"}
+                    <th className="border border-slate-300 px-1 py-1 bg-blue-50 leading-tight">
+                      {ar ? "المستخدم %" : "Used % / المستخدم"}
                     </th>
-                    <th className="border border-slate-300 px-2 py-1 bg-slate-100">{ar ? "مستخدم %" : "Used %"}</th>
+                    <th className="border border-slate-300 px-1 py-1 bg-green-100 leading-tight">
+                      {ar ? "نسبة المار" : "Original Pass % / نسبة المار"}
+                    </th>
+                    <th className="border border-slate-300 px-1 py-1 bg-slate-100 leading-tight">
+                      {ar ? "المستخدم %" : "Used % / المستخدم"}
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
                   {rowsWithBlend.map((row, idx) => {
                     const blend = row.finalBlend;
-                    const blendStr = blend !== null ? blend.toFixed(2) : "—";
+                    const blendStr = blend !== null ? blend.toFixed(1) : "—";
                     return (
-                      <tr key={row.sieveMm}>
+                      <tr key={row.sieveMm} className="hover:bg-slate-50/80">
                         <td className="border border-slate-300 px-2 py-2 text-center font-mono font-bold">
-                          {formatSieveMm(row.sieveMm)}
+                          {formatDisplaySieveMm(row.sieveMm)}
                         </td>
                         <td className="border border-slate-300 px-2 py-2 text-center bg-slate-50 font-mono">{row.lowerLimit}</td>
                         <td className="border border-slate-300 px-2 py-2 text-center bg-slate-50 font-mono">{row.upperLimit}</td>
@@ -565,14 +611,14 @@ export default function SieveAnalysis() {
                             min={0}
                             max={100}
                             step={0.1}
-                            value={row.whitePassPct}
+                            value={row.whitePassPct ?? ""}
                             onChange={e => updateRow(idx, "whitePassPct", e.target.value)}
-                            className="h-8 w-20 text-center font-mono mx-auto"
+                            className="h-8 w-20 text-center font-mono mx-auto text-sm"
                             disabled={submitted}
                           />
                         </td>
-                        <td className="border border-slate-300 px-2 py-2 text-center bg-blue-50 font-mono font-semibold">
-                          {whiteUsedPct != null ? whiteUsedPct : "—"}
+                        <td className="border border-slate-300 px-2 py-2 text-center bg-blue-50 font-mono font-medium">
+                          {whiteUsedPct ?? "—"}
                         </td>
                         <td className="border border-slate-300 px-1 py-1 bg-green-50">
                           <Input
@@ -580,27 +626,27 @@ export default function SieveAnalysis() {
                             min={0}
                             max={100}
                             step={0.1}
-                            value={row.blackPassPct}
+                            value={row.blackPassPct ?? ""}
                             onChange={e => updateRow(idx, "blackPassPct", e.target.value)}
-                            className="h-8 w-20 text-center font-mono mx-auto"
+                            className="h-8 w-20 text-center font-mono mx-auto text-sm"
                             disabled={submitted}
                           />
                         </td>
-                        <td className="border border-slate-300 px-2 py-2 text-center bg-slate-100 font-mono font-semibold">
-                          {blackUsedPct != null ? blackUsedPct : "—"}
+                        <td className="border border-slate-300 px-2 py-2 text-center bg-slate-100 font-mono font-medium">
+                          {blackUsedPct ?? "—"}
                         </td>
-                        <td className="border border-slate-300 px-2 py-2 text-center font-bold bg-yellow-50 font-mono">
+                        <td className="border border-slate-300 px-2 py-2 text-center font-bold bg-yellow-50 font-mono text-base">
                           {blendStr}
                         </td>
                         <td className="border border-slate-300 px-2 py-2 text-center">
-                          {blend !== null ? (
+                          {blend !== null && row.whitePassPct !== null && row.blackPassPct !== null ? (
                             row.passes ? (
-                              <span className="text-emerald-600 font-bold">✓</span>
+                              <span className="text-emerald-600 font-bold text-lg">✓</span>
                             ) : (
-                              <span className="text-red-600 font-bold">✗</span>
+                              <span className="text-red-600 font-bold text-lg">✗</span>
                             )
                           ) : (
-                            "—"
+                            <span className="text-slate-400">—</span>
                           )}
                         </td>
                       </tr>
@@ -609,57 +655,70 @@ export default function SieveAnalysis() {
                 </tbody>
               </table>
             </div>
-            <p className="text-xs text-slate-600 mt-2">
-              <strong>{ar ? "المعادلة:" : "Formula:"}</strong>{" "}
+            <div className="text-xs text-slate-600 mt-2 p-2 bg-blue-50 rounded-md border border-blue-100">
+              <strong>{ar ? "الصيغة:" : "Formula / الصيغة:"}</strong>{" "}
               {ar
                 ? "الخليط % = (مستخدم أبيض × مرور أبيض + مستخدم أسود × مرور أسود) ÷ 100"
                 : "Final Blend % = (White Used% × White Pass% + Black Used% × Black Pass%) ÷ 100"}
-            </p>
+            </div>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-base">{ar ? "منحنى التدرج" : "Grading curve"}</CardTitle>
+            <CardTitle className="text-base">
+              {ar ? "منحنى التدرج" : "Grading Curve / منحنى التدرج"}
+            </CardTitle>
           </CardHeader>
           <CardContent>
             {blendAnyData ? (
               <ResponsiveContainer width="100%" height={400}>
-                <LineChart data={chartData} margin={{ top: 8, right: 24, left: 8, bottom: 28 }}>
+                <LineChart data={chartData} margin={{ top: 8, right: 24, left: 16, bottom: 36 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
                   <XAxis
                     type="number"
                     dataKey="sieveLog"
                     scale="log"
                     domain={[0.05, 10]}
-                    tick={{ fontSize: 10 }}
+                    tick={{ fontSize: 11 }}
+                    tickFormatter={v => formatDisplaySieveMm(Number(v))}
                     label={{
-                      value: ar ? "حجم المنخل (مم) — مقياس لوغاريتمي" : "Sieve size (mm) — log scale",
+                      value: ar ? "مقاس المنخل (مم)" : "Sieve Size (mm) / مقاس المنخل",
                       position: "insideBottom",
-                      offset: -18,
+                      offset: -22,
                       fontSize: 11,
                     }}
                   />
-                  <YAxis domain={[0, 100]} tick={{ fontSize: 10 }} width={48} />
+                  <YAxis
+                    domain={[0, 100]}
+                    tick={{ fontSize: 11 }}
+                    width={52}
+                    label={{
+                      value: ar ? "النسبة المارة %" : "% Passing / النسبة المارة",
+                      angle: -90,
+                      position: "insideLeft",
+                      style: { fontSize: 11 },
+                    }}
+                  />
                   <Tooltip formatter={(v: number) => (v != null && Number.isFinite(v) ? `${Number(v).toFixed(1)}%` : "—")} />
                   <Legend wrapperStyle={{ fontSize: 11 }} />
                   <Line
                     type="monotone"
                     dataKey={chartKeys.kLo}
-                    stroke="#94a3b8"
+                    stroke="#888888"
                     strokeDasharray="5 5"
                     dot={false}
-                    strokeWidth={1.5}
+                    strokeWidth={2}
                     name={chartKeys.kLo}
                     connectNulls
                   />
                   <Line
                     type="monotone"
                     dataKey={chartKeys.kUp}
-                    stroke="#94a3b8"
+                    stroke="#888888"
                     strokeDasharray="5 5"
                     dot={false}
-                    strokeWidth={1.5}
+                    strokeWidth={2}
                     name={chartKeys.kUp}
                     connectNulls
                   />
@@ -668,7 +727,7 @@ export default function SieveAnalysis() {
                     dataKey={chartKeys.kWhite}
                     stroke="#3b82f6"
                     strokeWidth={2}
-                    dot={{ r: 3 }}
+                    dot={{ r: 4 }}
                     name={chartKeys.kWhite}
                   />
                   <Line
@@ -676,7 +735,7 @@ export default function SieveAnalysis() {
                     dataKey={chartKeys.kBlack}
                     stroke="#374151"
                     strokeWidth={2}
-                    dot={{ r: 3 }}
+                    dot={{ r: 4 }}
                     name={chartKeys.kBlack}
                   />
                   <Line
@@ -684,7 +743,7 @@ export default function SieveAnalysis() {
                     dataKey={chartKeys.kBlend}
                     stroke="#ef4444"
                     strokeWidth={3}
-                    dot={{ r: 4 }}
+                    dot={{ r: 5, fill: "#ef4444" }}
                     name={chartKeys.kBlend}
                     connectNulls
                   />
@@ -705,7 +764,13 @@ export default function SieveAnalysis() {
               <Info size={14} className="text-slate-500 mt-0.5 shrink-0" />
               <div className="text-xs text-slate-600 space-y-1">
                 <p className="font-semibold text-slate-700">
-                  {blendStandard === "ASTM_C144" ? "ASTM C 144 — Masonry Sand" : "BS 1199:76 Type A — Plaster Sand"}
+                  {blendStandard === "ASTM_C144"
+                    ? ar
+                      ? "ASTM C 144 — رمل بناء (رمل مصنع)"
+                      : "ASTM C 144 — Masonry Sand (Type: Manufactured Sand)"
+                    : ar
+                      ? "BS 1199:76 النوع أ — رمل لياسة"
+                      : "BS 1199:76 Type A — Plaster Sand"}
                 </p>
                 <p>
                   {ar
@@ -721,7 +786,7 @@ export default function SieveAnalysis() {
           <ResultBanner
             result={overallResult}
             testName={ar ? "تحليل المناخل — خليط الرمل" : "Sieve Analysis — Sand Blend"}
-            standard={blendStandard === "ASTM_C144" ? "ASTM C 144" : "BS 1199:76 Type A"}
+            standard={blendStandard === "ASTM_C144" ? "ASTM C 144 (Manufactured Sand)" : "BS 1199:76 Type A"}
           />
         )}
 
