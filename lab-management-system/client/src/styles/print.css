@@ -117,6 +117,39 @@
     print-color-adjust: exact !important;
   }
 
+  /* Sieve blend report (under .lab-print-root) — preserve tinted cells for PDF */
+  .lab-print-root .metadata-table thead tr.bg-slate-100 th,
+  .lab-print-root .metadata-table thead tr.bg-slate-50 th {
+    background-color: #f1f5f9 !important;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+
+  .lab-print-root .metadata-table .bg-yellow-50 {
+    background-color: #fefce8 !important;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+
+  .lab-print-root .metadata-table .bg-blue-50 {
+    background-color: #eff6ff !important;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+
+  .lab-print-root .metadata-table .bg-gray-50,
+  .lab-print-root .metadata-table .bg-gray-100 {
+    background-color: #f9fafb !important;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+
+  .lab-print-root .metadata-table .bg-slate-50 {
+    background-color: #f8fafc !important;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+
   * {
     box-shadow: none !important;
     text-shadow: none !important;

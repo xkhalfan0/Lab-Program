@@ -289,7 +289,7 @@ export default function SieveAnalysis() {
       if (vars.status === "submitted") {
         toast.success(ar ? "تم إرسال النتائج بنجاح" : "Results submitted successfully");
         setSubmitted(true);
-        setLocation("/technician");
+        setLocation(`/test-report/${distId}`);
       } else {
         toast.success(ar ? "تم حفظ المسودة بنجاح" : "Draft saved successfully");
       }
@@ -358,6 +358,7 @@ export default function SieveAnalysis() {
           passesSpec: passesBlendSpec,
           overallResult: passesBlendSpec ? "pass" : status === "submitted" ? "fail" : "pending",
           source,
+          testedBy: user?.name ?? undefined,
         },
         overallResult: passesBlendSpec ? "pass" : status === "submitted" ? "fail" : "pending",
         summaryValues: {
