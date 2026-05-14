@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { FlexibleResultsTable, type Column, formDataToKeyValueRows, keyValueColumns } from "@/components/reports/FlexibleResultsTable";
 import { formatCalendarDate } from "@/lib/dateFormat";
+import { calculateTheBlend, type BlendStandardKey } from "@/pages/tests/SieveAnalysis";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function fmt(v: any, dec = 2) {
@@ -338,27 +339,68 @@ function _parseReportBlendNum(v: unknown): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-/** Match SieveAnalysis.tsx blend formulas for PDF/report. */
-function _reportSieveBlendValue(
-  blendStd: string,
+function _reportBlendWhiteUsedPct(fd: Record<string, unknown>, row: Record<string, unknown>): number | null {
+  return (
+    _parseReportBlendNum(fd.whiteUsedPct) ??
+    _parseReportBlendNum(fd.masonryWhiteSandUsedPct) ??
+    _parseReportBlendNum(row.whiteSandUsed) ??
+    _parseReportBlendNum(row.whiteUsedPct)
+  );
+}
+
+function _reportBlendBlackUsedPct(fd: Record<string, unknown>, row: Record<string, unknown>): number | null {
+  return (
+    _parseReportBlendNum(fd.blackUsedPct) ??
+    _parseReportBlendNum(row.blackSandUsed) ??
+    _parseReportBlendNum(row.blackUsedPct)
+  );
+}
+
+function _reportBlendWhitePassPct(row: Record<string, unknown>): number | null {
+  return (
+    _parseReportBlendNum(row.whitePassPct) ??
+    _parseReportBlendNum(row.whiteSandOriginalPass ?? row.whiteSandOriginal)
+  );
+}
+
+function _reportBlendBlackPassPct(row: Record<string, unknown>): number | null {
+  return (
+    _parseReportBlendNum(row.blackPassPct) ??
+    _parseReportBlendNum(row.blackSandOriginalPass ?? row.blackSandOriginal)
+  );
+}
+
+/** Weighted blend % passing — matches SieveAnalysis.tsx (saved finalBlend preferred). */
+function _reportFinalBlendForRow(
+  blendStdKey: BlendStandardKey,
+  fd: Record<string, unknown>,
   row: Record<string, unknown>,
-  masonryWhitePct: string | undefined,
 ): number | null {
-  const wOrig = _parseReportBlendNum(row.whiteSandOriginalPass ?? row.whiteSandOriginal);
-  const wRowUsed = _parseReportBlendNum(row.whiteSandUsed);
-  const bUsed = _parseReportBlendNum(row.blackSandUsed);
-  if (blendStd === "BS_1199_A") {
-    if (wOrig === null || wRowUsed === null) return null;
-    return wOrig * (wRowUsed / 100);
-  }
-  const wUsed = _parseReportBlendNum(masonryWhitePct) ?? wRowUsed;
-  if (wUsed === null || bUsed === null) return null;
-  return wUsed + bUsed;
+  const saved = _parseReportBlendNum(row.finalBlend);
+  if (saved !== null) return saved;
+  const wu = _reportBlendWhiteUsedPct(fd, row);
+  const bu = _reportBlendBlackUsedPct(fd, row);
+  const wp = _reportBlendWhitePassPct(row);
+  const bp = _reportBlendBlackPassPct(row);
+  return calculateTheBlend(blendStdKey, wu, wp, bu, bp);
+}
+
+function _isSandBlendSieveFormData(fd: any): boolean {
+  if (!Array.isArray(fd?.sieveData) || fd.sieveData.length === 0) return false;
+  if (fd.testMode === "blend" || fd.blendStandard != null || fd.blendFormula === "WEIGHTED_PASS_V1") return true;
+  const r0 = fd.sieveData[0] as Record<string, unknown> | undefined;
+  if (!r0) return false;
+  return (
+    "whitePassPct" in r0 ||
+    "whiteSandOriginalPass" in r0 ||
+    "whiteSandOriginal" in r0 ||
+    "finalBlend" in r0
+  );
 }
 
 function renderSieveAnalysis(fd: any, isAr: boolean) {
-  if (fd.testMode === "blend" && Array.isArray(fd.sieveData)) {
-    const blendStdKey = fd.blendStandard === "BS_1199_A" ? "BS_1199_A" : "ASTM_C144";
+  if (_isSandBlendSieveFormData(fd)) {
+    const blendStdKey: BlendStandardKey = fd.blendStandard === "BS_1199_A" ? "BS_1199_A" : "ASTM_C144";
     const std =
       blendStdKey === "BS_1199_A"
         ? isAr
@@ -369,75 +411,114 @@ function renderSieveAnalysis(fd: any, isAr: boolean) {
           : "ASTM C 144 — Masonry Sand";
     const rows = fd.sieveData as Array<Record<string, unknown>>;
     const passes = fd.passesSpec === true;
-    const masonryW =
-      typeof fd.masonryWhiteSandUsedPct === "string" ? fd.masonryWhiteSandUsedPct : undefined;
+    const fdRec = fd as Record<string, unknown>;
     const cols: Column[] = [
-      { header: isAr ? "حد أعلى" : "Spec upper", field: "upperLimit", align: "center" },
-      { header: isAr ? "حد أدنى" : "Spec lower", field: "lowerLimit", align: "center" },
       {
-        header: isAr ? "الخليط" : "Blend",
-        field: "blend",
+        header: isAr ? "المنخل (مم)" : "Sieve (mm)",
+        field: "sieveMm",
         align: "center",
         render: (_, row) => {
-          const b = _reportSieveBlendValue(blendStdKey, row as Record<string, unknown>, masonryW);
-          const display = b !== null ? b.toFixed(1) : row.blend != null ? String(row.blend) : "—";
-          return <span className="font-bold text-amber-900">{display}</span>;
+          const mm = _parseReportBlendNum((row as any).sieveMm);
+          return mm !== null ? mm.toFixed(3) : String((row as any).sieveMm ?? "—");
         },
       },
-      { header: isAr ? "أبيض — مستخدم %" : "White — Used %", field: "whiteSandUsed", align: "center" },
+      { header: isAr ? "حد أدنى %" : "Lower Limit %", field: "lowerLimit", align: "center" },
+      { header: isAr ? "حد أعلى %" : "Upper Limit %", field: "upperLimit", align: "center" },
       {
-        header: isAr ? "أبيض — أصلي % مار" : "White — Orig. pass %",
-        field: "whiteSandOriginalPass",
+        header: isAr ? "أبيض % مار" : "White Pass %",
+        field: "whitePassPct",
         align: "center",
-        render: (_, row) =>
-          String((row as any).whiteSandOriginalPass ?? (row as any).whiteSandOriginal ?? "—"),
+        render: (_, row) => fmt(_reportBlendWhitePassPct(row as Record<string, unknown>), 1),
       },
-      { header: isAr ? "أسود — مستخدم %" : "Black — Used %", field: "blackSandUsed", align: "center" },
       {
-        header: isAr ? "أسود — أصلي % مار" : "Black — Orig. pass %",
-        field: "blackSandOriginalPass",
+        header: isAr ? "أبيض مستخدم %" : "White Used %",
+        field: "_wu",
         align: "center",
-        render: (_, row) =>
-          String((row as any).blackSandOriginalPass ?? (row as any).blackSandOriginal ?? "—"),
+        render: (_, row) => fmt(_reportBlendWhiteUsedPct(fdRec, row as Record<string, unknown>), 0),
       },
-      { header: isAr ? "المنخل (مم)" : "Sieve (mm)", field: "sieveMm", align: "center" },
       {
-        header: isAr ? "ضمن الحد" : "OK",
-        field: "_ok",
+        header: isAr ? "أسود % مار" : "Black Pass %",
+        field: "blackPassPct",
+        align: "center",
+        render: (_, row) => fmt(_reportBlendBlackPassPct(row as Record<string, unknown>), 1),
+      },
+      {
+        header: isAr ? "أسود مستخدم %" : "Black Used %",
+        field: "_bu",
+        align: "center",
+        render: (_, row) => fmt(_reportBlendBlackUsedPct(fdRec, row as Record<string, unknown>), 0),
+      },
+      {
+        header: isAr ? "الخليط النهائي %" : "Final Blend %",
+        field: "finalBlend",
         align: "center",
         render: (_, row) => {
-          const b = _reportSieveBlendValue(blendStdKey, row as Record<string, unknown>, masonryW);
-          const lo = _parseReportBlendNum((row as any).lowerLimit);
-          const hi = _parseReportBlendNum((row as any).upperLimit);
+          const b = _reportFinalBlendForRow(blendStdKey, fdRec, row as Record<string, unknown>);
+          return (
+            <span className="font-bold text-amber-900">{b !== null ? b.toFixed(2) : "—"}</span>
+          );
+        },
+      },
+      {
+        header: isAr ? "النتيجة" : "Result",
+        field: "_result",
+        align: "center",
+        render: (_, row) => {
+          const rec = row as Record<string, unknown>;
+          const b = _reportFinalBlendForRow(blendStdKey, fdRec, rec);
+          const lo = _parseReportBlendNum(rec.lowerLimit);
+          const hi = _parseReportBlendNum(rec.upperLimit);
           if (b === null || lo === null || hi === null) return "—";
-          return b >= lo && b <= hi ? (
-            <span className="text-emerald-700 font-bold">✓</span>
+          const ok = b >= lo && b <= hi;
+          return ok ? (
+            <span className="text-emerald-700 font-bold">{isAr ? "✓ مطابق" : "✓ PASS"}</span>
           ) : (
-            <span className="text-red-700 font-bold">✗</span>
+            <span className="text-red-700 font-bold">{isAr ? "✗ غير مطابق" : "✗ FAIL"}</span>
           );
         },
       },
     ];
+    const wu0 = _reportBlendWhiteUsedPct(fdRec, rows[0] ?? {});
+    const bu0 = _reportBlendBlackUsedPct(fdRec, rows[0] ?? {});
     return (
       <div className="space-y-3">
-        <div className="text-xs font-semibold text-blue-700 bg-blue-50 border border-blue-200 rounded px-3 py-1.5">
-          {isAr ? "وضع الخليط — رمل أبيض + أسود" : "Blend mode — white + black sand"}
-          <div className="text-[11px] font-normal text-blue-800/90 mt-0.5">{std}</div>
-          {blendStdKey === "ASTM_C144" && masonryW != null && masonryW !== "" && (
-            <div className="text-[11px] font-normal text-blue-800/90 mt-1">
-              {isAr ? "رمل أبيض — مستخدم % (موحّد):" : "White sand — Used % (single value):"}{" "}
-              <span className="font-mono font-semibold">{masonryW}</span>
-            </div>
-          )}
+        <div className="text-xs font-semibold text-blue-700 bg-blue-50 border border-blue-200 rounded px-3 py-1.5 space-y-1">
+          <div>{isAr ? "تحليل المناخل — خليط رمل" : "Sieve Analysis — Sand blend"}</div>
+          <div className="text-[11px] font-normal text-blue-800/90">{std}</div>
+          <div className="text-[11px] font-normal text-blue-800/90">
+            {isAr ? "الخليط:" : "Blend:"}{" "}
+            {isAr ? "رمل أبيض" : "White sand"}{" "}
+            <span className="font-mono font-semibold">{wu0 != null ? wu0.toFixed(0) : "—"}%</span>
+            {" + "}
+            {isAr ? "رمل أسود" : "Black sand"}{" "}
+            <span className="font-mono font-semibold">{bu0 != null ? bu0.toFixed(0) : "—"}%</span>
+          </div>
         </div>
+        <p className="text-[11px] text-slate-600">
+          <strong>{isAr ? "المعادلة:" : "Formula:"}</strong>{" "}
+          {isAr
+            ? "الخليط % = (مستخدم أبيض × مرور أبيض + مستخدم أسود × مرور أسود) ÷ 100"
+            : "Final Blend % = (White Used% × White Pass% + Black Used% × Black Pass%) ÷ 100"}
+        </p>
         <FlexibleResultsTable columns={cols} rows={rows} />
-        <div className="text-xs font-semibold">
-          {isAr ? "النتيجة الإجمالية:" : "Overall:"}{" "}
-          {passes ? (
-            <span className="text-emerald-700">{isAr ? "مطابق" : "PASS"}</span>
-          ) : (
-            <span className="text-red-700">{isAr ? "غير مطابق" : "FAIL"}</span>
-          )}
+        <div className="text-xs space-y-1">
+          <div className="font-semibold">
+            {isAr ? "النتيجة الإجمالية:" : "Overall:"}{" "}
+            {passes ? (
+              <span className="text-emerald-700">{isAr ? "مطابق للمواصفة" : "PASS"}</span>
+            ) : (
+              <span className="text-red-700">{isAr ? "غير مطابق" : "FAIL"}</span>
+            )}
+          </div>
+          <p className="text-slate-600">
+            {passes
+              ? isAr
+                ? "الخليط يحقق جميع متطلبات المواصفة."
+                : "The blend meets all specification requirements."
+              : isAr
+                ? "الخليط لا يحقق المواصفة في منخل واحد على الأقل."
+                : "The blend fails to meet specification requirements at one or more sieves."}
+          </p>
         </div>
       </div>
     );
