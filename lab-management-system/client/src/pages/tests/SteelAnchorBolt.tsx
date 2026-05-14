@@ -139,7 +139,7 @@ export default function SteelAnchorBolt() {
         <SampleInfoCard
           dist={distribution}
           extraFields={[
-            { label: "القطر", value: distribution?.testSubType ? `${distribution.testSubType} mm` : null },
+            { label: "Diameter / القطر", value: distribution?.testSubType ? `${distribution.testSubType} mm` : null },
           ]}
         />
         {/* Header */}

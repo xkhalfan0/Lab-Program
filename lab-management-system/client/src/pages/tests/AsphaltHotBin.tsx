@@ -205,7 +205,7 @@ export default function AsphaltHotBin() {
         <SampleInfoCard
           dist={dist}
           extraFields={[
-            { label: "رقم البن", value: dist?.testSubType },
+            { label: "Bin number / رقم البن", value: dist?.testSubType },
           ]}
         />
 

@@ -211,7 +211,7 @@ export default function AsphaltCore() {
         <SampleInfoCard
           dist={dist}
           extraFields={[
-            { label: "الطبقة", value: dist?.testSubType },
+            { label: "Layer / الطبقة", value: dist?.testSubType },
           ]}
         />
         {/* Header */}

@@ -284,7 +284,7 @@ export default function SteelRebar() {
         <SampleInfoCard
           dist={dist}
           extraFields={[
-            { label: "القطر", value: dist?.testSubType ? `${dist.testSubType} mm` : null },
+            { label: "Diameter / القطر", value: dist?.testSubType ? `${dist.testSubType} mm` : null },
           ]}
         />
         {/* Header */}

@@ -198,7 +198,7 @@ export default function AsphaltBitumenExtraction() {
         <SampleInfoCard
           dist={dist}
           extraFields={[
-            { label: "نوع الخلطة", value: dist?.testSubType },
+            { label: "Mix type / نوع الخلطة", value: dist?.testSubType },
           ]}
         />
         {/* Header */}

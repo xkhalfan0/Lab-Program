@@ -149,7 +149,7 @@ export default function AggShapeIndex() {
         <SampleInfoCard
           dist={dist}
           extraFields={[
-            { label: "نوع الركام", value: dist?.testSubType },
+            { label: "Aggregate type / نوع الركام", value: dist?.testSubType },
           ]}
         />
         {/* Header */}

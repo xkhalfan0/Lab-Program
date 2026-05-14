@@ -273,7 +273,7 @@ export default function AsphaltMarshall() {
         <SampleInfoCard
           dist={dist}
           extraFields={[
-            { label: "نوع الخلطة", value: dist?.testSubType },
+            { label: "Mix type / نوع الخلطة", value: dist?.testSubType },
           ]}
         />
         {/* Header */}

@@ -183,7 +183,7 @@ export default function AggSpecificGravity() {
         <SampleInfoCard
           dist={dist}
           extraFields={[
-            { label: "نوع الركام", value: dist?.testSubType },
+            { label: "Aggregate type / نوع الركام", value: dist?.testSubType },
           ]}
         />
         {/* Header */}

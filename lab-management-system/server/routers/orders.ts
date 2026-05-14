@@ -41,6 +41,8 @@ export const labOrderReceptionCreateInputSchema = z.object({
         testSubType: z.string().optional(),
         quantity: z.number().default(1),
         unitPrice: z.number().default(0),
+        /** Optional per-line metadata (e.g. foamed concrete age at registration). */
+        metadata: z.record(z.string(), z.union([z.string(), z.number()])).optional(),
       })
     )
     .min(1),
@@ -116,17 +118,29 @@ export async function runLabOrderReceptionCreate(ctx: ReceptionCtx, input: LabOr
     status: "pending",
   });
   const items = await createLabOrderItems(
-    input.tests.map((t) => ({
-      orderId: order.id,
-      testTypeId: t.testTypeId,
-      testTypeCode: t.testTypeCode,
-      testTypeName: t.testTypeName.length <= 250 ? t.testTypeName : t.testTypeName.slice(0, 247) + "...",
-      formTemplate: t.formTemplate ?? null,
-      testSubType: t.testSubType ?? null,
-      quantity: t.quantity,
-      unitPrice: String(t.unitPrice),
-      status: "pending" as const,
-    }))
+    input.tests.map((t) => {
+      const foamAge =
+        t.testTypeCode === "CONC_FOAM" && t.metadata?.concreteAge != null && String(t.metadata.concreteAge).trim() !== ""
+          ? JSON.stringify({ concreteAge: String(t.metadata.concreteAge).trim() })
+          : null;
+      const testSubType =
+        foamAge != null
+          ? foamAge
+          : t.testSubType != null && t.testSubType !== "" && t.testSubType !== "__multi__"
+            ? t.testSubType
+            : null;
+      return {
+        orderId: order.id,
+        testTypeId: t.testTypeId,
+        testTypeCode: t.testTypeCode,
+        testTypeName: t.testTypeName.length <= 250 ? t.testTypeName : t.testTypeName.slice(0, 247) + "...",
+        formTemplate: t.formTemplate ?? null,
+        testSubType,
+        quantity: t.quantity,
+        unitPrice: String(t.unitPrice),
+        status: "pending" as const,
+      };
+    })
   );
   await addSampleHistory({
     sampleId: sample.id,

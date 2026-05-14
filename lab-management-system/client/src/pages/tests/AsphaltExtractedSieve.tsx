@@ -157,7 +157,7 @@ export default function AsphaltExtractedSieve() {
         <SampleInfoCard
           dist={distribution}
           extraFields={[
-            { label: "نوع الخلطة", value: distribution?.testSubType },
+            { label: "Mix type / نوع الخلطة", value: distribution?.testSubType },
           ]}
         />
         {/* Header */}

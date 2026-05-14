@@ -289,7 +289,8 @@ export default function SieveAnalysis() {
       if (vars.status === "submitted") {
         toast.success(ar ? "تم إرسال النتائج بنجاح" : "Results submitted successfully");
         setSubmitted(true);
-        setLocation(`/test-report/${distId}`);
+        // Full navigation so we always leave /test/:id and load the printable report (wouter SPA alone can stay on the form in some cases).
+        window.location.assign(`/test-report/${distId}`);
       } else {
         toast.success(ar ? "تم حفظ المسودة بنجاح" : "Draft saved successfully");
       }

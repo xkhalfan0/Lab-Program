@@ -114,6 +114,7 @@ const CODE_TO_COMPONENT: Record<string, React.ComponentType> = {
   "CONC_FOAM_DENSITY":      ConcreteFoam,
   "CEM_SETTING_TIME":       CementSettingTime,
   "CONC_MORTAR_SAND":       SieveAnalysis,
+  "CONC_BEAM":              ConcreteBeam,
   "CONC_BEAM_SMALL":        ConcreteBeam,
   "CONC_BEAM_LARGE":        ConcreteBeam,
   "CONC_MIX_GRAD":          ConcreteMixGrad,

@@ -896,6 +896,8 @@ export async function getDistributionsByBatch(batchDistributionId: string) {
       contractName: samples.contractName,
       contractorName: samples.contractorName,
       sector: samples.sector,
+      receivedAt: samples.receivedAt,
+      createdAt: distributions.createdAt,
     })
     .from(distributions)
     .leftJoin(samples, eq(distributions.sampleId, samples.id))

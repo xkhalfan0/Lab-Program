@@ -182,7 +182,7 @@ export default function AggCrushingImpact() {
         <SampleInfoCard
           dist={dist}
           extraFields={[
-            { label: "نوع الاختبار", value: dist?.testSubType },
+            { label: "Test subtype / نوع الاختبار", value: dist?.testSubType },
           ]}
         />
         {/* Header */}
