@@ -74,11 +74,8 @@ function getLDCorrectionFactor(ld: number): { cf: number; isCylinderStrength: bo
 interface CoreRow {
   id: string;
   coreNo: string;
-  location: string;
   diameter: string;
-  length: string;          // Total length (mm)
-  lengthAfterCap: string;  // Length after capping (mm)
-  mass: string;            // Mass (g)
+  length: string; // Length (mm) for L/D and density volume when weights absent
   weightInAir: string;     // Weight in air (g)
   weightInAirSSD: string;  // Weight in air SSD (g)
   weightInWater: string;   // Weight in water (g)
@@ -133,11 +130,8 @@ function newRow(index: number): CoreRow {
   return {
     id: `row_${Date.now()}_${index}`,
     coreNo: `C${index + 1}`,
-    location: "",
     diameter: "100",
     length: "",
-    lengthAfterCap: "",
-    mass: "",
     weightInAir: "",
     weightInAirSSD: "",
     weightInWater: "",
@@ -147,25 +141,16 @@ function newRow(index: number): CoreRow {
 
 function computeRow(row: CoreRow, specifiedCubeStrength: number): CoreRow {
   const d = parseFloat(row.diameter);
-  const l = parseFloat(row.lengthAfterCap || row.length);
+  const l = parseFloat(row.length);
   const load = parseFloat(row.maxLoad);
   if (!d || !l || !load) {
     const dOnly = parseFloat(row.diameter);
-    const lOnly = parseFloat(row.length || row.lengthAfterCap);
-    const massG = parseFloat(row.mass);
+    const lOnly = parseFloat(row.length);
     const wAir = parseFloat(row.weightInAir || "");
     const wSsd = parseFloat(row.weightInAirSSD || "");
     const wWat = parseFloat(row.weightInWater || "");
     const fromW = calculateDensityFromWeights(wAir, wSsd, wWat);
-    let density: number | undefined = fromW ?? undefined;
-    if (fromW == null && dOnly && lOnly && massG) {
-      const areaOnly = Math.PI * (dOnly / 2) ** 2;
-      const volMm3 = areaOnly * lOnly;
-      const volM3 = volMm3 * 1e-9;
-      const massKg = massG / 1000;
-      const densityRaw = massKg / volM3;
-      density = Math.round(densityRaw / 10) * 10;
-    }
+    const density: number | undefined = fromW ?? undefined;
     if (density != null && dOnly && lOnly) {
       const areaOnly = Math.PI * (dOnly / 2) ** 2;
       return { ...row, area: Math.round(areaOnly), density };
@@ -187,7 +172,7 @@ function computeRow(row: CoreRow, specifiedCubeStrength: number): CoreRow {
   const coreStrRounded = coreStrRaw != null ? Math.round(coreStrRaw * 10) / 10 : 0;
   const eqCubeStrRounded = Math.round(eqCubeStr * 10) / 10;
 
-  // Density: prefer immersion weights when all three valid; else mass / volume
+  // Density: immersion method only (kg/m³)
   const wAir = parseFloat(row.weightInAir || "");
   const wSsd = parseFloat(row.weightInAirSSD || "");
   const wWat = parseFloat(row.weightInWater || "");
@@ -195,16 +180,6 @@ function computeRow(row: CoreRow, specifiedCubeStrength: number): CoreRow {
   const fromWeights = calculateDensityFromWeights(wAir, wSsd, wWat);
   if (fromWeights != null) {
     density = fromWeights;
-  } else {
-    const massG = parseFloat(row.mass);
-    const lForDensity = parseFloat(row.length || row.lengthAfterCap);
-    if (massG && lForDensity && d) {
-      const volMm3 = area * lForDensity;
-      const volM3 = volMm3 * 1e-9;
-      const massKg = massG / 1000;
-      const densityRaw = massKg / volM3;
-      density = Math.round(densityRaw / 10) * 10;
-    }
   }
 
   return {
@@ -280,11 +255,8 @@ export default function ConcreteCore() {
       setRows(fd.cores.map((c: any) => ({
         id: c.id || `row_${Date.now()}_${Math.random()}`,
         coreNo: c.coreNo || "",
-        location: c.location || "",
         diameter: String(c.diameter || "100"),
-        length: String(c.length || ""),
-        lengthAfterCap: String(c.lengthAfterCap || ""),
-        mass: String(c.mass || ""),
+        length: String(c.length || c.lengthAfterCap || ""),
         weightInAir: String(c.weightInAir ?? ""),
         weightInAirSSD: String(c.weightInAirSSD ?? ""),
         weightInWater: String(c.weightInWater ?? ""),
@@ -551,11 +523,8 @@ export default function ConcreteCore() {
                 <tr className="bg-slate-50">
                   {[
                     { en: "Core No.", ar: "رقم اللب" },
-                    { en: "Location", ar: "الموقع" },
                     { en: "Dia. (mm)", ar: "القطر (مم)" },
                     { en: "Length (mm)", ar: "الطول (مم)" },
-                    { en: "L after cap (mm)", ar: "الطول بعد التغطية (مم)" },
-                    { en: "Mass (g)", ar: "الكتلة (غ)" },
                     { en: "Weight in Air (g)", ar: "الوزن في الهواء (غ)" },
                     { en: "Weight in Air (SSD) (g)", ar: "الوزن في الهواء SSD (غ)" },
                     { en: "Weight in Water (g)", ar: "الوزن في الماء (غ)" },
@@ -591,18 +560,9 @@ export default function ConcreteCore() {
                     </td>
                     <td className="border border-slate-200 px-1 py-1">
                       <Input
-                        value={row.location}
-                        onChange={e => updateRow(row.id, "location", e.target.value)}
-                        className="h-7 text-xs w-28"
-                        placeholder={ar ? "مرجع الشبكة" : "Grid ref."}
-                        disabled={submitted}
-                      />
-                    </td>
-                    <td className="border border-slate-200 px-1 py-1">
-                      <Input
                         value={row.diameter}
                         onChange={e => updateRow(row.id, "diameter", e.target.value)}
-                        className="h-7 text-xs w-16 text-center font-mono"
+                        className="h-7 text-xs w-24 text-center font-mono"
                         disabled={submitted}
                       />
                     </td>
@@ -610,25 +570,7 @@ export default function ConcreteCore() {
                       <Input
                         value={row.length}
                         onChange={e => updateRow(row.id, "length", e.target.value)}
-                        className="h-7 text-xs w-20 text-center font-mono"
-                        placeholder="—"
-                        disabled={submitted}
-                      />
-                    </td>
-                    <td className="border border-slate-200 px-1 py-1">
-                      <Input
-                        value={row.lengthAfterCap}
-                        onChange={e => updateRow(row.id, "lengthAfterCap", e.target.value)}
-                        className="h-7 text-xs w-20 text-center font-mono"
-                        placeholder="—"
-                        disabled={submitted}
-                      />
-                    </td>
-                    <td className="border border-slate-200 px-1 py-1">
-                      <Input
-                        value={row.mass}
-                        onChange={e => updateRow(row.id, "mass", e.target.value)}
-                        className="h-7 text-xs w-20 text-center font-mono"
+                        className="h-7 text-xs w-24 text-center font-mono"
                         placeholder="—"
                         disabled={submitted}
                       />
@@ -637,7 +579,7 @@ export default function ConcreteCore() {
                       <Input
                         value={row.weightInAir}
                         onChange={e => updateRow(row.id, "weightInAir", e.target.value)}
-                        className="h-7 text-xs w-[4.5rem] text-center font-mono"
+                        className="h-7 text-xs w-28 text-center font-mono"
                         placeholder="—"
                         disabled={submitted}
                       />
@@ -646,7 +588,7 @@ export default function ConcreteCore() {
                       <Input
                         value={row.weightInAirSSD}
                         onChange={e => updateRow(row.id, "weightInAirSSD", e.target.value)}
-                        className="h-7 text-xs w-[4.5rem] text-center font-mono"
+                        className="h-7 text-xs w-28 text-center font-mono"
                         placeholder="—"
                         disabled={submitted}
                       />
@@ -655,7 +597,7 @@ export default function ConcreteCore() {
                       <Input
                         value={row.weightInWater}
                         onChange={e => updateRow(row.id, "weightInWater", e.target.value)}
-                        className="h-7 text-xs w-[4.5rem] text-center font-mono"
+                        className="h-7 text-xs w-28 text-center font-mono"
                         placeholder="—"
                         disabled={submitted}
                       />
@@ -667,7 +609,7 @@ export default function ConcreteCore() {
                       <Input
                         value={row.maxLoad}
                         onChange={e => updateRow(row.id, "maxLoad", e.target.value)}
-                        className="h-7 text-xs w-20 text-center font-mono"
+                        className="h-7 text-xs w-24 text-center font-mono"
                         placeholder="—"
                         disabled={submitted}
                       />

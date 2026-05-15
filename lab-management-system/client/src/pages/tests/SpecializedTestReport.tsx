@@ -72,7 +72,6 @@ function renderConcreteCore(fd: any, isAr: boolean, castingDateMs?: number | nul
 
   const coreColumns: Column[] = [
     { header: L("Core No.", "رقم الكور"), field: "coreNo", align: "center", render: (v, row) => String((row as any).coreNo ?? ((row as any)._idx + 1)) },
-    { header: L("Location", "الموقع"), field: "location", align: "center", render: (v) => String(v || "—") },
     ...(hasAge ? [{ header: L("Age (Days)", "العمر (يوم)"), field: "_ageDays", align: "center" } as Column] : []),
     { header: L("Dia. (mm)", "القطر (مم)"), field: "diameter", type: "number", decimals: 0, align: "right" },
     {
@@ -84,7 +83,6 @@ function renderConcreteCore(fd: any, isAr: boolean, castingDateMs?: number | nul
         return displayLength ? fmt(displayLength, 0) : "—";
       },
     },
-    { header: L("Mass (g)", "الكتلة (غ)"), field: "mass", align: "right", render: (v) => (v != null && v !== "" ? fmt(String(v), 2) : "—") },
     { header: L("Weight in Air (g)", "الوزن في الهواء (غ)"), field: "weightInAir", align: "right", render: (v) => (v != null && v !== "" ? fmt(String(v), 2) : "—") },
     { header: L("Weight in Air (SSD) (g)", "الوزن في الهواء SSD (غ)"), field: "weightInAirSSD", align: "right", render: (v) => (v != null && v !== "" ? fmt(String(v), 2) : "—") },
     { header: L("Weight in Water (g)", "الوزن في الماء (غ)"), field: "weightInWater", align: "right", render: (v) => (v != null && v !== "" ? fmt(String(v), 2) : "—") },
