@@ -14,11 +14,9 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { useDeletionStatus } from "@/hooks/useDeletionStatus";
 import {
   AlertCircle,
-  ClipboardList,
   Clock,
   Eye,
   UserCheck,
-  Building2,
   FlaskConical,
   CheckCircle2,
   Pencil,
@@ -54,18 +52,6 @@ const normalizeOrder = (order: any) => {
       })),
   };
 };
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-function sectorLabel(val: string, lang: string) {
-  const map: Record<string, { ar: string; en: string }> = {
-    sector_1: { ar: "قطاع/1", en: "Sector 1" },
-    sector_2: { ar: "قطاع/2", en: "Sector 2" },
-    sector_3: { ar: "قطاع/3", en: "Sector 3" },
-    sector_4: { ar: "قطاع/4", en: "Sector 4" },
-    sector_5: { ar: "قطاع/5", en: "Sector 5" },
-  };
-  return map[val]?.[lang as "ar" | "en"] ?? val;
-}
 
 function typeLabel(type: string, lang: string) {
   const map: Record<string, Record<string, string>> = {
@@ -277,12 +263,11 @@ function DistributionAllOrdersStatusCell({ order, lang }: { order: any; lang: st
   const deletionStatus = useDistributionRowDeletionStatus(order);
   const completedTests = (order.items ?? []).filter((item: any) => item.status === "completed").length;
   const totalTests = (order.items ?? []).length;
-  const sampleStatus = order.sampleStatus ?? order.sample?.status;
+  const sampleStatus = order.sampleStatus ?? order.sample?.status ?? order.status;
   return (
     <div className="flex flex-col gap-1">
       <div className="flex items-center gap-2 flex-wrap">
-        <StatusBadge status={order.status} />
-        {sampleStatus && <StatusBadge status={sampleStatus} />}
+        <StatusBadge status={sampleStatus} />
         {deletionStatus.PendingDeletionBadge}
       </div>
       {sampleStatus === "testing_in_progress" && totalTests > 0 && (
@@ -299,89 +284,10 @@ function DistributionAllOrdersStatusCell({ order, lang }: { order: any; lang: st
   );
 }
 
-/** Pending-distribution table: deletion badge only (hook cannot run inside map/IIFE). */
-function DistributionPendingOrderDeletionBadgeCell({ order }: { order: any }) {
-  const { PendingDeletionBadge } = useDistributionRowDeletionStatus(order);
-  return <>{PendingDeletionBadge}</>;
-}
-
-function DistributionPendingOrderActionsCell({
-  order,
-  lang,
-  handleOpenDialog,
-  onDeletionSuccess,
-}: {
-  order: any;
-  lang: string;
-  handleOpenDialog: (order: any) => void;
-  onDeletionSuccess: () => void;
-}) {
-  const { hasPendingDeletion, PendingDeletionBadge, DisabledWarning } =
-    useDistributionRowDeletionStatus(order);
-
-  const wrapDisabledAction = (node: ReactElement) =>
-    hasPendingDeletion ? (
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <span className="inline-flex cursor-not-allowed">{node}</span>
-        </TooltipTrigger>
-        <TooltipContent side="top" className="max-w-xs">
-          {DisabledWarning}
-        </TooltipContent>
-      </Tooltip>
-    ) : (
-      node
-    );
-
-  return (
-    <div className="flex items-center gap-1">
-      {PendingDeletionBadge}
-      {wrapDisabledAction(
-        <Button
-          size="sm"
-          className="h-7 gap-1 text-xs"
-          disabled={hasPendingDeletion}
-          onClick={() => handleOpenDialog(order)}
-        >
-          <UserCheck className="w-3.5 h-3.5" />
-          {lang === "ar" ? "توزيع" : "Distribute"}
-        </Button>
-      )}
-      {hasPendingDeletion ? (
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <span className="inline-flex cursor-not-allowed opacity-60">
-              <span className="pointer-events-none inline-flex">
-                <DeletionRequestButton
-                  targetTable="lab_orders"
-                  targetId={order.id}
-                  targetLabel={`Order ${order.orderCode}`}
-                  variant="icon"
-                  onSuccess={onDeletionSuccess}
-                />
-              </span>
-            </span>
-          </TooltipTrigger>
-          <TooltipContent side="top" className="max-w-xs">
-            {DisabledWarning}
-          </TooltipContent>
-        </Tooltip>
-      ) : (
-        <DeletionRequestButton
-          targetTable="lab_orders"
-          targetId={order.id}
-          targetLabel={`Order ${order.orderCode}`}
-          variant="icon"
-          onSuccess={onDeletionSuccess}
-        />
-      )}
-    </div>
-  );
-}
-
 function DistributionAllOrdersActionsCell({
   order,
   lang,
+  handleOpenDialog,
   setLocation,
   handleOpenEditDialog,
   printDistributionSlip,
@@ -389,6 +295,7 @@ function DistributionAllOrdersActionsCell({
 }: {
   order: any;
   lang: string;
+  handleOpenDialog: (order: any) => void;
   setLocation: (path: string) => void;
   handleOpenEditDialog: (order: any) => void;
   printDistributionSlip: (order: any, lang: string) => void;
@@ -397,6 +304,7 @@ function DistributionAllOrdersActionsCell({
   const hasSubmittedItems = (order.items ?? []).some(
     (item: any) => item.status === "completed" || item.status === "submitted"
   );
+  const canDistribute = order.status === "pending";
   const canEditDistribution =
     (order.status === "distributed" || order.status === "in_progress") && !hasSubmittedItems;
   const canPrintSlip = order.status === "distributed" || order.status === "in_progress";
@@ -433,6 +341,19 @@ function DistributionAllOrdersActionsCell({
         </Button>,
         hasPendingDeletion
       )}
+      {canDistribute &&
+        wrapDisabledAction(
+          <Button
+            size="sm"
+            className="h-7 gap-1 text-xs"
+            disabled={hasPendingDeletion}
+            onClick={() => handleOpenDialog(order)}
+          >
+            <UserCheck className="w-3.5 h-3.5" />
+            {lang === "ar" ? "توزيع" : "Distribute"}
+          </Button>,
+          hasPendingDeletion
+        )}
       {canEditDistribution &&
         wrapDisabledAction(
           <Button
@@ -502,11 +423,7 @@ export default function Distribution() {
     priority: "normal" as "low" | "normal" | "high" | "urgent",
     notes: "",
   });
-  const [taskFilter, setTaskFilter] = useState<"all" | "pending" | "active" | "awaiting_review" | "done">("all");
-  const [selectedOrderIds, setSelectedOrderIds] = useState<number[]>([]);
-  const [batchTechnicianId, setBatchTechnicianId] = useState("");
-  const [batchPriority, setBatchPriority] = useState<"low" | "normal" | "high" | "urgent">("normal");
-  const [batchLoading, setBatchLoading] = useState(false);
+  const [taskFilter, setTaskFilter] = useState<"all" | "active" | "awaiting_review" | "done">("all");
   const [, setLocation] = useLocation();
 
   // ─── Data ──────────────────────────────────────────────────────────────────
@@ -545,31 +462,32 @@ export default function Distribution() {
     },
     onError: (err) => toast.error(err.message),
   });
-  const distributeOrderBatch = trpc.orders.distribute.useMutation();
-
   // ─── Filters ───────────────────────────────────────────────────────────────
-  const PENDING_STATUSES = ["pending"];
-  const ACTIVE_STATUSES = ["distributed", "in_progress"];
-  const DONE_STATUSES = ["completed", "reviewed", "qc_passed", "rejected"];
+  const getSampleStatus = (order: any) => order.sampleStatus ?? order.sample?.status ?? order.status;
 
   const filteredOrders = orders.filter((o: any) => {
-    if (taskFilter === "pending") return PENDING_STATUSES.includes(o.status);
-    if (taskFilter === "active") return ACTIVE_STATUSES.includes(o.status);
-    if (taskFilter === "awaiting_review") return (o.sampleStatus ?? o.sample?.status) === "awaiting_review";
-    if (taskFilter === "done") return DONE_STATUSES.includes(o.status);
+    const sampleStatus = getSampleStatus(o);
+    if (taskFilter === "active") {
+      return sampleStatus === "distributed" || sampleStatus === "testing_in_progress";
+    }
+    if (taskFilter === "awaiting_review") {
+      return sampleStatus === "awaiting_review";
+    }
+    if (taskFilter === "done") {
+      return sampleStatus === "approved" || sampleStatus === "qc_passed" || o.status === "completed";
+    }
     return true;
   });
 
-  const pendingOrders = orders.filter((o: any) => PENDING_STATUSES.includes(o.status));
-  const activeOrders = orders.filter((o: any) => ACTIVE_STATUSES.includes(o.status));
-  const awaitingReviewOrders = orders.filter((o: any) => (o.sampleStatus ?? o.sample?.status) === "awaiting_review");
-  const doneOrders = orders.filter((o: any) => DONE_STATUSES.includes(o.status));
-  const allPendingSelected = pendingOrders.length > 0 && pendingOrders.every((o: any) => selectedOrderIds.includes(o.id));
-
- // useEffect(() => {
- //   const pendingIdSet = new Set(pendingOrders.map((o: any) => o.id));
- //   setSelectedOrderIds((prev) => prev.filter((id) => pendingIdSet.has(id)));
-//  }, [orders]);
+  const activeOrders = orders.filter((o: any) => {
+    const sampleStatus = getSampleStatus(o);
+    return sampleStatus === "distributed" || sampleStatus === "testing_in_progress";
+  });
+  const awaitingReviewOrders = orders.filter((o: any) => getSampleStatus(o) === "awaiting_review");
+  const doneOrders = orders.filter((o: any) => {
+    const sampleStatus = getSampleStatus(o);
+    return sampleStatus === "approved" || sampleStatus === "qc_passed" || o.status === "completed";
+  });
 
   // ─── Handlers ──────────────────────────────────────────────────────────────
   const handleOpenDialog = (order: any) => {
@@ -610,49 +528,9 @@ export default function Distribution() {
     }
   };
 
-  const toggleOrderSelection = (orderId: number, checked: boolean) => {
-    setSelectedOrderIds((prev) => {
-      if (checked) return prev.includes(orderId) ? prev : [...prev, orderId];
-      return prev.filter((id) => id !== orderId);
-    });
-  };
-
-  const toggleSelectAllPending = (checked: boolean) => {
-    setSelectedOrderIds(checked ? pendingOrders.map((o: any) => o.id) : []);
-  };
-
-  const batchDistribute = async () => {
-    if (!batchTechnicianId || selectedOrderIds.length === 0) return;
-    setBatchLoading(true);
-    let successCount = 0;
-    for (const orderId of selectedOrderIds) {
-      try {
-        await distributeOrderBatch.mutateAsync({
-          orderId,
-          technicianId: parseInt(batchTechnicianId),
-          priority: batchPriority,
-        });
-        successCount++;
-      } catch {
-        // Continue distributing the rest even if one fails.
-      }
-    }
-    toast.success(
-      lang === "ar"
-        ? `تم توزيع ${successCount} أوردر بنجاح`
-        : `${successCount} orders distributed successfully`
-    );
-    setSelectedOrderIds([]);
-    setBatchTechnicianId("");
-    setBatchPriority("normal");
-    setBatchLoading(false);
-    refetch();
-  };
-
   // ─── Filter Buttons ────────────────────────────────────────────────────────
   const filterBtns = [
     { key: "all", label: lang === "ar" ? "الكل" : "All", count: orders.length, color: "#3b82f6" },
-    { key: "pending", label: lang === "ar" ? "جديدة" : "Pending", count: pendingOrders.length, color: "#ef4444" },
     { key: "active", label: lang === "ar" ? "نشطة" : "Active", count: activeOrders.length, color: "#f59e0b" },
     { key: "awaiting_review", label: lang === "ar" ? "في انتظار المراجعة" : "Awaiting Review", count: awaitingReviewOrders.length, color: "#f97316" },
     { key: "done", label: lang === "ar" ? "مُنجزة" : "Done", count: doneOrders.length, color: "#10b981" },
@@ -699,149 +577,6 @@ export default function Distribution() {
           })}
         </div>
 
-        {/* Pending Orders */}
-        {(taskFilter === "all" || taskFilter === "pending") && (
-          <Card className="border-amber-200">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                <ClipboardList className="w-4 h-4 text-amber-600" />
-                {lang === "ar" ? `أوردرات تنتظر التوزيع (${pendingOrders.length})` : `Orders Pending Distribution (${pendingOrders.length})`}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="p-0">
-              {pendingOrders.length === 0 ? (
-                <div className="p-8 text-center text-sm text-muted-foreground">
-                  {lang === "ar" ? "لا توجد أوردرات جديدة" : "No pending orders"}
-                </div>
-              ) : (
-                <div className="space-y-3 p-3 pt-0">
-                  {selectedOrderIds.length > 0 && (
-                    <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 flex flex-wrap items-center gap-2">
-                      <span className="text-sm font-semibold text-amber-800">
-                        {lang === "ar" ? `${selectedOrderIds.length} أوردر محدد` : `${selectedOrderIds.length} orders selected`}
-                      </span>
-                      <div className="min-w-[220px] flex-1">
-                        <Select value={batchTechnicianId} onValueChange={setBatchTechnicianId}>
-                          <SelectTrigger className="h-9 bg-white">
-                            <SelectValue placeholder={lang === "ar" ? "اختر الفني..." : "Select technician..."} />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {technicians.map((tech: any) => (
-                              <SelectItem key={tech.id} value={String(tech.id)}>
-                                {toText(tech.name)} {tech.specialty ? `(${toText(tech.specialty)})` : ""}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="w-[170px]">
-                        <Select value={batchPriority} onValueChange={(v) => setBatchPriority(v as any)}>
-                          <SelectTrigger className="h-9 bg-white">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="low">{lang === "ar" ? "منخفضة" : "Low"}</SelectItem>
-                            <SelectItem value="normal">{lang === "ar" ? "عادية" : "Normal"}</SelectItem>
-                            <SelectItem value="high">{lang === "ar" ? "عالية" : "High"}</SelectItem>
-                            <SelectItem value="urgent">{lang === "ar" ? "عاجلة" : "Urgent"}</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <Button
-                        className="h-9"
-                        disabled={!batchTechnicianId || batchLoading}
-                        onClick={batchDistribute}
-                      >
-                        {batchLoading
-                          ? (lang === "ar" ? "جاري التوزيع..." : "Distributing...")
-                          : (lang === "ar" ? "توزيع الكل" : "Distribute All")}
-                      </Button>
-                    </div>
-                  )}
-                  <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b bg-muted/30">
-                        <th className="text-start px-4 py-2.5 text-xs font-medium text-muted-foreground">
-                          <input
-                            type="checkbox"
-                            checked={allPendingSelected}
-                            onChange={(e) => toggleSelectAllPending(e.target.checked)}
-                            aria-label={lang === "ar" ? "تحديد الكل" : "Select all"}
-                          />
-                        </th>
-                        <th className="text-start px-4 py-2.5 text-xs font-medium text-muted-foreground">{lang === "ar" ? "رقم الأوردر" : "Order #"}</th>
-                        <th className="text-start px-4 py-2.5 text-xs font-medium text-muted-foreground">{lang === "ar" ? "المقاول" : "Contractor"}</th>
-                        <th className="text-start px-4 py-2.5 text-xs font-medium text-muted-foreground">{lang === "ar" ? "النوع" : "Type"}</th>
-                        <th className="text-start px-4 py-2.5 text-xs font-medium text-muted-foreground">{lang === "ar" ? "الاختبارات" : "Tests"}</th>
-                        <th className="text-start px-4 py-2.5 text-xs font-medium text-muted-foreground">{lang === "ar" ? "القطاع" : "Sector"}</th>
-                        <th className="text-start px-4 py-2.5 text-xs font-medium text-muted-foreground">{lang === "ar" ? "تاريخ الاستلام" : "Received"}</th>
-                        <th className="text-start px-4 py-2.5 text-xs font-medium text-muted-foreground">
-                          {lang === "ar" ? "الحالة" : "Status"}
-                        </th>
-                        <th className="text-start px-4 py-2.5 text-xs font-medium text-muted-foreground">{lang === "ar" ? "الإجراء" : "Action"}</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {pendingOrders.map((order: any) => (
-                        <tr key={order.id} className="border-b last:border-0 hover:bg-muted/20 transition-colors">
-                          <td className="px-4 py-2.5">
-                            <input
-                              type="checkbox"
-                              checked={selectedOrderIds.includes(order.id)}
-                              onChange={(e) => toggleOrderSelection(order.id, e.target.checked)}
-                              aria-label={lang === "ar" ? "تحديد الأوردر" : "Select order"}
-                            />
-                          </td>
-                          <td className="px-4 py-2.5 font-mono text-xs font-semibold text-primary">{toText(order.orderCode)}</td>
-                          <td className="px-4 py-2.5 text-xs">{toText(order.contractorName)}</td>
-                          <td className="px-4 py-2.5 text-xs"><TypeCell order={{ ...order, sampleType: String(order.sampleType ?? ""), sampleSubType: toText(order.sampleSubType) }} lang={lang} /></td>
-                          <td className="px-4 py-2.5">
-                            <div className="flex flex-wrap gap-1">
-                              {(order.items ?? []).length === 0 ? (
-                                <span className="text-xs text-muted-foreground italic">{lang === "ar" ? "لا توجد" : "None"}</span>
-                              ) : (order.items ?? []).filter((item: any) => item && typeof item === "object").map((item: any, idx: number) => (
-                                <span key={`pending-${order.id}-${item.id || item._id || idx}`} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200">
-                                  <FlaskConical className="w-3 h-3" />
-                                  {item.testName && item.testName !== "__multi__" ? String(item.testName) : String(item.testTypeCode ?? "—")}
-                                  {Number(item.quantity) > 1 ? ` ×${item.quantity}` : ""}
-                                </span>
-                              ))}
-                            </div>
-                          </td>
-                          <td className="px-4 py-2.5 text-xs">
-                            {order.sector ? (
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200">
-                                <Building2 className="w-3 h-3" />
-                                {toText(sectorLabel(String(order.sector ?? ""), lang))}
-                              </span>
-                            ) : "—"}
-                          </td>
-                          <td className="px-4 py-2.5 text-xs text-muted-foreground">
-                            {new Date(order.createdAt).toLocaleDateString(lang === "ar" ? "ar-AE" : "en-AE")}
-                          </td>
-                          <td className="px-4 py-2.5">
-                            <DistributionPendingOrderDeletionBadgeCell order={order} />
-                          </td>
-                          <td className="px-4 py-2.5">
-                            <DistributionPendingOrderActionsCell
-                              order={order}
-                              lang={lang}
-                              handleOpenDialog={handleOpenDialog}
-                              onDeletionSuccess={() => refetch()}
-                            />
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        )}
-
         {/* All Orders */}
         {(taskFilter === "all" || taskFilter === "active" || taskFilter === "awaiting_review" || taskFilter === "done") && (
           <Card>
@@ -865,9 +600,7 @@ export default function Distribution() {
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredOrders
-                      .filter((o: any) => !PENDING_STATUSES.includes(o.status))
-                      .map((order: any) => (
+                    {filteredOrders.map((order: any) => (
                         <tr key={order.id} className="border-b last:border-0 hover:bg-muted/20 transition-colors">
                           <td className="px-4 py-2.5 font-mono text-xs font-semibold text-primary">{toText(order.orderCode)}</td>
                           <td className="px-4 py-2.5 text-xs">{toText(order.contractorName)}</td>
@@ -903,6 +636,7 @@ export default function Distribution() {
                             <DistributionAllOrdersActionsCell
                               order={order}
                               lang={lang}
+                              handleOpenDialog={handleOpenDialog}
                               setLocation={setLocation}
                               handleOpenEditDialog={handleOpenEditDialog}
                               printDistributionSlip={printDistributionSlip}
