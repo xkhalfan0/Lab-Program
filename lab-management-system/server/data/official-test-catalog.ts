@@ -34,8 +34,9 @@ export const OFFICIAL_TEST_CATALOG: OfficialTest[] = [
   { category: "asphalt", nameEn: "Asphalt Trial Mix & Hotbin Aggregates", nameAr: "تدرج الخلاط الساخن", code: "ASPH_HOTBIN", unitPrice: "50", unit: "%", standardRef: "—", formTemplate: "asphalt_hotbin", sortOrder: 300 },
   { category: "asphalt", nameEn: "Bitumen Extraction", nameAr: "استخلاص البيتومين", code: "ASPH_BITUMEN_EXTRACT", unitPrice: "200", unit: "%", standardRef: "ASTM D2172", formTemplate: "asphalt_bitumen_extraction", sortOrder: 310 },
   { category: "asphalt", nameEn: "Sieve Analysis of Extracted Aggregates", nameAr: "مناخل الركام المستخلص", code: "ASPH_EXTRACTED_SIEVE", unitPrice: "100", unit: "%", standardRef: "—", formTemplate: "asphalt_extracted_sieve", sortOrder: 320 },
-  { category: "asphalt", nameEn: "Marshall Stability, Flow & Voids", nameAr: "مارشال", code: "ASPH_MARSHALL", unitPrice: "150", unit: "kN", standardRef: "ASTM D6927", formTemplate: "asphalt_marshall", sortOrder: 330 },
-  { category: "asphalt", nameEn: "Density and Compaction of Asphalt Core", nameAr: "كثافة نواة أسفلت", code: "ASPH_CORE", unitPrice: "75", unit: "Mg/m³", standardRef: "—", formTemplate: "asphalt_core", sortOrder: 340 },
+  { category: "asphalt", nameEn: "Marshall Bulk Density (Gmb)", nameAr: "كثافة مارشال الحجمية", code: "ASPH_MARSHALL_DENSITY", unitPrice: "75", unit: "g/cm³", standardRef: "ASTM T 166", formTemplate: "asphalt_marshall_density", sortOrder: 335 },
+  { category: "asphalt", nameEn: "Marshall Stability & Flow", nameAr: "استقرار وتدفق مارشال", code: "ASPH_MARSHALL", unitPrice: "100", unit: "kN", standardRef: "ASTM T 245 / D 6927", formTemplate: "asphalt_marshall", sortOrder: 340 },
+  { category: "asphalt", nameEn: "Density and Compaction of Asphalt Core", nameAr: "كثافة نواة أسفلت", code: "ASPH_CORE", unitPrice: "75", unit: "Mg/m³", standardRef: "—", formTemplate: "asphalt_core", sortOrder: 345 },
   { category: "asphalt", nameEn: "Spray Rate", nameAr: "معدل الرش", code: "ASPH_SPRAY_RATE", unitPrice: "50", unit: "L/m²", standardRef: "—", formTemplate: "asphalt_spray_rate", sortOrder: 350 },
   { category: "aggregates", nameEn: "Specific Gravity & Water Absorption", nameAr: "الوزن النوعي والامتصاص", code: "AGG_SG", unitPrice: "75", unit: "—", standardRef: "BS EN 1097-6", formTemplate: "agg_specific_gravity", sortOrder: 410 },
   { category: "aggregates", nameEn: "Flakiness & Elongation Index", nameAr: "معامل التقشر والاستطالة", code: "AGG_FLAKINESS_ELONGATION", unitPrice: "100", unit: "%", standardRef: "BS EN 933-3 / BS EN 933-4", formTemplate: "agg_shape_index", sortOrder: 420 },
@@ -43,6 +44,6 @@ export const OFFICIAL_TEST_CATALOG: OfficialTest[] = [
   { category: "aggregates", nameEn: "Los Angeles Abrasion Test", nameAr: "تآكل لوس أنجلوس", code: "AGG_LA", unitPrice: "150", unit: "%", standardRef: "BS EN 1097-2", formTemplate: "agg_la_abrasion", sortOrder: 450 },
 ];
 
-if (OFFICIAL_TEST_CATALOG.length !== 27) {
-  throw new Error(`Official test catalog must contain exactly 27 tests, found ${OFFICIAL_TEST_CATALOG.length}`);
+if (OFFICIAL_TEST_CATALOG.length !== 28) {
+  throw new Error(`Official test catalog must contain exactly 28 tests, found ${OFFICIAL_TEST_CATALOG.length}`);
 }

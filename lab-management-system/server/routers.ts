@@ -35,8 +35,10 @@ import {
   getCertificateById,
   getDashboardStats,
   getDistributionById,
+  getOrderIdForDistribution,
   getDistributionsBySample,
   getDistributionsByBatch,
+  getBatchSiblingDistributions,
   getDistributionsByTechnician,
   getNotificationsByUser,
   getReviewsBySample,
@@ -983,8 +985,28 @@ ${testSummaries.length > 0 ? testSummaries.join("\n\n") : "لم تُجرَ اخ�
       .query(async ({ input }) => {
         const dist = await getDistributionById(input.id);
         if (!dist) throw new TRPCError({ code: "NOT_FOUND" });
-        return dist;
+        const orderId = await getOrderIdForDistribution(input.id);
+        return { ...dist, orderId: orderId ?? undefined };
       }),
+
+    getBatchSiblings: protectedProcedure
+      .input(
+        z.object({
+          sampleId: z.number(),
+          orderId: z.number().optional(),
+        }),
+      )
+      .query(async ({ input }) => {
+        const { sampleId, orderId } = input;
+
+        if (!orderId) {
+          return [];
+        }
+
+        // Same sample + lab order (distributions linked via lab_order_items.distributionId)
+        return getBatchSiblingDistributions(sampleId, orderId);
+      }),
+
     markRead: protectedProcedure
       .input(z.object({ id: z.number() }))
       .mutation(async ({ ctx, input }) => {

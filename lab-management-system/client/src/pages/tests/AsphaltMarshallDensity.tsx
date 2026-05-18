@@ -1,9 +1,8 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useParams, useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import DashboardLayout from "@/components/DashboardLayout";
 import { SampleInfoCard } from "@/components/SampleInfoCard";
-import { ResultBanner } from "@/components/PassFailBadge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -24,9 +23,8 @@ interface GmbRow {
   weightInAir: string;
   weightInWater: string;
   weightSSD: string;
-  // computed
-  volume?: number;      // V = SSD - Water (cm³)
-  gmb?: number;         // Bulk specific gravity
+  volume?: number;
+  gmb?: number;
 }
 
 function newRow(index: number): GmbRow {
@@ -61,6 +59,10 @@ export default function AsphaltMarshallDensity() {
   const distId = parseInt(distributionId ?? "0");
 
   const { data: dist } = trpc.distributions.get.useQuery({ id: distId }, { enabled: !!distId });
+  const { data: existing } = trpc.specializedTests.getByDistribution.useQuery(
+    { distributionId: distId },
+    { enabled: !!distId },
+  );
 
   const [rows, setRows] = useState<GmbRow[]>([newRow(0), newRow(1), newRow(2)]);
   const [notes, setNotes] = useState("");
@@ -80,14 +82,33 @@ export default function AsphaltMarshallDensity() {
     onError: (e) => toast.error(e.message),
   });
 
+  useEffect(() => {
+    if (!existing?.formData) return;
+    const fd = existing.formData as { specimens?: GmbRow[]; notes?: string };
+    if (fd.notes) setNotes(fd.notes);
+    if (Array.isArray(fd.specimens) && fd.specimens.length > 0) {
+      setRows(
+        fd.specimens.map((s, i) => ({
+          id: s.id || `row_${Date.now()}_${i}`,
+          specimenNo: s.specimenNo || `S${i + 1}`,
+          weightInAir: String(s.weightInAir ?? ""),
+          weightInWater: String(s.weightInWater ?? ""),
+          weightSSD: String(s.weightSSD ?? ""),
+        })),
+      );
+    }
+    if (existing.status === "submitted") setSubmitted(true);
+  }, [existing]);
+
   const computedRows = rows.map(r => computeRow(r));
   const validRows = computedRows.filter(r => r.gmb !== undefined);
-  const avgGmb = validRows.length > 0
-    ? parseFloat((validRows.reduce((s, r) => s + (r.gmb ?? 0), 0) / validRows.length).toFixed(3))
-    : undefined;
+  const avgGmb =
+    validRows.length > 0
+      ? parseFloat((validRows.reduce((s, r) => s + (r.gmb ?? 0), 0) / validRows.length).toFixed(3))
+      : undefined;
 
   const updateRow = useCallback((id: string, field: keyof GmbRow, value: string) => {
-    setRows(prev => prev.map(r => r.id === id ? { ...r, [field]: value } : r));
+    setRows(prev => prev.map(r => (r.id === id ? { ...r, [field]: value } : r)));
   }, []);
 
   const handleSave = async (status: "draft" | "submitted") => {
@@ -110,7 +131,7 @@ export default function AsphaltMarshallDensity() {
           specimens: computedRows,
           avgGmb,
         },
-        overallResult: "pass", // Gmb test doesn't have pass/fail criteria by itself
+        overallResult: "pass",
         summaryValues: { avgGmb },
         notes,
         status,
@@ -137,12 +158,9 @@ export default function AsphaltMarshallDensity() {
       <div className="max-w-5xl mx-auto p-6 space-y-6">
         <SampleInfoCard
           dist={dist}
-          extraFields={[
-            { label: "Mix type / نوع الخلطة", value: dist?.testSubType },
-          ]}
+          extraFields={[{ label: "Mix type / نوع الخلطة", value: dist?.testSubType }]}
         />
 
-        {/* Header */}
         <div className="flex items-start justify-between flex-wrap gap-3">
           <div>
             <div className="flex items-center gap-2 text-sm text-slate-500 mb-1">
@@ -178,24 +196,21 @@ export default function AsphaltMarshallDensity() {
                 </Button>
                 <Button className="bg-blue-600 hover:bg-blue-700" onClick={() => handleSave("submitted")} disabled={saving}>
                   <Send size={14} className="mr-1.5" />
-                  {saving ? (ar ? "جاري..." : "Submitting...") : (ar ? "إرسال النتائج" : "Submit Results")}
+                  {saving ? (ar ? "جاري..." : "Submitting...") : ar ? "إرسال النتائج" : "Submit Results"}
                 </Button>
               </>
             )}
           </div>
         </div>
 
-        {/* Info */}
         <Card className="border-blue-200 bg-blue-50">
           <CardContent className="pt-4 pb-3">
             <div className="flex items-start gap-2 text-sm text-blue-800">
               <FlaskConical size={16} className="mt-0.5 shrink-0" />
               <div>
-                <p className="font-semibold mb-1">
-                  {ar ? "الكثافة الحجمية (Gmb)" : "Bulk Specific Gravity (Gmb)"}
-                </p>
+                <p className="font-semibold mb-1">{ar ? "الكثافة الحجمية (Gmb)" : "Bulk Specific Gravity (Gmb)"}</p>
                 <p className="text-xs">
-                  {ar 
+                  {ar
                     ? "الصيغة: Gmb = الوزن في الهواء ÷ (الوزن SSD - الوزن في الماء)"
                     : "Formula: Gmb = Weight in Air ÷ (SSD Weight - Weight in Water)"}
                 </p>
@@ -209,7 +224,6 @@ export default function AsphaltMarshallDensity() {
           </CardContent>
         </Card>
 
-        {/* Test Info */}
         <Card>
           <CardContent className="pt-4">
             <div className="flex items-center gap-2">
@@ -222,14 +236,15 @@ export default function AsphaltMarshallDensity() {
           </CardContent>
         </Card>
 
-        {/* Specimens Table */}
         <Card>
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
               <CardTitle className="text-base">{ar ? "نتائج العينات" : "Specimen Results"}</CardTitle>
-              <Button size="sm" variant="outline" onClick={() => setRows(p => [...p, newRow(p.length)])}>
-                <Plus size={14} className="mr-1" /> {ar ? "إضافة عينة" : "Add Specimen"}
-              </Button>
+              {!submitted && (
+                <Button size="sm" variant="outline" onClick={() => setRows(p => [...p, newRow(p.length)])}>
+                  <Plus size={14} className="mr-1" /> {ar ? "إضافة عينة" : "Add Specimen"}
+                </Button>
+              )}
             </div>
           </CardHeader>
           <CardContent>
@@ -266,30 +281,34 @@ export default function AsphaltMarshallDensity() {
                           value={row.specimenNo}
                           onChange={e => updateRow(row.id, "specimenNo", e.target.value)}
                           className="h-7 text-xs w-16"
+                          disabled={submitted}
                         />
                       </td>
                       <td className="border border-slate-200 px-1 py-1">
                         <Input
                           value={row.weightInAir}
                           onChange={e => updateRow(row.id, "weightInAir", e.target.value)}
-                          className="h-7 text-xs w-24 text-center font-mono"
+                          className="h-7 text-xs w-28 text-center font-mono"
                           placeholder="—"
+                          disabled={submitted}
                         />
                       </td>
                       <td className="border border-slate-200 px-1 py-1">
                         <Input
                           value={row.weightInWater}
                           onChange={e => updateRow(row.id, "weightInWater", e.target.value)}
-                          className="h-7 text-xs w-24 text-center font-mono"
+                          className="h-7 text-xs w-28 text-center font-mono"
                           placeholder="—"
+                          disabled={submitted}
                         />
                       </td>
                       <td className="border border-slate-200 px-1 py-1">
                         <Input
                           value={row.weightSSD}
                           onChange={e => updateRow(row.id, "weightSSD", e.target.value)}
-                          className="h-7 text-xs w-24 text-center font-mono"
+                          className="h-7 text-xs w-28 text-center font-mono"
                           placeholder="—"
+                          disabled={submitted}
                         />
                       </td>
                       <td className="border border-slate-200 px-1 py-1 text-center font-mono text-xs text-slate-600">
@@ -298,18 +317,22 @@ export default function AsphaltMarshallDensity() {
                       <td className="border border-slate-200 px-1 py-1 text-center">
                         {row.gmb !== undefined ? (
                           <span className="font-mono text-xs font-bold text-blue-700">{row.gmb.toFixed(3)}</span>
-                        ) : "—"}
+                        ) : (
+                          "—"
+                        )}
                       </td>
                       <td className="border border-slate-200 px-1 py-1 text-center">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-8 w-8 p-0 text-red-600 hover:text-red-700"
-                          onClick={() => setRows(p => p.filter(r => r.id !== row.id))}
-                          disabled={rows.length <= 1}
-                        >
-                          <Trash2 size={12} />
-                        </Button>
+                        {!submitted && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 w-8 p-0 text-red-600 hover:text-red-700"
+                            onClick={() => setRows(p => p.filter(r => r.id !== row.id))}
+                            disabled={rows.length <= 1}
+                          >
+                            <Trash2 size={12} />
+                          </Button>
+                        )}
                       </td>
                     </tr>
                   ))}
@@ -332,15 +355,14 @@ export default function AsphaltMarshallDensity() {
           </CardContent>
         </Card>
 
-        {/* Result */}
-        {validRows.length > 0 && avgGmb && (
+        {validRows.length > 0 && avgGmb != null && (
           <Card>
             <CardContent className="pt-4">
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-center">
                 <p className="text-sm text-blue-600 mb-2">{ar ? "متوسط الكثافة الحجمية" : "Average Bulk Specific Gravity"}</p>
                 <p className="text-3xl font-bold text-blue-700">{avgGmb.toFixed(3)}</p>
                 <p className="text-xs text-blue-600 mt-2">
-                  {ar 
+                  {ar
                     ? "استخدم هذه القيمة في اختبار مارشال (الاستقرار والتدفق)"
                     : "Use this value in Marshall Stability & Flow test"}
                 </p>
@@ -349,11 +371,10 @@ export default function AsphaltMarshallDensity() {
           </Card>
         )}
 
-        {/* Notes */}
         <Card>
           <CardContent className="pt-4">
             <Label className="text-xs text-slate-500 mb-1 block">{ar ? "ملاحظات" : "Notes / Observations"}</Label>
-            <Textarea value={notes} onChange={e => setNotes(e.target.value)} rows={3} />
+            <Textarea value={notes} onChange={e => setNotes(e.target.value)} rows={3} disabled={submitted} />
           </CardContent>
         </Card>
       </div>

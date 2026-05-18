@@ -12,6 +12,7 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { FlexibleResultsTable, type Column, formDataToKeyValueRows, keyValueColumns } from "@/components/reports/FlexibleResultsTable";
 import { formatCalendarDate } from "@/lib/dateFormat";
 import { calculateFinalBlend, formatDisplaySieveMm } from "@/pages/tests/SieveAnalysis";
+import AsphaltMixBatchReport, { isCompleteAsphaltMixBatch } from "./AsphaltMixBatchReport";
 import {
   LineChart,
   Line,
@@ -847,6 +848,30 @@ function renderSoilProctor(fd: any, isAr: boolean) {
           <p className="text-xl font-bold text-gray-800">{fmt(fd.mouldVolume)} {isAr ? "سم³" : "cm³"}</p>
         </div>
       </div>
+    </>
+  );
+}
+
+function renderAsphaltMarshallDensity(fd: any, isAr: boolean) {
+  const specimens = fd.specimens ?? [];
+  const L = (en: string, ars: string) => (isAr ? ars : en);
+  const cols: Column[] = [
+    { header: L("Spec.", "العينة"), field: "specimenNo", align: "center" },
+    { header: L("Wt. Air (g)", "وزن الهواء"), field: "weightInAir", align: "right", render: v => fmt(v, 1) },
+    { header: L("Wt. Water (g)", "وزن الماء"), field: "weightInWater", align: "right", render: v => fmt(v, 1) },
+    { header: L("SSD (g)", "SSD"), field: "weightSSD", align: "right", render: v => fmt(v, 1) },
+    { header: L("Volume (cm³)", "الحجم"), field: "volume", align: "right", render: v => fmt(v, 1) },
+    { header: L("Gmb", "Gmb"), field: "gmb", align: "center", render: v => (v != null ? fmt(v, 3) : "—") },
+  ];
+  return (
+    <>
+      <FlexibleResultsTable columns={cols} rows={specimens} />
+      {fd.avgGmb != null && (
+        <div className="mt-3 bg-blue-50 border border-blue-200 rounded p-3 text-center text-xs">
+          <span className="font-semibold text-blue-800">{L("Average Gmb:", "متوسط Gmb:")} </span>
+          <span className="text-lg font-bold text-blue-900">{fmt(fd.avgGmb, 3)}</span>
+        </div>
+      )}
     </>
   );
 }
@@ -1902,7 +1927,7 @@ function renderConcreteCubes(fd: any, isAr: boolean) {
   );
 }
 
-function renderFormData(formTemplate: string, formData: any, isAr: boolean, extras?: FormReportExtras) {
+export function renderFormData(formTemplate: string, formData: any, isAr: boolean, extras?: FormReportExtras) {
   const castingDateMs = extras?.castingDateMs;
   switch (formTemplate) {
     case "concrete_cubes": return renderConcreteCubes(formData, isAr);
@@ -1921,7 +1946,13 @@ function renderFormData(formTemplate: string, formData: any, isAr: boolean, extr
     case "steel_rebar": return renderSteelRebar(formData, isAr);
     case "sieve_analysis": return renderSieveAnalysis(formData, isAr, extras);
     case "soil_proctor": return renderSoilProctor(formData, isAr);
-    case "asphalt_marshall": return renderAsphaltMarshall(formData, isAr);
+    case "asphalt_bitumen_extraction":
+    case "asphalt_extracted_sieve":
+      return renderGeneric(formData, isAr);
+    case "asphalt_marshall_density":
+      return renderAsphaltMarshallDensity(formData, isAr);
+    case "asphalt_marshall":
+      return renderAsphaltMarshall(formData, isAr);
     case "cement_setting_time": return renderCementSettingTime(formData, isAr);
     case "concrete_foam": return renderConcreteFoam(formData, isAr, extras);
     case "interlock": return renderInterlock(formData, isAr);
@@ -1947,6 +1978,16 @@ export default function SpecializedTestReport() {
     { id: distId },
     { enabled: !!distId }
   );
+
+  const distOrderId = (dist as { orderId?: number } | undefined)?.orderId;
+
+  // Check if this is part of an asphalt mix batch
+  const { data: siblings = [], isLoading: siblingsLoading } = trpc.distributions.getBatchSiblings.useQuery(
+    { sampleId: dist?.sampleId ?? 0, orderId: distOrderId ?? 0 },
+    { enabled: !!dist?.sampleId && !!distOrderId },
+  );
+
+  const isAsphaltBatch = isCompleteAsphaltMixBatch(siblings);
 
   // If this distribution belongs to a batch, fetch all batch distributions for consolidated report
   const batchDistId = (dist as any)?.batchDistributionId as string | undefined;
@@ -2007,12 +2048,16 @@ export default function SpecializedTestReport() {
     setIsDownloadLoading(false);
   };
 
-  if (pageLoading) {
+  if (pageLoading || (siblingsLoading && !!dist?.sampleId && !!distOrderId)) {
     return (
       <div className="flex items-center justify-center h-screen">
         <Loader2 className="animate-spin text-slate-400" size={32} />
       </div>
     );
+  }
+
+  if (isAsphaltBatch) {
+    return <AsphaltMixBatchReport />;
   }
 
   if (!result && legacyResult && (legacyResult.chartsData as { source?: string } | null)?.source === "concrete_cubes") {

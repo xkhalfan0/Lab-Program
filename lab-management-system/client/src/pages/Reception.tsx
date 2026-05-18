@@ -15,7 +15,7 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { FlaskConical, Plus, Search, Eye, Printer, FileText, Lock, Building2, Pencil, X, Trash2, Layers, CheckSquare, Package, CalendarIcon } from "lucide-react";
-import { useState, useMemo, type ReactElement } from "react";
+import { useState, useMemo, useEffect, type ReactElement } from "react";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import { useAuth } from "@/_core/hooks/useAuth";
@@ -306,6 +306,8 @@ export default function Reception() {
   const [hotBinAddons, setHotBinAddons] = useState<Record<string, boolean>>({});
   // Asphalt Mix course type (global for all mix tests)
   const [asphaltMixCourse, setAsphaltMixCourse] = useState<string>("");
+  /** Asphalt mix: standard 4-test batch vs pick tests individually */
+  const [asphaltMixSelectionMode, setAsphaltMixSelectionMode] = useState<"batch" | "individual">("batch");
   /** Foamed concrete (CONC_FOAM): age in days from casting to testing, saved on order item metadata → DB as JSON in testSubType */
   const [foamConcreteAge, setFoamConcreteAge] = useState("");
   /** Reception: CONC_CUBE nominal face size (stored on sample) */
@@ -330,6 +332,15 @@ export default function Reception() {
   const HOT_BIN_CODES = [HOT_BIN_REQUIRED_CODE, ...HOT_BIN_OPTIONAL_CODES];
   // Codes for Asphalt Mix (Trial/Fresh) tests only
   const ASPH_MIX_CODES = ["ASPH_MARSHALL", "ASPH_MARSHALL_DENSITY", "ASPH_CORE", "ASPH_EXTRACTED_SIEVE", "ASPH_ACWC", "ASPH_ACBC", "ASPH_DBM"];
+  const ASPH_BATCH_TEST_CODES = ["ASPH_BITUMEN_EXTRACT", "ASPH_EXTRACTED_SIEVE", "ASPH_MARSHALL_DENSITY", "ASPH_MARSHALL"] as const;
+
+  const batchTests = useMemo(
+    () =>
+      allTests.filter(t =>
+        ["ASPH_BITUMEN_EXTRACT", "ASPH_EXTRACTED_SIEVE", "ASPH_MARSHALL_DENSITY", "ASPH_MARSHALL"].includes(t.code ?? ""),
+      ),
+    [allTests],
+  );
 
   /**
    * Catalog link: rows in `test_types` use `category` (concrete | soil | steel | asphalt | aggregates).
@@ -350,11 +361,42 @@ export default function Reception() {
     if (form.sampleType === "asphalt") {
       // Hot Bin: show only ASPH_HOTBIN (required); AGG_SG & AGG_FLAKINESS_ELONGATION shown as optional add-ons inside ASPH_HOTBIN card
       if (asphaltKind === "hot_bin") return base.filter(tt => tt.code === HOT_BIN_REQUIRED_CODE);
-      if (asphaltKind === "mix") return base.filter(tt => !HOT_BIN_CODES.includes(tt.code ?? ""));
+      if (asphaltKind === "mix") {
+        if (asphaltMixSelectionMode === "individual") {
+          return base.filter(tt =>
+            ["ASPH_BITUMEN_EXTRACT", "ASPH_EXTRACTED_SIEVE", "ASPH_MARSHALL_DENSITY", "ASPH_MARSHALL"].includes(tt.code ?? ""),
+          );
+        }
+        return base.filter(
+          tt => !HOT_BIN_CODES.includes(tt.code ?? "") && !ASPH_BATCH_TEST_CODES.includes(tt.code as (typeof ASPH_BATCH_TEST_CODES)[number]),
+        );
+      }
       return []; // wait for user to pick kind
     }
     return base;
-  }, [allTests, form.sampleType, asphaltKind]);
+  }, [allTests, form.sampleType, asphaltKind, asphaltMixSelectionMode]);
+
+  // Auto-select all 4 batch tests when mix batch mode + course are set
+  useEffect(() => {
+    if (form.sampleType !== "asphalt" || asphaltKind !== "mix" || asphaltMixSelectionMode !== "batch" || !asphaltMixCourse) {
+      return;
+    }
+    const batchSelected: SelectedTest[] = batchTests
+      .filter(tt => tt.isActive)
+      .map(tt => ({
+        testTypeId: tt.id,
+        testTypeCode: tt.code ?? "",
+        testTypeName: lang === "ar" && tt.nameAr ? tt.nameAr : tt.nameEn,
+        formTemplate: tt.formTemplate ?? undefined,
+        testSubType: asphaltMixCourse,
+        quantity: 1,
+        unitPrice: parseFloat(tt.unitPrice ?? "0"),
+      }));
+    setSelectedTests(prev => {
+      const extras = prev.filter(s => !ASPH_BATCH_TEST_CODES.includes(s.testTypeCode as (typeof ASPH_BATCH_TEST_CODES)[number]));
+      return [...batchSelected, ...extras];
+    });
+  }, [form.sampleType, asphaltKind, asphaltMixSelectionMode, asphaltMixCourse, batchTests, lang]);
 
   const sectorLabel = (key: string) => {
     const s = sectors.find(x => x.sectorKey === key);
@@ -375,6 +417,7 @@ export default function Reception() {
       setAsphaltKind("");
       setHotBinAddons({});
       setAsphaltMixCourse("");
+      setAsphaltMixSelectionMode("batch");
       setNominalCubeSize("150mm");
       setFoamConcreteAge("");
       refetch();
@@ -696,7 +739,16 @@ export default function Reception() {
           </div>
           <Dialog open={open} onOpenChange={(v) => {
             setOpen(v);
-            if (!v) { setForm(emptyForm()); setSelectedTests([]); setSubtypeFor(null); setAsphaltKind(""); setHotBinAddons({}); setFoamConcreteAge(""); }
+            if (!v) {
+              setForm(emptyForm());
+              setSelectedTests([]);
+              setSubtypeFor(null);
+              setAsphaltKind("");
+              setHotBinAddons({});
+              setAsphaltMixCourse("");
+              setAsphaltMixSelectionMode("batch");
+              setFoamConcreteAge("");
+            }
           }}>
             <DialogTrigger asChild>
               <Button size="sm" className="gap-1.5">
@@ -805,14 +857,14 @@ export default function Reception() {
                     <Label>{lang === "ar" ? "نوع عينة الأسفلت" : "Asphalt Sample Type"} <span className="text-red-500">*</span></Label>
                     <div className="flex gap-2">
                       <button type="button"
-                        onClick={() => { setAsphaltKind("hot_bin"); setSelectedTests([]); setMultiSubtypes({}); setHotBinAddons({}); setAsphaltMixCourse(""); }}
+                        onClick={() => { setAsphaltKind("hot_bin"); setSelectedTests([]); setMultiSubtypes({}); setHotBinAddons({}); setAsphaltMixCourse(""); setAsphaltMixSelectionMode("batch"); }}
                         className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium border transition-all ${
                           asphaltKind === "hot_bin" ? "bg-primary text-primary-foreground border-primary" : "bg-background text-muted-foreground border-border hover:border-primary/50"
                         }`}>
                         {lang === "ar" ? "ركام صندوق ساخن (Hot Bin)" : "Hot Bin Aggregates"}
                       </button>
                       <button type="button"
-                        onClick={() => { setAsphaltKind("mix"); setSelectedTests([]); setMultiSubtypes({}); setHotBinAddons({}); setAsphaltMixCourse(""); }}
+                        onClick={() => { setAsphaltKind("mix"); setSelectedTests([]); setMultiSubtypes({}); setHotBinAddons({}); setAsphaltMixCourse(""); setAsphaltMixSelectionMode("batch"); }}
                         className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium border transition-all ${
                           asphaltKind === "mix" ? "bg-primary text-primary-foreground border-primary" : "bg-background text-muted-foreground border-border hover:border-primary/50"
                         }`}>
@@ -853,14 +905,64 @@ export default function Reception() {
                         </button>
                       ))}
                     </div>
+                    <div className="space-y-2 pt-2">
+                      <Label>{lang === "ar" ? "طريقة اختيار الاختبارات" : "Test Selection Mode"}</Label>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setAsphaltMixSelectionMode("batch");
+                            setSelectedTests([]);
+                          }}
+                          className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium border transition-all ${
+                            asphaltMixSelectionMode === "batch"
+                              ? "bg-primary text-primary-foreground border-primary"
+                              : "bg-background text-muted-foreground border-border hover:border-primary/50"
+                          }`}
+                        >
+                          {lang === "ar" ? "حزمة الاختبارات القياسية (4)" : "Standard Test Package (4)"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setAsphaltMixSelectionMode("individual");
+                            setSelectedTests([]);
+                          }}
+                          className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium border transition-all ${
+                            asphaltMixSelectionMode === "individual"
+                              ? "bg-primary text-primary-foreground border-primary"
+                              : "bg-background text-muted-foreground border-border hover:border-primary/50"
+                          }`}
+                        >
+                          {lang === "ar" ? "اختيار فردي" : "Individual Selection"}
+                        </button>
+                      </div>
+                      {asphaltMixSelectionMode === "batch" && asphaltMixCourse && (
+                        <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-xs">
+                          <p className="font-semibold text-green-800 mb-2">
+                            {lang === "ar" ? "الاختبارات المحددة:" : "Selected Tests:"}
+                          </p>
+                          <div className="space-y-1">
+                            <p className="text-green-700">✓ {lang === "ar" ? "استخلاص البيتومين" : "Bitumen Extraction"}</p>
+                            <p className="text-green-700">✓ {lang === "ar" ? "تحليل منخلي (بعد الاستخلاص)" : "Sieve Analysis (Extracted)"}</p>
+                            <p className="text-green-700">✓ {lang === "ar" ? "كثافة مارشال الحجمية (Gmb)" : "Marshall Bulk Density (Gmb)"}</p>
+                            <p className="text-green-700">✓ {lang === "ar" ? "استقرار وتدفق مارشال" : "Marshall Stability & Flow"}</p>
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 )}
-                {/* Tests Selection (checkboxes) */}
-                {form.sampleType && (form.sampleType !== "asphalt" || asphaltKind !== "") && (
+                {/* Tests Selection (checkboxes) — batch package auto-selects 4 tests; list shows optional add-ons or individual picks */}
+                {form.sampleType &&
+                  (form.sampleType !== "asphalt" || asphaltKind !== "") &&
+                  (form.sampleType !== "asphalt" || asphaltKind !== "mix" || asphaltMixSelectionMode !== "batch" || filteredTests.length > 0) && (
                   <div className="space-y-2">
                     <Label className="flex items-center gap-1.5">
                       <CheckSquare className="w-3.5 h-3.5 text-muted-foreground" />
-                      {lang === "ar" ? "الاختبارات المطلوبة" : "Required Tests"}
+                      {form.sampleType === "asphalt" && asphaltKind === "mix" && asphaltMixSelectionMode === "batch"
+                        ? (lang === "ar" ? "اختبارات إضافية (اختيارية)" : "Optional Additional Tests")
+                        : (lang === "ar" ? "الاختبارات المطلوبة" : "Required Tests")}
                       <span className="text-red-500">*</span>
                       {selectedTests.length > 0 && (
                         <Badge variant="secondary" className="ms-1 text-xs">{selectedTests.length} {lang === "ar" ? "محدد" : "selected"}</Badge>
@@ -1251,6 +1353,7 @@ export default function Reception() {
                       setAsphaltKind("");
                       setHotBinAddons({});
                       setAsphaltMixCourse("");
+                      setAsphaltMixSelectionMode("batch");
                       setNominalCubeSize("150mm");
                       setFoamConcreteAge("");
                     }}

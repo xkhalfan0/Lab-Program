@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, inArray, isNotNull, isNull, lte, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, lte, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import { alias } from "drizzle-orm/mysql-core";
 import { createPool } from "mysql2";
@@ -903,6 +903,43 @@ export async function getDistributionsByBatch(batchDistributionId: string) {
     .leftJoin(samples, eq(distributions.sampleId, samples.id))
     .where(and(eq(distributions.batchDistributionId, batchDistributionId), isNull(distributions.deletedAt)))
     .orderBy(distributions.id);
+}
+
+/** Distributions for the same lab order + sample (e.g. asphalt mix batch: extract → sieve → Gmb → Marshall). */
+export async function getBatchSiblingDistributions(sampleId: number, orderId: number) {
+  const db = await getDb();
+  if (!db) return [];
+
+  const order = await getLabOrderById(orderId);
+  if (!order || order.sampleId !== sampleId) return [];
+
+  const items = await getLabOrderItems(orderId);
+  const distIds = items.map(i => i.distributionId).filter((id): id is number => id != null);
+  if (distIds.length === 0) return [];
+
+  const siblingRows = await db
+    .select()
+    .from(distributions)
+    .where(
+      and(
+        eq(distributions.sampleId, sampleId),
+        inArray(distributions.id, distIds),
+        isNull(distributions.deletedAt),
+      ),
+    )
+    .orderBy(asc(distributions.createdAt));
+
+  return Promise.all(
+    siblingRows.map(async dist => {
+      const legacy = await getTestResultByDistribution(dist.id);
+      const specialized = await getSpecializedTestResultByDistribution(dist.id);
+      return {
+        ...dist,
+        testResults: legacy ? [legacy] : [],
+        specializedTestResults: specialized ? [specialized] : [],
+      };
+    }),
+  );
 }
 
 export async function updateDistributionStatus(
@@ -1881,6 +1918,17 @@ export async function getLabOrderItems(orderId: number) {
     .from(labOrderItems)
     .where(eq(labOrderItems.orderId, orderId))
     .orderBy(labOrderItems.id);
+}
+
+export async function getOrderIdForDistribution(distributionId: number): Promise<number | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const row = await db
+    .select({ orderId: labOrderItems.orderId })
+    .from(labOrderItems)
+    .where(eq(labOrderItems.distributionId, distributionId))
+    .limit(1);
+  return row[0]?.orderId ?? null;
 }
 
 export async function getLabOrdersByStatus(status: typeof labOrders.$inferSelect.status) {

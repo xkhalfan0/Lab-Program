@@ -24,6 +24,7 @@ import SoilAtterberg from "./SoilAtterberg";
 import SoilFieldDensity from "./SoilFieldDensity";
 import SoilCBR from "./SoilCBR";
 import AsphaltMarshall from "./AsphaltMarshall";
+import AsphaltMarshallDensity from "./AsphaltMarshallDensity";
 import AsphaltCore from "./AsphaltCore";
 import AsphaltBitumenExtraction from "./AsphaltBitumenExtraction";
 import AggSpecificGravity from "./AggSpecificGravity";
@@ -37,6 +38,7 @@ import ConcreteBeam from "./ConcreteBeam";
 import ConcreteFoam from "./ConcreteFoam";
 import AsphaltHotBin from "./AsphaltHotBin";
 import AsphaltExtractedSieve from "./AsphaltExtractedSieve";
+import AsphaltMixBatchReport from "./AsphaltMixBatchReport";
 import ConcreteMixGrad from "./ConcreteMixGrad";
 import AsphaltSprayRate from "./AsphaltSprayRate";
 
@@ -66,8 +68,11 @@ const FORM_MAP: Record<string, React.ComponentType> = {
   "AsphaltBitumenExtraction": AsphaltBitumenExtraction,
   "AsphaltExtractedSieve":    AsphaltExtractedSieve,
   "AsphaltMarshall":          AsphaltMarshall,
+  "AsphaltMarshallDensity":   AsphaltMarshallDensity,
   "AsphaltCore":              AsphaltCore,
   "AsphaltSprayRate":         AsphaltSprayRate,
+  "AsphaltMixBatchReport":    AsphaltMixBatchReport,
+  "asphalt_mix_batch":        AsphaltMixBatchReport,
   // Aggregate
   "AggSieveAnalysis":         SieveAnalysis,
   "AggCrushingImpact":        AggCrushingImpact,
@@ -90,6 +95,7 @@ const FORM_MAP: Record<string, React.ComponentType> = {
   "soil_field_density":       SoilFieldDensity,
   "soil_cbr":                 SoilCBR,
   "asphalt_marshall":         AsphaltMarshall,
+  "asphalt_marshall_density": AsphaltMarshallDensity,
   "asphalt_core":             AsphaltCore,
   "asphalt_bitumen_extraction": AsphaltBitumenExtraction,
   "steel_structural":         SteelStructural,
@@ -135,7 +141,7 @@ const CODE_TO_COMPONENT: Record<string, React.ComponentType> = {
   "ASPH_BITUMEN_EXTRACT":   AsphaltBitumenExtraction,
   "ASPH_EXTRACTED_SIEVE":   AsphaltExtractedSieve,
   "ASPH_MARSHALL":          AsphaltMarshall,
-  "ASPH_MARSHALL_DENSITY":  AsphaltMarshall,
+  "ASPH_MARSHALL_DENSITY":  AsphaltMarshallDensity,
   "ASPH_ACWC":              AsphaltMarshall,
   "ASPH_ACBC":              AsphaltMarshall,
   "ASPH_DBM":               AsphaltMarshall,
