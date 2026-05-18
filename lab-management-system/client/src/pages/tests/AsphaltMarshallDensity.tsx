@@ -14,9 +14,9 @@ import { Plus, Trash2, Send, FlaskConical, UserCheck, Printer } from "lucide-rea
 import { useAuth } from "@/_core/hooks/useAuth";
 import { useLanguage } from "@/contexts/LanguageContext";
 
-// ─── Bulk Specific Gravity (Gmb) Test ───────────────────────────────────────
-// Standard: ASTM T 166
-// Formula: Gmb = W_air / (W_SSD - W_water)
+// ─── Bulk Specific Gravity of Compacted HMA ─────────────────────────────────
+// Standard: ASTM D 2726
+// Volume = SSD mass - mass in water; Gmb = mass in air / volume.
 
 interface GmbRow {
   id: string;
@@ -26,6 +26,10 @@ interface GmbRow {
   weightSSD: string;
   volume?: number;
   gmb?: number;
+  gso?: string;
+  airVoids?: number;
+  vma?: number;
+  vfb?: number;
 }
 
 function newRow(index: number): GmbRow {
@@ -38,17 +42,22 @@ function newRow(index: number): GmbRow {
   };
 }
 
-function computeRow(row: GmbRow): GmbRow {
+function computeRow(row: GmbRow, theoreticalGso: string): GmbRow {
   const wair = parseFloat(row.weightInAir);
   const wwater = parseFloat(row.weightInWater);
   const wssd = parseFloat(row.weightSSD);
+  const gso = parseFloat(theoreticalGso);
 
   if (!wair || !wwater || !wssd || wssd <= wwater) return row;
 
-  const volume = wssd - wwater;
+  const volume = parseFloat((wssd - wwater).toFixed(1));
   const gmb = parseFloat((wair / volume).toFixed(3));
+  const airVoids = gso > 0 ? parseFloat(((1 - gmb / gso) * 100).toFixed(1)) : 0;
+  // VMA needs aggregate bulk specific gravity and binder content. Keep as zero until those inputs are available.
+  const vma = 0;
+  const vfb = vma > 0 ? parseFloat((((vma - airVoids) / vma) * 100).toFixed(0)) : 0;
 
-  return { ...row, volume: parseFloat(volume.toFixed(1)), gmb };
+  return { ...row, volume, gmb, gso: theoreticalGso, airVoids, vma, vfb };
 }
 
 export default function AsphaltMarshallDensity() {
@@ -66,6 +75,7 @@ export default function AsphaltMarshallDensity() {
   );
 
   const [rows, setRows] = useState<GmbRow[]>([newRow(0), newRow(1), newRow(2)]);
+  const [theoreticalGso, setTheoreticalGso] = useState("");
   const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
   const [submitted, setSubmitted] = useState(false);
@@ -85,8 +95,13 @@ export default function AsphaltMarshallDensity() {
 
   useEffect(() => {
     if (!existing?.formData) return;
-    const fd = existing.formData as { specimens?: GmbRow[]; notes?: string };
+    const fd = existing.formData as { specimens?: GmbRow[]; theoreticalGso?: string; notes?: string };
     if (fd.notes) setNotes(fd.notes);
+    if (fd.theoreticalGso != null) {
+      setTheoreticalGso(String(fd.theoreticalGso));
+    } else if (fd.specimens?.[0]?.gso != null) {
+      setTheoreticalGso(String(fd.specimens[0].gso));
+    }
     if (Array.isArray(fd.specimens) && fd.specimens.length > 0) {
       setRows(
         fd.specimens.map((s, i) => ({
@@ -101,12 +116,30 @@ export default function AsphaltMarshallDensity() {
     if (existing.status === "submitted") setSubmitted(true);
   }, [existing]);
 
-  const computedRows = rows.map(r => computeRow(r));
+  const computedRows = rows.map(r => computeRow(r, theoreticalGso));
   const validRows = computedRows.filter(r => r.gmb !== undefined);
   const avgGmb =
     validRows.length > 0
       ? parseFloat((validRows.reduce((s, r) => s + (r.gmb ?? 0), 0) / validRows.length).toFixed(3))
       : undefined;
+  const avgAirVoids =
+    validRows.length > 0
+      ? validRows.reduce((sum, r) => sum + (r.airVoids ?? 0), 0) / validRows.length
+      : 0;
+  const avgVMA =
+    validRows.length > 0
+      ? validRows.reduce((sum, r) => sum + (r.vma ?? 0), 0) / validRows.length
+      : 0;
+  const avgVFB =
+    validRows.length > 0
+      ? validRows.reduce((sum, r) => sum + (r.vfb ?? 0), 0) / validRows.length
+      : 0;
+  const airVoidsMin = 3;
+  const airVoidsMax = 5;
+  const vmaMin = 13;
+  const airVoidsPass = avgAirVoids >= airVoidsMin && avgAirVoids <= airVoidsMax;
+  const vmaPass = avgVMA >= vmaMin;
+  const overallResult = validRows.length > 0 && airVoidsPass && vmaPass ? "pass" : "fail";
 
   const updateRow = useCallback((id: string, field: keyof GmbRow, value: string) => {
     setRows(prev => prev.map(r => (r.id === id ? { ...r, [field]: value } : r)));
@@ -121,6 +154,10 @@ export default function AsphaltMarshallDensity() {
       toast.error(ar ? "الرجاء إدخال نتيجة عينة واحدة على الأقل" : "Please enter at least one specimen result");
       return;
     }
+    if (status === "submitted" && !parseFloat(theoreticalGso)) {
+      toast.error(ar ? "الرجاء إدخال Gso لحساب الفراغات الهوائية" : "Please enter Gso for Air Voids calculations");
+      return;
+    }
     setSaving(true);
     try {
       await saveResult.mutateAsync({
@@ -130,10 +167,19 @@ export default function AsphaltMarshallDensity() {
         formTemplate: "asphalt_marshall_density",
         formData: {
           specimens: computedRows,
+          theoreticalGso,
           avgGmb,
+          avgAirVoids: avgAirVoids.toFixed(1),
+          avgVMA: avgVMA.toFixed(1),
+          avgVFB: avgVFB.toFixed(0),
         },
-        overallResult: "pass",
-        summaryValues: { avgGmb },
+        overallResult,
+        summaryValues: {
+          avgGmb: avgGmb?.toFixed(3),
+          avgAirVoids: avgAirVoids.toFixed(1),
+          avgVMA: avgVMA.toFixed(1),
+          avgVFB: avgVFB.toFixed(0),
+        },
         notes,
         status,
       });
@@ -166,13 +212,15 @@ export default function AsphaltMarshallDensity() {
           <div>
             <div className="flex items-center gap-2 text-sm text-slate-500 mb-1">
               <FlaskConical size={16} />
-              <span>{ar ? "اختبارات الأسفلت / الكثافة الحجمية" : "Asphalt Tests / Bulk Density"}</span>
+              <span>{ar ? "اختبارات الأسفلت / الثقل النوعي الظاهري" : "Asphalt Tests / Bulk Specific Gravity"}</span>
             </div>
             <h1 className="text-2xl font-bold text-slate-900">
-              {ar ? "الكثافة الحجمية للخلطة المدموكة (Gmb)" : "Bulk Specific Gravity of Compacted HMA (Gmb)"}
+              {ar
+                ? "الثقل النوعي الظاهري للخلطة الإسفلتية المدموكة (ASTM D 2726)"
+                : "Bulk Specific Gravity of Compacted HMA (ASTM D 2726)"}
             </h1>
             <p className="text-slate-500 text-sm mt-1">
-              ASTM T 166 | {ar ? "أمر التوزيع:" : "Distribution:"} {dist?.distributionCode ?? `DIST-${distId}`}
+              ASTM D 2726 | {ar ? "أمر التوزيع:" : "Distribution:"} {dist?.distributionCode ?? `DIST-${distId}`}
             </p>
           </div>
           <div className="flex gap-2">
@@ -209,16 +257,18 @@ export default function AsphaltMarshallDensity() {
             <div className="flex items-start gap-2 text-sm text-blue-800">
               <FlaskConical size={16} className="mt-0.5 shrink-0" />
               <div>
-                <p className="font-semibold mb-1">{ar ? "الكثافة الحجمية (Gmb)" : "Bulk Specific Gravity (Gmb)"}</p>
+                <p className="font-semibold mb-1">
+                  {ar ? "الثقل النوعي الظاهري وتحليل الفراغات" : "Bulk Specific Gravity and Air Voids Analysis"}
+                </p>
                 <p className="text-xs">
                   {ar
-                    ? "الصيغة: Gmb = الوزن في الهواء ÷ (الوزن SSD - الوزن في الماء)"
-                    : "Formula: Gmb = Weight in Air ÷ (SSD Weight - Weight in Water)"}
+                    ? "الصيغ: الحجم = كتلة SSD - الكتلة في الماء، و Gmb = الكتلة في الهواء ÷ الحجم"
+                    : "Formulas: Volume = SSD Mass - Mass in Water, and Gmb = Mass in Air ÷ Volume"}
                 </p>
                 <p className="text-xs mt-1">
                   {ar
-                    ? "هذه القيمة تُستخدم في حساب اختبار مارشال (الاستقرار والتدفق)"
-                    : "This value is used in Marshall Stability & Flow test calculations"}
+                    ? "Gso مطلوب لحساب نسبة الفراغات الهوائية. VMA محفوظ حالياً كقيمة مؤقتة حتى اعتماد معطيات الركام والبيتومين."
+                    : "Gso is required for Air Voids. VMA is currently stored as a placeholder until aggregate and binder inputs are confirmed."}
                 </p>
               </div>
             </div>
@@ -249,26 +299,46 @@ export default function AsphaltMarshallDensity() {
             </div>
           </CardHeader>
           <CardContent>
+            <div className="mb-4 max-w-sm">
+              <Label className="text-xs text-slate-600">
+                {ar ? "الثقل النوعي النظري الأقصى (Gso)" : "Theoretical Maximum Specific Gravity (Gso)"}
+              </Label>
+              <Input
+                type="number"
+                step="0.001"
+                value={theoreticalGso}
+                onChange={(e) => setTheoreticalGso(e.target.value)}
+                className="h-8 text-sm"
+                placeholder={ar ? "مثال: 2.5" : "e.g., 2.5"}
+                disabled={submitted}
+              />
+              <p className="text-xs text-slate-500 mt-1">
+                {ar
+                  ? "مطلوب لحساب الفراغات الهوائية وVMA"
+                  : "Required for Air Voids and VMA calculations"}
+              </p>
+            </div>
+
             <div className="overflow-x-auto">
               <table className="w-full text-sm border-collapse">
-                <thead>
-                  <tr className="bg-slate-50">
-                    <th className="border border-slate-200 px-2 py-2 text-xs font-semibold text-slate-600">
-                      {ar ? "رقم العينة" : "Specimen No."}
+                <thead className="bg-slate-50">
+                  <tr>
+                    <th className="border border-slate-300 px-2 py-1 text-xs font-semibold text-slate-600">
+                      {ar ? "رقم العينة" : "Spec."}
                     </th>
-                    <th className="border border-slate-200 px-2 py-2 text-xs font-semibold text-slate-600">
-                      {ar ? "الوزن في الهواء (جم)" : "Weight in Air (g)"}
+                    <th className="border border-slate-300 px-2 py-1 text-xs font-semibold text-slate-600">
+                      {ar ? "الكتلة في الهواء (جم)" : "Wt. Air (g)"}
                     </th>
-                    <th className="border border-slate-200 px-2 py-2 text-xs font-semibold text-slate-600">
-                      {ar ? "الوزن في الماء (جم)" : "Weight in Water (g)"}
+                    <th className="border border-slate-300 px-2 py-1 text-xs font-semibold text-slate-600">
+                      {ar ? "الكتلة في الماء (جم)" : "Wt. Water (g)"}
                     </th>
-                    <th className="border border-slate-200 px-2 py-2 text-xs font-semibold text-slate-600">
-                      {ar ? "الوزن SSD (جم)" : "SSD Weight (g)"}
+                    <th className="border border-slate-300 px-2 py-1 text-xs font-semibold text-slate-600">
+                      {ar ? "كتلة SSD (جم)" : "SSD (g)"}
                     </th>
-                    <th className="border border-slate-200 px-2 py-2 text-xs font-semibold text-slate-600">
+                    <th className="border border-slate-300 px-2 py-1 text-xs font-semibold text-slate-600 bg-blue-50">
                       {ar ? "الحجم (سم³)" : "Volume (cm³)"}
                     </th>
-                    <th className="border border-slate-200 px-2 py-2 text-xs font-semibold text-slate-600">
+                    <th className="border border-slate-300 px-2 py-1 text-xs font-semibold text-slate-600 bg-blue-50">
                       Gmb
                     </th>
                     <th className="border border-slate-200 px-2 py-2"></th>
@@ -356,17 +426,106 @@ export default function AsphaltMarshallDensity() {
           </CardContent>
         </Card>
 
+        {validRows.length > 0 && (
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-lg">
+                {ar ? "تحليل الفراغات الهوائية" : "Air Voids Analysis"}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="overflow-x-auto">
+                <table className="w-full border-collapse text-xs">
+                  <thead className="bg-slate-50">
+                    <tr>
+                      <th className="border border-slate-300 px-2 py-1">
+                        {ar ? "رقم العينة" : "Specimen #"}
+                      </th>
+                      <th className="border border-slate-300 px-2 py-1">
+                        {ar ? "Gso" : "Gso"}
+                      </th>
+                      <th className="border border-slate-300 px-2 py-1">
+                        {ar ? "الفراغات الهوائية %" : "% Air Voids"}
+                      </th>
+                      <th className="border border-slate-300 px-2 py-1">
+                        {ar ? "الفراغات في الركام المعدني" : "VMA"}
+                      </th>
+                      <th className="border border-slate-300 px-2 py-1">
+                        {ar ? "الفراغات المملوءة بالإسفلت" : "VFB"}
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {validRows.map((row, idx) => (
+                      <tr key={row.id}>
+                        <td className="border border-slate-300 px-2 py-1 text-center">
+                          {row.specimenNo || `S${idx + 1}`}
+                        </td>
+                        <td className="border border-slate-300 px-2 py-1 text-center bg-slate-50">
+                          {row.gso || "—"}
+                        </td>
+                        <td className="border border-slate-300 px-2 py-1 text-center bg-blue-50">
+                          {row.airVoids !== undefined ? `${row.airVoids.toFixed(1)}%` : "—"}
+                        </td>
+                        <td className="border border-slate-300 px-2 py-1 text-center bg-blue-50">
+                          {row.vma !== undefined ? row.vma.toFixed(1) : "—"}
+                        </td>
+                        <td className="border border-slate-300 px-2 py-1 text-center bg-blue-50">
+                          {row.vfb !== undefined ? row.vfb.toFixed(0) : "—"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="mt-3 text-xs">
+                <div className="flex flex-wrap gap-4">
+                  <div className={`px-2 py-1 rounded ${airVoidsPass ? "bg-green-50 border border-green-200" : "bg-red-50 border border-red-200"}`}>
+                    {ar ? "حد الفراغات الهوائية" : "Air Voids Spec"}: 3 - 5%
+                    <span className="font-semibold ml-1">
+                      (Avg: {avgAirVoids.toFixed(1)}%)
+                    </span>
+                    {airVoidsPass ? " ✓" : " ✗"}
+                  </div>
+                  <div className={`px-2 py-1 rounded ${vmaPass ? "bg-green-50 border border-green-200" : "bg-red-50 border border-red-200"}`}>
+                    {ar ? "حد VMA الأدنى" : "VMA Min"}: 13
+                    <span className="font-semibold ml-1">
+                      (Avg: {avgVMA.toFixed(1)})
+                    </span>
+                    {vmaPass ? " ✓" : " ✗"}
+                  </div>
+                </div>
+                <p className="text-slate-500 mt-2">
+                  {ar
+                    ? "ملاحظة: VMA قيمة مؤقتة حتى اعتماد صيغة المختبر ومدخلات الركام والبيتومين."
+                    : "Note: VMA is a placeholder until the lab confirms the formula and required aggregate/binder inputs."}
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {validRows.length > 0 && avgGmb != null && (
           <Card>
             <CardContent className="pt-4">
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-center">
-                <p className="text-sm text-blue-600 mb-2">{ar ? "متوسط الكثافة الحجمية" : "Average Bulk Specific Gravity"}</p>
-                <p className="text-3xl font-bold text-blue-700">{avgGmb.toFixed(3)}</p>
-                <p className="text-xs text-blue-600 mt-2">
-                  {ar
-                    ? "استخدم هذه القيمة في اختبار مارشال (الاستقرار والتدفق)"
-                    : "Use this value in Marshall Stability & Flow test"}
-                </p>
+              <div className="grid sm:grid-cols-4 gap-3">
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-center">
+                  <p className="text-sm text-blue-600 mb-2">{ar ? "متوسط Gmb" : "Average Gmb"}</p>
+                  <p className="text-2xl font-bold text-blue-700">{avgGmb.toFixed(3)}</p>
+                </div>
+                <div className="bg-slate-50 border border-slate-200 rounded-lg p-4 text-center">
+                  <p className="text-sm text-slate-600 mb-2">{ar ? "متوسط الفراغات" : "Average Air Voids"}</p>
+                  <p className="text-2xl font-bold text-slate-800">{avgAirVoids.toFixed(1)}%</p>
+                </div>
+                <div className="bg-slate-50 border border-slate-200 rounded-lg p-4 text-center">
+                  <p className="text-sm text-slate-600 mb-2">{ar ? "متوسط VMA" : "Average VMA"}</p>
+                  <p className="text-2xl font-bold text-slate-800">{avgVMA.toFixed(1)}</p>
+                </div>
+                <div className="bg-slate-50 border border-slate-200 rounded-lg p-4 text-center">
+                  <p className="text-sm text-slate-600 mb-2">{ar ? "متوسط VFB" : "Average VFB"}</p>
+                  <p className="text-2xl font-bold text-slate-800">{avgVFB.toFixed(0)}</p>
+                </div>
               </div>
             </CardContent>
           </Card>

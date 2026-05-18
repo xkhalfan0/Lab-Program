@@ -62,15 +62,20 @@ export const samples = mysqlTable("samples", {
   status: mysqlEnum("status", [
     "received",
     "distributed",
+    "testing_in_progress",
+    "awaiting_review",
+    "under_review",
     "tested",
     "processed",
     "reviewed",
     "approved",
     "qc_passed",
     "qc_failed",
+    "clearance_requested",
     "clearance_issued",
     "rejected",
     "revision_requested",
+    "deleted",
   ])
     .notNull()
     .default("received"),

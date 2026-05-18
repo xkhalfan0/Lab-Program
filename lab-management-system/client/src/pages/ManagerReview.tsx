@@ -60,6 +60,20 @@ function getSampleTaskState(sample: any): "new" | "incomplete" | "completed" {
   return "new";
 }
 
+function sampleReviewPriority(sample: any): number {
+  const statusPriority: Record<string, number> = {
+    awaiting_review: 1,
+    under_review: 2,
+    processed: 3,
+    revision_requested: 4,
+    testing_in_progress: 5,
+    distributed: 6,
+    approved: 7,
+    rejected: 8,
+  };
+  return statusPriority[sample.status] ?? 99;
+}
+
 function wrapDisabledWithTooltip(
   hasPendingDeletion: boolean,
   DisabledWarning: React.ReactNode,
@@ -376,24 +390,30 @@ export default function ManagerReview() {
     DisabledWarning: dialogSampleDisabledWarning,
   } = useDeletionStatus("samples", selectedSample?.id ?? 0);
 
-  // All samples that have been processed (ready for manager review)
+  // Samples ready for review, including the new explicit awaiting_review status.
   const reviewSamples = samples?.filter((s) =>
-    ["processed", "reviewed", "approved", "qc_passed", "qc_failed", "clearance_issued", "rejected"].includes(s.status)
+    ["awaiting_review", "under_review", "processed", "reviewed", "approved", "qc_passed", "qc_failed", "clearance_issued", "rejected"].includes(s.status)
   ) ?? [];
+  const sortedReviewSamples = [...reviewSamples].sort((a, b) => {
+    const priority = sampleReviewPriority(a) - sampleReviewPriority(b);
+    if (priority !== 0) return priority;
+    return new Date(b.updatedAt ?? b.receivedAt ?? b.createdAt ?? 0).getTime() - new Date(a.updatedAt ?? a.receivedAt ?? a.createdAt ?? 0).getTime();
+  });
 
   // Count by state
   const newCount = reviewSamples.filter(s => getSampleTaskState(s) === "new").length;
   const incompleteCount = reviewSamples.filter(s => getSampleTaskState(s) === "incomplete").length;
   const completedCount = reviewSamples.filter(s => getSampleTaskState(s) === "completed").length;
-  const pendingCount = reviewSamples.filter(s => s.status === "processed").length;
 
   // Filtered list
-  const filteredSamples = reviewSamples.filter(s => {
+  const filteredSamples = sortedReviewSamples.filter(s => {
     if (taskFilter === "all") return true;
     return getSampleTaskState(s) === taskFilter;
   });
 
   const activeSamples = filteredSamples.filter(s => getSampleTaskState(s) !== "completed");
+  const awaitingReviewSamples = activeSamples.filter(s => s.status === "awaiting_review");
+  const otherActiveSamples = activeSamples.filter(s => s.status !== "awaiting_review");
   const completedSamples = filteredSamples.filter(s => getSampleTaskState(s) === "completed");
 
   const handleOpenSample = (sample: any) => {
@@ -402,7 +422,7 @@ export default function ManagerReview() {
     setSignature("");
     setDecision(null);
     // Mark as read (new → incomplete)
-    if (!sample.managerReadAt && sample.status === "processed") {
+    if (!sample.managerReadAt && (sample.status === "processed" || sample.status === "awaiting_review")) {
       markManagerRead.mutate({ sampleId: sample.id }, {
         onSuccess: () => refetch(),
       });
@@ -567,16 +587,57 @@ export default function ManagerReview() {
             </CardContent>
           </Card>
         ) : (
-          <div className="grid gap-3">
-            {activeSamples.map((sample) => (
-              <ManagerReviewActiveSampleCard
-                key={sample.id}
-                sample={sample}
-                lang={lang}
-                onOpen={handleOpenSample}
-                onRefetch={() => refetch()}
-              />
-            ))}
+          <div className="space-y-6">
+            {(taskFilter === "all" || taskFilter === "new") && (
+              <div>
+                <h3 className="text-lg font-semibold mb-3 flex items-center gap-2">
+                  <span className="bg-orange-100 text-orange-800 px-2 py-1 rounded text-sm">
+                    {lang === "ar" ? "في انتظار المراجعة" : "Awaiting Review"}
+                  </span>
+                  <span className="text-sm text-muted-foreground">
+                    ({awaitingReviewSamples.length})
+                  </span>
+                </h3>
+                {awaitingReviewSamples.length === 0 ? (
+                  <p className="text-sm italic text-muted-foreground">
+                    {lang === "ar" ? "لا توجد عينات في انتظار المراجعة" : "No samples awaiting review"}
+                  </p>
+                ) : (
+                  <div className="grid gap-3">
+                    {awaitingReviewSamples.map((sample) => (
+                      <ManagerReviewActiveSampleCard
+                        key={sample.id}
+                        sample={sample}
+                        lang={lang}
+                        onOpen={handleOpenSample}
+                        onRefetch={() => refetch()}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {otherActiveSamples.length > 0 && (
+              <div>
+                {(taskFilter === "all" || taskFilter === "new") && (
+                  <h3 className="text-lg font-semibold mb-3">
+                    {lang === "ar" ? "عينات أخرى" : "Other Samples"}
+                  </h3>
+                )}
+                <div className="grid gap-3">
+                  {otherActiveSamples.map((sample) => (
+                    <ManagerReviewActiveSampleCard
+                      key={sample.id}
+                      sample={sample}
+                      lang={lang}
+                      onOpen={handleOpenSample}
+                      onRefetch={() => refetch()}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
 

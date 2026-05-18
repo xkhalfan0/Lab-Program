@@ -854,17 +854,69 @@ function renderSoilProctor(fd: any, isAr: boolean) {
 function renderAsphaltMarshallDensity(fd: any, isAr: boolean) {
   const specimens = fd.specimens ?? [];
   const L = (en: string, ars: string) => (isAr ? ars : en);
-  const cols: Column[] = [
+  const gmbCols: Column[] = [
     { header: L("Spec.", "العينة"), field: "specimenNo", align: "center" },
-    { header: L("Wt. Air (g)", "وزن الهواء"), field: "weightInAir", align: "right", render: v => fmt(v, 1) },
-    { header: L("Wt. Water (g)", "وزن الماء"), field: "weightInWater", align: "right", render: v => fmt(v, 1) },
-    { header: L("SSD (g)", "SSD"), field: "weightSSD", align: "right", render: v => fmt(v, 1) },
+    { header: L("Wt. Air (g)", "الكتلة في الهواء"), field: "weightInAir", align: "right", render: v => fmt(v, 1) },
+    { header: L("Wt. Water (g)", "الكتلة في الماء"), field: "weightInWater", align: "right", render: v => fmt(v, 1) },
+    { header: L("SSD (g)", "كتلة SSD"), field: "weightSSD", align: "right", render: v => fmt(v, 1) },
     { header: L("Volume (cm³)", "الحجم"), field: "volume", align: "right", render: v => fmt(v, 1) },
     { header: L("Gmb", "Gmb"), field: "gmb", align: "center", render: v => (v != null ? fmt(v, 3) : "—") },
   ];
+  const airVoidsCols: Column[] = [
+    { header: L("Specimen #", "رقم العينة"), field: "specimenNo", align: "center" },
+    { header: L("Gso", "Gso"), field: "gso", align: "center", render: v => (v ? String(v) : "—") },
+    { header: L("% Air Voids", "نسبة الفراغات الهوائية %"), field: "airVoids", align: "center", render: v => (v != null ? `${fmt(v, 1)}%` : "—") },
+    { header: L("VMA", "الفراغات في الركام المعدني"), field: "vma", align: "center", render: v => (v != null ? fmt(v, 1) : "—") },
+    { header: L("VFB", "الفراغات المملوءة بالإسفلت"), field: "vfb", align: "center", render: v => (v != null ? fmt(v, 0) : "—") },
+  ];
   return (
     <>
-      <FlexibleResultsTable columns={cols} rows={specimens} />
+      <div className="mb-4">
+        <h3 className="text-sm font-semibold mb-2">
+          {L("Bulk Specific Gravity", "الثقل النوعي الظاهري")}
+        </h3>
+        <FlexibleResultsTable columns={gmbCols} rows={specimens} />
+      </div>
+
+      <div className="mb-4">
+        <h3 className="text-sm font-semibold mb-2">
+          {L("Air Voids Analysis", "تحليل الفراغات الهوائية")}
+        </h3>
+        <FlexibleResultsTable columns={airVoidsCols} rows={specimens} />
+        <div className="mt-2 grid grid-cols-3 gap-2 text-xs">
+          <div className="border border-slate-200 p-2 rounded">
+            <div className="text-slate-600">
+              {L("Average % Air Voids", "متوسط الفراغات الهوائية")}
+            </div>
+            <div className="text-lg font-semibold">
+              {fd.avgAirVoids != null ? `${fd.avgAirVoids}%` : "—"}
+            </div>
+            <div className="text-slate-500 text-xs">
+              {L("Spec: 3 - 5%", "الحد: 3 - 5%")}
+            </div>
+          </div>
+          <div className="border border-slate-200 p-2 rounded">
+            <div className="text-slate-600">
+              {L("Average VMA", "متوسط VMA")}
+            </div>
+            <div className="text-lg font-semibold">
+              {fd.avgVMA ?? "—"}
+            </div>
+            <div className="text-slate-500 text-xs">
+              {L("Min: 13", "الحد الأدنى: 13")}
+            </div>
+          </div>
+          <div className="border border-slate-200 p-2 rounded">
+            <div className="text-slate-600">
+              {L("Average VFB", "متوسط VFB")}
+            </div>
+            <div className="text-lg font-semibold">
+              {fd.avgVFB ?? "—"}
+            </div>
+          </div>
+        </div>
+      </div>
+
       {fd.avgGmb != null && (
         <div className="mt-3 bg-blue-50 border border-blue-200 rounded p-3 text-center text-xs">
           <span className="font-semibold text-blue-800">{L("Average Gmb:", "متوسط Gmb:")} </span>
@@ -2182,9 +2234,20 @@ export default function SpecializedTestReport() {
   const formData = result.formData as any ?? {};
   const summaryValues = result.summaryValues as any ?? {};
   const isPassed = result.overallResult === "pass";
-  const testNameDisplay = isAr
-    ? ((dist as any)?.testNameAr ?? dist?.testName ?? result.testTypeCode)
-    : ((dist as any)?.testNameEn ?? dist?.testName ?? result.testTypeCode);
+  const isMarshallDensityReport =
+    result.formTemplate === "asphalt_marshall_density" ||
+    result.testTypeCode === "ASPH_MARSHALL_DENSITY" ||
+    result.testTypeCode === "DIST-2026-042";
+  const testNameDisplay = isMarshallDensityReport
+    ? (isAr
+      ? "الثقل النوعي الظاهري للخلطة الإسفلتية المدموكة (ASTM D 2726)"
+      : "Bulk Specific Gravity of Compacted HMA (ASTM D 2726)")
+    : isAr
+      ? ((dist as any)?.testNameAr ?? dist?.testName ?? result.testTypeCode)
+      : ((dist as any)?.testNameEn ?? dist?.testName ?? result.testTypeCode);
+  const standardDisplay = isMarshallDensityReport
+    ? "ASTM D 2726"
+    : String((dist as any)?.standardRef ?? "—");
 
   return (
     <>
@@ -2297,7 +2360,7 @@ export default function SpecializedTestReport() {
                 {(() => {
                   const detailLeft: [string, string][] = [
                     [isAr ? "نوع الفحص" : "Test Type", String(testNameDisplay)],
-                    [isAr ? "المعيار" : "Standard", String((dist as any)?.standardRef ?? "—")],
+                    [isAr ? "المعيار" : "Standard", standardDisplay],
                     [isAr ? "المقاول" : "Contractor", String((dist as any)?.contractorName ?? result.contractorName ?? "—")],
                     [isAr ? "رقم العقد" : "Contract No.", String((dist as any)?.contractNumber ?? result.contractNo ?? "—")],
                   ];

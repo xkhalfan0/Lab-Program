@@ -273,12 +273,28 @@ function useDistributionRowDeletionStatus(order: any) {
   };
 }
 
-function DistributionAllOrdersStatusCell({ order }: { order: any }) {
+function DistributionAllOrdersStatusCell({ order, lang }: { order: any; lang: string }) {
   const deletionStatus = useDistributionRowDeletionStatus(order);
+  const completedTests = (order.items ?? []).filter((item: any) => item.status === "completed").length;
+  const totalTests = (order.items ?? []).length;
+  const sampleStatus = order.sampleStatus ?? order.sample?.status;
   return (
-    <div className="flex items-center gap-2 flex-wrap">
-      <StatusBadge status={order.status} />
-      {deletionStatus.PendingDeletionBadge}
+    <div className="flex flex-col gap-1">
+      <div className="flex items-center gap-2 flex-wrap">
+        <StatusBadge status={order.status} />
+        {sampleStatus && <StatusBadge status={sampleStatus} />}
+        {deletionStatus.PendingDeletionBadge}
+      </div>
+      {sampleStatus === "testing_in_progress" && totalTests > 0 && (
+        <span className="text-xs text-muted-foreground">
+          {completedTests}/{totalTests} {lang === "ar" ? "اختبارات مكتملة" : "tests completed"}
+        </span>
+      )}
+      {sampleStatus === "awaiting_review" && (
+        <span className="text-xs font-semibold text-orange-700">
+          {lang === "ar" ? "جاهز للمراجعة" : "Ready for review"}
+        </span>
+      )}
     </div>
   );
 }
@@ -486,7 +502,7 @@ export default function Distribution() {
     priority: "normal" as "low" | "normal" | "high" | "urgent",
     notes: "",
   });
-  const [taskFilter, setTaskFilter] = useState<"all" | "pending" | "active" | "done">("all");
+  const [taskFilter, setTaskFilter] = useState<"all" | "pending" | "active" | "awaiting_review" | "done">("all");
   const [selectedOrderIds, setSelectedOrderIds] = useState<number[]>([]);
   const [batchTechnicianId, setBatchTechnicianId] = useState("");
   const [batchPriority, setBatchPriority] = useState<"low" | "normal" | "high" | "urgent">("normal");
@@ -539,12 +555,14 @@ export default function Distribution() {
   const filteredOrders = orders.filter((o: any) => {
     if (taskFilter === "pending") return PENDING_STATUSES.includes(o.status);
     if (taskFilter === "active") return ACTIVE_STATUSES.includes(o.status);
+    if (taskFilter === "awaiting_review") return (o.sampleStatus ?? o.sample?.status) === "awaiting_review";
     if (taskFilter === "done") return DONE_STATUSES.includes(o.status);
     return true;
   });
 
   const pendingOrders = orders.filter((o: any) => PENDING_STATUSES.includes(o.status));
   const activeOrders = orders.filter((o: any) => ACTIVE_STATUSES.includes(o.status));
+  const awaitingReviewOrders = orders.filter((o: any) => (o.sampleStatus ?? o.sample?.status) === "awaiting_review");
   const doneOrders = orders.filter((o: any) => DONE_STATUSES.includes(o.status));
   const allPendingSelected = pendingOrders.length > 0 && pendingOrders.every((o: any) => selectedOrderIds.includes(o.id));
 
@@ -636,6 +654,7 @@ export default function Distribution() {
     { key: "all", label: lang === "ar" ? "الكل" : "All", count: orders.length, color: "#3b82f6" },
     { key: "pending", label: lang === "ar" ? "جديدة" : "Pending", count: pendingOrders.length, color: "#ef4444" },
     { key: "active", label: lang === "ar" ? "نشطة" : "Active", count: activeOrders.length, color: "#f59e0b" },
+    { key: "awaiting_review", label: lang === "ar" ? "في انتظار المراجعة" : "Awaiting Review", count: awaitingReviewOrders.length, color: "#f97316" },
     { key: "done", label: lang === "ar" ? "مُنجزة" : "Done", count: doneOrders.length, color: "#10b981" },
   ];
 
@@ -824,7 +843,7 @@ export default function Distribution() {
         )}
 
         {/* All Orders */}
-        {(taskFilter === "all" || taskFilter === "active" || taskFilter === "done") && (
+        {(taskFilter === "all" || taskFilter === "active" || taskFilter === "awaiting_review" || taskFilter === "done") && (
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-semibold">
@@ -878,7 +897,7 @@ export default function Distribution() {
                             {toText(order.assignedTechnicianName)}
                           </td>
                           <td className="px-4 py-2.5">
-                            <DistributionAllOrdersStatusCell order={order} />
+                            <DistributionAllOrdersStatusCell order={order} lang={lang} />
                           </td>
                           <td className="px-4 py-2.5">
                             <DistributionAllOrdersActionsCell

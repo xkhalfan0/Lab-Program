@@ -81,6 +81,67 @@ function resolveSummaryValues(sibling: BatchSibling): Record<string, unknown> {
   return {};
 }
 
+function asNumber(value: unknown): number | null {
+  const parsed = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function MarshallDensityBatchSummary({
+  summaryValues,
+  isAr,
+}: {
+  summaryValues: Record<string, unknown>;
+  isAr: boolean;
+}) {
+  const avgAirVoids = asNumber(summaryValues.avgAirVoids);
+  const avgVMA = asNumber(summaryValues.avgVMA);
+  const airVoidsPass = avgAirVoids != null && avgAirVoids >= 3 && avgAirVoids <= 5;
+  const vmaPass = avgVMA != null && avgVMA >= 13;
+
+  return (
+    <div>
+      <h3 className="text-base font-semibold mb-2">
+        {isAr
+          ? "الثقل النوعي الظاهري للخلطة الإسفلتية المدموكة (ASTM D 2726)"
+          : "Bulk Specific Gravity of Compacted HMA (ASTM D 2726)"}
+      </h3>
+      <div className="grid grid-cols-2 gap-2 text-sm">
+        <div>
+          <span className="text-slate-600">{isAr ? "متوسط Gmb:" : "Avg Gmb:"}</span>
+          <span className="font-semibold ml-1">{String(summaryValues.avgGmb ?? EM_DASH)}</span>
+        </div>
+        <div>
+          <span className="text-slate-600">{isAr ? "الفراغات الهوائية:" : "% Air Voids:"}</span>
+          <span className="font-semibold ml-1">
+            {avgAirVoids != null ? `${avgAirVoids.toFixed(1)}%` : EM_DASH}
+          </span>
+          {avgAirVoids != null && (
+            <span className={airVoidsPass ? "text-green-600" : "text-red-600"}>
+              {airVoidsPass ? " ✓" : " ✗"}
+            </span>
+          )}
+        </div>
+        <div>
+          <span className="text-slate-600">{isAr ? "VMA:" : "VMA:"}</span>
+          <span className="font-semibold ml-1">{avgVMA != null ? avgVMA.toFixed(1) : EM_DASH}</span>
+          {avgVMA != null && (
+            <span className={vmaPass ? "text-green-600" : "text-red-600"}>
+              {vmaPass ? " ✓" : " ✗"}
+            </span>
+          )}
+        </div>
+        <div>
+          <span className="text-slate-600">{isAr ? "VFB:" : "VFB:"}</span>
+          <span className="font-semibold ml-1">{String(summaryValues.avgVFB ?? EM_DASH)}</span>
+        </div>
+      </div>
+      <p className="text-[10px] text-gray-500 mt-2">
+        {isAr ? "الحد: الفراغات الهوائية 3 - 5%، و VMA لا يقل عن 13" : "Spec: Air Voids 3 - 5%, VMA min 13"}
+      </p>
+    </div>
+  );
+}
+
 function computeBatchStatus(passCount: number, total: number, completedCount: number) {
   if (completedCount < total) {
     return {
@@ -225,16 +286,26 @@ export default function BatchReport() {
         const tt = testTypes.find(
           t =>
             t.code === sibling.testType ||
+            (sibling.testType === "DIST-2026-042" && t.code === "ASPH_MARSHALL_DENSITY") ||
             (sibling.testType.startsWith("ASPH_EXTRACTED_SIEVE") && t.code === "ASPH_EXTRACTED_SIEVE"),
         );
+        const isMarshallDensity =
+          sibling.testType === "ASPH_MARSHALL_DENSITY" ||
+          sibling.testType === "DIST-2026-042" ||
+          sibling.specializedTestResults?.[0]?.formTemplate === "asphalt_marshall_density";
         return {
           sibling,
           overallResult,
           summaryValues,
-          testName: isAr
-            ? tt?.nameAr ?? tt?.nameEn ?? sibling.testName
-            : tt?.nameEn ?? tt?.nameAr ?? sibling.testName,
-          standard: tt?.standardRef ?? EM_DASH,
+          testName: isMarshallDensity
+            ? isAr
+              ? "الثقل النوعي الظاهري للخلطة الإسفلتية المدموكة (ASTM D 2726)"
+              : "Bulk Specific Gravity of Compacted HMA (ASTM D 2726)"
+            : isAr
+              ? tt?.nameAr ?? tt?.nameEn ?? sibling.testName
+              : tt?.nameEn ?? tt?.nameAr ?? sibling.testName,
+          standard: isMarshallDensity ? "ASTM D 2726" : tt?.standardRef ?? EM_DASH,
+          formTemplate: sibling.specializedTestResults?.[0]?.formTemplate ?? null,
           testedBy: sibling.specializedTestResults?.[0]?.testedBy ?? undefined,
         };
       }),
@@ -412,10 +483,14 @@ export default function BatchReport() {
                 {isAr ? "\u0646\u062a\u0627\u0626\u062c \u0627\u0644\u0627\u062e\u062a\u0628\u0627\u0631\u0627\u062a" : "Test Results"}
               </h3>
 
-              {sections.map(({ sibling, overallResult, summaryValues, testName, standard }, index) => {
+              {sections.map(({ sibling, overallResult, summaryValues, testName, standard, formTemplate }, index) => {
                 const summaryEntries = Object.entries(summaryValues).filter(
                   ([k, v]) => !SUMMARY_SKIP_KEYS.has(k) && v != null && v !== "" && typeof v !== "object",
                 );
+                const isMarshallDensity =
+                  formTemplate === "asphalt_marshall_density" ||
+                  sibling.testType === "ASPH_MARSHALL_DENSITY" ||
+                  sibling.testType === "DIST-2026-042";
                 const hasReport =
                   sibling.status === "completed" &&
                   (sibling.specializedTestResults?.length || sibling.testResults?.length);
@@ -438,7 +513,9 @@ export default function BatchReport() {
                       <PassFailBadge result={overallResult} size="sm" lang={isAr ? "ar" : "en"} />
                     </div>
                     <div className="p-3 space-y-3">
-                      {summaryEntries.length > 0 ? (
+                      {isMarshallDensity && summaryEntries.length > 0 ? (
+                        <MarshallDensityBatchSummary summaryValues={summaryValues} isAr={isAr} />
+                      ) : summaryEntries.length > 0 ? (
                         <div>
                           <p className="text-[10px] font-semibold text-gray-600 mb-1.5 uppercase">
                             {isAr ? "\u0627\u0644\u0646\u062a\u0627\u0626\u062c \u0627\u0644\u0631\u0626\u064a\u0633\u064a\u0629" : "Key results"}

@@ -127,6 +127,7 @@ import {
   updateLabOrderItemStatus,
   updateLabOrderItemDistribution,
   checkAndCompleteOrder,
+  checkAndUpdateSampleStatusAfterSubmission,
 } from "./db";
 import { storagePut } from "./storage";
 import { generateMonthlyReportPdf } from "./monthlyReportPdf";
@@ -1164,13 +1165,13 @@ ${testSummaries.length > 0 ? testSummaries.join("\n\n") : "لم تُجرَ اخ�
         });
 
         await updateDistributionStatus(input.distributionId, "completed");
-        await updateSampleStatus(input.sampleId, "processed");
+        const nextSampleStatus = await checkAndUpdateSampleStatusAfterSubmission(input.sampleId);
         await addSampleHistory({
           sampleId: input.sampleId,
           userId: ctx.user.id,
           action: "Test results submitted and processed",
           fromStatus: "distributed",
-          toStatus: "processed",
+          toStatus: nextSampleStatus ?? "processed",
           notes: `Average: ${stats?.average} ${input.unit}, Compliance: ${stats?.complianceStatus}`,
         });
         const reviewSample = await getSampleById(input.sampleId);
@@ -1860,14 +1861,14 @@ ${testSummaries.length > 0 ? testSummaries.join("\n\n") : "لم تُجرَ اخ�
         };
 
         await updateDistributionStatus(submittedGroup.distributionId, "completed");
-        await updateSampleStatus(submittedGroup.sampleId, "processed");
+        const nextSampleStatus = await checkAndUpdateSampleStatusAfterSubmission(submittedGroup.sampleId);
 
         await addSampleHistory({
           sampleId: submittedGroup.sampleId,
           userId: ctx.user.id,
           action: "Concrete test results submitted",
           fromStatus: "distributed",
-          toStatus: "processed",
+          toStatus: nextSampleStatus ?? "processed",
           notes: `${submittedGroup.testAge}-day concrete cube test submitted for review`,
         });
 
@@ -2184,13 +2185,13 @@ ${testSummaries.length > 0 ? testSummaries.join("\n\n") : "لم تُجرَ اخ�
           // Also update distribution/sample status when submitting an existing result
           if (input.status === "submitted") {
             await updateDistributionStatus(input.distributionId, "completed");
-            await updateSampleStatus(input.sampleId, "processed");
+            const nextSampleStatus = await checkAndUpdateSampleStatusAfterSubmission(input.sampleId);
             await addSampleHistory({
               sampleId: input.sampleId,
               userId: ctx.user.id,
               action: "Specialized test results submitted",
               fromStatus: "distributed",
-              toStatus: "processed",
+              toStatus: nextSampleStatus ?? "processed",
               notes: `Test: ${input.testTypeCode}, Result: ${input.overallResult}`,
             });
             await notifyUsersByRole(
@@ -2236,13 +2237,13 @@ ${testSummaries.length > 0 ? testSummaries.join("\n\n") : "لم تُجرَ اخ�
         });
         if (input.status === "submitted") {
           await updateDistributionStatus(input.distributionId, "completed");
-          await updateSampleStatus(input.sampleId, "processed");
+          const nextSampleStatus = await checkAndUpdateSampleStatusAfterSubmission(input.sampleId);
           await addSampleHistory({
             sampleId: input.sampleId,
             userId: ctx.user.id,
             action: "Specialized test results submitted",
             fromStatus: "distributed",
-            toStatus: "processed",
+            toStatus: nextSampleStatus ?? "processed",
             notes: `Test: ${input.testTypeCode}, Result: ${input.overallResult}`,
           });
           await notifyUsersByRole(
@@ -2811,10 +2812,12 @@ ${testSummaries.length > 0 ? testSummaries.join("\n\n") : "لم تُجرَ اخ�
           // Get sampleSubType from the linked sample
           let sampleSubType: string | null = null;
           let sampleCode: string | null = null;
+          let sampleStatus: string | null = o.sampleStatus ?? null;
           if (o.sampleId) {
             const sample = await getSampleById(o.sampleId);
             sampleSubType = sample?.sampleSubType ?? null;
             sampleCode = sample?.sampleCode ?? null;
+            sampleStatus = sample?.status ?? sampleStatus;
           }
           const tech = allUsers.find((u: any) => u.id === o.assignedTechnicianId);
           return {
@@ -2829,6 +2832,7 @@ ${testSummaries.length > 0 ? testSummaries.join("\n\n") : "لم تُجرَ اخ�
             testNames,
             sampleSubType,
             sampleCode,
+            sampleStatus,
             assignedTechnicianName: tech?.name ?? null,
           };
         })
@@ -3073,7 +3077,7 @@ ${testSummaries.length > 0 ? testSummaries.join("\n\n") : "لم تُجرَ اخ�
         if (allDone) {
           const order = await getLabOrderById(input.orderId);
           if (order) {
-            await updateSampleStatus(order.sampleId, "processed");
+            await checkAndUpdateSampleStatusAfterSubmission(order.sampleId);
             await notifyUsersByRole("sample_manager", "Order Complete", `Order ${order.orderCode} — all tests completed`, order.sampleId, "info", "order_complete");
           }
         }

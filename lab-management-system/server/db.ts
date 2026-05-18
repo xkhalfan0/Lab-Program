@@ -21,6 +21,7 @@ import {
   contracts,
   specializedTestResults,
   clearanceRequests,
+  deletionRequests,
   sectorAccounts,
   type InsertConcreteTestGroup,
   type InsertConcreteCube,
@@ -616,6 +617,24 @@ export async function updateSampleStatus(
   await db.update(samples).set({ status, updatedAt: new Date() }).where(eq(samples.id, id));
 }
 
+export async function checkAndUpdateSampleStatusAfterSubmission(sampleId: number) {
+  const allDistributions = await getDistributionsBySample(sampleId);
+  if (allDistributions.length === 0) return undefined;
+
+  const allCompleted = allDistributions.every((d) => d.status === "completed");
+  const someCompleted = allDistributions.some((d) => d.status === "completed");
+
+  if (allCompleted) {
+    await updateSampleStatus(sampleId, "awaiting_review");
+    return "awaiting_review" as const;
+  }
+  if (someCompleted) {
+    await updateSampleStatus(sampleId, "testing_in_progress");
+    return "testing_in_progress" as const;
+  }
+  return "distributed" as const;
+}
+
 export async function updateSampleFields(
   id: number,
   data: {
@@ -784,6 +803,9 @@ export async function getDistributionsBySample(sampleId: number) {
 export async function getDistributionsByTechnician(technicianId: number) {
   const db = await getDb();
   if (!db) return [];
+  const pendingSampleDeletion = alias(deletionRequests, "pendingSampleDeletion");
+  const pendingDistributionDeletion = alias(deletionRequests, "pendingDistributionDeletion");
+  const activeSampleFilter = samplesHasSoftDeleteColumns() ? isNull(samples.deletedAt) : sql`TRUE`;
   const rows = await db
     .select({
       id: distributions.id,
@@ -813,11 +835,30 @@ export async function getDistributionsByTechnician(technicianId: number) {
     .from(distributions)
     .leftJoin(testTypes, eq(distributions.testType, testTypes.code))
     .leftJoin(samples, eq(distributions.sampleId, samples.id))
+    .leftJoin(
+      pendingSampleDeletion,
+      and(
+        eq(pendingSampleDeletion.targetTable, "samples"),
+        eq(pendingSampleDeletion.targetId, distributions.sampleId),
+        eq(pendingSampleDeletion.status, "pending")
+      )
+    )
+    .leftJoin(
+      pendingDistributionDeletion,
+      and(
+        eq(pendingDistributionDeletion.targetTable, "distributions"),
+        eq(pendingDistributionDeletion.targetId, distributions.id),
+        eq(pendingDistributionDeletion.status, "pending")
+      )
+    )
     .where(
       and(
         eq(distributions.assignedTechnicianId, technicianId),
         inArray(distributions.status, ["pending", "in_progress", "completed"]),
-        isNull(distributions.deletedAt)
+        isNull(distributions.deletedAt),
+        activeSampleFilter,
+        isNull(pendingSampleDeletion.id),
+        isNull(pendingDistributionDeletion.id)
       )
     )
     .orderBy(desc(distributions.createdAt));
@@ -1691,11 +1732,16 @@ export async function getAuditLogs(opts?: { entity?: string; entityId?: number; 
 export async function markSampleManagerRead(sampleId: number) {
   const db = await getDb();
   if (!db) return;
-  const { samples } = await import("../drizzle/schema");
-  const { eq } = await import("drizzle-orm");
-  const existing = await db.select({ managerReadAt: samples.managerReadAt }).from(samples).where(eq(samples.id, sampleId)).limit(1);
+  const existing = await db.select({ managerReadAt: samples.managerReadAt, status: samples.status }).from(samples).where(eq(samples.id, sampleId)).limit(1);
   if (existing[0] && !existing[0].managerReadAt) {
-    await db.update(samples).set({ managerReadAt: new Date(), updatedAt: new Date() }).where(eq(samples.id, sampleId));
+    await db
+      .update(samples)
+      .set({
+        managerReadAt: new Date(),
+        status: ["awaiting_review", "processed"].includes(existing[0].status) ? "under_review" : existing[0].status,
+        updatedAt: new Date(),
+      })
+      .where(eq(samples.id, sampleId));
   }
 }
 
@@ -1854,6 +1900,7 @@ export async function getAllLabOrders() {
       orderCode: labOrders.orderCode,
       sampleId: labOrders.sampleId,
       sampleCode: samples.sampleCode,
+      sampleStatus: samples.status,
       contractNumber: labOrders.contractNumber,
       contractName: labOrders.contractName,
       contractorName: labOrders.contractorName,

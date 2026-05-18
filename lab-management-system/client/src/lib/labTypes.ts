@@ -3,15 +3,20 @@
 export type SampleStatus =
   | "received"
   | "distributed"
+  | "testing_in_progress"
+  | "awaiting_review"
+  | "under_review"
   | "tested"
   | "processed"
   | "reviewed"
   | "approved"
   | "qc_passed"
   | "qc_failed"
+  | "clearance_requested"
   | "clearance_issued"
   | "rejected"
-  | "revision_requested";
+  | "revision_requested"
+  | "deleted";
 
 export type UserRole =
   | "admin"
@@ -25,15 +30,20 @@ export type UserRole =
 export const STATUS_LABELS: Record<SampleStatus, string> = {
   received: "Received",
   distributed: "Distributed",
+  testing_in_progress: "Testing In Progress",
+  awaiting_review: "Awaiting Review",
+  under_review: "Under Review",
   tested: "Tested",
   processed: "Processed",
   reviewed: "Reviewed",
   approved: "Supervisor Approved",
   qc_passed: "QC Passed",
   qc_failed: "QC Failed",
+  clearance_requested: "Clearance Requested",
   clearance_issued: "Clearance Issued",
   rejected: "Rejected",
   revision_requested: "Revision Requested",
+  deleted: "Deleted",
 };
 
 export const ROLE_LABELS: Record<UserRole, string> = {
@@ -56,6 +66,8 @@ export const SAMPLE_TYPE_LABELS: Record<string, string> = {
 export const WORKFLOW_STAGES = [
   { key: "received", label: "Reception", labelAr: "الاستقبال", step: 1 },
   { key: "distributed", label: "Distribution", labelAr: "التوزيع", step: 2 },
+  { key: "testing_in_progress", label: "Testing In Progress", labelAr: "قيد الاختبار", step: 3 },
+  { key: "awaiting_review", label: "Awaiting Review", labelAr: "في انتظار المراجعة", step: 4 },
   { key: "tested", label: "Testing", labelAr: "الاختبار", step: 3 },
   { key: "processed", label: "Processing", labelAr: "المعالجة", step: 4 },
   { key: "approved", label: "Supervisor Review", labelAr: "مراجعة المشرف", step: 5 },
@@ -66,30 +78,40 @@ export const WORKFLOW_STAGES = [
 export const STATUS_LABELS_AR: Record<SampleStatus, string> = {
   received: "مستلم",
   distributed: "موزع",
+  testing_in_progress: "قيد الاختبار",
+  awaiting_review: "في انتظار المراجعة",
+  under_review: "قيد المراجعة",
   tested: "تم الاختبار",
   processed: "قيد المعالجة",
   reviewed: "قيد المراجعة",
   approved: "معتمد من المشرف",
   qc_passed: "اجتاز ضبط الجودة",
   qc_failed: "رفض ضبط الجودة",
+  clearance_requested: "طلب براءة الذمة",
   clearance_issued: "صدرت براءة الذمة",
   rejected: "مرفوض",
   revision_requested: "طلب مراجعة",
+  deleted: "محذوف",
 };
 
 export function getStatusStep(status: SampleStatus): number {
   const map: Partial<Record<SampleStatus, number>> = {
     received: 1,
     distributed: 2,
+    testing_in_progress: 3,
+    awaiting_review: 4,
+    under_review: 5,
     tested: 3,
     processed: 4,
     reviewed: 5,
     approved: 5,
     qc_passed: 6,
     qc_failed: 6,
+    clearance_requested: 7,
     clearance_issued: 7,
     rejected: 0,
     revision_requested: 0,
+    deleted: 0,
   };
   return map[status] ?? 0;
 }

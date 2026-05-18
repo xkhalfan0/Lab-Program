@@ -305,15 +305,20 @@
 /* Lab system status badge colors */
 .status-received    { background-color: #dbeafe; color: #1e40af; }
 .status-distributed { background-color: #ede9fe; color: #5b21b6; }
+.status-testing_in_progress { background-color: #fef3c7; color: #92400e; border-color: #fcd34d; }
+.status-awaiting_review { background-color: #ffedd5; color: #9a3412; border-color: #fdba74; font-weight: 700; box-shadow: 0 0 0 2px rgba(251, 146, 60, 0.25); }
+.status-under_review { background-color: #e0e7ff; color: #3730a3; border-color: #a5b4fc; }
 .status-tested      { background-color: #fef3c7; color: #92400e; }
 .status-processed   { background-color: #ffedd5; color: #9a3412; }
 .status-reviewed    { background-color: #e0e7ff; color: #3730a3; }
 .status-approved    { background-color: #ccfbf1; color: #134e4a; }
 .status-qc_passed   { background-color: #dcfce7; color: #14532d; }
 .status-qc_failed   { background-color: #fee2e2; color: #991b1b; }
+.status-clearance_requested { background-color: #f0f9ff; color: #075985; border-color: #7dd3fc; }
 .status-clearance_issued { background-color: #d1fae5; color: #064e3b; }
 .status-rejected    { background-color: #fee2e2; color: #991b1b; }
 .status-revision_requested { background-color: #fef3c7; color: #78350f; }
+.status-deleted { background-color: #f1f5f9; color: #475569; border-color: #cbd5e1; text-decoration: line-through; }
 
 /* ─── Print Styles ──────────────────────────────────────────────────────────── */
 @media print {

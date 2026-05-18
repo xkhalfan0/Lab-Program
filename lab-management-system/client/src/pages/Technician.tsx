@@ -27,7 +27,7 @@ import {
   FileText,
   Package,
 } from "lucide-react";
-import { useMemo, useState, type ReactElement } from "react";
+import { useEffect, useMemo, useState, type ReactElement } from "react";
 import { useLocation } from "wouter";
 import { toast } from "sonner";
 
@@ -514,6 +514,15 @@ export default function Technician() {
   const { data: myOrders = [], refetch: refetchOrders } = trpc.orders.myOrders.useQuery();
   const { data: allSamples = [] } = trpc.samples.list.useQuery();
   const markRead = trpc.distributions.markRead.useMutation();
+
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      void refetch();
+      void refetchOrders();
+    }, 30000);
+
+    return () => window.clearInterval(interval);
+  }, [refetch, refetchOrders]);
 
   const assignmentDistIds = useMemo(() => assignments.map((d) => d.id), [assignments]);
   const assignmentPendingQueries = trpc.useQueries((t) =>
