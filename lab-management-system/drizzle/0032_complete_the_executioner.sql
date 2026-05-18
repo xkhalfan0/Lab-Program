@@ -1,4 +1,4 @@
-CREATE TABLE `deletion_requests` (
+CREATE TABLE IF NOT EXISTS `deletion_requests` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`requestedBy` int NOT NULL,
 	`targetTable` varchar(50) NOT NULL,
