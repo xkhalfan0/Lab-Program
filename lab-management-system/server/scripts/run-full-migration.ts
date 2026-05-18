@@ -21,11 +21,35 @@ async function main() {
     console.log("[migration] Step 5: Seed users");
     execSync("tsx server/scripts/seed-role-users.ts", { stdio: "inherit" });
 
-    // Step 6: Create deletion_requests table if it doesn't exist
-    console.log("[migration] Step 6: Create deletion_requests table");
+    console.log("[migration] Step 6: Update sample status enum");
     const db = await getDb();
     if (!db) throw new Error("Database connection failed");
 
+    await db.execute(sql`
+      ALTER TABLE samples
+      MODIFY COLUMN status ENUM(
+        'received',
+        'distributed',
+        'testing_in_progress',
+        'awaiting_review',
+        'under_review',
+        'tested',
+        'processed',
+        'reviewed',
+        'approved',
+        'qc_passed',
+        'qc_failed',
+        'clearance_requested',
+        'clearance_issued',
+        'rejected',
+        'revision_requested',
+        'deleted'
+      ) NOT NULL DEFAULT 'received'
+    `);
+    console.log("[migration] ✅ sample status enum updated");
+
+    // Step 7: Create deletion_requests table if it doesn't exist
+    console.log("[migration] Step 7: Create deletion_requests table");
     try {
       // Drop existing table to recreate with correct column names
       await db.execute(sql`DROP TABLE IF EXISTS deletion_requests`);

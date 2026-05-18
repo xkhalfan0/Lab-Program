@@ -16,11 +16,13 @@ Migrations run when the app starts, when `DATABASE_URL` is available:
 pnpm run db:full-migration && node dist/index.js
 ```
 
-`db:full-migration` applies committed Drizzle migrations first, then runs the existing startup migration script:
+`db:full-migration` uses the existing custom startup migration script:
 
 ```bash
-pnpm run db:migrate && tsx server/scripts/run-full-migration.ts
+tsx server/scripts/run-full-migration.ts
 ```
+
+The Railway database already has older schema changes that were applied by this custom script. Do not run `drizzle-kit migrate` automatically during deployment unless the production Drizzle migration journal is known to be aligned with the existing database.
 
 ## Local Development
 
@@ -34,8 +36,8 @@ pnpm run db:migrate
 # Push schema directly as an alternative for one-off fixes
 pnpm run db:push
 
-# Apply migrations against the Railway database
-railway run pnpm run db:migrate
+# Run the same startup migration used by Railway
+railway run pnpm run db:full-migration
 ```
 
 ## Manual Migration (Emergency)
