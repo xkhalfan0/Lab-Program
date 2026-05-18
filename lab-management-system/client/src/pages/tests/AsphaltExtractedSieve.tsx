@@ -8,8 +8,9 @@
  * Mix types: ACWC (20mm), ACBC (28mm), DBM (40mm)
  */
 import { useState, useCallback } from "react";
-import { useParams } from "wouter";
+import { useParams, useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
+import { redirectAfterTestSave } from "@/lib/batchHelpers";
 import DashboardLayout from "@/components/DashboardLayout";
 import { SampleInfoCard } from "@/components/SampleInfoCard";
 import { PassFailBadge } from "@/components/PassFailBadge";
@@ -73,6 +74,7 @@ function computeGradation(rows: SieveRow[], totalMass: number, mixType: string):
 
 export default function AsphaltExtractedSieve() {
   const { distributionId } = useParams<{ distributionId: string }>();
+  const [, setLocation] = useLocation();
   const { lang } = useLanguage();
   const ar = lang === "ar";
   const distId = parseInt(distributionId || "0", 10);
@@ -89,7 +91,11 @@ export default function AsphaltExtractedSieve() {
   );
 
   const saveMut = trpc.specializedTests.save.useMutation({
-    onSuccess: () => { toast.success("تم حفظ نتائج تحليل المنخل بنجاح"); setSubmitted(true); },
+    onSuccess: () => {
+      toast.success("تم حفظ نتائج تحليل المنخل بنجاح");
+      setSubmitted(true);
+      redirectAfterTestSave(setLocation, distribution);
+    },
     onError: (err: { message: string }) => toast.error(err.message),
   });
 

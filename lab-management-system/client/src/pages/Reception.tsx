@@ -1339,7 +1339,11 @@ export default function Reception() {
                     {createOrder.isPending
                       ? (lang === "ar" ? "جاري الإنشاء..." : "Creating...")
                       : selectedTests.length > 0
-                        ? (lang === "ar" ? `إنشاء أوردر (${selectedTests.length} اختبار)` : `Create Order (${selectedTests.length} test(s))`)
+                        ? selectedTests.length > 1
+                          ? (lang === "ar"
+                              ? `إنشاء أمر (دفعة واحدة مع ${selectedTests.length} اختبارات)`
+                              : `Create Order (1 batch with ${selectedTests.length} tests)`)
+                          : (lang === "ar" ? "إنشاء أمر (اختبار واحد)" : "Create Order (1 test)")
                         : (lang === "ar" ? "اختر اختباراً أولاً" : "Select a test first")}
                   </Button>
                   <Button

@@ -38,7 +38,8 @@ import ConcreteBeam from "./ConcreteBeam";
 import ConcreteFoam from "./ConcreteFoam";
 import AsphaltHotBin from "./AsphaltHotBin";
 import AsphaltExtractedSieve from "./AsphaltExtractedSieve";
-import AsphaltMixBatchReport from "./AsphaltMixBatchReport";
+import BatchOverview from "../BatchOverview";
+import BatchReport from "../BatchReport";
 import ConcreteMixGrad from "./ConcreteMixGrad";
 import AsphaltSprayRate from "./AsphaltSprayRate";
 
@@ -71,8 +72,8 @@ const FORM_MAP: Record<string, React.ComponentType> = {
   "AsphaltMarshallDensity":   AsphaltMarshallDensity,
   "AsphaltCore":              AsphaltCore,
   "AsphaltSprayRate":         AsphaltSprayRate,
-  "AsphaltMixBatchReport":    AsphaltMixBatchReport,
-  "asphalt_mix_batch":        AsphaltMixBatchReport,
+  "BatchOverview":            BatchOverview,
+  "BatchReport":              BatchReport,
   // Aggregate
   "AggSieveAnalysis":         SieveAnalysis,
   "AggCrushingImpact":        AggCrushingImpact,

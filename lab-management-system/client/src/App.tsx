@@ -10,6 +10,8 @@ import Login from "./pages/Login";
 import Reception from "./pages/Reception";
 import Distribution from "./pages/Distribution";
 import Technician from "./pages/Technician";
+import BatchOverview from "./pages/BatchOverview";
+import BatchReport from "./pages/BatchReport";
 import ManagerReview from "./pages/ManagerReview";
 import QCReview from "./pages/QCReview";
 import Clearance from "./pages/ClearancePage";
@@ -92,6 +94,8 @@ const ROUTE_ROLES: Record<string, string[]> = {
   "/reception": ["admin", "reception", "lab_manager"],
   "/distribution": ["admin", "lab_manager"],
   "/technician": ["admin", "technician", "lab_manager"],
+  "/batch/:sampleId/:orderId": ["admin", "technician", "lab_manager"],
+  "/batch-report/:sampleId/:orderId": ["admin", "technician", "lab_manager"],
   "/manager-review": ["admin", "sample_manager", "lab_manager"],
   "/qc-review": ["admin", "qc_inspector", "lab_manager"],
   "/clearance": ["admin", "lab_manager", "sample_manager", "accountant"],
@@ -193,6 +197,7 @@ function Router() {
       <Route path="/technician">
         {() => <ProtectedRoute component={Technician} path="/technician" />}
       </Route>
+      <Route path="/batch/:sampleId/:orderId" component={BatchOverview} />
       <Route path="/manager-review">
         {() => <ProtectedRoute component={ManagerReview} path="/manager-review" />}
       </Route>
@@ -230,6 +235,7 @@ function Router() {
         {() => <ProtectedRoute component={TestRouter} path="/test/:distributionId" />}
       </Route>
       <Route path="/test-report/:distributionId" component={SpecializedTestReport} />
+      <Route path="/batch-report/:sampleId/:orderId" component={BatchReport} />
       <Route path="/batch-report/:batchId" component={BatchBlockReport} />
       <Route path="/order-report/:orderId">
         {() => <ProtectedRoute component={OrderReport} path="/order-report/:orderId" />}

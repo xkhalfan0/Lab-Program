@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect } from "react";
 import { useParams, useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
+import { redirectAfterTestSave } from "@/lib/batchHelpers";
 import DashboardLayout from "@/components/DashboardLayout";
 import { SampleInfoCard } from "@/components/SampleInfoCard";
 import { PassFailBadge, ResultBanner } from "@/components/PassFailBadge";
@@ -227,6 +228,7 @@ export default function ConcreteCore() {
       if (vars.status === "submitted") {
         toast.success(ar ? "تم إرسال النتائج بنجاح" : "Test results submitted successfully");
         setSubmitted(true);
+        redirectAfterTestSave(setLocation, dist);
       } else {
         toast.success(ar ? "تم حفظ المسودة بنجاح" : "Draft saved successfully");
       }

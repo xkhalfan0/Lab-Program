@@ -10,6 +10,7 @@
 import { useState, useCallback, useEffect, useMemo } from "react";
 import { useParams, useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
+import { redirectAfterTestSave } from "@/lib/batchHelpers";
 import DashboardLayout from "@/components/DashboardLayout";
 import { SampleInfoCard } from "@/components/SampleInfoCard";
 import { PassFailBadge } from "@/components/PassFailBadge";
@@ -220,6 +221,7 @@ export default function ConcreteFoam() {
     onSuccess: () => {
       toast.success(ar ? "تم حفظ نتائج الخرسانة الرغوية بنجاح" : "Foamed concrete results saved successfully");
       setSubmitted(true);
+      redirectAfterTestSave(navigate, distribution);
     },
     onError: (err: { message: string }) => toast.error(err.message),
   });

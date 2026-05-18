@@ -25,6 +25,7 @@ import {
   Building2,
   Calendar,
   FileText,
+  Package,
 } from "lucide-react";
 import { useMemo, useState, type ReactElement } from "react";
 import { useLocation } from "wouter";
@@ -61,6 +62,9 @@ const T = {
   sampleCode:  { ar: "رمز العينة",               en: "Sample code" },
   contractNo:  { ar: "رقم العقد",                 en: "Contract no." },
   distCode:    { ar: "رمز التوزيع",               en: "Distribution" },
+  batchTitle:  { ar: "حزمة",                       en: "Batch" },
+  batchProgress:{ ar: "اختبارات مكتملة",           en: "tests completed" },
+  openBatch:   { ar: "فتح الحزمة",                 en: "Open batch" },
 };
 
 function tx(key: keyof typeof T, lang: string) {
@@ -156,6 +160,64 @@ function getReceivedSortKey(dist: any): number {
   if (!raw) return Number.MAX_SAFE_INTEGER;
   const t = new Date(raw).getTime();
   return Number.isNaN(t) ? Number.MAX_SAFE_INTEGER : t;
+}
+
+function groupDistributionsByBatch(distributions: any[]) {
+  const batches = new Map<string, any[]>();
+  const individuals: any[] = [];
+
+  for (const dist of distributions) {
+    if (!dist.orderId) {
+      individuals.push(dist);
+      continue;
+    }
+    const key = `${dist.sampleId}-${dist.orderId}`;
+    if (!batches.has(key)) {
+      batches.set(key, []);
+    }
+    batches.get(key)!.push(dist);
+  }
+
+  const batchGroups = Array.from(batches.values()).filter(g => g.length > 1);
+  const singleTests = [
+    ...Array.from(batches.values())
+      .filter(g => g.length === 1)
+      .flat(),
+    ...individuals,
+  ];
+
+  return { batchGroups, singleTests };
+}
+
+/** Preserve sort order from a flat list: batches first (by first appearance), then singles. */
+function orderGroupedTaskList(
+  sortedList: any[],
+  grouped: { batchGroups: any[][]; singleTests: any[] },
+) {
+  const batchMap = new Map<string, any[]>();
+  for (const g of grouped.batchGroups) {
+    if (g.length > 0 && g[0].orderId) {
+      batchMap.set(`${g[0].sampleId}-${g[0].orderId}`, g);
+    }
+  }
+
+  const batchKeysInOrder: string[] = [];
+  for (const dist of sortedList) {
+    if (!dist.orderId) continue;
+    const key = `${dist.sampleId}-${dist.orderId}`;
+    if (batchMap.has(key) && !batchKeysInOrder.includes(key)) {
+      batchKeysInOrder.push(key);
+    }
+  }
+
+  const orderedBatchGroups = batchKeysInOrder
+    .map(key => batchMap.get(key)!)
+    .filter(g => g.length > 1);
+
+  const singleIds = new Set(grouped.singleTests.map(d => d.id));
+  const orderedSingles = sortedList.filter(d => singleIds.has(d.id));
+
+  return { batchGroups: orderedBatchGroups, singleTests: orderedSingles };
 }
 
 function priorityRank(p: string | null | undefined): number {
@@ -377,6 +439,68 @@ function EmptyState({ lang }: { lang: string }) {
   );
 }
 
+function TechnicianBatchCard({
+  group,
+  lang,
+  allSamples,
+  onOpenBatch,
+}: {
+  group: any[];
+  lang: string;
+  allSamples: any[];
+  onOpenBatch: () => void;
+}) {
+  const sample = allSamples.find((s: any) => s.id === group[0]?.sampleId);
+  const sampleCode = group[0]?.sampleCode ?? sample?.sampleCode ?? "—";
+  const completed = group.filter(d => d.status === "completed").length;
+  const total = group.length;
+  const allDone = completed === total;
+  const contractor = sample?.contractorName ?? "—";
+
+  return (
+    <button
+      type="button"
+      onClick={onOpenBatch}
+      className={`w-full rounded-lg border px-5 py-4 text-left transition-shadow hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
+        allDone ? "border-blue-200/80 bg-blue-50/40" : "border-blue-300/60 bg-blue-50/20"
+      }`}
+    >
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex min-w-0 flex-1 items-start gap-3">
+          <Package className="h-6 w-6 shrink-0 text-blue-600" />
+          <div className="min-w-0 flex-1 space-y-1.5">
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="text-lg font-semibold leading-tight text-foreground">
+                {tx("batchTitle", lang)}: <span className="font-mono">{sampleCode}</span>
+              </h2>
+              {allDone ? (
+                <Badge className="border border-green-200 bg-green-100 text-xs text-green-800">
+                  <CheckCircle2 className="mr-1 h-3 w-3" />
+                  {lang === "ar" ? "مكتمل" : "Complete"}
+                </Badge>
+              ) : (
+                <Badge className="border border-blue-200 bg-blue-100 text-xs text-blue-900">
+                  <Clock className="mr-1 h-3 w-3" />
+                  {lang === "ar" ? "قيد التنفيذ" : "In progress"}
+                </Badge>
+              )}
+            </div>
+            <p className="text-sm font-medium text-blue-800">
+              {completed}/{total} {tx("batchProgress", lang)}
+            </p>
+            <p className="text-xs text-muted-foreground truncate">
+              <Building2 className="inline h-3.5 w-3.5 mr-1 align-text-bottom" />
+              {contractor}
+              {group[0]?.orderCode ? ` · ${group[0].orderCode}` : ""}
+            </p>
+          </div>
+        </div>
+        <span className="shrink-0 text-sm font-medium text-blue-700">{tx("openBatch", lang)} →</span>
+      </div>
+    </button>
+  );
+}
+
 export default function Technician() {
   const { lang } = useLanguage();
   const [, navigate] = useLocation();
@@ -409,13 +533,11 @@ export default function Technician() {
   const enrichedTasks = useMemo(() => {
     return assignments.map((dist) => {
       const parentOrder = myOrders.find((ord: any) =>
-        ord.items?.some(
-          (item: any) =>
-            Number(item.distributionId) === dist.id || Number(item.id) === dist.id
-        )
+        ord.items?.some((item: any) => Number(item.distributionId) === dist.id),
       );
       return {
         ...dist,
+        orderId: parentOrder?.id as number | undefined,
         orderCode: parentOrder?.orderCode,
         isMultiTest: (parentOrder?.items?.length || 1) > 1,
         pendingDeletion: pendingByDistId.get(dist.id) ?? false,
@@ -556,6 +678,31 @@ export default function Technician() {
     );
   };
 
+  const renderBatchCard = (group: any[]) => {
+    const sampleId = group[0]?.sampleId;
+    const orderId = group[0]?.orderId;
+    return (
+      <TechnicianBatchCard
+        key={`batch-${sampleId}-${orderId}`}
+        group={group}
+        lang={lang}
+        allSamples={allSamples}
+        onOpenBatch={() => navigate(`/batch/${sampleId}/${orderId}`)}
+      />
+    );
+  };
+
+  const renderTaskList = (list: any[]) => {
+    if (list.length === 0) return <EmptyState lang={lang} />;
+    const grouped = orderGroupedTaskList(list, groupDistributionsByBatch(list));
+    return (
+      <>
+        {grouped.batchGroups.map(renderBatchCard)}
+        {grouped.singleTests.map(renderCard)}
+      </>
+    );
+  };
+
   const tabBtn = (key: "all" | "active" | "completed", labelKey: keyof typeof T, count: number) => {
     const active = filterTab === key;
     return (
@@ -601,7 +748,7 @@ export default function Technician() {
                 {tx("sectionActive", lang)}
               </h2>
               <div className="space-y-3">
-                {activeList.length === 0 ? <EmptyState lang={lang} /> : activeList.map(renderCard)}
+                {renderTaskList(activeList)}
               </div>
             </section>
             <section className="space-y-3 border-l-4 border-green-500 pl-4">
@@ -609,7 +756,7 @@ export default function Technician() {
                 {tx("sectionDone", lang)}
               </h2>
               <div className="space-y-3">
-                {completedList.length === 0 ? <EmptyState lang={lang} /> : completedList.map(renderCard)}
+                {renderTaskList(completedList)}
               </div>
             </section>
           </div>
@@ -620,7 +767,7 @@ export default function Technician() {
             <h2 className="text-sm font-semibold uppercase tracking-wide text-amber-900">
               {tx("sectionActive", lang)}
             </h2>
-            {activeList.length === 0 ? <EmptyState lang={lang} /> : activeList.map(renderCard)}
+            {renderTaskList(activeList)}
           </div>
         )}
 
@@ -629,7 +776,7 @@ export default function Technician() {
             <h2 className="text-sm font-semibold uppercase tracking-wide text-green-800">
               {tx("sectionDone", lang)}
             </h2>
-            {completedList.length === 0 ? <EmptyState lang={lang} /> : completedList.map(renderCard)}
+            {renderTaskList(completedList)}
           </div>
         )}
       </div>

@@ -9,6 +9,7 @@
 import { useState, useCallback, useEffect } from "react";
 import { useParams, useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
+import { redirectAfterTestSave } from "@/lib/batchHelpers";
 import DashboardLayout from "@/components/DashboardLayout";
 import { SampleInfoCard } from "@/components/SampleInfoCard";
 import { PassFailBadge } from "@/components/PassFailBadge";
@@ -113,7 +114,7 @@ export default function ConcreteMixGrad() {
     onSuccess: (_, vars) => {
       if (vars.status === "submitted") {
         toast.success(ar ? "تم إرسال النتائج بنجاح" : "Results submitted successfully");
-        setLocation("/technician");
+        redirectAfterTestSave(setLocation, distribution);
       } else {
         toast.success(ar ? "تم حفظ المسودة بنجاح" : "Draft saved successfully");
       }

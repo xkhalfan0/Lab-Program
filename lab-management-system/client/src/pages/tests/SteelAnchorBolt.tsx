@@ -9,8 +9,9 @@
  * Acceptance: Load ≥ minimum specified pull-out load
  */
 import { useState, useCallback } from "react";
-import { useParams } from "wouter";
+import { useParams, useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
+import { redirectAfterTestSave } from "@/lib/batchHelpers";
 import DashboardLayout from "@/components/DashboardLayout";
 import { SampleInfoCard } from "@/components/SampleInfoCard";
 import { PassFailBadge, ResultBanner } from "@/components/PassFailBadge";
@@ -68,6 +69,7 @@ function computeRow(row: AnchorRow, minLoad: number): AnchorRow {
 
 export default function SteelAnchorBolt() {
   const { distributionId } = useParams<{ distributionId: string }>();
+  const [, setLocation] = useLocation();
   const { lang } = useLanguage();
   const ar = lang === "ar";
   const { user } = useAuth();
@@ -86,7 +88,11 @@ export default function SteelAnchorBolt() {
   );
 
   const saveMut = trpc.specializedTests.save.useMutation({
-    onSuccess: () => { toast.success("تم حفظ نتائج أنكر بولت بنجاح"); setSubmitted(true); },
+    onSuccess: () => {
+      toast.success("تم حفظ نتائج أنكر بولت بنجاح");
+      setSubmitted(true);
+      redirectAfterTestSave(setLocation, distribution);
+    },
     onError: (err: { message: string }) => toast.error(err.message),
   });
 

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
+import { redirectAfterTestSave } from "@/lib/batchHelpers";
 import DashboardLayout from "@/components/DashboardLayout";
 import { SampleInfoCard } from "@/components/SampleInfoCard";
 import { PassFailBadge, ResultBanner } from "@/components/PassFailBadge";
@@ -301,8 +302,7 @@ export default function SieveAnalysis() {
               : "Submitted — blend FAILED specification (recorded for contractor review)",
         );
         setSubmitted(true);
-        // Full navigation so we always leave /test/:id and load the printable report (wouter SPA alone can stay on the form in some cases).
-        window.location.assign(`/test-report/${distId}`);
+        redirectAfterTestSave(setLocation, dist);
       } else {
         toast.success(ar ? "تم حفظ المسودة بنجاح" : "Draft saved successfully");
       }

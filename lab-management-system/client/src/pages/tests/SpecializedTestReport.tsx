@@ -12,7 +12,6 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { FlexibleResultsTable, type Column, formDataToKeyValueRows, keyValueColumns } from "@/components/reports/FlexibleResultsTable";
 import { formatCalendarDate } from "@/lib/dateFormat";
 import { calculateFinalBlend, formatDisplaySieveMm } from "@/pages/tests/SieveAnalysis";
-import AsphaltMixBatchReport, { isCompleteAsphaltMixBatch } from "./AsphaltMixBatchReport";
 import {
   LineChart,
   Line,
@@ -1979,17 +1978,11 @@ export default function SpecializedTestReport() {
     { enabled: !!distId }
   );
 
-  const distOrderId = (dist as { orderId?: number } | undefined)?.orderId;
+  // Lab-order batches (orderId + 2+ sibling distributions) are viewed at
+  // /batch-report/:sampleId/:orderId via BatchOverview — no redirect from this page.
+  // This route always renders the individual distribution report.
 
-  // Check if this is part of an asphalt mix batch
-  const { data: siblings = [], isLoading: siblingsLoading } = trpc.distributions.getBatchSiblings.useQuery(
-    { sampleId: dist?.sampleId ?? 0, orderId: distOrderId ?? 0 },
-    { enabled: !!dist?.sampleId && !!distOrderId },
-  );
-
-  const isAsphaltBatch = isCompleteAsphaltMixBatch(siblings);
-
-  // If this distribution belongs to a batch, fetch all batch distributions for consolidated report
+  // Block batches (shared batchDistributionId) may still consolidate below via getByBatch.
   const batchDistId = (dist as any)?.batchDistributionId as string | undefined;
   const { data: batchDists } = trpc.distributions.getByBatch.useQuery(
     { batchDistributionId: batchDistId! },
@@ -2048,16 +2041,12 @@ export default function SpecializedTestReport() {
     setIsDownloadLoading(false);
   };
 
-  if (pageLoading || (siblingsLoading && !!dist?.sampleId && !!distOrderId)) {
+  if (pageLoading) {
     return (
       <div className="flex items-center justify-center h-screen">
         <Loader2 className="animate-spin text-slate-400" size={32} />
       </div>
     );
-  }
-
-  if (isAsphaltBatch) {
-    return <AsphaltMixBatchReport />;
   }
 
   if (!result && legacyResult && (legacyResult.chartsData as { source?: string } | null)?.source === "concrete_cubes") {
