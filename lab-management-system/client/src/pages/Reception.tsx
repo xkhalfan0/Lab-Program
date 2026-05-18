@@ -14,7 +14,7 @@ import { trpc } from "@/lib/trpc";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { FlaskConical, Plus, Search, Eye, Printer, FileText, Lock, Building2, Pencil, X, Trash2, Layers, CheckSquare, Package, CalendarIcon } from "lucide-react";
+import { FlaskConical, Plus, Search, Eye, Printer, FileText, Lock, Building2, Pencil, X, Trash2, Layers, CheckSquare, Package, CalendarIcon, AlertTriangle } from "lucide-react";
 import { useState, useMemo, useEffect, type ReactElement } from "react";
 import { format } from "date-fns";
 import { toast } from "sonner";
@@ -164,6 +164,29 @@ const MULTI_SUBTYPE_TESTS = [
 
 // Multi-subtype selection state: { [testTypeId]: { [subtypeValue]: quantity } }
 type MultiSubtypeState = Record<number, Record<string, number>>;
+
+const ASPHALT_MIX_TEST_CODES = ["ASPH_BITUMEN_EXTRACT", "ASPH_EXTRACTED_SIEVE", "ASPH_MARSHALL_DENSITY", "ASPH_MARSHALL"];
+
+const ASPHALT_TEST_GROUPS = [
+  {
+    id: "hot_bin",
+    label: { en: "Hot Bin Aggregates (Pre-production)", ar: "ركام صندوق ساخن (ما قبل الإنتاج)" },
+    color: "blue",
+    tests: ["ASPH_HOTBIN"],
+  },
+  {
+    id: "mix",
+    label: { en: "Asphalt Mix - Trial/Fresh (Production QC)", ar: "خلطة أسفلتية (مراقبة الإنتاج)" },
+    color: "green",
+    tests: ASPHALT_MIX_TEST_CODES,
+  },
+  {
+    id: "core",
+    label: { en: "Asphalt Core (Field Testing)", ar: "لب أسفلتي (اختبار ميداني)" },
+    color: "orange",
+    tests: ["ASPH_CORE"],
+  },
+] as const;
 
 const emptyForm = () => ({
   contractId: "",
@@ -359,44 +382,19 @@ export default function Reception() {
       .filter(tt => tt.category === form.sampleType)
       .filter(tt => !RECEPTION_HIDDEN_TEST_CODES.includes(tt.code ?? ""));
     if (form.sampleType === "asphalt") {
-      // Hot Bin: show only ASPH_HOTBIN (required); AGG_SG & AGG_FLAKINESS_ELONGATION shown as optional add-ons inside ASPH_HOTBIN card
-      if (asphaltKind === "hot_bin") return base.filter(tt => tt.code === HOT_BIN_REQUIRED_CODE);
-      if (asphaltKind === "mix") {
-        if (asphaltMixSelectionMode === "individual") {
-          return base.filter(tt =>
-            ["ASPH_BITUMEN_EXTRACT", "ASPH_EXTRACTED_SIEVE", "ASPH_MARSHALL_DENSITY", "ASPH_MARSHALL"].includes(tt.code ?? ""),
-          );
-        }
-        return base.filter(
-          tt => !HOT_BIN_CODES.includes(tt.code ?? "") && !ASPH_BATCH_TEST_CODES.includes(tt.code as (typeof ASPH_BATCH_TEST_CODES)[number]),
-        );
-      }
-      return []; // wait for user to pick kind
+      const groupedCodes = new Set(ASPHALT_TEST_GROUPS.flatMap(group => group.tests));
+      return base.filter(tt => groupedCodes.has(tt.code ?? ""));
     }
     return base;
-  }, [allTests, form.sampleType, asphaltKind, asphaltMixSelectionMode]);
+  }, [allTests, form.sampleType]);
 
-  // Auto-select all 4 batch tests when mix batch mode + course are set
   useEffect(() => {
-    if (form.sampleType !== "asphalt" || asphaltKind !== "mix" || asphaltMixSelectionMode !== "batch" || !asphaltMixCourse) {
-      return;
+    if (asphaltMixCourse && selectedTests.length > 0) {
+      setSelectedTests(prev => prev.map(t =>
+        ASPHALT_MIX_TEST_CODES.includes(t.testTypeCode) ? { ...t, testSubType: asphaltMixCourse } : t,
+      ));
     }
-    const batchSelected: SelectedTest[] = batchTests
-      .filter(tt => tt.isActive)
-      .map(tt => ({
-        testTypeId: tt.id,
-        testTypeCode: tt.code ?? "",
-        testTypeName: lang === "ar" && tt.nameAr ? tt.nameAr : tt.nameEn,
-        formTemplate: tt.formTemplate ?? undefined,
-        testSubType: asphaltMixCourse,
-        quantity: 1,
-        unitPrice: parseFloat(tt.unitPrice ?? "0"),
-      }));
-    setSelectedTests(prev => {
-      const extras = prev.filter(s => !ASPH_BATCH_TEST_CODES.includes(s.testTypeCode as (typeof ASPH_BATCH_TEST_CODES)[number]));
-      return [...batchSelected, ...extras];
-    });
-  }, [form.sampleType, asphaltKind, asphaltMixSelectionMode, asphaltMixCourse, batchTests, lang]);
+  }, [asphaltMixCourse, selectedTests.length]);
 
   const sectorLabel = (key: string) => {
     const s = sectors.find(x => x.sectorKey === key);
@@ -551,6 +549,26 @@ export default function Reception() {
     }
   };
 
+  const handleTestSelection = (tt: any, checked: boolean) => {
+    if (!checked) {
+      setSelectedTests(prev => prev.filter(s => s.testTypeId !== tt.id));
+      return;
+    }
+
+    const testTypeCode = tt.code ?? "";
+    const isMixTest = ASPHALT_MIX_TEST_CODES.includes(testTypeCode);
+    const newTest: SelectedTest = {
+      testTypeId: tt.id,
+      testTypeCode,
+      testTypeName: lang === "ar" && tt.nameAr ? tt.nameAr : tt.nameEn,
+      formTemplate: tt.formTemplate ?? undefined,
+      testSubType: isMixTest ? asphaltMixCourse || undefined : undefined,
+      quantity: 1,
+      unitPrice: parseFloat(tt.unitPrice ?? "0"),
+    };
+    setSelectedTests(prev => [...prev.filter(s => s.testTypeId !== tt.id), newTest]);
+  };
+
   const toggleBlockSubtype = (testTypeId: number, subtypeValue: string, testTypeName: string, testTypeCode: string, formTemplate: string | undefined, unitPrice: number) => {
     setMultiSubtypes(prev => {
       const current = prev[testTypeId] ?? {};
@@ -585,6 +603,18 @@ export default function Reception() {
   };
 
   const isCastingRequired = selectedTests.some(t => CASTING_DATE_TESTS.includes(t.testTypeCode));
+  const getSelectedGroups = () => {
+    const groups = new Set<string>();
+    selectedTests.forEach(t => {
+      if (["ASPH_HOTBIN"].includes(t.testTypeCode)) groups.add("hot_bin");
+      if (ASPHALT_MIX_TEST_CODES.includes(t.testTypeCode)) groups.add("mix");
+      if (["ASPH_CORE"].includes(t.testTypeCode)) groups.add("core");
+    });
+    return groups;
+  };
+  const selectedGroups = getSelectedGroups();
+  const hasMultipleGroups = selectedGroups.size > 1;
+  const hasMixTests = selectedTests.some(t => ASPHALT_MIX_TEST_CODES.includes(t.testTypeCode));
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -604,8 +634,16 @@ export default function Reception() {
       toast.error(lang === "ar" ? "يرجى اختيار اختبار واحد على الأقل" : "Please select at least one test");
       return;
     }
+    if (hasMultipleGroups) {
+      const confirmed = window.confirm(
+        lang === "ar"
+          ? "لقد اخترت اختبارات من مجموعات مختلفة. هل أنت متأكد من المتابعة؟"
+          : "You've selected tests from different groups. Are you sure you want to continue?",
+      );
+      if (!confirmed) return;
+    }
     // Validate asphalt mix course selection
-    if (form.sampleType === "asphalt" && asphaltKind === "mix" && !asphaltMixCourse) {
+    if (form.sampleType === "asphalt" && hasMixTests && !asphaltMixCourse) {
       toast.error(lang === "ar" ? "يرجى اختيار نوع طبقة الأسفلت (Wearing / Binder / Base Course)" : "Please select the Asphalt Mix Course (Wearing / Binder / Base Course)");
       return;
     }
@@ -851,118 +889,129 @@ export default function Reception() {
                   </div>
                 </div>
 
-                {/* Asphalt Sample Kind Selector */}
                 {form.sampleType === "asphalt" && (
-                  <div className="space-y-1.5">
-                    <Label>{lang === "ar" ? "نوع عينة الأسفلت" : "Asphalt Sample Type"} <span className="text-red-500">*</span></Label>
-                    <div className="flex gap-2">
-                      <button type="button"
-                        onClick={() => { setAsphaltKind("hot_bin"); setSelectedTests([]); setMultiSubtypes({}); setHotBinAddons({}); setAsphaltMixCourse(""); setAsphaltMixSelectionMode("batch"); }}
-                        className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium border transition-all ${
-                          asphaltKind === "hot_bin" ? "bg-primary text-primary-foreground border-primary" : "bg-background text-muted-foreground border-border hover:border-primary/50"
-                        }`}>
-                        {lang === "ar" ? "ركام صندوق ساخن (Hot Bin)" : "Hot Bin Aggregates"}
-                      </button>
-                      <button type="button"
-                        onClick={() => { setAsphaltKind("mix"); setSelectedTests([]); setMultiSubtypes({}); setHotBinAddons({}); setAsphaltMixCourse(""); setAsphaltMixSelectionMode("batch"); }}
-                        className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium border transition-all ${
-                          asphaltKind === "mix" ? "bg-primary text-primary-foreground border-primary" : "bg-background text-muted-foreground border-border hover:border-primary/50"
-                        }`}>
-                        {lang === "ar" ? "خلطة أسفلتية (Trial/Fresh)" : "Asphalt Mix (Trial/Fresh)"}
-                      </button>
-                    </div>
-                    {asphaltKind === "" && (
-                      <p className="text-xs text-amber-700">
-                        {lang === "ar"
-                          ? "اختر نوع العينة أعلاه لعرض قائمة اختبارات الأسفلت."
-                          : "Choose a sample type above to load the asphalt test list."}
-                      </p>
+                  <div className="space-y-4">
+                    <Label className="flex items-center gap-1.5">
+                      <CheckSquare className="w-3.5 h-3.5 text-muted-foreground" />
+                      {lang === "ar" ? "اختبارات الأسفلت المطلوبة" : "Required Asphalt Tests"}
+                      <span className="text-red-500">*</span>
+                      {selectedTests.length > 0 && (
+                        <Badge variant="secondary" className="ms-1 text-xs">{selectedTests.length} {lang === "ar" ? "محدد" : "selected"}</Badge>
+                      )}
+                    </Label>
+
+                    {ASPHALT_TEST_GROUPS.map(group => {
+                      const groupTests = allTests.filter((test: any) => test.isActive && (group.tests as readonly string[]).includes(test.code ?? ""));
+                      const bgColor = group.color === "blue" ? "bg-blue-50" : group.color === "green" ? "bg-green-50" : "bg-orange-50";
+                      const borderColor = group.color === "blue" ? "border-blue-200" : group.color === "green" ? "border-green-200" : "border-orange-200";
+                      const textColor = group.color === "blue" ? "text-blue-800" : group.color === "green" ? "text-green-800" : "text-orange-800";
+
+                      return (
+                        <div key={group.id} className={`border ${borderColor} rounded-lg p-3 ${bgColor}`}>
+                          <p className={`text-xs font-semibold ${textColor} mb-2 flex items-center gap-2`}>
+                            <span className="w-2 h-2 rounded-full bg-current"></span>
+                            {lang === "ar" ? group.label.ar : group.label.en}
+                          </p>
+
+                          <div className="space-y-1">
+                            {groupTests.length === 0 ? (
+                              <p className="text-xs text-muted-foreground bg-white rounded p-2">
+                                {lang === "ar" ? "لا توجد اختبارات نشطة في هذه المجموعة." : "No active tests in this group."}
+                              </p>
+                            ) : groupTests.map((test: any) => (
+                              <label key={test.id} className="flex items-center gap-2 p-2 bg-white rounded cursor-pointer hover:shadow-sm transition-shadow">
+                                <input
+                                  type="checkbox"
+                                  checked={selectedTests.some(t => t.testTypeId === test.id)}
+                                  onChange={(e) => handleTestSelection(test, e.target.checked)}
+                                  className="w-4 h-4"
+                                />
+                                <span className="text-sm flex-1">
+                                  {lang === "ar" && test.nameAr ? test.nameAr : test.nameEn}
+                                </span>
+                                <span className="text-xs text-slate-500 font-mono">
+                                  {Number(test.unitPrice).toFixed(0)} AED
+                                </span>
+                              </label>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })}
+
+                    {hasMultipleGroups && (
+                      <div className="bg-amber-50 border-2 border-amber-300 rounded-lg p-4">
+                        <div className="flex items-start gap-3">
+                          <AlertTriangle size={20} className="text-amber-600 shrink-0 mt-0.5" />
+                          <div className="flex-1">
+                            <p className="font-semibold text-amber-900 mb-2">
+                              {lang === "ar" ? "⚠️ تحذير: اختبارات غير متوافقة" : "⚠️ Warning: Incompatible Tests Selected"}
+                            </p>
+                            <p className="text-sm text-amber-800 mb-3">
+                              {lang === "ar"
+                                ? "اخترت اختبارات من مجموعات مختلفة. هذه الاختبارات تتطلب عينات مختلفة:"
+                                : "You've selected tests from different groups. These tests require different sample types:"}
+                            </p>
+                            <ul className="text-xs text-amber-700 space-y-1 mb-3">
+                              {selectedGroups.has("hot_bin") && <li>• {lang === "ar" ? "صندوق ساخن = ركام غير مرتبط" : "Hot Bin = Loose aggregates"}</li>}
+                              {selectedGroups.has("mix") && <li>• {lang === "ar" ? "خلطة = أسفلت ساخن مخلوط" : "Mix = Fresh hot mix asphalt"}</li>}
+                              {selectedGroups.has("core") && <li>• {lang === "ar" ? "لب = رصيف متصلب" : "Core = Hardened pavement"}</li>}
+                            </ul>
+                            <p className="text-xs text-amber-600 font-semibold">
+                              {lang === "ar"
+                                ? "💡 يُنصح بإنشاء طلبات منفصلة لكل نوع عينة."
+                                : "💡 Recommended: Create separate orders for each sample type."}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {hasMixTests && (
+                      <div className="space-y-2">
+                        <Label className="text-sm font-semibold">
+                          {lang === "ar" ? "نوع طبقة الأسفلت *" : "Asphalt Mix Course *"}
+                        </Label>
+                        <div className="flex gap-2">
+                          {[
+                            { value: "wearing_course", labelEn: "Wearing Course", labelAr: "طبقة رابطة" },
+                            { value: "binder_course", labelEn: "Binder Course", labelAr: "طبقة أساس" },
+                            { value: "base_course", labelEn: "Base Course", labelAr: "طبقة قاعدة" },
+                          ].map(course => (
+                            <button
+                              key={course.value}
+                              type="button"
+                              onClick={() => {
+                                setAsphaltMixCourse(course.value);
+                                setSelectedTests(prev => prev.map(t =>
+                                  ASPHALT_MIX_TEST_CODES.includes(t.testTypeCode)
+                                    ? { ...t, testSubType: course.value }
+                                    : t,
+                                ));
+                              }}
+                              className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium border transition-all ${
+                                asphaltMixCourse === course.value
+                                  ? "bg-blue-600 text-white border-blue-600"
+                                  : "bg-white text-slate-700 border-slate-300 hover:border-blue-400"
+                              }`}
+                            >
+                              {lang === "ar" ? course.labelAr : course.labelEn}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
                     )}
                   </div>
                 )}
-                {/* Asphalt Mix Course Selector */}
-                {form.sampleType === "asphalt" && asphaltKind === "mix" && (
-                  <div className="space-y-1.5">
-                    <Label>{lang === "ar" ? "نوع طبقة الأسفلت" : "Asphalt Mix Course"} <span className="text-red-500">*</span></Label>
-                    <div className="flex gap-2 flex-wrap">
-                      {[
-                        { value: "wearing_course", labelAr: "طبقة رابطة (ويرنج)", labelEn: "Wearing Course" },
-                        { value: "binder_course", labelAr: "طبقة أساس (بايندر)", labelEn: "Binder Course" },
-                        { value: "base_course", labelAr: "طبقة قاعدة", labelEn: "Base Course" },
-                      ].map(c => (
-                        <button key={c.value} type="button"
-                          onClick={() => {
-                            setAsphaltMixCourse(c.value);
-                            // Apply course to all already-selected tests
-                            setSelectedTests(prev => prev.map(t => ({ ...t, testSubType: c.value })));
-                          }}
-                          className={`flex-1 min-w-[100px] px-3 py-2 rounded-lg text-sm font-medium border transition-all ${
-                            asphaltMixCourse === c.value
-                              ? "bg-primary text-primary-foreground border-primary"
-                              : "bg-background text-muted-foreground border-border hover:border-primary/50"
-                          }`}>
-                          {lang === "ar" ? c.labelAr : c.labelEn}
-                        </button>
-                      ))}
-                    </div>
-                    <div className="space-y-2 pt-2">
-                      <Label>{lang === "ar" ? "طريقة اختيار الاختبارات" : "Test Selection Mode"}</Label>
-                      <div className="flex gap-2">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setAsphaltMixSelectionMode("batch");
-                            setSelectedTests([]);
-                          }}
-                          className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium border transition-all ${
-                            asphaltMixSelectionMode === "batch"
-                              ? "bg-primary text-primary-foreground border-primary"
-                              : "bg-background text-muted-foreground border-border hover:border-primary/50"
-                          }`}
-                        >
-                          {lang === "ar" ? "حزمة الاختبارات القياسية (4)" : "Standard Test Package (4)"}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setAsphaltMixSelectionMode("individual");
-                            setSelectedTests([]);
-                          }}
-                          className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium border transition-all ${
-                            asphaltMixSelectionMode === "individual"
-                              ? "bg-primary text-primary-foreground border-primary"
-                              : "bg-background text-muted-foreground border-border hover:border-primary/50"
-                          }`}
-                        >
-                          {lang === "ar" ? "اختيار فردي" : "Individual Selection"}
-                        </button>
-                      </div>
-                      {asphaltMixSelectionMode === "batch" && asphaltMixCourse && (
-                        <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-xs">
-                          <p className="font-semibold text-green-800 mb-2">
-                            {lang === "ar" ? "الاختبارات المحددة:" : "Selected Tests:"}
-                          </p>
-                          <div className="space-y-1">
-                            <p className="text-green-700">✓ {lang === "ar" ? "استخلاص البيتومين" : "Bitumen Extraction"}</p>
-                            <p className="text-green-700">✓ {lang === "ar" ? "تحليل منخلي (بعد الاستخلاص)" : "Sieve Analysis (Extracted)"}</p>
-                            <p className="text-green-700">✓ {lang === "ar" ? "كثافة مارشال الحجمية (Gmb)" : "Marshall Bulk Density (Gmb)"}</p>
-                            <p className="text-green-700">✓ {lang === "ar" ? "استقرار وتدفق مارشال" : "Marshall Stability & Flow"}</p>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
-                {/* Tests Selection (checkboxes) — batch package auto-selects 4 tests; list shows optional add-ons or individual picks */}
+
+                {/* Tests Selection (checkboxes) */}
                 {form.sampleType &&
-                  (form.sampleType !== "asphalt" || asphaltKind !== "") &&
-                  (form.sampleType !== "asphalt" || asphaltKind !== "mix" || asphaltMixSelectionMode !== "batch" || filteredTests.length > 0) && (
+                  form.sampleType !== "asphalt" &&
+                  (
                   <div className="space-y-2">
                     <Label className="flex items-center gap-1.5">
                       <CheckSquare className="w-3.5 h-3.5 text-muted-foreground" />
-                      {form.sampleType === "asphalt" && asphaltKind === "mix" && asphaltMixSelectionMode === "batch"
-                        ? (lang === "ar" ? "اختبارات إضافية (اختيارية)" : "Optional Additional Tests")
-                        : (lang === "ar" ? "الاختبارات المطلوبة" : "Required Tests")}
+                      {lang === "ar" ? "الاختبارات المطلوبة" : "Required Tests"}
                       <span className="text-red-500">*</span>
                       {selectedTests.length > 0 && (
                         <Badge variant="secondary" className="ms-1 text-xs">{selectedTests.length} {lang === "ar" ? "محدد" : "selected"}</Badge>
