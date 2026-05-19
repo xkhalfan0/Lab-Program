@@ -1,67 +1,92 @@
-import { useState, useCallback, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useParams, useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { redirectAfterTestSave } from "@/lib/batchHelpers";
-import { extractBitumenContentFromExtractionResult } from "@/lib/asphaltBitumen";
-import { BitumenContentFromExtraction } from "@/components/BitumenContentFromExtraction";
+import { getMarshallCorrectionFactor } from "@/lib/marshallCorrectionFactors";
 import DashboardLayout from "@/components/DashboardLayout";
 import { SampleInfoCard } from "@/components/SampleInfoCard";
-import { PassFailBadge, ResultBanner } from "@/components/PassFailBadge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import { Plus, Trash2, Send, FlaskConical, UserCheck, Printer } from "lucide-react";
+import { Send, FlaskConical, UserCheck, Printer, AlertCircle, Info, Loader2 } from "lucide-react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { useLanguage } from "@/contexts/LanguageContext";
 
-const STABILITY_MIN_KN = 8;
-const FLOW_MIN_MM = 2;
-const FLOW_MAX_MM = 4;
-
-interface MarshallRow {
+interface SpecimenInput {
   id: string;
-  specimenNo: string;
-  bulkDensity: string;
-  stability: string;
-  flow: string;
-  vma: string;
-  vfa: string;
-  airVoids: string;
-  stabilityResult?: "pass" | "fail" | "pending";
-  flowResult?: "pass" | "fail" | "pending";
-  overallResult?: "pass" | "fail" | "pending";
+  specimenNumber: number;
+  readingKN: string;
+  volume: number;
+  flowMm: string;
 }
 
-function newRow(index: number): MarshallRow {
+interface SpecimenComputed extends SpecimenInput {
+  corrFactor: number;
+  stabilityN: number;
+  corrStabilityN: number;
+  flowUnits: number;
+}
+
+function extractVolumeFromBulkSpecimen(spec: Record<string, unknown>): number {
+  if (spec.volume != null && spec.volume !== "") {
+    return Number(spec.volume) || 0;
+  }
+  const ssd = parseFloat(String(spec.ssdMass ?? spec.weightSSD ?? ""));
+  const water = parseFloat(String(spec.massWater ?? spec.weightInWater ?? ""));
+  if (ssd > water) return parseFloat((ssd - water).toFixed(1));
+  return 0;
+}
+
+function buildSpecimensFromBulkSG(bulkSpecimens: Record<string, unknown>[]): SpecimenInput[] {
+  const withVolume = bulkSpecimens
+    .map((s, idx) => ({
+      id: String(s.id ?? `spec_${idx + 1}`),
+      specimenNumber: idx + 1,
+      readingKN: "",
+      volume: extractVolumeFromBulkSpecimen(s),
+      flowMm: "",
+    }))
+    .filter((s) => s.volume > 0);
+
+  if (withVolume.length > 0) return withVolume;
+
+  return bulkSpecimens.map((s, idx) => ({
+    id: String(s.id ?? `spec_${idx + 1}`),
+    specimenNumber: idx + 1,
+    readingKN: "",
+    volume: extractVolumeFromBulkSpecimen(s),
+    flowMm: "",
+  }));
+}
+
+function computeSpecimen(spec: SpecimenInput): SpecimenComputed {
+  const reading = parseFloat(spec.readingKN) || 0;
+  const corrFactor = getMarshallCorrectionFactor(spec.volume);
+  const stabilityN = reading * 1000;
+  const corrStabilityN = stabilityN * corrFactor;
+  const flowMm = parseFloat(spec.flowMm) || 0;
+  const flowUnits = flowMm / 0.25;
+
   return {
-    id: `row_${Date.now()}_${index}`,
-    specimenNo: `S${index + 1}`,
-    bulkDensity: "",
-    stability: "",
-    flow: "",
-    vma: "",
-    vfa: "",
-    airVoids: "",
+    ...spec,
+    corrFactor: parseFloat(corrFactor.toFixed(2)),
+    stabilityN: parseFloat(stabilityN.toFixed(0)),
+    corrStabilityN: parseFloat(corrStabilityN.toFixed(0)),
+    flowUnits: parseFloat(flowUnits.toFixed(0)),
   };
 }
 
-function computeMarshallRow(row: MarshallRow): MarshallRow {
-  const stability = parseFloat(row.stability);
-  const flow = parseFloat(row.flow);
-
-  const stabilityResult: "pass" | "fail" | "pending" =
-    !Number.isNaN(stability) ? (stability >= STABILITY_MIN_KN ? "pass" : "fail") : "pending";
-  const flowResult: "pass" | "fail" | "pending" =
-    !Number.isNaN(flow) ? (flow >= FLOW_MIN_MM && flow <= FLOW_MAX_MM ? "pass" : "fail") : "pending";
-
-  const judged = [stabilityResult, flowResult].filter((r) => r !== "pending");
-  const overallResult: "pass" | "fail" | "pending" =
-    judged.length === 0 ? "pending" : judged.every((r) => r === "pass") ? "pass" : "fail";
-
-  return { ...row, stabilityResult, flowResult, overallResult };
+function mapLegacySpecimen(s: Record<string, unknown>, idx: number, volume: number): SpecimenInput {
+  return {
+    id: String(s.id ?? `spec_${idx + 1}`),
+    specimenNumber: Number(s.specimenNumber ?? idx + 1),
+    readingKN: String(s.readingKN ?? s.stability ?? ""),
+    volume: Number(s.volume ?? volume) || volume,
+    flowMm: String(s.flowMm ?? s.flow ?? ""),
+  };
 }
 
 export default function AsphaltMarshall() {
@@ -77,25 +102,27 @@ export default function AsphaltMarshall() {
     { distributionId: distId },
     { enabled: !!distId },
   );
-  const { data: bitumenExtractionResults = [] } = trpc.specializedTests.getBySampleAndTestType.useQuery(
-    {
-      sampleId: dist?.sampleId ?? 0,
-      testTypeCode: "ASPH_BITUMEN_EXTRACT",
-      status: "submitted",
-    },
-    { enabled: !!dist?.sampleId },
-  );
+  const { data: bulkSGResults = [], isLoading: bulkSGLoading } =
+    trpc.specializedTests.getBySampleAndTestType.useQuery(
+      {
+        sampleId: dist?.sampleId ?? 0,
+        testTypeCode: "ASPH_MARSHALL_DENSITY",
+        status: "submitted",
+      },
+      { enabled: !!dist?.sampleId },
+    );
 
-  const [rows, setRows] = useState<MarshallRow[]>([newRow(0), newRow(1), newRow(2)]);
+  const bulkSGResult = bulkSGResults[0];
+  const bulkSGCompleted = bulkSGResult?.status === "submitted";
+  const bulkSGData = (bulkSGResult?.formData ?? {}) as Record<string, unknown>;
+  const bulkSGSpecimens = (bulkSGData.specimens ?? []) as Record<string, unknown>[];
+  const bulkSGAverages = (bulkSGData.averages ?? bulkSGData) as Record<string, unknown>;
+
+  const [specimens, setSpecimens] = useState<SpecimenInput[]>([]);
   const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
   const [submitted, setSubmitted] = useState(false);
-
-  const bitumenExtraction = bitumenExtractionResults[0];
-  const bitumenContent = useMemo(
-    () => extractBitumenContentFromExtractionResult(bitumenExtraction),
-    [bitumenExtraction],
-  );
+  const [hydrated, setHydrated] = useState(false);
 
   const saveResult = trpc.specializedTests.save.useMutation({
     onSuccess: (_, vars) => {
@@ -111,58 +138,107 @@ export default function AsphaltMarshall() {
   });
 
   useEffect(() => {
-    if (!existing?.formData) return;
-    const fd = existing.formData as {
-      specimens?: MarshallRow[];
-      notes?: string;
-      bitumenContent?: number;
-    };
-    if (fd.notes) setNotes(fd.notes);
-    if (Array.isArray(fd.specimens) && fd.specimens.length > 0) {
-      setRows(
-        fd.specimens.map((s, i) => ({
-          id: s.id || `row_${Date.now()}_${i}`,
-          specimenNo: s.specimenNo || `S${i + 1}`,
-          bulkDensity: String(s.bulkDensity ?? ""),
-          stability: String(s.stability ?? ""),
-          flow: String(s.flow ?? ""),
-          vma: String(s.vma ?? ""),
-          vfa: String(s.vfa ?? ""),
-          airVoids: String(s.airVoids ?? ""),
-        })),
-      );
+    if (!bulkSGCompleted || hydrated) return;
+
+    if (existing?.formData) {
+      const fd = existing.formData as Record<string, unknown>;
+      if (fd.notes) setNotes(String(fd.notes));
+      const saved = fd.specimens as Record<string, unknown>[] | undefined;
+      if (Array.isArray(saved) && saved.length > 0) {
+        const fromBulk = buildSpecimensFromBulkSG(bulkSGSpecimens);
+        setSpecimens(
+          saved.map((s, i) =>
+            mapLegacySpecimen(s, i, fromBulk[i]?.volume ?? extractVolumeFromBulkSpecimen(s)),
+          ),
+        );
+      } else if (bulkSGSpecimens.length > 0) {
+        setSpecimens(buildSpecimensFromBulkSG(bulkSGSpecimens));
+      }
+      if (existing.status === "submitted") setSubmitted(true);
+      setHydrated(true);
+      return;
     }
-    if (existing.status === "submitted") setSubmitted(true);
-  }, [existing]);
 
-  const computedRows = rows.map((r) => {
-    const computed = computeMarshallRow(r);
-    return {
-      ...computed,
-      bitumenContent: bitumenContent != null ? String(bitumenContent) : "",
-    };
-  });
-  const validRows = computedRows.filter((r) => r.stability && r.flow);
-  const overallResult: "pass" | "fail" | "pending" =
-    validRows.length === 0
-      ? "pending"
-      : validRows.every((r) => r.overallResult === "pass")
-        ? "pass"
-        : "fail";
+    if (bulkSGSpecimens.length > 0) {
+      setSpecimens(buildSpecimensFromBulkSG(bulkSGSpecimens));
+      setHydrated(true);
+    }
+  }, [bulkSGCompleted, bulkSGSpecimens, existing, hydrated]);
 
-  const updateRow = useCallback((id: string, field: keyof MarshallRow, value: string) => {
-    setRows((prev) => prev.map((r) => (r.id === id ? { ...r, [field]: value } : r)));
-  }, []);
+  const mixType = dist?.testSubType ?? "base_course";
+  const isWearingCourse = mixType === "wearing_course";
+
+  const avgAirVoids = Number(bulkSGAverages.avgAirVoids ?? bulkSGData.avgAirVoids ?? 0);
+  const avgVMA = Number(bulkSGAverages.avgVMA ?? bulkSGData.avgVMA ?? 0);
+  const avgGmb = Number(bulkSGAverages.avgGmb ?? bulkSGData.avgGmb ?? 0);
+
+  const specs = useMemo(
+    () => ({
+      airVoids: { min: 3, max: 5 },
+      vma: { min: isWearingCourse ? 14 : 13 },
+      corrStability: { min: 8000 },
+      flow: { min: 8, max: 16 },
+    }),
+    [isWearingCourse],
+  );
+
+  const computedSpecimens = useMemo(() => specimens.map(computeSpecimen), [specimens]);
+  const enteredSpecimens = computedSpecimens.filter(
+    (s) => parseFloat(s.readingKN) > 0 || parseFloat(s.flowMm) > 0,
+  );
+
+  const avgCorrStability =
+    enteredSpecimens.length > 0
+      ? enteredSpecimens.reduce((sum, s) => sum + s.corrStabilityN, 0) / enteredSpecimens.length
+      : 0;
+  const avgFlow =
+    enteredSpecimens.length > 0
+      ? enteredSpecimens.reduce((sum, s) => sum + s.flowUnits, 0) / enteredSpecimens.length
+      : 0;
+
+  const airVoidsPass = bulkSGCompleted && avgAirVoids >= specs.airVoids.min && avgAirVoids <= specs.airVoids.max;
+  const vmaPass = bulkSGCompleted && avgVMA >= specs.vma.min;
+  const stabilityPass = enteredSpecimens.length > 0 && avgCorrStability >= specs.corrStability.min;
+  const flowPass =
+    enteredSpecimens.length > 0 && avgFlow >= specs.flow.min && avgFlow <= specs.flow.max;
+  const overallPass = airVoidsPass && vmaPass && stabilityPass && flowPass;
+  const overallResult = overallPass ? "pass" : "fail";
+
+  const updateSpecimen = (index: number, field: "readingKN" | "flowMm", value: string) => {
+    setSpecimens((prev) => {
+      const updated = [...prev];
+      updated[index] = { ...updated[index], [field]: value };
+      return updated;
+    });
+  };
 
   const handleSave = async (status: "draft" | "submitted") => {
     if (!dist?.sampleId) {
-      toast.error(lang === "ar" ? "معرف العينة مفقود" : "Sample ID missing");
+      toast.error(ar ? "معرف العينة مفقود" : "Sample ID missing");
       return;
     }
-    if (status === "submitted" && validRows.length === 0) {
-      toast.error(ar ? "الرجاء إدخال نتيجة عينة واحدة على الأقل" : "Please enter at least one specimen result");
+    if (status === "submitted" && enteredSpecimens.length === 0) {
+      toast.error(ar ? "الرجاء إدخال قراءة ثبات وتدفق لعينة واحدة على الأقل" : "Enter stability and flow for at least one specimen");
       return;
     }
+
+    const formData = {
+      mixType,
+      specimens: computedSpecimens,
+      volumetricFromBulkSG: {
+        avgAirVoids,
+        avgVMA,
+        avgGmb,
+        bulkSGDistributionId: bulkSGResult?.distributionId,
+      },
+      averages: {
+        avgCorrStability: parseFloat(avgCorrStability.toFixed(0)),
+        avgFlow: parseFloat(avgFlow.toFixed(0)),
+      },
+      specifications: specs,
+      passFailChecks: { airVoidsPass, vmaPass, stabilityPass, flowPass },
+    };
+
     setSaving(true);
     try {
       await saveResult.mutateAsync({
@@ -170,29 +246,12 @@ export default function AsphaltMarshall() {
         sampleId: dist.sampleId,
         testTypeCode: "ASPH_MARSHALL",
         formTemplate: "asphalt_marshall",
-        formData: {
-          specimens: computedRows,
-          bitumenContent,
-          bitumenSource: bitumenExtraction
-            ? {
-                distributionId: bitumenExtraction.distributionId,
-                testTypeCode: bitumenExtraction.testTypeCode,
-              }
-            : null,
-        },
-        overallResult: overallResult === "pending" ? "pending" : overallResult,
+        formData,
+        overallResult: enteredSpecimens.length === 0 ? "pending" : overallResult,
         summaryValues: {
-          bitumenContent,
-          avgStability:
-            validRows.length > 0
-              ? (
-                  validRows.reduce((s, r) => s + parseFloat(r.stability), 0) / validRows.length
-                ).toFixed(2)
-              : undefined,
-          avgFlow:
-            validRows.length > 0
-              ? (validRows.reduce((s, r) => s + parseFloat(r.flow), 0) / validRows.length).toFixed(2)
-              : undefined,
+          avgCorrStability: parseFloat(avgCorrStability.toFixed(0)),
+          avgFlow: parseFloat(avgFlow.toFixed(0)),
+          mixType,
         },
         notes,
         status,
@@ -206,7 +265,37 @@ export default function AsphaltMarshall() {
     return (
       <DashboardLayout>
         <div className="p-6 text-center text-red-600">
-          {lang === "ar" ? "معرف التوزيع غير صالح" : "Invalid distribution ID"}
+          {ar ? "معرف التوزيع غير صالح" : "Invalid distribution ID"}
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  if (bulkSGLoading) {
+    return (
+      <DashboardLayout>
+        <div className="flex items-center justify-center p-16 gap-2 text-muted-foreground">
+          <Loader2 className="w-5 h-5 animate-spin" />
+          {ar ? "جاري التحميل..." : "Loading..."}
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  if (!bulkSGCompleted) {
+    return (
+      <DashboardLayout>
+        <div className="max-w-lg mx-auto p-8 text-center">
+          <AlertCircle className="w-12 h-12 text-amber-500 mx-auto mb-4" />
+          <h3 className="text-lg font-semibold mb-2">{ar ? "اختبار مقفل" : "Test Locked"}</h3>
+          <p className="text-muted-foreground mb-4">
+            {ar
+              ? "يجب إكمال اختبار الثقل النوعي الظاهري (ASTM D 2726) على نفس العينة أولاً"
+              : "Bulk Specific Gravity test (ASTM D 2726) must be completed on this sample first"}
+          </p>
+          <Button variant="outline" onClick={() => setLocation("/technician")}>
+            {ar ? "رجوع" : "Go Back"}
+          </Button>
         </div>
       </DashboardLayout>
     );
@@ -215,7 +304,10 @@ export default function AsphaltMarshall() {
   return (
     <DashboardLayout>
       <div className="max-w-6xl mx-auto p-6 space-y-6">
-        <SampleInfoCard dist={dist} extraFields={[{ label: ar ? "نوع الخلطة" : "Mix type", value: dist?.testSubType }]} />
+        <SampleInfoCard
+          dist={dist}
+          extraFields={[{ label: ar ? "نوع الخلطة" : "Mix type", value: dist?.testSubType }]}
+        />
 
         <div className="flex items-start justify-between flex-wrap gap-3">
           <div>
@@ -225,11 +317,11 @@ export default function AsphaltMarshall() {
             </div>
             <h1 className="text-2xl font-bold text-slate-900">
               {ar
-                ? "الثبات والتدفق ونسبة الفراغات لعينات مارشال"
-                : "Stability, Flow & Voids Percentage of Marshall Specimens"}
+                ? "الثبات والتدفق لخلطة HMA (ASTM D 6927)"
+                : "HMA Marshall Stability and Flow (ASTM D 6927)"}
             </h1>
             <p className="text-slate-500 text-sm mt-1">
-              ASTM D1559 | {ar ? "أمر التوزيع:" : "Distribution:"}{" "}
+              ASTM D 6927 | {ar ? "أمر التوزيع:" : "Distribution:"}{" "}
               {dist?.distributionCode ?? `DIST-${distId}`}
             </p>
           </div>
@@ -253,7 +345,11 @@ export default function AsphaltMarshall() {
                 <Button variant="outline" size="sm" onClick={() => handleSave("draft")} disabled={saving}>
                   {ar ? "حفظ مسودة" : "Save Draft"}
                 </Button>
-                <Button className="bg-blue-600 hover:bg-blue-700" onClick={() => handleSave("submitted")} disabled={saving}>
+                <Button
+                  className="bg-blue-600 hover:bg-blue-700"
+                  onClick={() => handleSave("submitted")}
+                  disabled={saving}
+                >
                   <Send size={14} className="mr-1.5" />
                   {saving ? (ar ? "جاري..." : "Submitting...") : ar ? "إرسال النتائج" : "Submit Results"}
                 </Button>
@@ -261,12 +357,6 @@ export default function AsphaltMarshall() {
             )}
           </div>
         </div>
-
-        <BitumenContentFromExtraction
-          lang={lang}
-          bitumenContent={bitumenContent}
-          extractionDistributionCode={bitumenExtraction?.testTypeCode ?? null}
-        />
 
         <Card>
           <CardContent className="pt-4">
@@ -280,139 +370,217 @@ export default function AsphaltMarshall() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="border-blue-200 bg-blue-50">
           <CardHeader className="pb-3">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-base">{ar ? "نتائج العينات" : "Specimen Results"}</CardTitle>
-              {!submitted && (
-                <Button size="sm" variant="outline" onClick={() => setRows((p) => [...p, newRow(p.length)])}>
-                  <Plus size={14} className="mr-1" /> {ar ? "إضافة عينة" : "Add Specimen"}
-                </Button>
-              )}
-            </div>
+            <CardTitle className="text-sm font-semibold flex items-center gap-2">
+              <Info className="w-4 h-4" />
+              {ar ? "البيانات من اختبار الثقل النوعي الظاهري" : "Data from Bulk Specific Gravity Test"}
+            </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm border-collapse">
-                <thead>
-                  <tr className="bg-slate-50">
-                    <th className="border border-slate-200 px-2 py-2 text-xs">{ar ? "العينة" : "Spec."}</th>
-                    <th className="border border-slate-200 px-2 py-2 text-xs bg-amber-50">
-                      {ar ? "البيتومين (%)" : "Bitumen (%)"}
-                    </th>
-                    <th className="border border-slate-200 px-2 py-2 text-xs">
-                      {ar ? "الكثافة" : "Bulk Density"}
-                    </th>
-                    <th className="border border-slate-200 px-2 py-2 text-xs">
-                      {ar ? "الثبات (كن)" : "Stability (kN)"}
-                    </th>
-                    <th className="border border-slate-200 px-2 py-2 text-xs">
-                      {ar ? "التدفق (مم)" : "Flow (mm)"}
-                    </th>
-                    <th className="border border-slate-200 px-2 py-2 text-xs">VMA (%)</th>
-                    <th className="border border-slate-200 px-2 py-2 text-xs">VFA (%)</th>
-                    <th className="border border-slate-200 px-2 py-2 text-xs">
-                      {ar ? "الفراغات (%)" : "Air Voids (%)"}
-                    </th>
-                    <th className="border border-slate-200 px-2 py-2 text-xs">{ar ? "النتيجة" : "Result"}</th>
-                    <th className="border border-slate-200 px-2 py-2"></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {computedRows.map((row, idx) => (
-                    <tr key={row.id} className={idx % 2 === 0 ? "bg-white" : "bg-slate-50/50"}>
-                      <td className="border border-slate-200 px-1 py-1">
-                        <Input
-                          value={row.specimenNo}
-                          onChange={(e) => updateRow(row.id, "specimenNo", e.target.value)}
-                          className="h-7 text-xs w-14"
-                          disabled={submitted}
-                        />
-                      </td>
-                      <td className="border border-slate-200 px-1 py-1 text-center font-mono text-xs bg-amber-50/50">
-                        {bitumenContent != null ? bitumenContent.toFixed(2) : "—"}
-                      </td>
-                      <td className="border border-slate-200 px-1 py-1">
-                        <Input
-                          value={row.bulkDensity}
-                          onChange={(e) => updateRow(row.id, "bulkDensity", e.target.value)}
-                          className="h-7 text-xs w-20 text-center font-mono"
-                          disabled={submitted}
-                        />
-                      </td>
-                      <td className="border border-slate-200 px-1 py-1">
-                        <Input
-                          value={row.stability}
-                          onChange={(e) => updateRow(row.id, "stability", e.target.value)}
-                          className="h-7 text-xs w-20 text-center font-mono"
-                          disabled={submitted}
-                        />
-                      </td>
-                      <td className="border border-slate-200 px-1 py-1">
-                        <Input
-                          value={row.flow}
-                          onChange={(e) => updateRow(row.id, "flow", e.target.value)}
-                          className="h-7 text-xs w-20 text-center font-mono"
-                          disabled={submitted}
-                        />
-                      </td>
-                      <td className="border border-slate-200 px-1 py-1">
-                        <Input
-                          value={row.vma}
-                          onChange={(e) => updateRow(row.id, "vma", e.target.value)}
-                          className="h-7 text-xs w-16 text-center font-mono"
-                          disabled={submitted}
-                        />
-                      </td>
-                      <td className="border border-slate-200 px-1 py-1">
-                        <Input
-                          value={row.vfa}
-                          onChange={(e) => updateRow(row.id, "vfa", e.target.value)}
-                          className="h-7 text-xs w-16 text-center font-mono"
-                          disabled={submitted}
-                        />
-                      </td>
-                      <td className="border border-slate-200 px-1 py-1">
-                        <Input
-                          value={row.airVoids}
-                          onChange={(e) => updateRow(row.id, "airVoids", e.target.value)}
-                          className="h-7 text-xs w-16 text-center font-mono"
-                          disabled={submitted}
-                        />
-                      </td>
-                      <td className="border border-slate-200 px-1 py-1 text-center">
-                        <PassFailBadge result={row.overallResult ?? "pending"} size="sm" />
-                      </td>
-                      <td className="border border-slate-200 px-1 py-1">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-8 w-8 p-0 text-red-600"
-                          onClick={() => setRows((p) => p.filter((r) => r.id !== row.id))}
-                          disabled={submitted || rows.length <= 1}
-                        >
-                          <Trash2 size={12} />
-                        </Button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
+              <div>
+                <Label className="text-xs text-muted-foreground">{ar ? "النوع" : "Mix Type"}</Label>
+                <div className="font-semibold mt-1">
+                  {isWearingCourse
+                    ? ar
+                      ? "طبقة التآكل"
+                      : "Wearing Course"
+                    : ar
+                      ? "طبقة الأساس"
+                      : "Base Course"}
+                </div>
+              </div>
+              <div className={airVoidsPass ? "text-green-700" : "text-red-700"}>
+                <Label className="text-xs">{ar ? "الفراغات الهوائية" : "Air Voids"}</Label>
+                <div className="font-semibold mt-1">
+                  {avgAirVoids.toFixed(1)}% {airVoidsPass ? "✓" : "✗"}
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  Spec: {specs.airVoids.min}-{specs.airVoids.max}%
+                </div>
+              </div>
+              <div className={vmaPass ? "text-green-700" : "text-red-700"}>
+                <Label className="text-xs">VMA</Label>
+                <div className="font-semibold mt-1">
+                  {avgVMA.toFixed(1)} {vmaPass ? "✓" : "✗"}
+                </div>
+                <div className="text-xs text-muted-foreground">Spec: ≥{specs.vma.min}</div>
+              </div>
+              <div>
+                <Label className="text-xs">{ar ? "متوسط Gmb" : "Avg Gmb"}</Label>
+                <div className="font-semibold mt-1">{avgGmb > 0 ? avgGmb.toFixed(3) : "—"}</div>
+              </div>
             </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm font-semibold">
+              {ar ? "قياسات الثبات والتدفق" : "Stability and Flow Measurements"}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {specimens.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-4">
+                {ar ? "لا توجد عينات في نتائج الثقل النوعي الظاهري" : "No specimens found in Bulk SG results"}
+              </p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs border-collapse">
+                  <thead className="bg-slate-50">
+                    <tr>
+                      <th className="border border-slate-300 px-2 py-2">{ar ? "رقم العينة" : "Specimen #"}</th>
+                      <th className="border border-slate-300 px-2 py-2">{ar ? "القراءة (kN)" : "Reading (kN)"}</th>
+                      <th className="border border-slate-300 px-2 py-2 bg-blue-50">
+                        {ar ? "الحجم (cm³)" : "Volume (cm³)"}
+                      </th>
+                      <th className="border border-slate-300 px-2 py-2 bg-blue-50">
+                        {ar ? "معامل التصحيح" : "Corr. Factor"}
+                      </th>
+                      <th className="border border-slate-300 px-2 py-2 bg-blue-50">
+                        {ar ? "الثبات (N)" : "Stability (N)"}
+                      </th>
+                      <th className="border border-slate-300 px-2 py-2 bg-blue-50">
+                        {ar ? "الثبات المصحح (N)" : "Corr. Stability (N)"}
+                      </th>
+                      <th className="border border-slate-300 px-2 py-2">{ar ? "التدفق (mm)" : "Flow (mm)"}</th>
+                      <th className="border border-slate-300 px-2 py-2 bg-blue-50">
+                        {ar ? "التدفق (وحدات 0.25mm)" : "Flow (0.25mm units)"}
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {computedSpecimens.map((spec, idx) => (
+                      <tr key={spec.id}>
+                        <td className="border border-slate-300 px-2 py-2 text-center font-semibold">
+                          {spec.specimenNumber}
+                        </td>
+                        <td className="border border-slate-300 px-2 py-2">
+                          <Input
+                            type="number"
+                            step="0.01"
+                            value={spec.readingKN}
+                            onChange={(e) => updateSpecimen(idx, "readingKN", e.target.value)}
+                            className="h-7 text-xs"
+                            placeholder="10.5"
+                            disabled={submitted}
+                          />
+                        </td>
+                        <td className="border border-slate-300 px-2 py-2 text-center bg-blue-50 font-semibold">
+                          {spec.volume.toFixed(1)}
+                        </td>
+                        <td className="border border-slate-300 px-2 py-2 text-center bg-blue-50 font-semibold">
+                          {spec.corrFactor.toFixed(2)}
+                        </td>
+                        <td className="border border-slate-300 px-2 py-2 text-center bg-blue-50 font-semibold">
+                          {spec.stabilityN.toFixed(0)}
+                        </td>
+                        <td className="border border-slate-300 px-2 py-2 text-center bg-blue-50 font-semibold">
+                          {spec.corrStabilityN.toFixed(0)}
+                        </td>
+                        <td className="border border-slate-300 px-2 py-2">
+                          <Input
+                            type="number"
+                            step="0.1"
+                            value={spec.flowMm}
+                            onChange={(e) => updateSpecimen(idx, "flowMm", e.target.value)}
+                            className="h-7 text-xs"
+                            placeholder="3.5"
+                            disabled={submitted}
+                          />
+                        </td>
+                        <td className="border border-slate-300 px-2 py-2 text-center bg-blue-50 font-semibold">
+                          {spec.flowUnits.toFixed(0)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  {enteredSpecimens.length > 0 && (
+                    <tfoot className="bg-green-50 font-semibold">
+                      <tr>
+                        <td colSpan={5} className="border border-slate-300 px-2 py-2 text-right">
+                          {ar ? "المتوسط:" : "Average:"}
+                        </td>
+                        <td
+                          className={`border border-slate-300 px-2 py-2 text-center text-base ${
+                            stabilityPass ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"
+                          }`}
+                        >
+                          {avgCorrStability.toFixed(0)} {stabilityPass ? "✓" : "✗"}
+                        </td>
+                        <td className="border border-slate-300 px-2 py-2" />
+                        <td
+                          className={`border border-slate-300 px-2 py-2 text-center text-base ${
+                            flowPass ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"
+                          }`}
+                        >
+                          {avgFlow.toFixed(0)} {flowPass ? "✓" : "✗"}
+                        </td>
+                      </tr>
+                      <tr className="bg-amber-50 text-xs">
+                        <td colSpan={5} className="border border-slate-300 px-2 py-2 text-right">
+                          {ar ? "المواصفة:" : "Specification:"}
+                        </td>
+                        <td className="border border-slate-300 px-2 py-2 text-center text-red-700 font-semibold">
+                          ≥{specs.corrStability.min} N
+                        </td>
+                        <td className="border border-slate-300 px-2 py-2" />
+                        <td className="border border-slate-300 px-2 py-2 text-center text-red-700 font-semibold">
+                          {specs.flow.min}-{specs.flow.max}
+                        </td>
+                      </tr>
+                    </tfoot>
+                  )}
+                </table>
+              </div>
+            )}
             <p className="text-xs text-muted-foreground mt-2">
               {ar
-                ? `المواصفات: الثبات ≥ ${STABILITY_MIN_KN} كن، التدفق ${FLOW_MIN_MM}–${FLOW_MAX_MM} مم`
-                : `Spec: Stability ≥ ${STABILITY_MIN_KN} kN, Flow ${FLOW_MIN_MM}–${FLOW_MAX_MM} mm`}
+                ? "التدفق بالوحدات = مم ÷ 0.25 (المواصفة 8–16 وحدات = 2–4 مم)"
+                : "Flow units = mm ÷ 0.25 (spec 8–16 units = 2–4 mm)"}
             </p>
           </CardContent>
         </Card>
 
-        {validRows.length > 0 && overallResult !== "pending" && (
-          <ResultBanner
-            result={overallResult}
-            testName={ar ? "مارشال — الثبات والتدفق" : "Marshall — Stability & Flow"}
-            standard="ASTM D1559"
-          />
+        {enteredSpecimens.length > 0 && (
+          <Card>
+            <CardContent className="pt-6">
+              <div
+                className={`p-6 rounded-lg border-2 text-center ${
+                  overallPass
+                    ? "bg-green-50 border-green-500 text-green-900"
+                    : "bg-red-50 border-red-500 text-red-900"
+                }`}
+              >
+                <div className="text-3xl font-bold mb-2">
+                  {overallPass ? (ar ? "مقبول ✓" : "PASS ✓") : ar ? "مرفوض ✗" : "FAIL ✗"}
+                </div>
+                {!overallPass && (
+                  <div className="text-sm space-y-1 mt-3">
+                    {!airVoidsPass && (
+                      <div>{ar ? "❌ الفراغات الهوائية خارج الحد" : "❌ Air Voids out of spec"}</div>
+                    )}
+                    {!vmaPass && (
+                      <div>{ar ? "❌ VMA أقل من الحد الأدنى" : "❌ VMA below minimum"}</div>
+                    )}
+                    {!stabilityPass && (
+                      <div>
+                        {ar ? "❌ الثبات المصحح أقل من الحد" : "❌ Corr. Stability below minimum"}
+                      </div>
+                    )}
+                    {!flowPass && <div>{ar ? "❌ التدفق خارج الحد" : "❌ Flow out of range"}</div>}
+                  </div>
+                )}
+                {overallPass && (
+                  <div className="text-sm mt-2">
+                    {ar ? "جميع المعايير مستوفاة" : "All criteria met"}
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
         )}
 
         <Card>
@@ -425,4 +593,3 @@ export default function AsphaltMarshall() {
     </DashboardLayout>
   );
 }
-

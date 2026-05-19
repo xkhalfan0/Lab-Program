@@ -142,6 +142,7 @@ const CODE_TO_COMPONENT: Record<string, React.ComponentType> = {
   "ASPH_BITUMEN_EXTRACT":   AsphaltBitumenExtraction,
   "ASPH_EXTRACTED_SIEVE":   AsphaltExtractedSieve,
   "ASPH_MARSHALL":          AsphaltMarshall,
+  "DIST-2026-040":          AsphaltMarshall,
   "ASPH_MARSHALL_DENSITY":  AsphaltMarshallDensity,
   "DIST-2026-042":          AsphaltMarshallDensity,
   "ASPH_ACWC":              AsphaltMarshall,

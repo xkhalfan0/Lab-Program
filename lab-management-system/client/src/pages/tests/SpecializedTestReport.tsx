@@ -989,33 +989,76 @@ function renderAsphaltMarshallDensity(fd: any, isAr: boolean) {
 }
 
 function renderAsphaltMarshall(fd: any, isAr: boolean) {
-  const specimens = fd.specimens ?? [];
-  const headers = isAr
-    ? ["العينة", "نسبة البيتومين (%)", "الكثافة الكلية", "الثبات (كن)", "الانسياب (مم)", "VMA (%)", "VFA (%)", "الفراغات الهوائية (%)"]
-    : ["Spec.", "Bitumen (%)", "Bulk Density", "Stability (kN)", "Flow (mm)", "VMA (%)", "VFA (%)", "Air Voids (%)"];
+  const L = (en: string, ars: string) => (isAr ? ars : en);
+  const specimens = (fd.specimens ?? []).map((s: any, i: number) => ({
+    ...s,
+    _i: s.specimenNumber ?? i + 1,
+    readingKN: s.readingKN ?? s.stability,
+    flowMm: s.flowMm ?? s.flow,
+  }));
+  const vol = fd.volumetricFromBulkSG ?? {};
+  const averages = fd.averages ?? {};
+  const checks = fd.passFailChecks ?? {};
+  const isWearing = (fd.mixType ?? "") === "wearing_course";
+
   const marshallCols: Column[] = [
-    { header: headers[0], field: "_i", align: "center", render: (_v, row) => String((row as any)._i + 1) },
-    { header: headers[1], field: "bitumenContent", type: "number", decimals: 2, align: "right" },
-    { header: headers[2], field: "bulkDensity", type: "number", decimals: 2, align: "right" },
-    { header: headers[3], field: "stability", type: "number", decimals: 2, align: "right" },
-    { header: headers[4], field: "flow", type: "number", decimals: 2, align: "right" },
-    { header: headers[5], field: "vma", type: "number", decimals: 2, align: "right" },
-    { header: headers[6], field: "vfa", type: "number", decimals: 2, align: "right" },
-    { header: headers[7], field: "airVoids", type: "number", decimals: 2, align: "right" },
+    { header: L("Specimen #", "رقم العينة"), field: "_i", align: "center" },
+    { header: L("Reading (kN)", "القراءة (kN)"), field: "readingKN", align: "right", render: v => fmt(v, 2) },
+    { header: L("Volume (cm³)", "الحجم"), field: "volume", align: "right", render: v => fmt(v, 1) },
+    { header: L("Corr. Factor", "معامل التصحيح"), field: "corrFactor", align: "center", render: v => fmt(v, 2) },
+    { header: L("Stability (N)", "الثبات (N)"), field: "stabilityN", align: "right", render: v => fmt(v, 0) },
+    { header: L("Corr. Stability (N)", "الثبات المصحح (N)"), field: "corrStabilityN", align: "right", render: v => fmt(v, 0) },
+    { header: L("Flow (mm)", "التدفق (mm)"), field: "flowMm", align: "right", render: v => fmt(v, 1) },
+    { header: L("Flow (0.25mm)", "التدفق (0.25mm)"), field: "flowUnits", align: "center", render: v => fmt(v, 0) },
   ];
+
   return (
     <>
-      <div className="mb-4">
-        <FlexibleResultsTable columns={marshallCols} rows={specimens.map((s: any, i: number) => ({ ...s, _i: i }))} />
-      </div>
-      {fd.obc && (
-        <div className="bg-amber-50 border border-amber-200 rounded p-3 text-xs text-center">
-          <span className="font-semibold text-amber-800">
-            {isAr ? "نسبة البيتومين المثلى (OBC): " : "Optimum Bitumen Content (OBC): "}
-          </span>
-          <span className="text-xl font-bold text-amber-900">{fmt(fd.obc)} %</span>
+      {(vol.avgAirVoids != null || vol.avgVMA != null) && (
+        <div className="mb-4 grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+          <div className="border border-blue-200 bg-blue-50 rounded p-2">
+            <div className="text-blue-700">{L("Mix Type", "النوع")}</div>
+            <div className="font-semibold">
+              {isWearing ? L("Wearing Course", "طبقة التآكل") : L("Base Course", "طبقة الأساس")}
+            </div>
+          </div>
+          <div className="border border-slate-200 rounded p-2">
+            <div className="text-slate-600">{L("Air Voids", "الفراغات الهوائية")}</div>
+            <div className="font-semibold">{fmt(vol.avgAirVoids, 1)}%</div>
+          </div>
+          <div className="border border-slate-200 rounded p-2">
+            <div className="text-slate-600">VMA</div>
+            <div className="font-semibold">{fmt(vol.avgVMA, 1)}</div>
+          </div>
+          <div className="border border-slate-200 rounded p-2">
+            <div className="text-slate-600">{L("Avg Gmb", "متوسط Gmb")}</div>
+            <div className="font-semibold">{fmt(vol.avgGmb, 3)}</div>
+          </div>
         </div>
       )}
+
+      <div className="mb-4">
+        <h3 className="text-sm font-semibold mb-2">
+          {L("Stability and Flow", "قياسات الثبات والتدفق")}
+        </h3>
+        <FlexibleResultsTable columns={marshallCols} rows={specimens} />
+        <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
+          <div className="border border-slate-200 p-2 rounded">
+            <div className="text-slate-600">{L("Avg Corr. Stability (N)", "متوسط الثبات المصحح")}</div>
+            <div className="text-lg font-semibold">
+              {averages.avgCorrStability ?? "—"}
+              {checks.stabilityPass === false ? " ✗" : checks.stabilityPass ? " ✓" : ""}
+            </div>
+          </div>
+          <div className="border border-slate-200 p-2 rounded">
+            <div className="text-slate-600">{L("Avg Flow (0.25mm units)", "متوسط التدفق")}</div>
+            <div className="text-lg font-semibold">
+              {averages.avgFlow ?? "—"}
+              {checks.flowPass === false ? " ✗" : checks.flowPass ? " ✓" : ""}
+            </div>
+          </div>
+        </div>
+      </div>
     </>
   );
 }
@@ -2299,16 +2342,26 @@ export default function SpecializedTestReport() {
     result.formTemplate === "asphalt_marshall_density" ||
     result.testTypeCode === "ASPH_MARSHALL_DENSITY" ||
     result.testTypeCode === "DIST-2026-042";
+  const isMarshallStabilityReport =
+    result.formTemplate === "asphalt_marshall" ||
+    result.testTypeCode === "ASPH_MARSHALL" ||
+    result.testTypeCode === "DIST-2026-040";
   const testNameDisplay = isMarshallDensityReport
-    ? (isAr
+    ? isAr
       ? "الثقل النوعي الظاهري للخلطة الإسفلتية المدموكة (ASTM D 2726)"
-      : "Bulk Specific Gravity of Compacted HMA (ASTM D 2726)")
-    : isAr
-      ? ((dist as any)?.testNameAr ?? dist?.testName ?? result.testTypeCode)
-      : ((dist as any)?.testNameEn ?? dist?.testName ?? result.testTypeCode);
+      : "Bulk Specific Gravity of Compacted HMA (ASTM D 2726)"
+    : isMarshallStabilityReport
+      ? isAr
+        ? "الثبات والتدفق لخلطة HMA (ASTM D 6927)"
+        : "HMA Marshall Stability and Flow (ASTM D 6927)"
+      : isAr
+        ? ((dist as any)?.testNameAr ?? dist?.testName ?? result.testTypeCode)
+        : ((dist as any)?.testNameEn ?? dist?.testName ?? result.testTypeCode);
   const standardDisplay = isMarshallDensityReport
     ? "ASTM D 2726"
-    : String((dist as any)?.standardRef ?? "—");
+    : isMarshallStabilityReport
+      ? "ASTM D 6927"
+      : String((dist as any)?.standardRef ?? "—");
 
   return (
     <>
