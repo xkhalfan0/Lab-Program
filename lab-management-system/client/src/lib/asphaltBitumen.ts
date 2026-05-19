@@ -20,6 +20,16 @@ export function extractBitumenContentFromExtractionResult(
     const n = Number(formData.bitumenContent);
     if (!Number.isNaN(n)) return parseFloat(n.toFixed(2));
   }
+  const calculations = formData?.calculations as { pgBinder?: unknown } | undefined;
+  if (calculations?.pgBinder != null && calculations.pgBinder !== "") {
+    const n = Number(calculations.pgBinder);
+    if (!Number.isNaN(n)) return parseFloat(n.toFixed(2));
+  }
+  const sample = formData?.sample as { pgBinder?: unknown } | undefined;
+  if (sample?.pgBinder != null && sample.pgBinder !== "") {
+    const n = Number(sample.pgBinder);
+    if (!Number.isNaN(n)) return parseFloat(n.toFixed(2));
+  }
   return undefined;
 }
 

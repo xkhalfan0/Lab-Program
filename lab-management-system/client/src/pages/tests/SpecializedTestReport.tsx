@@ -851,6 +851,45 @@ function renderSoilProctor(fd: any, isAr: boolean) {
   );
 }
 
+function renderAsphaltBitumenExtraction(fd: any, isAr: boolean) {
+  const L = (en: string, ars: string) => (isAr ? ars : en);
+  const sample = fd.sample ?? (Array.isArray(fd.samples) ? fd.samples[0] : null);
+  if (!sample) return renderGeneric(fd, isAr);
+
+  const cols: Column[] = [
+    { header: L("Sample No.", "رقم العينة"), field: "sampleNo", align: "center" },
+    { header: L("Mass Before (gm)", "قبل الاشتعال"), field: "massBeforeIgnition", align: "right", render: v => fmt(v, 1) },
+    { header: L("Loss (gms)", "فقدان الاشتعال"), field: "lossOfIgnition", align: "right", render: v => fmt(v, 1) },
+    { header: L("Mass After (gm)", "بعد الاشتعال"), field: "massAfterIgnition", align: "right", render: v => fmt(v, 1) },
+    { header: L("% Loss", "نسبة الفقد"), field: "percentLoss", align: "center", render: v => (v != null ? `${fmt(v, 2)}%` : "—") },
+    { header: L("Temp. Comp. %", "تعويض الحرارة"), field: "tempComp", align: "center", render: v => fmt(v, 2) },
+    { header: L("Ignition Factor %", "عامل الاشتعال"), field: "ignitionFactor", align: "center", render: v => fmt(v, 2) },
+    { header: L("%PG Binder", "محتوى الرابط PG"), field: "pgBinder", align: "center", render: v => (v != null ? `${fmt(v, 2)}%` : "—") },
+  ];
+
+  const pgBinder = sample.pgBinder ?? fd.calculations?.pgBinder ?? fd.avgBitumen;
+
+  return (
+    <>
+      <div className="mb-3 grid grid-cols-3 gap-2 text-xs">
+        <div className="border rounded p-2">
+          <div className="text-slate-500">{L("Design", "التصميم")}</div>
+          <div className="font-semibold">{fmt(fd.designBitumen, 2)}%</div>
+        </div>
+        <div className="border rounded p-2">
+          <div className="text-slate-500">{L("Tolerance", "التفاوت")}</div>
+          <div className="font-semibold">±{fmt(fd.tolerance, 2)}%</div>
+        </div>
+        <div className="border border-green-200 bg-green-50 rounded p-2">
+          <div className="text-green-700">{L("PG Binder (Pb)", "محتوى الرابط PG")}</div>
+          <div className="font-bold text-lg">{pgBinder != null ? `${fmt(pgBinder, 2)}%` : "—"}</div>
+        </div>
+      </div>
+      <FlexibleResultsTable columns={cols} rows={[sample]} />
+    </>
+  );
+}
+
 function renderAsphaltMarshallDensity(fd: any, isAr: boolean) {
   const L = (en: string, ars: string) => (isAr ? ars : en);
   const params = fd.parameters ?? {};
@@ -2102,6 +2141,7 @@ export function renderFormData(formTemplate: string, formData: any, isAr: boolea
     case "sieve_analysis": return renderSieveAnalysis(formData, isAr, extras);
     case "soil_proctor": return renderSoilProctor(formData, isAr);
     case "asphalt_bitumen_extraction":
+      return renderAsphaltBitumenExtraction(formData, isAr);
     case "asphalt_extracted_sieve":
       return renderGeneric(formData, isAr);
     case "asphalt_marshall_density":

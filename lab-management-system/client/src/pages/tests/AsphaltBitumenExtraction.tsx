@@ -1,93 +1,130 @@
-import { useState } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useParams, useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { redirectAfterTestSave } from "@/lib/batchHelpers";
 import DashboardLayout from "@/components/DashboardLayout";
 import { SampleInfoCard } from "@/components/SampleInfoCard";
-import { PassFailBadge, ResultBanner } from "@/components/PassFailBadge";
+import { ResultBanner } from "@/components/PassFailBadge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Send, FlaskConical, Info, UserCheck , Printer } from "lucide-react";
+import { Send, FlaskConical, Info, UserCheck, Printer } from "lucide-react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { useLanguage } from "@/contexts/LanguageContext";
 
-// ─── Bitumen Extraction Test (BS EN 12697-1 / ASTM D2172) ────────────────────
-// Formula (CMW Practice):
-//   Bitumen Content (%) = [(W_sample - W_aggregate - CF - TF) / W_sample] × 100
-// Where:
-//   W_sample = mass of asphalt sample (g)
-//   W_aggregate = mass of dry aggregate after extraction (g)
-//   CF = Correction Factor for fines lost in solvent (g) — from calibration
-//   TF = Tare Factor / moisture correction (g)
-// Acceptance: Bitumen content within ±0.3% of design bitumen content
+// Bitumen Extraction — Ignition Furnace (ASTM D6307)
 
 const EXTRACTION_METHODS = {
-  "CENTRIFUGE": {
-    label: "Centrifuge (BS EN 12697-1)",
-    standard: "BS EN 12697-1",
-    code: "ASPH_BITUMEN_EXTRACT",
-  },
-  "ROTARY": {
-    label: "Rotary Evaporator",
-    standard: "BS EN 12697-1",
-    code: "ASPH_BITUMEN_EXTRACT",
-  },
-  "IGNITION": {
+  IGNITION: {
     label: "Ignition Furnace (ASTM D6307)",
     standard: "ASTM D6307",
     code: "ASPH_BITUMEN_EXTRACT",
   },
-};
+  CENTRIFUGE: {
+    label: "Centrifuge (BS EN 12697-1)",
+    standard: "BS EN 12697-1",
+    code: "ASPH_BITUMEN_EXTRACT",
+  },
+  ROTARY: {
+    label: "Rotary Evaporator",
+    standard: "BS EN 12697-1",
+    code: "ASPH_BITUMEN_EXTRACT",
+  },
+} as const;
 
 type MethodKey = keyof typeof EXTRACTION_METHODS;
 
-interface ExtractionRow {
-  id: string;
+interface SampleInputs {
   sampleNo: string;
-  location: string;
-  wSample: string;        // Mass of asphalt sample (g)
-  wAggregate: string;     // Mass of dry aggregate after extraction (g)
-  cf: string;             // Correction Factor (g)
-  tf: string;             // Tare Factor (g)
-  // computed
-  bitumenContent?: number; // %
-  result?: "pass" | "fail" | "pending";
+  massBeforeIgnition: string;
+  lossOfIgnition: string;
+  tempComp: string;
+  ignitionFactor: string;
 }
 
-function newRow(index: number): ExtractionRow {
+interface SampleComputed extends SampleInputs {
+  massAfterIgnition: number;
+  percentLoss: number;
+  pgBinder: number;
+  result: "pass" | "fail" | "pending";
+}
+
+const EMPTY_INPUTS: SampleInputs = {
+  sampleNo: "S1",
+  massBeforeIgnition: "",
+  lossOfIgnition: "",
+  tempComp: "",
+  ignitionFactor: "",
+};
+
+function computeSample(
+  sample: SampleInputs,
+  designBitumen: number,
+  tolerance: number,
+): SampleComputed {
+  const before = parseFloat(sample.massBeforeIgnition) || 0;
+  const loss = parseFloat(sample.lossOfIgnition) || 0;
+  const tempComp = parseFloat(sample.tempComp) || 0;
+  const ignFactor = parseFloat(sample.ignitionFactor) || 0;
+
+  if (before <= 0 || loss <= 0) {
+    return {
+      sampleNo: sample.sampleNo,
+      massBeforeIgnition: sample.massBeforeIgnition,
+      lossOfIgnition: sample.lossOfIgnition,
+      tempComp: sample.tempComp,
+      ignitionFactor: sample.ignitionFactor,
+      massAfterIgnition: 0,
+      percentLoss: 0,
+      pgBinder: 0,
+      result: "pending",
+    };
+  }
+
+  const massAfter = before - loss;
+  const percentLoss = (loss / before) * 100;
+  const pgBinder = percentLoss - tempComp - ignFactor;
+
+  const minAcceptable = designBitumen - tolerance;
+  const maxAcceptable = designBitumen + tolerance;
+  const result: "pass" | "fail" =
+    pgBinder >= minAcceptable && pgBinder <= maxAcceptable ? "pass" : "fail";
+
   return {
-    id: `row_${Date.now()}_${index}`,
-    sampleNo: `S${index + 1}`,
-    location: "",
-    wSample: "",
-    wAggregate: "",
-    cf: "0",
-    tf: "0",
+    sampleNo: sample.sampleNo,
+    massBeforeIgnition: sample.massBeforeIgnition,
+    lossOfIgnition: sample.lossOfIgnition,
+    tempComp: sample.tempComp,
+    ignitionFactor: sample.ignitionFactor,
+    massAfterIgnition: parseFloat(massAfter.toFixed(1)),
+    percentLoss: parseFloat(percentLoss.toFixed(2)),
+    pgBinder: parseFloat(pgBinder.toFixed(2)),
+    result,
   };
 }
 
-function computeRow(row: ExtractionRow, designBitumen: number, tolerance: number): ExtractionRow {
-  const wSample = parseFloat(row.wSample);
-  const wAgg = parseFloat(row.wAggregate);
-  const cf = parseFloat(row.cf) || 0;
-  const tf = parseFloat(row.tf) || 0;
-
-  if (!wSample || !wAgg || wSample <= 0) return row;
-
-  // Bitumen Content = [(W_sample - W_aggregate - CF - TF) / W_sample] × 100
-  const bitumenMass = wSample - wAgg - cf - tf;
-  const bitumenContent = parseFloat(((bitumenMass / wSample) * 100).toFixed(2));
-
-  const lowerLimit = designBitumen - tolerance;
-  const upperLimit = designBitumen + tolerance;
-  const result: "pass" | "fail" = bitumenContent >= lowerLimit && bitumenContent <= upperLimit ? "pass" : "fail";
-
-  return { ...row, bitumenContent, result };
+function mapLegacyToInputs(row: Record<string, unknown>): SampleInputs {
+  if (row.massBeforeIgnition != null || row.lossOfIgnition != null) {
+    return {
+      sampleNo: String(row.sampleNo ?? "S1"),
+      massBeforeIgnition: String(row.massBeforeIgnition ?? ""),
+      lossOfIgnition: String(row.lossOfIgnition ?? ""),
+      tempComp: String(row.tempComp ?? ""),
+      ignitionFactor: String(row.ignitionFactor ?? ""),
+    };
+  }
+  return {
+    sampleNo: String(row.sampleNo ?? "S1"),
+    massBeforeIgnition: String(row.wSample ?? ""),
+    lossOfIgnition: "",
+    tempComp: "0",
+    ignitionFactor: "0",
+  };
 }
 
 export default function AsphaltBitumenExtraction() {
@@ -96,16 +133,19 @@ export default function AsphaltBitumenExtraction() {
   const [, setLocation] = useLocation();
   const distId = parseInt(distributionId ?? "0");
   const { data: dist } = trpc.distributions.get.useQuery({ id: distId }, { enabled: !!distId });
+  const { data: existing } = trpc.specializedTests.getByDistribution.useQuery(
+    { distributionId: distId },
+    { enabled: !!distId },
+  );
 
   const { lang } = useLanguage();
   const ar = lang === "ar";
 
-  const [method, setMethod] = useState<MethodKey>("CENTRIFUGE");
-  const [designBitumenStr, setDesignBitumenStr] = useState("5.0"); // % design bitumen content
-  const [toleranceStr, setToleranceStr] = useState("0.3");         // ±% tolerance
-  const [roadName, setRoadName] = useState("");
+  const [method, setMethod] = useState<MethodKey>("IGNITION");
+  const [designBitumenStr, setDesignBitumenStr] = useState("5.0");
+  const [toleranceStr, setToleranceStr] = useState("0.3");
   const [notes, setNotes] = useState("");
-  const [rows, setRows] = useState<ExtractionRow[]>([newRow(0), newRow(1), newRow(2)]);
+  const [sample, setSample] = useState<SampleInputs>(EMPTY_INPUTS);
   const [saving, setSaving] = useState(false);
   const [submitted, setSubmitted] = useState(false);
 
@@ -113,15 +153,41 @@ export default function AsphaltBitumenExtraction() {
   const designBitumen = parseFloat(designBitumenStr) || 5.0;
   const tolerance = parseFloat(toleranceStr) || 0.3;
 
-  const computedRows = rows.map(r => computeRow(r, designBitumen, tolerance));
-  const validRows = computedRows.filter(r => r.bitumenContent !== undefined);
-  const avgBitumen = validRows.length > 0
-    ? parseFloat((validRows.reduce((s, r) => s + (r.bitumenContent ?? 0), 0) / validRows.length).toFixed(2))
-    : undefined;
+  const computedSample = useMemo(
+    () => computeSample(sample, designBitumen, tolerance),
+    [sample, designBitumen, tolerance],
+  );
 
+  const hasResult = computedSample.pgBinder > 0 || (parseFloat(sample.massBeforeIgnition) > 0 && parseFloat(sample.lossOfIgnition) > 0);
   const overallResult: "pass" | "fail" | "pending" =
-    validRows.length === 0 ? "pending"
-    : validRows.every(r => r.result === "pass") ? "pass" : "fail";
+    computedSample.result === "pending" ? "pending" : computedSample.result;
+
+  useEffect(() => {
+    if (!existing?.formData) return;
+    const fd = existing.formData as Record<string, unknown>;
+    if (fd.method && fd.method in EXTRACTION_METHODS) {
+      setMethod(fd.method as MethodKey);
+    } else if (fd.extractionMethod === "ignition_furnace") {
+      setMethod("IGNITION");
+    }
+    if (fd.designBitumen != null) setDesignBitumenStr(String(fd.designBitumen));
+    if (fd.tolerance != null) setToleranceStr(String(fd.tolerance));
+    if (fd.notes) setNotes(String(fd.notes));
+
+    const savedSample = fd.sample as Record<string, unknown> | undefined;
+    if (savedSample) {
+      setSample({
+        sampleNo: String(savedSample.sampleNo ?? "S1"),
+        massBeforeIgnition: String(savedSample.massBeforeIgnition ?? ""),
+        lossOfIgnition: String(savedSample.lossOfIgnition ?? ""),
+        tempComp: String(savedSample.tempComp ?? ""),
+        ignitionFactor: String(savedSample.ignitionFactor ?? ""),
+      });
+    } else if (Array.isArray(fd.samples) && fd.samples.length > 0) {
+      setSample(mapLegacyToInputs(fd.samples[0] as Record<string, unknown>));
+    }
+    if (existing.status === "submitted") setSubmitted(true);
+  }, [existing]);
 
   const saveResult = trpc.specializedTests.save.useMutation({
     onSuccess: (_, vars) => {
@@ -136,19 +202,18 @@ export default function AsphaltBitumenExtraction() {
     onError: (e) => toast.error(e.message),
   });
 
-  const updateRow = (id: string, field: keyof ExtractionRow, value: string) => {
-    setRows(prev => prev.map(r => r.id === id ? { ...r, [field]: value } : r));
-  };
-
   const handleSave = async (status: "draft" | "submitted") => {
     if (!dist?.sampleId) {
-      toast.error(lang === "ar" ? "معرف العينة مفقود" : "Sample ID missing");
+      toast.error(ar ? "معرف العينة مفقود" : "Sample ID missing");
       return;
     }
-    if (status === "submitted" && validRows.length === 0) {
-      toast.error(ar ? "الرجاء إدخال نتيجة عينة واحدة على الأقل" : "Please enter at least one sample result");
+    if (status === "submitted" && computedSample.result === "pending") {
+      toast.error(ar ? "الرجاء إدخال بيانات العينة" : "Please enter sample data");
       return;
     }
+
+    const pgBinder = computedSample.pgBinder;
+
     setSaving(true);
     try {
       await saveResult.mutateAsync({
@@ -157,21 +222,28 @@ export default function AsphaltBitumenExtraction() {
         testTypeCode: spec.code,
         formTemplate: "asphalt_bitumen_extraction",
         formData: {
+          extractionMethod: "ignition_furnace",
           method,
           designBitumen,
           tolerance,
-          roadName,
-          samples: computedRows,
-          avgBitumen,
-          overallResult,
+          sample: computedSample,
+          calculations: {
+            massAfterIgnition: computedSample.massAfterIgnition,
+            percentLoss: computedSample.percentLoss,
+            pgBinder,
+          },
+          avgBitumen: pgBinder,
+          bitumenContent: pgBinder,
+          overallResult: overallResult === "pending" ? undefined : overallResult,
         },
-        overallResult,
+        overallResult: overallResult === "pending" ? "pending" : overallResult,
         summaryValues: {
           method: spec.label,
           designBitumen,
-          avgBitumen,
+          avgBitumen: pgBinder,
+          bitumenContent: pgBinder,
           tolerance,
-          overallResult,
+          overallResult: overallResult === "pending" ? undefined : overallResult,
         },
         notes,
         status,
@@ -181,13 +253,20 @@ export default function AsphaltBitumenExtraction() {
     }
   };
 
+  const resultBadge = (result: "pass" | "fail" | "pending") => {
+    if (result === "pending") return <span className="text-muted-foreground">—</span>;
+    return (
+      <Badge variant={result === "pass" ? "default" : "destructive"}>
+        {result === "pass" ? (ar ? "مطابق" : "Specified") : ar ? "غير مطابق" : "Not Specified"}
+      </Badge>
+    );
+  };
+
   if (!distId || distId === 0) {
     return (
       <DashboardLayout>
-        <div className="p-6">
-          <div className="text-center text-red-600">
-            {lang === "ar" ? "معرف التوزيع غير صالح" : "Invalid distribution ID"}
-          </div>
+        <div className="p-6 text-center text-red-600">
+          {ar ? "معرف التوزيع غير صالح" : "Invalid distribution ID"}
         </div>
       </DashboardLayout>
     );
@@ -198,20 +277,21 @@ export default function AsphaltBitumenExtraction() {
       <div className="max-w-6xl mx-auto p-6 space-y-6">
         <SampleInfoCard
           dist={dist}
-          extraFields={[
-            { label: "Mix type / نوع الخلطة", value: dist?.testSubType },
-          ]}
+          extraFields={[{ label: ar ? "نوع الخلطة" : "Mix type", value: dist?.testSubType }]}
         />
-        {/* Header */}
+
         <div className="flex items-start justify-between flex-wrap gap-3">
           <div>
             <div className="flex items-center gap-2 text-sm text-slate-500 mb-1">
               <FlaskConical size={16} />
               <span>{ar ? "اختبارات الأسفلت / استخلاص البيتومين" : "Asphalt Tests / Bitumen Extraction"}</span>
             </div>
-            <h1 className="text-2xl font-bold text-slate-900">{ar ? "محتوى البيتومين بالاستخلاص" : "Bitumen Content by Extraction"}</h1>
+            <h1 className="text-2xl font-bold text-slate-900">
+              {ar ? "محتوى البيتومين بالاستخلاص" : "Bitumen Content by Extraction"}
+            </h1>
             <p className="text-slate-500 text-sm mt-1">
-              BS EN 12697-1 | {ar ? "أمر التوزيع:" : "Distribution:"} {dist?.distributionCode ?? `DIST-${distId}`}
+              {spec.standard} | {ar ? "أمر التوزيع:" : "Distribution:"}{" "}
+              {dist?.distributionCode ?? `DIST-${distId}`}
             </p>
           </div>
           <div className="flex gap-2">
@@ -231,51 +311,84 @@ export default function AsphaltBitumenExtraction() {
               </>
             ) : (
               <>
-                <Button variant="outline" size="sm" onClick={() => handleSave("draft")} disabled={saving}>{ar ? "حفظ مسودة" : "Save Draft"}</Button>
+                <Button variant="outline" size="sm" onClick={() => handleSave("draft")} disabled={saving}>
+                  {ar ? "حفظ مسودة" : "Save Draft"}
+                </Button>
                 <Button className="bg-blue-600 hover:bg-blue-700" onClick={() => handleSave("submitted")} disabled={saving}>
-                  <Send size={14} className="mr-1.5" />{saving ? (ar ? "جاري..." : "Submitting...") : (ar ? "إرسال النتائج" : "Submit Results")}
+                  <Send size={14} className="mr-1.5" />
+                  {saving ? (ar ? "جاري..." : "Submitting...") : ar ? "إرسال النتائج" : "Submit Results"}
                 </Button>
               </>
             )}
           </div>
         </div>
 
-        {/* Formula Note */}
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-xs text-blue-800">
-          <Info size={12} className="inline mr-1" />
-          <strong>{ar ? "الصيغة (ممارسة CMW):" : "Formula (CMW Practice):"}</strong>{" "}
-          Bitumen Content (%) = [(W_sample − W_aggregate − CF − TF) ÷ W_sample] × 100<br />
-          {ar ? "حيث CF = عامل التصحيح (الجسيمات الدقيقة المفقودة في المذيب)، TF = عامل الوزن الفارغ (تصحيح الرطوبة)." : "Where CF = Correction Factor (fines lost in solvent), TF = Tare Factor (moisture correction)."}
-          {ar ? `القبول: بيتومين التصميم ± ${tolerance}%` : `Acceptance: Design Bitumen ± ${tolerance}%`}
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
+          <div className="flex items-center gap-2 text-blue-900 text-sm">
+            <Info className="w-4 h-4 shrink-0" />
+            <span className="font-semibold">
+              {ar ? "معادلة الاشتعال:" : "Formula (Ignition Furnace):"}
+            </span>
+          </div>
+          <div className="mt-2 text-xs text-blue-700 font-mono">
+            %PG Binder (Pb) = % Loss − Temp. Comp. % − Ignition Factor of Mix %
+          </div>
+          <div className="mt-1 text-xs text-blue-600">
+            {ar
+              ? "حيث: % الفقد = (فقدان الاشتعال / الكتلة قبل الاشتعال) × 100"
+              : "Where: % Loss = (Loss of Ignition / Mass Before Ignition) × 100"}
+          </div>
+          <div className="mt-1 text-xs text-blue-600">
+            {ar
+              ? `القبول: محتوى التصميم ± ${tolerance}%`
+              : `Acceptance: Design Bitumen ± ${tolerance}%`}
+          </div>
         </div>
 
-        {/* Test Info */}
         <Card>
-          <CardHeader className="pb-3"><CardTitle className="text-base">{ar ? "معلومات الاختبار" : "Test Information"}</CardTitle></CardHeader>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">{ar ? "معلومات الاختبار" : "Test Information"}</CardTitle>
+          </CardHeader>
           <CardContent>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <div>
-                <Label className="text-xs text-slate-500 mb-1 block">{ar ? "طريقة الاستخلاص" : "Extraction Method"}</Label>
-                <Select value={method} onValueChange={v => setMethod(v as MethodKey)}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
+                <Label className="text-xs text-slate-500 mb-1 block">
+                  {ar ? "طريقة الاستخلاص" : "Extraction Method"}
+                </Label>
+                <Select value={method} onValueChange={(v) => setMethod(v as MethodKey)} disabled={submitted}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
                   <SelectContent>
                     {Object.entries(EXTRACTION_METHODS).map(([k, s]) => (
-                      <SelectItem key={k} value={k}>{s.label}</SelectItem>
+                      <SelectItem key={k} value={k}>
+                        {s.label}
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
               <div>
-                <Label className="text-xs text-slate-500 mb-1 block">{ar ? "محتوى البيتومين التصميمي (%)" : "Design Bitumen Content (%)"}</Label>
-                <Input value={designBitumenStr} onChange={e => setDesignBitumenStr(e.target.value)} className="font-mono" placeholder="5.0" />
+                <Label className="text-xs text-slate-500 mb-1 block">
+                  {ar ? "محتوى البيتومين التصميمي (%)" : "Design Bitumen Content (%)"}
+                </Label>
+                <Input
+                  value={designBitumenStr}
+                  onChange={(e) => setDesignBitumenStr(e.target.value)}
+                  className="font-mono"
+                  placeholder="3.9"
+                  disabled={submitted}
+                />
               </div>
               <div>
                 <Label className="text-xs text-slate-500 mb-1 block">{ar ? "التفاوت (±%)" : "Tolerance (±%)"}</Label>
-                <Input value={toleranceStr} onChange={e => setToleranceStr(e.target.value)} className="font-mono" placeholder="0.3" />
-              </div>
-              <div>
-                <Label className="text-xs text-slate-500 mb-1 block">{ar ? "الطريق / الموقع" : "Road / Location"}</Label>
-                <Input value={roadName} onChange={e => setRoadName(e.target.value)} placeholder={ar ? "اسم الطريق أو الكيلومترية" : "Road name or chainage"} />
+                <Input
+                  value={toleranceStr}
+                  onChange={(e) => setToleranceStr(e.target.value)}
+                  className="font-mono"
+                  placeholder="0.3"
+                  disabled={submitted}
+                />
               </div>
               <div>
                 <Label className="text-xs text-slate-500 mb-1 block">{ar ? "الفاحص" : "Tested By"}</Label>
@@ -284,13 +397,20 @@ export default function AsphaltBitumenExtraction() {
                   <span className="text-sm font-semibold text-green-800">{user?.name ?? "—"}</span>
                 </div>
               </div>
-              <div className="flex items-end">
-                <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 text-xs text-slate-600 w-full space-y-0.5">
-                  <div><span className="font-semibold">{ar ? "التصميم:" : "Design:"}</span> {designBitumen}%</div>
-                  <div><span className="font-semibold">{ar ? "القبول:" : "Acceptance:"}</span> {(designBitumen - tolerance).toFixed(2)}% – {(designBitumen + tolerance).toFixed(2)}%</div>
-                  {avgBitumen !== undefined && (
-                    <div className={`font-bold ${overallResult === "pass" ? "text-emerald-700" : "text-red-700"}`}>
-                      {ar ? "المتوسط:" : "Average:"} {avgBitumen}%
+              <div className="md:col-span-2">
+                <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 text-xs text-slate-600 space-y-0.5 h-full flex flex-col justify-center">
+                  <div>
+                    <span className="font-semibold">{ar ? "التصميم:" : "Design:"}</span> {designBitumen}%
+                  </div>
+                  <div>
+                    <span className="font-semibold">{ar ? "القبول:" : "Acceptance:"}</span>{" "}
+                    {(designBitumen - tolerance).toFixed(2)}% – {(designBitumen + tolerance).toFixed(2)}%
+                  </div>
+                  {hasResult && (
+                    <div
+                      className={`font-bold ${overallResult === "pass" ? "text-emerald-700" : "text-red-700"}`}
+                    >
+                      {ar ? "محتوى الرابط PG:" : "PG Binder:"} {computedSample.pgBinder.toFixed(2)}%
                     </div>
                   )}
                 </div>
@@ -299,108 +419,159 @@ export default function AsphaltBitumenExtraction() {
           </CardContent>
         </Card>
 
-        {/* Samples Table */}
         <Card>
           <CardHeader className="pb-3">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-base">{ar ? "نتائج الاستخلاص" : "Extraction Results"}</CardTitle>
-              <Button size="sm" variant="outline" onClick={() => setRows(p => [...p, newRow(p.length)])}>
-                {ar ? "+ إضافة عينة" : "+ Add Sample"}
-              </Button>
-            </div>
+            <CardTitle className="text-base">{ar ? "نتائج الاستخلاص" : "Extraction Results"}</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="overflow-x-auto">
-<table className="w-full text-sm border-collapse">
-              <thead>
-                <tr className="bg-slate-50">
-                  <th className="border border-slate-200 px-2 py-2 text-xs font-semibold text-slate-600">{ar ? "رقم العينة" : "Sample No."}</th>
-                  <th className="border border-slate-200 px-2 py-2 text-xs font-semibold text-slate-600">{ar ? "الموقع" : "Location"}</th>
-                  <th className="border border-slate-200 px-2 py-2 text-xs font-semibold text-slate-600">{ar ? "وزن العينة (جم)" : "W_sample (g)"}</th>
-                  <th className="border border-slate-200 px-2 py-2 text-xs font-semibold text-slate-600">{ar ? "وزن الركام (جم)" : "W_aggregate (g)"}</th>
-                  <th className="border border-slate-200 px-2 py-2 text-xs font-semibold text-slate-600">{ar ? "عامل التصحيح (جم)" : "CF (g)"}</th>
-                  <th className="border border-slate-200 px-2 py-2 text-xs font-semibold text-slate-600">{ar ? "عامل الوزن الفارغ (جم)" : "TF (g)"}</th>
-                  <th className="border border-slate-200 px-2 py-2 text-xs font-semibold text-slate-600">{ar ? "البيتومين (%)" : "Bitumen (%)"}</th>
-                  <th className="border border-slate-200 px-2 py-2 text-xs font-semibold text-slate-600">{ar ? "النتيجة" : "Result"}</th>
-                  <th className="border border-slate-200 px-2 py-2"></th>
-                </tr>
-              </thead>
-              <tbody>
-                {computedRows.map((row, idx) => (
-                  <tr key={row.id} className={idx % 2 === 0 ? "bg-white" : "bg-slate-50/50"}>
-                    <td className="border border-slate-200 px-1 py-1">
-                      <Input value={row.sampleNo} onChange={e => updateRow(row.id, "sampleNo", e.target.value)} className="h-7 text-xs w-14" />
+              <table className="w-full text-xs border-collapse">
+                <thead className="bg-slate-50">
+                  <tr>
+                    <th className="border border-slate-300 px-2 py-2">{ar ? "رقم العينة" : "Sample No."}</th>
+                    <th className="border border-slate-300 px-2 py-2">
+                      {ar ? "الكتلة قبل الاشتعال (جم)" : "Mass Before Ignition (gm)"}
+                    </th>
+                    <th className="border border-slate-300 px-2 py-2">
+                      {ar ? "فقدان الاشتعال (جم)" : "Loss of Ignition (gms)"}
+                    </th>
+                    <th className="border border-slate-300 px-2 py-2 bg-blue-50">
+                      {ar ? "الكتلة بعد الاشتعال (جم)" : "Mass After Ignition (gm)"}
+                    </th>
+                    <th className="border border-slate-300 px-2 py-2 bg-blue-50">
+                      {ar ? "نسبة الفقد %" : "% Loss"}
+                    </th>
+                    <th className="border border-slate-300 px-2 py-2">
+                      {ar ? "تعويض الحرارة %" : "Temp. Comp. %"}
+                    </th>
+                    <th className="border border-slate-300 px-2 py-2">
+                      {ar ? "عامل الاشتعال للخليط %" : "Ignition Factor of Mix %"}
+                    </th>
+                    <th className="border border-slate-300 px-2 py-2 bg-blue-50">
+                      {ar ? "محتوى الرابط PG (%)" : "%PG Binder (Pb)"}
+                    </th>
+                    <th className="border border-slate-300 px-2 py-2">{ar ? "النتيجة" : "Result"}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td className="border border-slate-300 px-2 py-2 text-center font-semibold">S1</td>
+                    <td className="border border-slate-300 px-2 py-2">
+                      <Input
+                        type="number"
+                        step="0.1"
+                        value={sample.massBeforeIgnition}
+                        onChange={(e) => setSample({ ...sample, massBeforeIgnition: e.target.value })}
+                        className="h-7 text-xs"
+                        placeholder="3050"
+                        disabled={submitted}
+                      />
                     </td>
-                    <td className="border border-slate-200 px-1 py-1">
-                      <Input value={row.location} onChange={e => updateRow(row.id, "location", e.target.value)} className="h-7 text-xs w-24" placeholder={ar ? "ك+000" : "Ch.+000"} />
+                    <td className="border border-slate-300 px-2 py-2">
+                      <Input
+                        type="number"
+                        step="0.1"
+                        value={sample.lossOfIgnition}
+                        onChange={(e) => setSample({ ...sample, lossOfIgnition: e.target.value })}
+                        className="h-7 text-xs"
+                        placeholder="166.5"
+                        disabled={submitted}
+                      />
                     </td>
-                    <td className="border border-slate-200 px-1 py-1">
-                      <Input value={row.wSample} onChange={e => updateRow(row.id, "wSample", e.target.value)} className="h-7 text-xs w-20 text-center font-mono" placeholder="—" />
+                    <td className="border border-slate-300 px-2 py-2 text-center bg-blue-50 font-semibold">
+                      {computedSample.massAfterIgnition > 0
+                        ? computedSample.massAfterIgnition.toFixed(1)
+                        : "—"}
                     </td>
-                    <td className="border border-slate-200 px-1 py-1">
-                      <Input value={row.wAggregate} onChange={e => updateRow(row.id, "wAggregate", e.target.value)} className="h-7 text-xs w-20 text-center font-mono" placeholder="—" />
+                    <td className="border border-slate-300 px-2 py-2 text-center bg-blue-50 font-semibold">
+                      {computedSample.percentLoss > 0 ? `${computedSample.percentLoss.toFixed(2)}%` : "—"}
                     </td>
-                    <td className="border border-slate-200 px-1 py-1">
-                      <Input value={row.cf} onChange={e => updateRow(row.id, "cf", e.target.value)} className="h-7 text-xs w-16 text-center font-mono" placeholder="0" />
+                    <td className="border border-slate-300 px-2 py-2">
+                      <Input
+                        type="number"
+                        step="0.01"
+                        value={sample.tempComp}
+                        onChange={(e) => setSample({ ...sample, tempComp: e.target.value })}
+                        className="h-7 text-xs"
+                        placeholder="0.00"
+                        disabled={submitted}
+                      />
                     </td>
-                    <td className="border border-slate-200 px-1 py-1">
-                      <Input value={row.tf} onChange={e => updateRow(row.id, "tf", e.target.value)} className="h-7 text-xs w-16 text-center font-mono" placeholder="0" />
+                    <td className="border border-slate-300 px-2 py-2">
+                      <Input
+                        type="number"
+                        step="0.01"
+                        value={sample.ignitionFactor}
+                        onChange={(e) => setSample({ ...sample, ignitionFactor: e.target.value })}
+                        className="h-7 text-xs"
+                        placeholder="0.00"
+                        disabled={submitted}
+                      />
                     </td>
-                    <td className="border border-slate-200 px-1 py-1 text-center">
-                      {row.bitumenContent !== undefined ? (
-                        <span className={`font-mono text-xs font-bold ${row.result === "pass" ? "text-emerald-700" : "text-red-700"}`}>
-                          {row.bitumenContent}%
-                        </span>
-                      ) : "—"}
+                    <td className="border border-slate-300 px-2 py-2 text-center bg-blue-50 font-bold text-base">
+                      {computedSample.result !== "pending"
+                        ? `${computedSample.pgBinder.toFixed(2)}%`
+                        : "—"}
                     </td>
-                    <td className="border border-slate-200 px-1 py-1 text-center">
-                      {row.result && row.result !== "pending" ? <PassFailBadge result={row.result} size="sm" /> : "—"}
-                    </td>
-                    <td className="border border-slate-200 px-1 py-1 text-center">
-                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-red-600 hover:text-red-700"
-                        onClick={() => setRows(p => p.filter(r => r.id !== row.id))}
-                        disabled={rows.length <= 1}>
-                        ✕
-                      </Button>
+                    <td className="border border-slate-300 px-2 py-2 text-center">
+                      {resultBadge(computedSample.result)}
                     </td>
                   </tr>
-                ))}
-              </tbody>
-              {validRows.length > 0 && (
-                <tfoot>
-                  <tr className="bg-slate-100 font-semibold">
-                    <td colSpan={6} className="border border-slate-200 px-3 py-2 text-right text-xs text-slate-600">{ar ? "متوسط محتوى البيتومين:" : "Average Bitumen Content:"}</td>
-                    <td className="border border-slate-200 px-2 py-2 text-center font-mono text-sm font-bold">{avgBitumen}%</td>
-                    <td className="border border-slate-200 px-2 py-2 text-center">
-                      <PassFailBadge result={overallResult} size="sm" />
-                    </td>
-                    <td className="border border-slate-200"></td>
-                  </tr>
-                </tfoot>
-              )}
-            </table>
-</div>
+                </tbody>
+                {computedSample.result !== "pending" && (
+                  <tfoot className="bg-green-50">
+                    <tr>
+                      <td
+                        colSpan={7}
+                        className="border border-slate-300 px-2 py-2 text-right font-semibold"
+                      >
+                        {ar ? "محتوى الرابط PG:" : "PG Binder Content:"}
+                      </td>
+                      <td className="border border-slate-300 px-2 py-2 text-center font-bold text-lg">
+                        {computedSample.pgBinder.toFixed(2)}%
+                      </td>
+                      <td className="border border-slate-300 px-2 py-2 text-center">
+                        <Badge
+                          variant={computedSample.result === "pass" ? "default" : "destructive"}
+                          className="text-sm"
+                        >
+                          {computedSample.result === "pass"
+                            ? ar
+                              ? "مطابق ✓"
+                              : "Specified ✓"
+                            : ar
+                              ? "غير مطابق ✗"
+                              : "Not Specified ✗"}
+                        </Badge>
+                      </td>
+                    </tr>
+                  </tfoot>
+                )}
+              </table>
+            </div>
           </CardContent>
         </Card>
 
-        {/* Summary */}
-        {validRows.length > 0 && (
+        {hasResult && overallResult !== "pending" && (
           <Card>
             <CardContent className="pt-4">
               <ResultBanner
                 result={overallResult}
-                testName={ar ? `محتوى البيتومين بالاستخلاص — ${spec.label}` : `Bitumen Content by Extraction — ${spec.label}`}
+                testName={
+                  ar
+                    ? `محتوى البيتومين — ${spec.label}`
+                    : `Bitumen Content — ${spec.label}`
+                }
                 standard={spec.standard}
               />
             </CardContent>
           </Card>
         )}
 
-        {/* Notes */}
         <Card>
           <CardContent className="pt-4">
             <Label className="text-xs text-slate-500 mb-1 block">{ar ? "ملاحظات" : "Notes / Observations"}</Label>
-            <Textarea value={notes} onChange={e => setNotes(e.target.value)} rows={3} />
+            <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} disabled={submitted} />
           </CardContent>
         </Card>
       </div>
