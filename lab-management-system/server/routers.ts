@@ -40,6 +40,7 @@ import {
   getDistributionsByBatch,
   getBatchSiblingDistributions,
   getDistributionsByTechnician,
+  checkTestDependencies,
   getNotificationsByUser,
   getReviewsBySample,
   getSampleById,
@@ -99,6 +100,7 @@ import {
   getSpecializedTestResultById,
   getSpecializedTestResultByDistribution,
   getSpecializedTestResultsBySample,
+  getSpecializedTestResultsBySampleAndTestType,
   getAllClearanceRequests,
   getClearanceRequestById,
   getClearanceRequestsByContract,
@@ -2131,6 +2133,20 @@ ${testSummaries.length > 0 ? testSummaries.join("\n\n") : "لم تُجرَ اخ�
         return getSpecializedTestResultsBySample(input.sampleId);
       }),
 
+    getBySampleAndTestType: protectedProcedure
+      .input(
+        z.object({
+          sampleId: z.number(),
+          testTypeCode: z.string().min(1),
+          status: z.enum(["draft", "submitted", "approved", "rejected", "revision_requested"]).optional(),
+        }),
+      )
+      .query(async ({ input }) => {
+        return getSpecializedTestResultsBySampleAndTestType(input.sampleId, input.testTypeCode, {
+          status: input.status,
+        });
+      }),
+
     getByBatch: protectedProcedure
       .input(z.object({ batchId: z.string() }))
       .query(async ({ input }) => {
@@ -3428,6 +3444,19 @@ ${testSummaries.length > 0 ? testSummaries.join("\n\n") : "لم تُجرَ اخ�
           technicianPerformance: Object.values(technicianMap).sort((a, b) => b.completed - a.completed),
           bySampleType: Object.entries(bySampleType).map(([type, count]) => ({ type, count })),
         };
+      }),
+  }),
+
+  testDependencies: router({
+    check: protectedProcedure
+      .input(
+        z.object({
+          sampleId: z.number(),
+          testCode: z.string().min(1),
+        })
+      )
+      .query(async ({ input }) => {
+        return checkTestDependencies(input.sampleId, input.testCode);
       }),
   }),
 

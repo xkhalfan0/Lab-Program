@@ -26,6 +26,7 @@ import {
   Calendar,
   FileText,
   Package,
+  AlertCircle,
 } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactElement } from "react";
 import { useLocation } from "wouter";
@@ -65,7 +66,14 @@ const T = {
   batchTitle:  { ar: "حزمة",                       en: "Batch" },
   batchProgress:{ ar: "اختبارات مكتملة",           en: "tests completed" },
   openBatch:   { ar: "فتح الحزمة",                 en: "Open batch" },
+  requiresPrereq: { ar: "يتطلب إكمال الاختبارات التالية أولاً:", en: "Requires completing these tests first:" },
+  testLocked:  { ar: "هذا الاختبار مقفل",          en: "This test is locked" },
+  unlockHint:  { ar: "أكمل الاختبارات المطلوبة أولاً", en: "Complete prerequisite tests to unlock" },
+  requiredTest:{ ar: "اختبار مطلوب",               en: "Required test" },
+  prereqNotMet:{ ar: "الشروط المسبقة غير مستوفاة", en: "Prerequisites not met" },
 };
+
+type MissingPrerequisiteTest = { code: string; nameEn: string; nameAr: string };
 
 function tx(key: keyof typeof T, lang: string) {
   return lang === "ar" ? T[key].ar : T[key].en;
@@ -272,6 +280,8 @@ function TechnicianAssignmentCard({
   sample,
   isCompleted,
   pendingDeletion,
+  prerequisitesLocked,
+  missingTests,
   onStartTest,
   onViewReport,
   onDeletionSuccess,
@@ -281,6 +291,8 @@ function TechnicianAssignmentCard({
   sample: any | undefined;
   isCompleted: boolean;
   pendingDeletion: boolean;
+  prerequisitesLocked: boolean;
+  missingTests: MissingPrerequisiteTest[];
   onStartTest: () => void;
   onViewReport: () => void;
   onDeletionSuccess: () => void;
@@ -291,6 +303,7 @@ function TechnicianAssignmentCard({
     distId
   );
   const combinedPending = pendingDeletion || hasPendingDeletion;
+  const startDisabled = combinedPending || prerequisitesLocked;
 
   const testTitle =
     lang === "ar" ? dist.testNameAr || dist.testName : dist.testNameEn || dist.testName;
@@ -372,6 +385,20 @@ function TechnicianAssignmentCard({
                 </span>
               </div>
             )}
+            {prerequisitesLocked && missingTests.length > 0 && (
+              <div className="rounded-md border border-amber-200 bg-amber-50 p-2">
+                <div className="flex items-center gap-2 text-sm text-amber-800">
+                  <AlertCircle className="h-4 w-4 shrink-0" />
+                  <span>{tx("requiresPrereq", lang)}</span>
+                </div>
+                <ul className="mt-1 list-inside list-disc text-xs text-amber-700">
+                  {missingTests.map((test) => (
+                    <li key={test.code}>{lang === "ar" ? test.nameAr : test.nameEn}</li>
+                  ))}
+                </ul>
+                <p className="mt-1 text-xs text-amber-600">{tx("unlockHint", lang)}</p>
+              </div>
+            )}
           </div>
         </div>
         <div className="flex shrink-0 flex-wrap items-center gap-2 sm:flex-col sm:items-end">
@@ -382,13 +409,17 @@ function TechnicianAssignmentCard({
             </Button>
           ) : (
             wrapDisabledWithTooltip(
-              combinedPending,
-              DisabledWarning,
+              startDisabled,
+              prerequisitesLocked ? (
+                <span className="text-xs text-amber-800">{tx("prereqNotMet", lang)}</span>
+              ) : (
+                DisabledWarning
+              ),
               <Button
                 type="button"
                 size="sm"
                 className="gap-1.5"
-                disabled={combinedPending}
+                disabled={startDisabled}
                 onClick={onStartTest}
               >
                 {tx("startTest", lang)}
@@ -510,6 +541,7 @@ export default function Technician() {
   const [testNotes, setTestNotes] = useState("");
   const [filterTab, setFilterTab] = useState<"all" | "active" | "completed">("all");
 
+  const utils = trpc.useUtils();
   const { data: assignments = [], refetch } = trpc.distributions.myAssignments.useQuery();
   const { data: myOrders = [], refetch: refetchOrders } = trpc.orders.myOrders.useQuery();
   const { data: allSamples = [] } = trpc.samples.list.useQuery();
@@ -519,10 +551,11 @@ export default function Technician() {
     const interval = window.setInterval(() => {
       void refetch();
       void refetchOrders();
+      void utils.testDependencies.check.invalidate();
     }, 30000);
 
     return () => window.clearInterval(interval);
-  }, [refetch, refetchOrders]);
+  }, [refetch, refetchOrders, utils.testDependencies.check]);
 
   const assignmentDistIds = useMemo(() => assignments.map((d) => d.id), [assignments]);
   const assignmentPendingQueries = trpc.useQueries((t) =>
@@ -538,6 +571,34 @@ export default function Technician() {
     });
     return m;
   }, [assignments, assignmentPendingQueries]);
+
+  const tasksForDependencyCheck = useMemo(
+    () => assignments.filter((d) => d.status !== "completed"),
+    [assignments],
+  );
+
+  const dependencyQueries = trpc.useQueries((t) =>
+    tasksForDependencyCheck.map((dist) =>
+      t.testDependencies.check(
+        { sampleId: dist.sampleId, testCode: dist.testType ?? "" },
+        { enabled: Boolean(dist.sampleId && dist.testType) },
+      ),
+    ),
+  );
+
+  const dependencyByDistId = useMemo(() => {
+    const m = new Map<number, { isAllowed: boolean; missingTests: MissingPrerequisiteTest[] }>();
+    tasksForDependencyCheck.forEach((dist, i) => {
+      const data = dependencyQueries[i]?.data;
+      if (data) {
+        m.set(dist.id, {
+          isAllowed: data.isAllowed,
+          missingTests: data.missingTests ?? [],
+        });
+      }
+    });
+    return m;
+  }, [tasksForDependencyCheck, dependencyQueries]);
 
   const enrichedTasks = useMemo(() => {
     return assignments.map((dist) => {
@@ -593,6 +654,7 @@ export default function Technician() {
       setTestNotes("");
       refetch();
       refetchOrders();
+      void utils.testDependencies.check.invalidate();
     },
     onError: (err) => toast.error(err.message),
   });
@@ -610,6 +672,15 @@ export default function Technician() {
         lang === "ar"
           ? "طلب حذف قيد الانتظار لهذا التوزيع."
           : "A deletion request is pending for this assignment."
+      );
+      return;
+    }
+    const dep = dependencyByDistId.get(pid);
+    if (dep && !dep.isAllowed) {
+      toast.warning(
+        lang === "ar"
+          ? `${tx("prereqNotMet", lang)}: ${dep.missingTests.map((t) => t.nameAr).join("، ")}`
+          : `${tx("prereqNotMet", lang)}: ${dep.missingTests.map((t) => t.nameEn).join(", ")}`,
       );
       return;
     }
@@ -669,6 +740,9 @@ export default function Technician() {
     const sample = allSamples.find((s: any) => s.id === dist.sampleId);
     const isCompleted = dist.status === "completed";
     const pend = pendingByDistId.get(dist.id) ?? false;
+    const dep = dependencyByDistId.get(dist.id);
+    const prerequisitesLocked = !isCompleted && dep?.isAllowed === false;
+    const missingTests = dep?.missingTests ?? [];
     return (
       <TechnicianAssignmentCard
         key={dist.id}
@@ -677,6 +751,8 @@ export default function Technician() {
         sample={sample}
         isCompleted={isCompleted}
         pendingDeletion={pend}
+        prerequisitesLocked={prerequisitesLocked}
+        missingTests={missingTests}
         onStartTest={() => openTestFlow(dist)}
         onViewReport={() => window.open(reportUrlForDistribution(dist), "_blank")}
         onDeletionSuccess={() => {

@@ -31,6 +31,21 @@ import {
   type InsertSample,
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
+import {
+  getOfficialTestByCode,
+  normalizeTestCode,
+  TEST_CODE_ALIASES,
+  type TestDependencySummary,
+} from "./data/official-test-catalog";
+
+function codesMatchingTestType(testTypeCode: string): Set<string> {
+  const canonical = normalizeTestCode(testTypeCode) ?? testTypeCode;
+  const codes = new Set<string>([testTypeCode, canonical]);
+  for (const [alias, target] of Object.entries(TEST_CODE_ALIASES)) {
+    if (target === canonical) codes.add(alias);
+  }
+  return codes;
+}
 
 let _db: ReturnType<typeof drizzle> | null = null;
 
@@ -800,6 +815,58 @@ export async function getDistributionsBySample(sampleId: number) {
     .from(distributions)
     .leftJoin(testTypes, eq(distributions.testType, testTypes.code))
     .where(and(eq(distributions.sampleId, sampleId), isNull(distributions.deletedAt)));
+}
+
+/**
+ * Check whether prerequisite tests are completed for a sample before starting a test.
+ */
+export async function checkTestDependencies(sampleId: number, testCode: string) {
+  const db = await getDb();
+  if (!db) return { isAllowed: true, missingTests: [] as TestDependencySummary[] };
+
+  const testDef = getOfficialTestByCode(testCode);
+  if (!testDef?.requiredTests?.length) {
+    return { isAllowed: true, missingTests: [] as TestDependencySummary[] };
+  }
+
+  const sampleDistributions = await db
+    .select({
+      id: distributions.id,
+      testType: distributions.testType,
+      status: distributions.status,
+    })
+    .from(distributions)
+    .where(and(eq(distributions.sampleId, sampleId), isNull(distributions.deletedAt)));
+
+  const completedCodes = new Set<string>();
+  for (const dist of sampleDistributions) {
+    if (dist.status !== "completed") continue;
+    const specialized = await getSpecializedTestResultByDistribution(dist.id);
+    const legacy = await getTestResultByDistribution(dist.id);
+    if (!specialized && !legacy) continue;
+
+    const rawCode = dist.testType ?? "";
+    const normalized = normalizeTestCode(rawCode);
+    if (normalized) completedCodes.add(normalized);
+    if (rawCode) completedCodes.add(rawCode);
+  }
+
+  const missingCodes = testDef.requiredTests.filter((reqCode) => {
+    const normalizedReq = normalizeTestCode(reqCode) ?? reqCode;
+    return !completedCodes.has(normalizedReq) && !completedCodes.has(reqCode);
+  });
+
+  const missingTests: TestDependencySummary[] = missingCodes.map((code) => {
+    const def = getOfficialTestByCode(code);
+    return def
+      ? { code: def.code, nameEn: def.nameEn, nameAr: def.nameAr }
+      : { code, nameEn: code, nameAr: code };
+  });
+
+  return {
+    isAllowed: missingTests.length === 0,
+    missingTests,
+  };
 }
 
 export async function getDistributionsByTechnician(technicianId: number) {
@@ -1653,6 +1720,26 @@ export async function getSpecializedTestResultsBySample(sampleId: number) {
   return db.select().from(specializedTestResults)
     .where(eq(specializedTestResults.sampleId, sampleId))
     .orderBy(specializedTestResults.createdAt);
+}
+
+export async function getSpecializedTestResultsBySampleAndTestType(
+  sampleId: number,
+  testTypeCode: string,
+  options?: { status?: typeof specializedTestResults.$inferSelect.status },
+) {
+  const db = await getDb();
+  if (!db) return [];
+  const matchCodes = codesMatchingTestType(testTypeCode);
+  const conditions = [eq(specializedTestResults.sampleId, sampleId)];
+  if (options?.status) {
+    conditions.push(eq(specializedTestResults.status, options.status));
+  }
+  const rows = await db
+    .select()
+    .from(specializedTestResults)
+    .where(and(...conditions))
+    .orderBy(desc(specializedTestResults.createdAt));
+  return rows.filter((row) => matchCodes.has(row.testTypeCode));
 }
 
 // ─── Clearance Requests (براءة الذمة) ────────────────────────────────────────
