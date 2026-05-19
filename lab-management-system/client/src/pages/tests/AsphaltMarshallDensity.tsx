@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useMemo } from "react";
 import { useParams, useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { redirectAfterTestSave } from "@/lib/batchHelpers";
@@ -13,6 +13,8 @@ import { toast } from "sonner";
 import { Plus, Trash2, Send, FlaskConical, UserCheck, Printer } from "lucide-react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { extractBitumenContentFromExtractionResult } from "@/lib/asphaltBitumen";
+import { BitumenContentFromExtraction } from "@/components/BitumenContentFromExtraction";
 
 // ─── Bulk Specific Gravity of Compacted HMA ─────────────────────────────────
 // Standard: ASTM D 2726
@@ -42,7 +44,7 @@ function newRow(index: number): GmbRow {
   };
 }
 
-function computeRow(row: GmbRow, theoreticalGso: string): GmbRow {
+function computeRow(row: GmbRow, theoreticalGso: string, _bitumenPercent?: number): GmbRow {
   const wair = parseFloat(row.weightInAir);
   const wwater = parseFloat(row.weightInWater);
   const wssd = parseFloat(row.weightSSD);
@@ -53,7 +55,7 @@ function computeRow(row: GmbRow, theoreticalGso: string): GmbRow {
   const volume = parseFloat((wssd - wwater).toFixed(1));
   const gmb = parseFloat((wair / volume).toFixed(3));
   const airVoids = gso > 0 ? parseFloat(((1 - gmb / gso) * 100).toFixed(1)) : 0;
-  // VMA needs aggregate bulk specific gravity and binder content. Keep as zero until those inputs are available.
+  // VMA requires aggregate bulk specific gravity (Gsb); bitumen % is auto-filled from extraction for reporting.
   const vma = 0;
   const vfb = vma > 0 ? parseFloat((((vma - airVoids) / vma) * 100).toFixed(0)) : 0;
 
@@ -72,6 +74,20 @@ export default function AsphaltMarshallDensity() {
   const { data: existing } = trpc.specializedTests.getByDistribution.useQuery(
     { distributionId: distId },
     { enabled: !!distId },
+  );
+  const { data: bitumenExtractionResults = [] } = trpc.specializedTests.getBySampleAndTestType.useQuery(
+    {
+      sampleId: dist?.sampleId ?? 0,
+      testTypeCode: "ASPH_BITUMEN_EXTRACT",
+      status: "submitted",
+    },
+    { enabled: !!dist?.sampleId },
+  );
+
+  const bitumenExtraction = bitumenExtractionResults[0];
+  const bitumenContent = useMemo(
+    () => extractBitumenContentFromExtractionResult(bitumenExtraction),
+    [bitumenExtraction],
   );
 
   const [rows, setRows] = useState<GmbRow[]>([newRow(0), newRow(1), newRow(2)]);
@@ -116,7 +132,7 @@ export default function AsphaltMarshallDensity() {
     if (existing.status === "submitted") setSubmitted(true);
   }, [existing]);
 
-  const computedRows = rows.map(r => computeRow(r, theoreticalGso));
+  const computedRows = rows.map((r) => computeRow(r, theoreticalGso, bitumenContent));
   const validRows = computedRows.filter(r => r.gmb !== undefined);
   const avgGmb =
     validRows.length > 0
@@ -168,6 +184,7 @@ export default function AsphaltMarshallDensity() {
         formData: {
           specimens: computedRows,
           theoreticalGso,
+          bitumenContent,
           avgGmb,
           avgAirVoids: avgAirVoids.toFixed(1),
           avgVMA: avgVMA.toFixed(1),
@@ -175,6 +192,7 @@ export default function AsphaltMarshallDensity() {
         },
         overallResult,
         summaryValues: {
+          bitumenContent,
           avgGmb: avgGmb?.toFixed(3),
           avgAirVoids: avgAirVoids.toFixed(1),
           avgVMA: avgVMA.toFixed(1),
@@ -267,13 +285,19 @@ export default function AsphaltMarshallDensity() {
                 </p>
                 <p className="text-xs mt-1">
                   {ar
-                    ? "Gso مطلوب لحساب نسبة الفراغات الهوائية. VMA محفوظ حالياً كقيمة مؤقتة حتى اعتماد معطيات الركام والبيتومين."
-                    : "Gso is required for Air Voids. VMA is currently stored as a placeholder until aggregate and binder inputs are confirmed."}
+                    ? "Gso مطلوب لحساب الفراغات الهوائية. محتوى البيتومين يُملأ تلقائياً من استخلاص البيتومين عند توفره."
+                    : "Gso is required for Air Voids. Bitumen content auto-fills from Bitumen Extraction when available."}
                 </p>
               </div>
             </div>
           </CardContent>
         </Card>
+
+        <BitumenContentFromExtraction
+          lang={lang}
+          bitumenContent={bitumenContent}
+          extractionDistributionCode={bitumenExtraction?.testTypeCode ?? null}
+        />
 
         <Card>
           <CardContent className="pt-4">
@@ -541,3 +565,4 @@ export default function AsphaltMarshallDensity() {
     </DashboardLayout>
   );
 }
+
