@@ -1,74 +1,95 @@
 /**
- * AsphaltExtractedSieve — Sieve Analysis of Extracted Aggregate
- * Standard: BS EN 12697-2 / ASTM D5444
- *
- * Performed after bitumen extraction (BS EN 12697-1).
- * Compares gradation of extracted aggregate vs. JMF limits.
- *
- * Mix types: ACWC (20mm), ACBC (28mm), DBM (40mm)
+ * Sieve Analysis of Extracted Aggregates
+ * BS EN 12697-2 / ASTM D5444 — gradation vs JMF (CC) and mix-type specification limits
  */
-import { useState, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { useParams, useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { redirectAfterTestSave } from "@/lib/batchHelpers";
+import { extractBitumenContentFromExtractionResult } from "@/lib/asphaltBitumen";
+import {
+  EXTRACTED_SIEVE_SIZES,
+  JMF_LIMITS,
+  getExtractedSieveSpecLimits,
+} from "@/lib/extractedSieveLimits";
 import DashboardLayout from "@/components/DashboardLayout";
 import { SampleInfoCard } from "@/components/SampleInfoCard";
-import { PassFailBadge } from "@/components/PassFailBadge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { Send, FlaskConical, Info, Printer } from "lucide-react";
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
-
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
+} from "recharts";
 import { useLanguage } from "@/contexts/LanguageContext";
-// ─── JMF Gradation Limits per Mix Type ───────────────────────────────────────
-// Sieves in mm, limits as % passing
-const MIX_GRADATIONS: Record<string, { sieves: string[]; lower: number[]; upper: number[] }> = {
-  "ACWC": {
-    sieves: ["25.0","19.0","12.5","9.5","6.3","4.75","2.36","1.18","0.600","0.300","0.150","0.075"],
-    lower:  [100,   90,    62,    47,    35,   28,    20,    13,    9,     6,     4,     3],
-    upper:  [100,   100,   80,    65,    52,   44,    34,    24,    18,    13,    9,     7],
-  },
-  "ACBC": {
-    sieves: ["37.5","25.0","19.0","12.5","9.5","6.3","4.75","2.36","1.18","0.600","0.300","0.150","0.075"],
-    lower:  [100,   90,    71,    51,    40,   30,   23,    15,    10,    7,     4,     3,     2],
-    upper:  [100,   100,   90,    72,    60,   50,   42,    32,    23,    17,    12,    8,     6],
-  },
-  "DBM": {
-    sieves: ["50.0","37.5","25.0","19.0","12.5","9.5","4.75","2.36","0.600","0.075"],
-    lower:  [100,   90,    65,    50,    35,    25,   15,    10,    5,     2],
-    upper:  [100,   100,   85,    70,    55,    45,   35,    25,    15,    8],
-  },
-};
 
-interface SieveRow {
-  sieve: string;
+interface SieveInputs {
+  sieveSize: string;
   massRetained: string;
-  cumRetained?: number;
-  percentPassing?: number;
-  lower?: number;
-  upper?: number;
-  withinLimits?: boolean;
 }
 
-function computeGradation(rows: SieveRow[], totalMass: number, mixType: string): SieveRow[] {
-  const limits = MIX_GRADATIONS[mixType];
-  let cumR = 0;
-  return rows.map((row, i) => {
-    const m = parseFloat(row.massRetained) || 0;
-    cumR += m;
-    const percentPassing = totalMass > 0 ? parseFloat(((1 - cumR / totalMass) * 100).toFixed(1)) : undefined;
-    const lower = limits?.lower[i];
-    const upper = limits?.upper[i];
-    const withinLimits = percentPassing !== undefined && lower !== undefined && upper !== undefined
-      ? percentPassing >= lower && percentPassing <= upper
-      : undefined;
-    return { ...row, cumRetained: parseFloat(cumR.toFixed(1)), percentPassing, lower, upper, withinLimits };
+interface SieveComputed extends SieveInputs {
+  percentRetained: number;
+  percentPassing: number;
+  ccLower: number;
+  ccUpper: number;
+  specLower: number;
+  specUpper: number;
+  result: "pass" | "fail" | "pending";
+}
+
+function createEmptySieves(): SieveInputs[] {
+  return EXTRACTED_SIEVE_SIZES.map((s) => ({
+    sieveSize: s.size,
+    massRetained: "",
+  }));
+}
+
+function computeSieves(
+  sieves: SieveInputs[],
+  massAfterIgnition: number,
+  specLimits: Record<string, { lower: number; upper: number }>,
+): SieveComputed[] {
+  let cumulativePercentRetained = 0;
+
+  return sieves.map((sieve) => {
+    const massRet = parseFloat(sieve.massRetained) || 0;
+    const percentRetained =
+      massAfterIgnition > 0 ? parseFloat(((massRet / massAfterIgnition) * 100).toFixed(1)) : 0;
+    cumulativePercentRetained += percentRetained;
+    const percentPassing = parseFloat((100 - cumulativePercentRetained).toFixed(1));
+
+    const jmf = JMF_LIMITS[sieve.sieveSize] ?? { lower: 0, upper: 100 };
+    const spec = specLimits[sieve.sieveSize] ?? { lower: 0, upper: 100 };
+
+    const hasData = massAfterIgnition > 0 && sieve.massRetained !== "";
+    const result: SieveComputed["result"] = !hasData
+      ? "pending"
+      : percentPassing >= spec.lower && percentPassing <= spec.upper
+        ? "pass"
+        : "fail";
+
+    return {
+      ...sieve,
+      percentRetained,
+      percentPassing,
+      ccLower: jmf.lower,
+      ccUpper: jmf.upper,
+      specLower: spec.lower,
+      specUpper: spec.upper,
+      result,
+    };
   });
 }
 
@@ -77,81 +98,166 @@ export default function AsphaltExtractedSieve() {
   const [, setLocation] = useLocation();
   const { lang } = useLanguage();
   const ar = lang === "ar";
-  const distId = parseInt(distributionId || "0", 10);
+  const distId = parseInt(distributionId ?? "0", 10);
 
-  const [mixType, setMixType] = useState("ACWC");
-  const [sampleMass, setSampleMass] = useState("1000");
-  const [panMass, setPanMass] = useState("0");
+  const { data: dist } = trpc.distributions.get.useQuery({ id: distId }, { enabled: !!distId });
+  const { data: existing } = trpc.specializedTests.getByDistribution.useQuery(
+    { distributionId: distId },
+    { enabled: !!distId },
+  );
+  const { data: bitumenResults = [] } = trpc.specializedTests.getBySampleAndTestType.useQuery(
+    {
+      sampleId: dist?.sampleId ?? 0,
+      testTypeCode: "ASPH_BITUMEN_EXTRACT",
+      status: "submitted",
+    },
+    { enabled: !!dist?.sampleId },
+  );
+
+  const bitumenData = bitumenResults[0];
+  const bitumenForm = (bitumenData?.formData ?? {}) as Record<string, unknown>;
+  const bitumenSample = (bitumenForm.sample ?? {}) as Record<string, unknown>;
+
+  const massBeforeIgnition = parseFloat(String(bitumenSample.massBeforeIgnition ?? "")) || 0;
+  const massAfterIgnition =
+    parseFloat(String(bitumenSample.massAfterIgnition ?? "")) ||
+    (parseFloat(String(bitumenSample.massBeforeIgnition ?? "")) || 0) -
+      (parseFloat(String(bitumenSample.lossOfIgnition ?? "")) || 0);
+  const pgBinder =
+    extractBitumenContentFromExtractionResult(bitumenData) ??
+    (parseFloat(String(bitumenSample.pgBinder ?? bitumenForm.avgBitumen ?? "")) || 0);
+
+  const mixType = dist?.testSubType ?? "base_course";
+  const isWearingCourse = mixType === "wearing_course";
+  const specLimits = useMemo(() => getExtractedSieveSpecLimits(mixType), [mixType]);
+
+  const [sieves, setSieves] = useState<SieveInputs[]>(createEmptySieves);
   const [notes, setNotes] = useState("");
   const [submitted, setSubmitted] = useState(false);
+  const [saving, setSaving] = useState(false);
 
-  const { data: distribution } = trpc.distributions.get.useQuery(
-    { id: distId },
-    { enabled: !!distId }
+  const computedSieves = useMemo(
+    () => computeSieves(sieves, massAfterIgnition, specLimits),
+    [sieves, massAfterIgnition, specLimits],
   );
+
+  const evaluatedSieves = computedSieves.filter((s) => s.result !== "pending");
+  const failedSieves = evaluatedSieves.filter((s) => s.result === "fail").length;
+  const overallPass = evaluatedSieves.length > 0 && failedSieves === 0;
 
   const saveMut = trpc.specializedTests.save.useMutation({
-    onSuccess: () => {
-      toast.success("تم حفظ نتائج تحليل المنخل بنجاح");
-      setSubmitted(true);
-      redirectAfterTestSave(setLocation, distribution);
+    onSuccess: (_, vars) => {
+      if (vars.status === "submitted") {
+        toast.success(ar ? "تم إرسال النتائج بنجاح" : "Results submitted successfully");
+        setSubmitted(true);
+        redirectAfterTestSave(setLocation, dist);
+      } else {
+        toast.success(ar ? "تم حفظ المسودة بنجاح" : "Draft saved successfully");
+      }
     },
-    onError: (err: { message: string }) => toast.error(err.message),
+    onError: (err) => toast.error(err.message),
   });
 
-  const [rows, setRows] = useState<SieveRow[]>(() =>
-    (MIX_GRADATIONS[mixType]?.sieves ?? []).map(s => ({ sieve: s, massRetained: "" }))
-  );
+  useEffect(() => {
+    if (!existing?.formData) return;
+    const fd = existing.formData as Record<string, unknown>;
+    if (fd.notes) setNotes(String(fd.notes));
 
-  const handleMixChange = (m: string) => {
-    setMixType(m);
-    setRows((MIX_GRADATIONS[m]?.sieves ?? []).map(s => ({ sieve: s, massRetained: "" })));
-  };
+    const saved = (fd.sieves ?? fd.rows) as Array<Record<string, unknown>> | undefined;
+    if (Array.isArray(saved) && saved.length > 0) {
+      setSieves(
+        EXTRACTED_SIEVE_SIZES.map((info) => {
+          const row = saved.find(
+            (r) =>
+              String(r.sieveSize ?? r.sieve) === info.size ||
+              String(r.sieve) === info.size,
+          );
+          return {
+            sieveSize: info.size,
+            massRetained: String(row?.massRetained ?? ""),
+          };
+        }),
+      );
+    }
+    if (existing.status === "submitted") setSubmitted(true);
+  }, [existing]);
 
-  const totalMass = (parseFloat(sampleMass) || 0) - (parseFloat(panMass) || 0);
-  const computed = computeGradation(rows, totalMass, mixType);
-  const validRows = computed.filter(r => r.percentPassing !== undefined);
-  const failCount = validRows.filter(r => r.withinLimits === false).length;
-  const overallPass = validRows.length > 0 && failCount === 0;
-
-  const updateRow = useCallback((sieve: string, value: string) => {
-    setRows(prev => prev.map(r => r.sieve === sieve ? { ...r, massRetained: value } : r));
+  const updateMass = useCallback((index: number, value: string) => {
+    setSieves((prev) => {
+      const updated = [...prev];
+      updated[index] = { ...updated[index], massRetained: value };
+      return updated;
+    });
   }, []);
 
-  const chartData = computed
-    .filter(r => r.percentPassing !== undefined)
-    .map(r => ({
-      sieve: r.sieve,
-      "% Passing": r.percentPassing,
-      "Upper Limit": r.upper,
-      "Lower Limit": r.lower,
-    }));
+  const chartData = computedSieves
+    .filter((s) => s.result !== "pending")
+    .map((s) => {
+      const info = EXTRACTED_SIEVE_SIZES.find((x) => x.size === s.sieveSize);
+      return {
+        sieve: ar ? info?.labelAr ?? s.sieveSize : info?.label ?? s.sieveSize,
+        "% Passing": s.percentPassing,
+        "Spec Lower": s.specLower,
+        "Spec Upper": s.specUpper,
+        "JMF Lower": s.ccLower,
+        "JMF Upper": s.ccUpper,
+      };
+    });
 
-  const handleSubmit = () => {
-    if (!distribution?.sampleId) {
-      toast.error(lang === "ar" ? "معرف العينة مفقود" : "Sample ID missing");
+  const handleSave = async (status: "draft" | "submitted") => {
+    if (!dist?.sampleId) {
+      toast.error(ar ? "معرف العينة مفقود" : "Sample ID missing");
       return;
     }
-    if (!distributionId) return;
-    saveMut.mutate({
-      distributionId: distId,
-      sampleId: distribution.sampleId,
-      testTypeCode: `ASPH_EXTRACTED_SIEVE_${mixType}`,
-      formTemplate: "asphalt_extracted_sieve",
-      formData: { mixType, sampleMass, panMass, totalMass, rows: computed, overallPass },
-      overallResult: overallPass ? "pass" : "fail",
-      notes,
-      status: "submitted",
-    });
+    if (status === "submitted" && evaluatedSieves.length === 0) {
+      toast.error(ar ? "الرجاء إدخال كتلة محجوزة لمنخل واحد على الأقل" : "Enter mass retained for at least one sieve");
+      return;
+    }
+    if (status === "submitted" && massAfterIgnition <= 0) {
+      toast.error(
+        ar
+          ? "يجب إكمال اختبار استخلاص البيتومين أولاً"
+          : "Complete Bitumen Extraction test first",
+      );
+      return;
+    }
+
+    setSaving(true);
+    try {
+      await saveMut.mutateAsync({
+        distributionId: distId,
+        sampleId: dist.sampleId,
+        testTypeCode: "ASPH_EXTRACTED_SIEVE",
+        formTemplate: "asphalt_extracted_sieve",
+        formData: {
+          massBeforeIgnition,
+          massAfterIgnition,
+          pgBinder,
+          mixType,
+          sieves: computedSieves,
+          failedCount: failedSieves,
+          overallPass,
+        },
+        overallResult: evaluatedSieves.length === 0 ? "pending" : overallPass ? "pass" : "fail",
+        summaryValues: {
+          failedSieves,
+          overallResult: overallPass ? "pass" : "fail",
+          massAfterIgnition,
+          pgBinder,
+        },
+        notes,
+        status,
+      });
+    } finally {
+      setSaving(false);
+    }
   };
 
   if (!distId || distId === 0) {
     return (
       <DashboardLayout>
-        <div className="p-6">
-          <div className="text-center text-red-600">
-            {lang === "ar" ? "معرف التوزيع غير صالح" : "Invalid distribution ID"}
-          </div>
+        <div className="p-6 text-center text-red-600">
+          {ar ? "معرف التوزيع غير صالح" : "Invalid distribution ID"}
         </div>
       </DashboardLayout>
     );
@@ -159,173 +265,305 @@ export default function AsphaltExtractedSieve() {
 
   return (
     <DashboardLayout>
-      <div className="container max-w-5xl py-6 space-y-6">
+      <div className="max-w-6xl mx-auto p-6 space-y-6">
         <SampleInfoCard
-          dist={distribution}
+          dist={dist}
           extraFields={[
-            { label: "Mix type / نوع الخلطة", value: distribution?.testSubType },
+            {
+              label: ar ? "نوع الخلطة" : "Mix type",
+              value: isWearingCourse
+                ? ar
+                  ? "طبقة التآكل"
+                  : "Wearing Course"
+                : ar
+                  ? "طبقة الأساس"
+                  : "Base Course",
+            },
           ]}
         />
-        {/* Header */}
-        <div className="flex items-center justify-between">
+
+        <div className="flex items-start justify-between flex-wrap gap-3">
           <div>
-            <h1 className="text-2xl font-bold flex items-center gap-2">
-              <FlaskConical className="h-6 w-6 text-amber-600" />
-              تحليل منخل الركام المستخلص — Extracted Aggregate Sieve Analysis
-            </h1>
-            <p className="text-muted-foreground text-sm mt-1">BS EN 12697-2 / ASTM D5444</p>
-          </div>
-          {distribution && (
-            <Badge variant="outline">{distribution.distributionCode} — {distribution.testName}</Badge>
-          )}
-        </div>
-
-        {/* Settings */}
-        <Card>
-          <CardHeader><CardTitle className="text-base">إعدادات الفحص</CardTitle></CardHeader>
-          <CardContent className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div>
-              <Label>نوع الخلطة</Label>
-              <Select value={mixType} onValueChange={handleMixChange}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="ACWC">ACWC (20mm)</SelectItem>
-                  <SelectItem value="ACBC">ACBC (28mm)</SelectItem>
-                  <SelectItem value="DBM">DBM (40mm)</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label>كتلة العينة الكلية (g)</Label>
-              <Input value={sampleMass} onChange={e => setSampleMass(e.target.value)} type="number" />
-            </div>
-            <div>
-              <Label>كتلة الصينية (g)</Label>
-              <Input value={panMass} onChange={e => setPanMass(e.target.value)} type="number" />
-            </div>
-            <div className="flex items-end">
-              <div className="bg-muted rounded-lg px-4 py-2 text-sm w-full">
-                <span className="text-muted-foreground">الكتلة الفعلية: </span>
-                <span className="font-mono font-bold">{totalMass.toLocaleString()} g</span>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Info */}
-        <Card className="border-amber-200 bg-amber-50 dark:bg-amber-950/20">
-          <CardContent className="pt-4">
-            <div className="flex gap-2 text-sm text-amber-700 dark:text-amber-300">
-              <Info className="h-4 w-4 mt-0.5 shrink-0" />
+            <div className="flex items-center gap-2 text-sm text-slate-500 mb-1">
+              <FlaskConical size={16} />
               <span>
-                يُجرى هذا الاختبار على الركام بعد استخلاص البيتومين. الحدود المعيارية مأخوذة من JMF للخلطة المحددة.
+                {ar ? "اختبارات الأسفلت / منخل الركام المستخلص" : "Asphalt / Extracted Aggregate Sieve"}
               </span>
             </div>
+            <h1 className="text-2xl font-bold text-slate-900">
+              {ar ? "تحليل منخل الركام المستخلص" : "Sieve Analysis of Extracted Aggregates"}
+            </h1>
+            <p className="text-slate-500 text-sm mt-1">BS EN 12697-2 / ASTM D5444</p>
+          </div>
+          <div className="flex gap-2">
+            {submitted ? (
+              <>
+                <Button variant="outline" size="sm" onClick={() => setLocation("/technician")}>
+                  {ar ? "العودة" : "Back"}
+                </Button>
+                <Button
+                  size="sm"
+                  className="bg-green-600 hover:bg-green-700 gap-1.5"
+                  onClick={() => window.open(`/test-report/${distId}`, "_blank")}
+                >
+                  <Printer size={14} />
+                  {ar ? "طباعة التقرير" : "Print Report"}
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button variant="outline" size="sm" onClick={() => handleSave("draft")} disabled={saving}>
+                  {ar ? "حفظ مسودة" : "Save Draft"}
+                </Button>
+                <Button
+                  className="bg-blue-600 hover:bg-blue-700"
+                  onClick={() => handleSave("submitted")}
+                  disabled={saving}
+                >
+                  <Send size={14} className="mr-1.5" />
+                  {saving ? (ar ? "جاري..." : "Saving...") : ar ? "إرسال النتائج" : "Submit Results"}
+                </Button>
+              </>
+            )}
+          </div>
+        </div>
+
+        <Card className="border-blue-200 bg-blue-50">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm font-semibold flex items-center gap-2">
+              <Info className="w-4 h-4" />
+              {ar ? "بيانات من اختبار استخلاص البيتومين" : "Data from Bitumen Extraction Test"}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {massAfterIgnition <= 0 ? (
+              <p className="text-sm text-amber-800">
+                {ar
+                  ? "لا توجد نتائج مُرسلة لاستخلاص البيتومين على هذه العينة. أكمل ذلك الاختبار أولاً."
+                  : "No submitted Bitumen Extraction results for this sample. Complete that test first."}
+              </p>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm">
+                <div>
+                  <Label className="text-xs text-muted-foreground">
+                    {ar ? "الكتلة قبل الاشتعال (جم)" : "Mass Before Ignition (gm)"}
+                  </Label>
+                  <div className="font-semibold mt-1 text-blue-700">
+                    {massBeforeIgnition.toFixed(1)} gm
+                  </div>
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground">
+                    {ar ? "الكتلة بعد الاشتعال (جم)" : "Mass After Ignition (gm)"}
+                  </Label>
+                  <div className="font-semibold mt-1 text-blue-700">
+                    {massAfterIgnition.toFixed(1)} gm
+                  </div>
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground">
+                    {ar ? "محتوى الرابط PG (%)" : "%PG Binder (Pb)"}
+                  </Label>
+                  <div className="font-semibold mt-1 text-blue-700">{pgBinder.toFixed(2)}%</div>
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
 
-        {/* Sieve Table */}
+        <Card className="border-amber-200 bg-amber-50">
+          <CardContent className="pt-4 text-sm text-amber-800">
+            <Info className="inline w-4 h-4 mr-1 align-text-bottom" />
+            {ar
+              ? "نسبة المحجوز = (الكتلة المحجوزة / الكتلة بعد الاشتعال) × 100. نسبة المار = 100 − مجموع نسب المحجوز المتراكم. المقارنة مع حدود المواصفة حسب نوع الطبقة."
+              : "% Retained = (Mass Retained / Mass After Ignition) × 100. % Passing = 100 − cumulative % retained. Compared to specification limits by mix course."}
+          </CardContent>
+        </Card>
+
         <Card>
-          <CardHeader><CardTitle className="text-base">جدول تحليل المنخل</CardTitle></CardHeader>
+          <CardHeader>
+            <CardTitle className="text-base">{ar ? "جدول تحليل المنخل" : "Sieve Analysis Table"}</CardTitle>
+          </CardHeader>
           <CardContent>
             <div className="overflow-x-auto">
-              <table className="w-full text-sm border-collapse">
-                <thead>
-                  <tr className="bg-muted text-center">
-                    <th className="border px-3 py-2">حجم المنخل (mm)</th>
-                    <th className="border px-3 py-2">الكتلة المحتجزة (g)</th>
-                    <th className="border px-3 py-2">الكتلة المتراكمة (g)</th>
-                    <th className="border px-3 py-2">% العابر</th>
-                    <th className="border px-3 py-2">الحد الأدنى</th>
-                    <th className="border px-3 py-2">الحد الأقصى</th>
-                    <th className="border px-3 py-2">النتيجة</th>
+              <table className="w-full text-xs border-collapse">
+                <thead className="bg-slate-50">
+                  <tr>
+                    <th className="border border-slate-300 px-2 py-2" rowSpan={2}>
+                      {ar ? "حجم المنخل (mm)" : "Sieve Size (mm)"}
+                    </th>
+                    <th className="border border-slate-300 px-2 py-2" rowSpan={2}>
+                      {ar ? "الكتلة المحجوزة (gm)" : "Mass Retained (gm)"}
+                    </th>
+                    <th className="border border-slate-300 px-2 py-2" rowSpan={2}>
+                      {ar ? "نسبة المحجوز %" : "% Retained"}
+                    </th>
+                    <th className="border border-slate-300 px-2 py-2" rowSpan={2}>
+                      {ar ? "نسبة المار %" : "% Passing"}
+                    </th>
+                    <th className="border border-slate-300 px-2 py-2 bg-amber-50" colSpan={2}>
+                      CC (JMF)
+                    </th>
+                    <th className="border border-slate-300 px-2 py-2 bg-blue-50" colSpan={2}>
+                      {ar ? "حدود المواصفات" : "Specification Limits"}
+                    </th>
+                    <th className="border border-slate-300 px-2 py-2" rowSpan={2}>
+                      {ar ? "النتيجة" : "Result"}
+                    </th>
+                  </tr>
+                  <tr>
+                    <th className="border border-slate-300 px-2 py-2 bg-amber-50 text-xs">
+                      {ar ? "الحد الأدنى" : "Lower"}
+                    </th>
+                    <th className="border border-slate-300 px-2 py-2 bg-amber-50 text-xs">
+                      {ar ? "الحد الأعلى" : "Upper"}
+                    </th>
+                    <th className="border border-slate-300 px-2 py-2 bg-blue-50 text-xs">
+                      {ar ? "الحد الأدنى" : "Lower"}
+                    </th>
+                    <th className="border border-slate-300 px-2 py-2 bg-blue-50 text-xs">
+                      {ar ? "الحد الأعلى" : "Upper"}
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
-                  {computed.map(row => (
-                    <tr key={row.sieve} className="text-center hover:bg-muted/30">
-                      <td className="border px-3 py-1.5 font-mono font-semibold">{row.sieve}</td>
-                      <td className="border px-2 py-1">
-                        <Input
-                          value={row.massRetained}
-                          onChange={e => updateRow(row.sieve, e.target.value)}
-                          className="h-7 text-center w-24 mx-auto"
-                          type="number" min="0"
-                        />
-                      </td>
-                      <td className="border px-3 py-1.5 font-mono">{row.cumRetained?.toFixed(1) ?? "—"}</td>
-                      <td className={`border px-3 py-1.5 font-mono font-bold ${row.withinLimits === false ? "text-red-600" : row.withinLimits === true ? "text-emerald-600" : ""}`}>
-                        {row.percentPassing?.toFixed(1) ?? "—"}
-                      </td>
-                      <td className="border px-3 py-1.5 text-muted-foreground">{row.lower ?? "—"}</td>
-                      <td className="border px-3 py-1.5 text-muted-foreground">{row.upper ?? "—"}</td>
-                      <td className="border px-3 py-1.5">
-                        {row.withinLimits !== undefined
-                          ? <PassFailBadge result={row.withinLimits ? "pass" : "fail"} size="sm" />
-                          : <span className="text-muted-foreground text-xs">—</span>}
-                      </td>
-                    </tr>
-                  ))}
+                  {EXTRACTED_SIEVE_SIZES.map((sieveInfo, idx) => {
+                    const sieve = computedSieves[idx];
+                    return (
+                      <tr key={sieveInfo.size}>
+                        <td className="border border-slate-300 px-2 py-2 font-semibold whitespace-nowrap">
+                          {ar ? sieveInfo.labelAr : sieveInfo.label}
+                        </td>
+                        <td className="border border-slate-300 px-2 py-2">
+                          <Input
+                            type="number"
+                            step="0.1"
+                            value={sieves[idx].massRetained}
+                            onChange={(e) => updateMass(idx, e.target.value)}
+                            className="h-7 text-xs min-w-[72px]"
+                            disabled={submitted}
+                          />
+                        </td>
+                        <td className="border border-slate-300 px-2 py-2 text-center bg-blue-50 font-semibold">
+                          {sieve.percentRetained > 0 || sieves[idx].massRetained
+                            ? sieve.percentRetained.toFixed(1)
+                            : "—"}
+                        </td>
+                        <td
+                          className={`border border-slate-300 px-2 py-2 text-center bg-blue-50 font-semibold ${
+                            sieve.result === "fail" ? "text-red-700" : ""
+                          }`}
+                        >
+                          {sieve.result !== "pending" ? sieve.percentPassing.toFixed(1) : "—"}
+                        </td>
+                        <td className="border border-slate-300 px-2 py-2 text-center bg-amber-50">
+                          {sieve.ccLower}
+                        </td>
+                        <td className="border border-slate-300 px-2 py-2 text-center bg-amber-50">
+                          {sieve.ccUpper}
+                        </td>
+                        <td className="border border-slate-300 px-2 py-2 text-center bg-blue-50">
+                          {sieve.specLower}
+                        </td>
+                        <td className="border border-slate-300 px-2 py-2 text-center bg-blue-50">
+                          {sieve.specUpper}
+                        </td>
+                        <td className="border border-slate-300 px-2 py-2 text-center">
+                          {sieve.result === "pending" ? (
+                            "—"
+                          ) : (
+                            <Badge
+                              variant={sieve.result === "pass" ? "default" : "destructive"}
+                              className="text-xs"
+                            >
+                              {sieve.result === "pass"
+                                ? ar
+                                  ? "مطابق"
+                                  : "Pass"
+                                : ar
+                                  ? "غير مطابق"
+                                  : "Fail"}
+                            </Badge>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
           </CardContent>
         </Card>
 
-        {/* Chart */}
         {chartData.length > 0 && (
           <Card>
-            <CardHeader><CardTitle className="text-base">منحنى التدرج الحبيبي مقارنةً بحدود JMF</CardTitle></CardHeader>
+            <CardHeader>
+              <CardTitle className="text-base">
+                {ar ? "منحنى التدرج الحبيبي" : "Gradation Curve"}
+              </CardTitle>
+            </CardHeader>
             <CardContent>
               <ResponsiveContainer width="100%" height={300}>
-                <LineChart data={chartData} margin={{ top: 10, right: 20, left: 0, bottom: 20 }}>
+                <LineChart data={chartData} margin={{ top: 10, right: 20, left: 0, bottom: 40 }}>
                   <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="sieve" label={{ value: "Sieve Size (mm)", position: "insideBottom", offset: -10 }} />
+                  <XAxis dataKey="sieve" angle={-35} textAnchor="end" height={70} interval={0} />
                   <YAxis domain={[0, 100]} label={{ value: "% Passing", angle: -90, position: "insideLeft" }} />
                   <Tooltip />
                   <Legend verticalAlign="top" />
                   <Line type="monotone" dataKey="% Passing" stroke="#d97706" strokeWidth={2.5} dot={{ r: 4 }} />
-                  <Line type="monotone" dataKey="Upper Limit" stroke="#dc2626" strokeWidth={1.5} strokeDasharray="6 3" dot={false} />
-                  <Line type="monotone" dataKey="Lower Limit" stroke="#16a34a" strokeWidth={1.5} strokeDasharray="6 3" dot={false} />
+                  <Line
+                    type="monotone"
+                    dataKey="Spec Upper"
+                    stroke="#dc2626"
+                    strokeWidth={1.5}
+                    strokeDasharray="6 3"
+                    dot={false}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="Spec Lower"
+                    stroke="#16a34a"
+                    strokeWidth={1.5}
+                    strokeDasharray="6 3"
+                    dot={false}
+                  />
                 </LineChart>
               </ResponsiveContainer>
             </CardContent>
           </Card>
         )}
 
-        {/* Overall Result */}
-        {validRows.length > 0 && (
-          <div className={`flex items-center gap-3 rounded-xl p-4 border-2 ${overallPass ? "bg-emerald-50 border-emerald-300" : "bg-red-50 border-red-300"}`}>
-            <span className={`font-bold text-lg ${overallPass ? "text-emerald-800" : "text-red-800"}`}>
-              {overallPass ? "✓ PASS — ضمن حدود JMF" : `✗ FAIL — ${failCount} منخل خارج الحدود`}
-            </span>
-          </div>
+        {evaluatedSieves.length > 0 && (
+          <Card>
+            <CardContent className="pt-6">
+              <div
+                className={`p-6 rounded-lg border-2 text-center ${
+                  overallPass
+                    ? "bg-green-50 border-green-500 text-green-900"
+                    : "bg-red-50 border-red-500 text-red-900"
+                }`}
+              >
+                <div className="text-3xl font-bold mb-2">
+                  {overallPass ? (ar ? "✓ مطابق" : "✓ PASS") : ar ? "✗ غير مطابق" : "✗ FAIL"}
+                </div>
+                {!overallPass && (
+                  <div className="text-base mt-2">
+                    {ar
+                      ? `${failedSieves} منخل خارج الحدود`
+                      : `${failedSieves} sieves out of limits`}
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
         )}
 
-        {/* Notes */}
         <Card>
-          <CardHeader><CardTitle className="text-base">ملاحظات</CardTitle></CardHeader>
-          <CardContent>
-            <Textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="أي ملاحظات إضافية..." rows={3} />
+          <CardContent className="pt-4">
+            <Label className="text-xs text-slate-500 mb-1 block">{ar ? "ملاحظات" : "Notes"}</Label>
+            <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} disabled={submitted} />
           </CardContent>
         </Card>
-
-        {/* Actions */}
-        <div className="flex gap-3 justify-end">
-          {submitted && (
-            <Button variant="outline" onClick={() => window.print()}>
-              <Printer className="h-4 w-4 mr-2" /> طباعة التقرير
-            </Button>
-          )}
-          <Button
-            onClick={handleSubmit}
-            disabled={saveMut.isPending || submitted}
-            className="min-w-32 bg-blue-600 hover:bg-blue-700"
-          >
-            <Send className="h-4 w-4 mr-2" />
-            {saveMut.isPending ? "جاري الحفظ..." : submitted ? "تم الحفظ ✓" : "تأكيد النتائج"}
-          </Button>
-        </div>
       </div>
     </DashboardLayout>
   );

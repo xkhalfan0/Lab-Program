@@ -12,6 +12,7 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { FlexibleResultsTable, type Column, formDataToKeyValueRows, keyValueColumns } from "@/components/reports/FlexibleResultsTable";
 import { formatCalendarDate } from "@/lib/dateFormat";
 import { calculateFinalBlend, formatDisplaySieveMm } from "@/pages/tests/SieveAnalysis";
+import { EXTRACTED_SIEVE_SIZES } from "@/lib/extractedSieveLimits";
 import {
   LineChart,
   Line,
@@ -886,6 +887,122 @@ function renderAsphaltBitumenExtraction(fd: any, isAr: boolean) {
         </div>
       </div>
       <FlexibleResultsTable columns={cols} rows={[sample]} />
+    </>
+  );
+}
+
+function renderAsphaltExtractedSieve(fd: any, isAr: boolean) {
+  const L = (en: string, ars: string) => (isAr ? ars : en);
+  const sieves = (fd.sieves ?? fd.rows ?? []) as Array<Record<string, unknown>>;
+  if (!Array.isArray(sieves) || sieves.length === 0) return renderGeneric(fd, isAr);
+
+  const mixType = String(fd.mixType ?? "base_course");
+  const mixLabel =
+    mixType === "wearing_course"
+      ? L("Wearing Course", "طبقة التآكل")
+      : L("Base Course", "طبقة الأساس");
+  const overallPass = fd.overallPass === true || fd.summaryValues?.overallResult === "pass";
+  const failedCount = Number(fd.failedCount ?? fd.summaryValues?.failedSieves ?? 0);
+
+  const cols: Column[] = [
+    {
+      header: L("Sieve Size (mm)", "حجم المنخل (مم)"),
+      field: "sieveLabel",
+      align: "left",
+    },
+    {
+      header: L("Mass Retained (gm)", "الكتلة المحجوزة (جم)"),
+      field: "massRetained",
+      align: "right",
+      render: (v) => fmt(v, 1),
+    },
+    {
+      header: L("% Retained", "نسبة المحجوز %"),
+      field: "percentRetained",
+      align: "center",
+      render: (v) => fmt(v, 1),
+    },
+    {
+      header: L("% Passing", "نسبة المار %"),
+      field: "percentPassing",
+      align: "center",
+      render: (v) => fmt(v, 1),
+    },
+    {
+      header: L("CC Lower", "CC أدنى"),
+      field: "ccLower",
+      align: "center",
+      render: (v) => fmt(v, 0),
+    },
+    {
+      header: L("CC Upper", "CC أعلى"),
+      field: "ccUpper",
+      align: "center",
+      render: (v) => fmt(v, 0),
+    },
+    {
+      header: L("Spec Lower", "مواصفات أدنى"),
+      field: "specLower",
+      align: "center",
+      render: (v) => fmt(v, 0),
+    },
+    {
+      header: L("Spec Upper", "مواصفات أعلى"),
+      field: "specUpper",
+      align: "center",
+      render: (v) => fmt(v, 0),
+    },
+    {
+      header: L("Result", "النتيجة"),
+      field: "result",
+      align: "center",
+      render: (v) =>
+        v === "pass" ? L("Pass", "مطابق") : v === "fail" ? L("Fail", "غير مطابق") : "—",
+    },
+  ];
+
+  const rows = sieves.map((s) => {
+    const size = String(s.sieveSize ?? s.sieve ?? "");
+    const info = EXTRACTED_SIEVE_SIZES.find((x) => x.size === size);
+    return {
+      ...s,
+      sieveLabel: isAr ? info?.labelAr ?? size : info?.label ?? size,
+    };
+  });
+
+  return (
+    <>
+      <div className="mb-4 grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+        <div className="border border-blue-200 bg-blue-50 rounded p-2">
+          <div className="text-slate-500">{L("Mass Before Ignition (gm)", "الكتلة قبل الاشتعال (جم)")}</div>
+          <div className="font-semibold">{fmt(fd.massBeforeIgnition, 1)}</div>
+        </div>
+        <div className="border border-blue-200 bg-blue-50 rounded p-2">
+          <div className="text-slate-500">{L("Mass After Ignition (gm)", "الكتلة بعد الاشتعال (جم)")}</div>
+          <div className="font-semibold">{fmt(fd.massAfterIgnition, 1)}</div>
+        </div>
+        <div className="border border-blue-200 bg-blue-50 rounded p-2">
+          <div className="text-slate-500">{L("%PG Binder (Pb)", "محتوى الرابط PG (%)")}</div>
+          <div className="font-semibold">{fd.pgBinder != null ? `${fmt(fd.pgBinder, 2)}%` : "—"}</div>
+        </div>
+        <div className="border rounded p-2">
+          <div className="text-slate-500">{L("Mix Type", "نوع الخلطة")}</div>
+          <div className="font-semibold">{mixLabel}</div>
+        </div>
+      </div>
+      <FlexibleResultsTable columns={cols} rows={rows} />
+      <div
+        className={`mt-4 p-4 rounded-lg border-2 text-center font-bold ${
+          overallPass ? "bg-green-50 border-green-500 text-green-900" : "bg-red-50 border-red-500 text-red-900"
+        }`}
+      >
+        {overallPass ? L("✓ PASS", "✓ مطابق") : L("✗ FAIL", "✗ غير مطابق")}
+        {!overallPass && failedCount > 0 && (
+          <div className="text-sm font-normal mt-1">
+            {L(`${failedCount} sieves out of limits`, `${failedCount} منخل خارج الحدود`)}
+          </div>
+        )}
+      </div>
     </>
   );
 }
@@ -2143,7 +2260,7 @@ export function renderFormData(formTemplate: string, formData: any, isAr: boolea
     case "asphalt_bitumen_extraction":
       return renderAsphaltBitumenExtraction(formData, isAr);
     case "asphalt_extracted_sieve":
-      return renderGeneric(formData, isAr);
+      return renderAsphaltExtractedSieve(formData, isAr);
     case "asphalt_marshall_density":
       return renderAsphaltMarshallDensity(formData, isAr);
     case "asphalt_marshall":
