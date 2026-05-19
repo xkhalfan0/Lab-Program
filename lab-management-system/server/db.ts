@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, lte, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, lte, ne, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import { alias } from "drizzle-orm/mysql-core";
 import { createPool } from "mysql2";
@@ -23,6 +23,8 @@ import {
   clearanceRequests,
   deletionRequests,
   sectorAccounts,
+  labOrders,
+  labOrderItems,
   type InsertConcreteTestGroup,
   type InsertConcreteCube,
   type InsertClearanceRequest,
@@ -805,6 +807,7 @@ export async function getDistributionsByTechnician(technicianId: number) {
   if (!db) return [];
   const pendingSampleDeletion = alias(deletionRequests, "pendingSampleDeletion");
   const pendingDistributionDeletion = alias(deletionRequests, "pendingDistributionDeletion");
+  const pendingLabOrderDeletion = alias(deletionRequests, "pendingLabOrderDeletion");
   const activeSampleFilter = samplesHasSoftDeleteColumns() ? isNull(samples.deletedAt) : sql`TRUE`;
   const rows = await db
     .select({
@@ -834,7 +837,9 @@ export async function getDistributionsByTechnician(technicianId: number) {
     })
     .from(distributions)
     .leftJoin(testTypes, eq(distributions.testType, testTypes.code))
-    .leftJoin(samples, eq(distributions.sampleId, samples.id))
+    .innerJoin(samples, eq(distributions.sampleId, samples.id))
+    .innerJoin(labOrderItems, eq(labOrderItems.distributionId, distributions.id))
+    .innerJoin(labOrders, eq(labOrders.id, labOrderItems.orderId))
     .leftJoin(
       pendingSampleDeletion,
       and(
@@ -851,14 +856,25 @@ export async function getDistributionsByTechnician(technicianId: number) {
         eq(pendingDistributionDeletion.status, "pending")
       )
     )
+    .leftJoin(
+      pendingLabOrderDeletion,
+      and(
+        eq(pendingLabOrderDeletion.targetTable, "lab_orders"),
+        eq(pendingLabOrderDeletion.targetId, labOrders.id),
+        eq(pendingLabOrderDeletion.status, "pending")
+      )
+    )
     .where(
       and(
         eq(distributions.assignedTechnicianId, technicianId),
         inArray(distributions.status, ["pending", "in_progress", "completed"]),
         isNull(distributions.deletedAt),
         activeSampleFilter,
+        ne(samples.status, "deleted"),
+        isNull(labOrders.deletedAt),
         isNull(pendingSampleDeletion.id),
-        isNull(pendingDistributionDeletion.id)
+        isNull(pendingDistributionDeletion.id),
+        isNull(pendingLabOrderDeletion.id)
       )
     )
     .orderBy(desc(distributions.createdAt));
@@ -1816,8 +1832,6 @@ export async function deleteSector(id: number) {
 
 // ─── Lab Orders ──────────────────────────────────────────────────────────────
 import {
-  labOrders,
-  labOrderItems,
   type InsertLabOrder,
   type InsertLabOrderItem,
 } from "../drizzle/schema";
