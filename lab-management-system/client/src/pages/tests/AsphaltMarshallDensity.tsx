@@ -14,52 +14,79 @@ import { Plus, Trash2, Send, FlaskConical, UserCheck, Printer } from "lucide-rea
 import { useAuth } from "@/_core/hooks/useAuth";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { extractBitumenContentFromExtractionResult } from "@/lib/asphaltBitumen";
-import { BitumenContentFromExtraction } from "@/components/BitumenContentFromExtraction";
 
-// ─── Bulk Specific Gravity of Compacted HMA ─────────────────────────────────
-// Standard: ASTM D 2726
-// Volume = SSD mass - mass in water; Gmb = mass in air / volume.
+// Bulk Specific Gravity of Compacted HMA — ASTM D 2726
 
-interface GmbRow {
-  id: string;
-  specimenNo: string;
-  weightInAir: string;
-  weightInWater: string;
-  weightSSD: string;
-  volume?: number;
-  gmb?: number;
-  gso?: string;
-  airVoids?: number;
-  vma?: number;
-  vfb?: number;
+interface TestParameters {
+  pb: string;
+  gsb: string;
+  gse: string;
+  gb: string;
 }
 
-function newRow(index: number): GmbRow {
+interface SpecimenInput {
+  id: string;
+  massAir: string;
+  massWater: string;
+  ssdMass: string;
+}
+
+interface SpecimenComputed extends SpecimenInput {
+  volume: number;
+  gmb: number;
+}
+
+interface VolumetricRow {
+  gsb: string;
+  airVoids: number;
+  vma: number;
+  vfb: number;
+}
+
+function newSpecimen(index: number): SpecimenInput {
   return {
-    id: `row_${Date.now()}_${index}`,
-    specimenNo: `S${index + 1}`,
-    weightInAir: "",
-    weightInWater: "",
-    weightSSD: "",
+    id: `spec_${Date.now()}_${index}`,
+    massAir: "",
+    massWater: "",
+    ssdMass: "",
   };
 }
 
-function computeRow(row: GmbRow, theoreticalGso: string, _bitumenPercent?: number): GmbRow {
-  const wair = parseFloat(row.weightInAir);
-  const wwater = parseFloat(row.weightInWater);
-  const wssd = parseFloat(row.weightSSD);
-  const gso = parseFloat(theoreticalGso);
+function computeSpecimen(spec: SpecimenInput): SpecimenComputed {
+  const air = parseFloat(spec.massAir) || 0;
+  const water = parseFloat(spec.massWater) || 0;
+  const ssd = parseFloat(spec.ssdMass) || 0;
+  const volume = ssd > water ? parseFloat((ssd - water).toFixed(1)) : 0;
+  const gmb = volume > 0 ? parseFloat((air / volume).toFixed(3)) : 0;
+  return { ...spec, volume, gmb };
+}
 
-  if (!wair || !wwater || !wssd || wssd <= wwater) return row;
+function calculateGmm(pb: number, gse: number, gb: number): number {
+  if (pb <= 0 || gse <= 0 || gb <= 0) return 0;
+  const gmm = 100 / ((100 - pb) / gse + pb / gb);
+  return parseFloat(gmm.toFixed(3));
+}
 
-  const volume = parseFloat((wssd - wwater).toFixed(1));
-  const gmb = parseFloat((wair / volume).toFixed(3));
-  const airVoids = gso > 0 ? parseFloat(((1 - gmb / gso) * 100).toFixed(1)) : 0;
-  // VMA requires aggregate bulk specific gravity (Gsb); bitumen % is auto-filled from extraction for reporting.
-  const vma = 0;
+function computeVolumetric(
+  gmb: number,
+  gmm: number,
+  pb: number,
+  gsb: number,
+  gsbDisplay: string,
+): VolumetricRow {
+  const airVoids = gmm > 0 ? parseFloat((100 * ((gmm - gmb) / gmm)).toFixed(1)) : 0;
+  const vma = gsb > 0 ? parseFloat((100 - ((100 - pb) * gmb) / gsb).toFixed(1)) : 0;
   const vfb = vma > 0 ? parseFloat((((vma - airVoids) / vma) * 100).toFixed(0)) : 0;
+  return { gsb: gsbDisplay, airVoids, vma, vfb };
+}
 
-  return { ...row, volume, gmb, gso: theoreticalGso, airVoids, vma, vfb };
+function mapLegacySpecimen(s: Record<string, unknown>, index: number): SpecimenInput {
+  return {
+    id: String(s.id ?? `spec_${index}`),
+    massAir: String(s.massAir ?? s.weightInAir ?? ""),
+    massWater: String(s.massWater ?? s.weightInWater ?? ""),
+    ssdMass: String(s.ssdMass ?? s.weightSSD ?? ""),
+  };
 }
 
 export default function AsphaltMarshallDensity() {
@@ -85,16 +112,34 @@ export default function AsphaltMarshallDensity() {
   );
 
   const bitumenExtraction = bitumenExtractionResults[0];
-  const bitumenContent = useMemo(
+  const bitumenFromExtraction = useMemo(
     () => extractBitumenContentFromExtractionResult(bitumenExtraction),
     [bitumenExtraction],
   );
 
-  const [rows, setRows] = useState<GmbRow[]>([newRow(0), newRow(1), newRow(2)]);
-  const [theoreticalGso, setTheoreticalGso] = useState("");
+  const [parameters, setParameters] = useState<TestParameters>({
+    pb: "",
+    gsb: "",
+    gse: "",
+    gb: "",
+  });
+  const [specimens, setSpecimens] = useState<SpecimenInput[]>([
+    newSpecimen(0),
+    newSpecimen(1),
+    newSpecimen(2),
+  ]);
   const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+
+  useEffect(() => {
+    if (bitumenFromExtraction == null) return;
+    setParameters((prev) =>
+      prev.pb === "" || prev.pb === String(bitumenFromExtraction)
+        ? { ...prev, pb: String(bitumenFromExtraction) }
+        : prev,
+    );
+  }, [bitumenFromExtraction]);
 
   const saveResult = trpc.specializedTests.save.useMutation({
     onSuccess: (_, vars) => {
@@ -111,69 +156,136 @@ export default function AsphaltMarshallDensity() {
 
   useEffect(() => {
     if (!existing?.formData) return;
-    const fd = existing.formData as { specimens?: GmbRow[]; theoreticalGso?: string; notes?: string };
-    if (fd.notes) setNotes(fd.notes);
-    if (fd.theoreticalGso != null) {
-      setTheoreticalGso(String(fd.theoreticalGso));
-    } else if (fd.specimens?.[0]?.gso != null) {
-      setTheoreticalGso(String(fd.specimens[0].gso));
+    const fd = existing.formData as Record<string, unknown>;
+
+    if (fd.notes) setNotes(String(fd.notes));
+
+    const params = fd.parameters as TestParameters | undefined;
+    if (params) {
+      setParameters({
+        pb: String(params.pb ?? ""),
+        gsb: String(params.gsb ?? ""),
+        gse: String(params.gse ?? ""),
+        gb: String(params.gb ?? ""),
+      });
+    } else {
+      const legacyGso = fd.theoreticalGso != null ? String(fd.theoreticalGso) : "";
+      const legacyBitumen = fd.bitumenContent != null ? String(fd.bitumenContent) : "";
+      setParameters((prev) => ({
+        pb: legacyBitumen || prev.pb,
+        gsb: prev.gsb,
+        gse: legacyGso || prev.gse,
+        gb: prev.gb || "1.030",
+      }));
     }
-    if (Array.isArray(fd.specimens) && fd.specimens.length > 0) {
-      setRows(
-        fd.specimens.map((s, i) => ({
-          id: s.id || `row_${Date.now()}_${i}`,
-          specimenNo: s.specimenNo || `S${i + 1}`,
-          weightInAir: String(s.weightInAir ?? ""),
-          weightInWater: String(s.weightInWater ?? ""),
-          weightSSD: String(s.weightSSD ?? ""),
-        })),
-      );
+
+    const rawSpecimens = (fd.specimens ?? fd.computedSpecimens) as Record<string, unknown>[] | undefined;
+    if (Array.isArray(rawSpecimens) && rawSpecimens.length > 0) {
+      setSpecimens(rawSpecimens.map(mapLegacySpecimen));
     }
+
     if (existing.status === "submitted") setSubmitted(true);
   }, [existing]);
 
-  const computedRows = rows.map((r) => computeRow(r, theoreticalGso, bitumenContent));
-  const validRows = computedRows.filter(r => r.gmb !== undefined);
+  const pbNum = parseFloat(parameters.pb) || 0;
+  const gsbNum = parseFloat(parameters.gsb) || 0;
+  const gseNum = parseFloat(parameters.gse) || 0;
+  const gbNum = parseFloat(parameters.gb) || 0;
+  const gmm = calculateGmm(pbNum, gseNum, gbNum);
+
+  const computedSpecimens = useMemo(() => specimens.map(computeSpecimen), [specimens]);
+  const validSpecimens = computedSpecimens.filter((s) => s.gmb > 0);
+
   const avgGmb =
-    validRows.length > 0
-      ? parseFloat((validRows.reduce((s, r) => s + (r.gmb ?? 0), 0) / validRows.length).toFixed(3))
-      : undefined;
+    validSpecimens.length > 0
+      ? validSpecimens.reduce((sum, s) => sum + s.gmb, 0) / validSpecimens.length
+      : 0;
+
+  const volumetricData = useMemo(
+    () =>
+      computedSpecimens.map((spec) =>
+        computeVolumetric(spec.gmb, gmm, pbNum, gsbNum, parameters.gsb),
+      ),
+    [computedSpecimens, gmm, pbNum, gsbNum, parameters.gsb],
+  );
+
+  const validVolumetric = volumetricData.filter((_, i) => computedSpecimens[i].gmb > 0);
   const avgAirVoids =
-    validRows.length > 0
-      ? validRows.reduce((sum, r) => sum + (r.airVoids ?? 0), 0) / validRows.length
+    validVolumetric.length > 0
+      ? validVolumetric.reduce((sum, v) => sum + v.airVoids, 0) / validVolumetric.length
       : 0;
   const avgVMA =
-    validRows.length > 0
-      ? validRows.reduce((sum, r) => sum + (r.vma ?? 0), 0) / validRows.length
+    validVolumetric.length > 0
+      ? validVolumetric.reduce((sum, v) => sum + v.vma, 0) / validVolumetric.length
       : 0;
   const avgVFB =
-    validRows.length > 0
-      ? validRows.reduce((sum, r) => sum + (r.vfb ?? 0), 0) / validRows.length
+    validVolumetric.length > 0
+      ? validVolumetric.reduce((sum, v) => sum + v.vfb, 0) / validVolumetric.length
       : 0;
-  const airVoidsMin = 3;
-  const airVoidsMax = 5;
-  const vmaMin = 13;
-  const airVoidsPass = avgAirVoids >= airVoidsMin && avgAirVoids <= airVoidsMax;
-  const vmaPass = avgVMA >= vmaMin;
-  const overallResult = validRows.length > 0 && airVoidsPass && vmaPass ? "pass" : "fail";
 
-  const updateRow = useCallback((id: string, field: keyof GmbRow, value: string) => {
-    setRows(prev => prev.map(r => (r.id === id ? { ...r, [field]: value } : r)));
+  const airVoidsPass = validVolumetric.length > 0 && avgAirVoids >= 3 && avgAirVoids <= 5;
+  const vmaPass = validVolumetric.length > 0 && avgVMA >= 13;
+  const overallPass = validVolumetric.length > 0 && gmm > 0 && airVoidsPass && vmaPass;
+  const overallResult = overallPass ? "pass" : "fail";
+
+  const updateSpecimen = useCallback((index: number, field: keyof SpecimenInput, value: string) => {
+    setSpecimens((prev) => {
+      const updated = [...prev];
+      updated[index] = { ...updated[index], [field]: value };
+      return updated;
+    });
   }, []);
 
   const handleSave = async (status: "draft" | "submitted") => {
     if (!dist?.sampleId) {
-      toast.error(lang === "ar" ? "معرف العينة مفقود" : "Sample ID missing");
+      toast.error(ar ? "معرف العينة مفقود" : "Sample ID missing");
       return;
     }
-    if (status === "submitted" && validRows.length === 0) {
+    if (status === "submitted" && validSpecimens.length === 0) {
       toast.error(ar ? "الرجاء إدخال نتيجة عينة واحدة على الأقل" : "Please enter at least one specimen result");
       return;
     }
-    if (status === "submitted" && !parseFloat(theoreticalGso)) {
-      toast.error(ar ? "الرجاء إدخال Gso لحساب الفراغات الهوائية" : "Please enter Gso for Air Voids calculations");
+    if (status === "submitted" && gmm <= 0) {
+      toast.error(
+        ar
+          ? "الرجاء إدخال Pb و Gse و Gb لحساب Gmm"
+          : "Please enter Pb, Gse, and Gb to calculate Gmm",
+      );
       return;
     }
+    if (status === "submitted" && gsbNum <= 0) {
+      toast.error(ar ? "الرجاء إدخال Gsb لحساب VMA" : "Please enter Gsb for VMA calculations");
+      return;
+    }
+
+    const formData = {
+      parameters: { ...parameters, gmm },
+      specimens: computedSpecimens,
+      volumetricData,
+      averages: {
+        avgGmb: parseFloat(avgGmb.toFixed(3)),
+        avgAirVoids: parseFloat(avgAirVoids.toFixed(1)),
+        avgVMA: parseFloat(avgVMA.toFixed(1)),
+        avgVFB: parseFloat(avgVFB.toFixed(0)),
+      },
+      bitumenContent: bitumenFromExtraction,
+      notes,
+      // Legacy fields for older report paths
+      avgGmb: parseFloat(avgGmb.toFixed(3)),
+      avgAirVoids: avgAirVoids.toFixed(1),
+      avgVMA: avgVMA.toFixed(1),
+      avgVFB: avgVFB.toFixed(0),
+    };
+
+    const summaryValues = {
+      gmm,
+      bitumenContent: parameters.pb || bitumenFromExtraction,
+      avgGmb: parseFloat(avgGmb.toFixed(3)),
+      avgAirVoids: parseFloat(avgAirVoids.toFixed(1)),
+      avgVMA: parseFloat(avgVMA.toFixed(1)),
+      avgVFB: parseFloat(avgVFB.toFixed(0)),
+    };
+
     setSaving(true);
     try {
       await saveResult.mutateAsync({
@@ -181,23 +293,9 @@ export default function AsphaltMarshallDensity() {
         sampleId: dist.sampleId,
         testTypeCode: "ASPH_MARSHALL_DENSITY",
         formTemplate: "asphalt_marshall_density",
-        formData: {
-          specimens: computedRows,
-          theoreticalGso,
-          bitumenContent,
-          avgGmb,
-          avgAirVoids: avgAirVoids.toFixed(1),
-          avgVMA: avgVMA.toFixed(1),
-          avgVFB: avgVFB.toFixed(0),
-        },
+        formData,
         overallResult,
-        summaryValues: {
-          bitumenContent,
-          avgGmb: avgGmb?.toFixed(3),
-          avgAirVoids: avgAirVoids.toFixed(1),
-          avgVMA: avgVMA.toFixed(1),
-          avgVFB: avgVFB.toFixed(0),
-        },
+        summaryValues,
         notes,
         status,
       });
@@ -211,7 +309,7 @@ export default function AsphaltMarshallDensity() {
       <DashboardLayout>
         <div className="p-6">
           <div className="text-center text-red-600">
-            {lang === "ar" ? "معرف التوزيع غير صالح" : "Invalid distribution ID"}
+            {ar ? "معرف التوزيع غير صالح" : "Invalid distribution ID"}
           </div>
         </div>
       </DashboardLayout>
@@ -223,7 +321,7 @@ export default function AsphaltMarshallDensity() {
       <div className="max-w-5xl mx-auto p-6 space-y-6">
         <SampleInfoCard
           dist={dist}
-          extraFields={[{ label: "Mix type / نوع الخلطة", value: dist?.testSubType }]}
+          extraFields={[{ label: ar ? "نوع الخلطة" : "Mix type", value: dist?.testSubType }]}
         />
 
         <div className="flex items-start justify-between flex-wrap gap-3">
@@ -270,39 +368,10 @@ export default function AsphaltMarshallDensity() {
           </div>
         </div>
 
-        <Card className="border-blue-200 bg-blue-50">
-          <CardContent className="pt-4 pb-3">
-            <div className="flex items-start gap-2 text-sm text-blue-800">
-              <FlaskConical size={16} className="mt-0.5 shrink-0" />
-              <div>
-                <p className="font-semibold mb-1">
-                  {ar ? "الثقل النوعي الظاهري وتحليل الفراغات" : "Bulk Specific Gravity and Air Voids Analysis"}
-                </p>
-                <p className="text-xs">
-                  {ar
-                    ? "الصيغ: الحجم = كتلة SSD - الكتلة في الماء، و Gmb = الكتلة في الهواء ÷ الحجم"
-                    : "Formulas: Volume = SSD Mass - Mass in Water, and Gmb = Mass in Air ÷ Volume"}
-                </p>
-                <p className="text-xs mt-1">
-                  {ar
-                    ? "Gso مطلوب لحساب الفراغات الهوائية. محتوى البيتومين يُملأ تلقائياً من استخلاص البيتومين عند توفره."
-                    : "Gso is required for Air Voids. Bitumen content auto-fills from Bitumen Extraction when available."}
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <BitumenContentFromExtraction
-          lang={lang}
-          bitumenContent={bitumenContent}
-          extractionDistributionCode={bitumenExtraction?.testTypeCode ?? null}
-        />
-
         <Card>
           <CardContent className="pt-4">
             <div className="flex items-center gap-2">
-              <Label className="text-xs text-slate-500 mb-1 block">{ar ? "الفاحص" : "Tested By"}</Label>
+              <Label className="text-xs text-slate-500">{ar ? "الفاحص" : "Tested By"}</Label>
               <div className="flex items-center gap-2 px-3 py-2 bg-green-50 border border-green-200 rounded-lg">
                 <UserCheck size={14} className="text-green-600 shrink-0" />
                 <span className="text-sm font-semibold text-green-800">{user?.name ?? "—"}</span>
@@ -311,137 +380,209 @@ export default function AsphaltMarshallDensity() {
           </CardContent>
         </Card>
 
-        <Card>
+        {/* Section 1: Test Parameters */}
+        <Card className="mb-4">
+          <CardHeader>
+            <CardTitle className="text-sm font-semibold">
+              {ar ? "معاملات الاختبار" : "Test Parameters"}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <Label className="text-xs">
+                  {ar ? "محتوى الرابط (Pb) %" : "Binder Content (Pb) %"}
+                </Label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  value={parameters.pb}
+                  readOnly
+                  className="h-8 text-sm bg-blue-50 font-semibold mt-1"
+                />
+                <p className="text-xs text-blue-600 mt-1">
+                  {bitumenFromExtraction != null
+                    ? ar
+                      ? "من نتائج استخلاص البيتومين"
+                      : "From Bitumen Extraction"
+                    : ar
+                      ? "أكمل استخلاص البيتومين لملء Pb تلقائياً"
+                      : "Complete Bitumen Extraction to auto-fill Pb"}
+                </p>
+              </div>
+
+              <div>
+                <Label className="text-xs">
+                  {ar ? "الثقل النوعي الظاهري للركام (Gsb)" : "Bulk SG of Aggregate (Gsb)"}
+                </Label>
+                <Input
+                  type="number"
+                  step="0.001"
+                  value={parameters.gsb}
+                  onChange={(e) => setParameters({ ...parameters, gsb: e.target.value })}
+                  className="h-8 text-sm mt-1"
+                  placeholder="2.650"
+                  disabled={submitted}
+                />
+              </div>
+
+              <div>
+                <Label className="text-xs">
+                  {ar ? "الثقل النوعي الفعال للركام (Gse)" : "Effective SG of Aggregate (Gse)"}
+                </Label>
+                <Input
+                  type="number"
+                  step="0.001"
+                  value={parameters.gse}
+                  onChange={(e) => setParameters({ ...parameters, gse: e.target.value })}
+                  className="h-8 text-sm mt-1"
+                  placeholder="2.700"
+                  disabled={submitted}
+                />
+              </div>
+
+              <div>
+                <Label className="text-xs">
+                  {ar ? "الثقل النوعي للرابط (Gb)" : "SG of Binder (Gb)"}
+                </Label>
+                <Input
+                  type="number"
+                  step="0.001"
+                  value={parameters.gb}
+                  onChange={(e) => setParameters({ ...parameters, gb: e.target.value })}
+                  className="h-8 text-sm mt-1"
+                  placeholder="1.030"
+                  disabled={submitted}
+                />
+              </div>
+            </div>
+
+            {gmm > 0 && (
+              <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded">
+                <div className="flex justify-between items-center">
+                  <span className="text-sm font-semibold text-green-900">
+                    {ar ? "الثقل النوعي النظري الأقصى (Gmm):" : "Theoretical Maximum SG (Gmm):"}
+                  </span>
+                  <span className="text-lg font-bold text-green-700">{gmm.toFixed(3)}</span>
+                </div>
+                <p className="text-xs text-green-600 mt-1">
+                  {ar ? "محسوب تلقائياً" : "Auto-calculated"}
+                </p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Section 2: Table 1 — Gmb */}
+        <Card className="mb-4">
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
-              <CardTitle className="text-base">{ar ? "نتائج العينات" : "Specimen Results"}</CardTitle>
+              <CardTitle className="text-sm font-semibold">
+                {ar ? "الثقل النوعي الظاهري (Gmb)" : "Bulk Specific Gravity (Gmb)"}
+              </CardTitle>
               {!submitted && (
-                <Button size="sm" variant="outline" onClick={() => setRows(p => [...p, newRow(p.length)])}>
-                  <Plus size={14} className="mr-1" /> {ar ? "إضافة عينة" : "Add Specimen"}
+                <Button size="sm" variant="outline" onClick={() => setSpecimens((p) => [...p, newSpecimen(p.length)])}>
+                  <Plus size={14} className="mr-1" />
+                  {ar ? "إضافة عينة" : "Add Specimen"}
                 </Button>
               )}
             </div>
           </CardHeader>
           <CardContent>
-            <div className="mb-4 max-w-sm">
-              <Label className="text-xs text-slate-600">
-                {ar ? "الثقل النوعي النظري الأقصى (Gso)" : "Theoretical Maximum Specific Gravity (Gso)"}
-              </Label>
-              <Input
-                type="number"
-                step="0.001"
-                value={theoreticalGso}
-                onChange={(e) => setTheoreticalGso(e.target.value)}
-                className="h-8 text-sm"
-                placeholder={ar ? "مثال: 2.5" : "e.g., 2.5"}
-                disabled={submitted}
-              />
-              <p className="text-xs text-slate-500 mt-1">
-                {ar
-                  ? "مطلوب لحساب الفراغات الهوائية وVMA"
-                  : "Required for Air Voids and VMA calculations"}
-              </p>
-            </div>
-
             <div className="overflow-x-auto">
-              <table className="w-full text-sm border-collapse">
+              <table className="w-full text-xs border-collapse">
                 <thead className="bg-slate-50">
                   <tr>
-                    <th className="border border-slate-300 px-2 py-1 text-xs font-semibold text-slate-600">
-                      {ar ? "رقم العينة" : "Spec."}
+                    <th className="border border-slate-300 px-2 py-2">
+                      {ar ? "رقم العينة" : "Specimen #"}
                     </th>
-                    <th className="border border-slate-300 px-2 py-1 text-xs font-semibold text-slate-600">
-                      {ar ? "الكتلة في الهواء (جم)" : "Wt. Air (g)"}
+                    <th className="border border-slate-300 px-2 py-2">
+                      {ar ? "الكتلة في الهواء (جم)" : "Mass in Air (g)"}
                     </th>
-                    <th className="border border-slate-300 px-2 py-1 text-xs font-semibold text-slate-600">
-                      {ar ? "الكتلة في الماء (جم)" : "Wt. Water (g)"}
+                    <th className="border border-slate-300 px-2 py-2">
+                      {ar ? "الكتلة في الماء (جم)" : "Mass in Water (g)"}
                     </th>
-                    <th className="border border-slate-300 px-2 py-1 text-xs font-semibold text-slate-600">
-                      {ar ? "كتلة SSD (جم)" : "SSD (g)"}
+                    <th className="border border-slate-300 px-2 py-2">
+                      {ar ? "كتلة SSD (جم)" : "SSD Mass (g)"}
                     </th>
-                    <th className="border border-slate-300 px-2 py-1 text-xs font-semibold text-slate-600 bg-blue-50">
+                    <th className="border border-slate-300 px-2 py-2 bg-blue-50">
                       {ar ? "الحجم (سم³)" : "Volume (cm³)"}
                     </th>
-                    <th className="border border-slate-300 px-2 py-1 text-xs font-semibold text-slate-600 bg-blue-50">
-                      Gmb
-                    </th>
-                    <th className="border border-slate-200 px-2 py-2"></th>
+                    <th className="border border-slate-300 px-2 py-2 bg-blue-50">Gmb</th>
+                    {!submitted && <th className="border border-slate-300 px-2 py-2 w-10" />}
                   </tr>
                 </thead>
                 <tbody>
-                  {computedRows.map((row, idx) => (
-                    <tr key={row.id} className={idx % 2 === 0 ? "bg-white" : "bg-slate-50/50"}>
-                      <td className="border border-slate-200 px-1 py-1">
-                        <Input
-                          value={row.specimenNo}
-                          onChange={e => updateRow(row.id, "specimenNo", e.target.value)}
-                          className="h-7 text-xs w-16"
-                          disabled={submitted}
-                        />
-                      </td>
-                      <td className="border border-slate-200 px-1 py-1">
-                        <Input
-                          value={row.weightInAir}
-                          onChange={e => updateRow(row.id, "weightInAir", e.target.value)}
-                          className="h-7 text-xs w-28 text-center font-mono"
-                          placeholder="—"
-                          disabled={submitted}
-                        />
-                      </td>
-                      <td className="border border-slate-200 px-1 py-1">
-                        <Input
-                          value={row.weightInWater}
-                          onChange={e => updateRow(row.id, "weightInWater", e.target.value)}
-                          className="h-7 text-xs w-28 text-center font-mono"
-                          placeholder="—"
-                          disabled={submitted}
-                        />
-                      </td>
-                      <td className="border border-slate-200 px-1 py-1">
-                        <Input
-                          value={row.weightSSD}
-                          onChange={e => updateRow(row.id, "weightSSD", e.target.value)}
-                          className="h-7 text-xs w-28 text-center font-mono"
-                          placeholder="—"
-                          disabled={submitted}
-                        />
-                      </td>
-                      <td className="border border-slate-200 px-1 py-1 text-center font-mono text-xs text-slate-600">
-                        {row.volume !== undefined ? row.volume.toFixed(1) : "—"}
-                      </td>
-                      <td className="border border-slate-200 px-1 py-1 text-center">
-                        {row.gmb !== undefined ? (
-                          <span className="font-mono text-xs font-bold text-blue-700">{row.gmb.toFixed(3)}</span>
-                        ) : (
-                          "—"
-                        )}
-                      </td>
-                      <td className="border border-slate-200 px-1 py-1 text-center">
+                  {specimens.map((spec, idx) => {
+                    const computed = computedSpecimens[idx];
+                    return (
+                      <tr key={spec.id}>
+                        <td className="border border-slate-300 px-2 py-2 text-center font-semibold">
+                          {idx + 1}
+                        </td>
+                        <td className="border border-slate-300 px-2 py-2">
+                          <Input
+                            type="number"
+                            step="0.1"
+                            value={spec.massAir}
+                            onChange={(e) => updateSpecimen(idx, "massAir", e.target.value)}
+                            className="h-7 text-xs"
+                            disabled={submitted}
+                          />
+                        </td>
+                        <td className="border border-slate-300 px-2 py-2">
+                          <Input
+                            type="number"
+                            step="0.1"
+                            value={spec.massWater}
+                            onChange={(e) => updateSpecimen(idx, "massWater", e.target.value)}
+                            className="h-7 text-xs"
+                            disabled={submitted}
+                          />
+                        </td>
+                        <td className="border border-slate-300 px-2 py-2">
+                          <Input
+                            type="number"
+                            step="0.1"
+                            value={spec.ssdMass}
+                            onChange={(e) => updateSpecimen(idx, "ssdMass", e.target.value)}
+                            className="h-7 text-xs"
+                            disabled={submitted}
+                          />
+                        </td>
+                        <td className="border border-slate-300 px-2 py-2 text-center bg-blue-50 font-semibold">
+                          {computed.volume > 0 ? computed.volume.toFixed(1) : "—"}
+                        </td>
+                        <td className="border border-slate-300 px-2 py-2 text-center bg-blue-50 font-semibold">
+                          {computed.gmb > 0 ? computed.gmb.toFixed(3) : "—"}
+                        </td>
                         {!submitted && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-8 w-8 p-0 text-red-600 hover:text-red-700"
-                            onClick={() => setRows(p => p.filter(r => r.id !== row.id))}
-                            disabled={rows.length <= 1}
-                          >
-                            <Trash2 size={12} />
-                          </Button>
+                          <td className="border border-slate-300 px-2 py-2 text-center">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 w-7 p-0 text-red-600"
+                              onClick={() => setSpecimens((p) => p.filter((_, i) => i !== idx))}
+                              disabled={specimens.length <= 1}
+                            >
+                              <Trash2 size={12} />
+                            </Button>
+                          </td>
                         )}
-                      </td>
-                    </tr>
-                  ))}
+                      </tr>
+                    );
+                  })}
                 </tbody>
-                {validRows.length > 0 && (
-                  <tfoot>
-                    <tr className="bg-slate-100 font-semibold">
-                      <td colSpan={5} className="border border-slate-200 px-3 py-2 text-right text-xs text-slate-600">
-                        {ar ? "متوسط Gmb:" : "Average Gmb:"}
+                {validSpecimens.length > 0 && (
+                  <tfoot className="bg-green-50 font-semibold">
+                    <tr>
+                      <td colSpan={submitted ? 5 : 5} className="border border-slate-300 px-2 py-2 text-right">
+                        {ar ? "متوسط الثقل النوعي الظاهري (Gmb):" : "Average Bulk Specific Gravity (Gmb):"}
                       </td>
-                      <td className="border border-slate-200 px-2 py-2 text-center font-mono text-sm font-bold text-blue-700">
-                        {avgGmb?.toFixed(3) ?? "—"}
+                      <td className="border border-slate-300 px-2 py-2 text-center text-base">
+                        {avgGmb.toFixed(3)}
                       </td>
-                      <td className="border border-slate-200"></td>
+                      {!submitted && <td className="border border-slate-300" />}
                     </tr>
                   </tfoot>
                 )}
@@ -450,119 +591,137 @@ export default function AsphaltMarshallDensity() {
           </CardContent>
         </Card>
 
-        {validRows.length > 0 && (
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-lg">
-                {ar ? "تحليل الفراغات الهوائية" : "Air Voids Analysis"}
+        {/* Section 3: Table 2 — Volumetric Analysis */}
+        {gmm > 0 && validSpecimens.length > 0 && (
+          <Card className="mb-4">
+            <CardHeader>
+              <CardTitle className="text-sm font-semibold">
+                {ar ? "التحليل الحجمي" : "Volumetric Analysis"}
               </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="overflow-x-auto">
-                <table className="w-full border-collapse text-xs">
+                <table className="w-full text-xs border-collapse">
                   <thead className="bg-slate-50">
                     <tr>
-                      <th className="border border-slate-300 px-2 py-1">
+                      <th className="border border-slate-300 px-2 py-2">
                         {ar ? "رقم العينة" : "Specimen #"}
                       </th>
-                      <th className="border border-slate-300 px-2 py-1">
-                        {ar ? "Gso" : "Gso"}
-                      </th>
-                      <th className="border border-slate-300 px-2 py-1">
+                      <th className="border border-slate-300 px-2 py-2">Gsb</th>
+                      <th className="border border-slate-300 px-2 py-2">
                         {ar ? "الفراغات الهوائية %" : "% Air Voids"}
                       </th>
-                      <th className="border border-slate-300 px-2 py-1">
-                        {ar ? "الفراغات في الركام المعدني" : "VMA"}
-                      </th>
-                      <th className="border border-slate-300 px-2 py-1">
-                        {ar ? "الفراغات المملوءة بالإسفلت" : "VFB"}
-                      </th>
+                      <th className="border border-slate-300 px-2 py-2">VMA</th>
+                      <th className="border border-slate-300 px-2 py-2">VFB</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {validRows.map((row, idx) => (
-                      <tr key={row.id}>
-                        <td className="border border-slate-300 px-2 py-1 text-center">
-                          {row.specimenNo || `S${idx + 1}`}
-                        </td>
-                        <td className="border border-slate-300 px-2 py-1 text-center bg-slate-50">
-                          {row.gso || "—"}
-                        </td>
-                        <td className="border border-slate-300 px-2 py-1 text-center bg-blue-50">
-                          {row.airVoids !== undefined ? `${row.airVoids.toFixed(1)}%` : "—"}
-                        </td>
-                        <td className="border border-slate-300 px-2 py-1 text-center bg-blue-50">
-                          {row.vma !== undefined ? row.vma.toFixed(1) : "—"}
-                        </td>
-                        <td className="border border-slate-300 px-2 py-1 text-center bg-blue-50">
-                          {row.vfb !== undefined ? row.vfb.toFixed(0) : "—"}
-                        </td>
-                      </tr>
-                    ))}
+                    {volumetricData.map((data, idx) => {
+                      if (computedSpecimens[idx].gmb <= 0) return null;
+                      return (
+                        <tr key={specimens[idx]?.id ?? idx}>
+                          <td className="border border-slate-300 px-2 py-2 text-center font-semibold">
+                            {idx + 1}
+                          </td>
+                          <td className="border border-slate-300 px-2 py-2 text-center bg-slate-50">
+                            {data.gsb || "—"}
+                          </td>
+                          <td className="border border-slate-300 px-2 py-2 text-center bg-blue-50 font-semibold">
+                            {data.airVoids.toFixed(1)}%
+                          </td>
+                          <td className="border border-slate-300 px-2 py-2 text-center bg-blue-50 font-semibold">
+                            {data.vma.toFixed(1)}
+                          </td>
+                          <td className="border border-slate-300 px-2 py-2 text-center bg-blue-50 font-semibold">
+                            {data.vfb}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
+                  <tfoot className="bg-green-50 font-semibold">
+                    <tr>
+                      <td colSpan={2} className="border border-slate-300 px-2 py-2 text-right">
+                        {ar ? "المتوسط:" : "Average:"}
+                      </td>
+                      <td
+                        className={`border border-slate-300 px-2 py-2 text-center ${
+                          airVoidsPass ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"
+                        }`}
+                      >
+                        {avgAirVoids.toFixed(1)}%
+                      </td>
+                      <td
+                        className={`border border-slate-300 px-2 py-2 text-center ${
+                          vmaPass ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"
+                        }`}
+                      >
+                        {avgVMA.toFixed(1)}
+                      </td>
+                      <td className="border border-slate-300 px-2 py-2 text-center">
+                        {avgVFB.toFixed(0)}
+                      </td>
+                    </tr>
+                  </tfoot>
                 </table>
               </div>
 
-              <div className="mt-3 text-xs">
-                <div className="flex flex-wrap gap-4">
-                  <div className={`px-2 py-1 rounded ${airVoidsPass ? "bg-green-50 border border-green-200" : "bg-red-50 border border-red-200"}`}>
-                    {ar ? "حد الفراغات الهوائية" : "Air Voids Spec"}: 3 - 5%
-                    <span className="font-semibold ml-1">
-                      (Avg: {avgAirVoids.toFixed(1)}%)
-                    </span>
-                    {airVoidsPass ? " ✓" : " ✗"}
+              <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <div
+                  className={`p-2 rounded border ${
+                    airVoidsPass
+                      ? "bg-green-50 border-green-200 text-green-800"
+                      : "bg-red-50 border-red-200 text-red-800"
+                  }`}
+                >
+                  <div className="text-xs font-semibold">
+                    {ar ? "حد الفراغات الهوائية:" : "Air Voids Spec:"}
                   </div>
-                  <div className={`px-2 py-1 rounded ${vmaPass ? "bg-green-50 border border-green-200" : "bg-red-50 border border-red-200"}`}>
-                    {ar ? "حد VMA الأدنى" : "VMA Min"}: 13
-                    <span className="font-semibold ml-1">
-                      (Avg: {avgVMA.toFixed(1)})
-                    </span>
-                    {vmaPass ? " ✓" : " ✗"}
-                  </div>
+                  <div className="text-sm">3 - 5% {airVoidsPass ? "✓" : "✗"}</div>
                 </div>
-                <p className="text-slate-500 mt-2">
-                  {ar
-                    ? "ملاحظة: VMA قيمة مؤقتة حتى اعتماد صيغة المختبر ومدخلات الركام والبيتومين."
-                    : "Note: VMA is a placeholder until the lab confirms the formula and required aggregate/binder inputs."}
-                </p>
+                <div
+                  className={`p-2 rounded border ${
+                    vmaPass ? "bg-green-50 border-green-200 text-green-800" : "bg-red-50 border-red-200 text-red-800"
+                  }`}
+                >
+                  <div className="text-xs font-semibold">{ar ? "حد VMA الأدنى:" : "VMA Minimum:"}</div>
+                  <div className="text-sm">≥ 13 {vmaPass ? "✓" : "✗"}</div>
+                </div>
               </div>
             </CardContent>
           </Card>
         )}
 
-        {validRows.length > 0 && avgGmb != null && (
-          <Card>
-            <CardContent className="pt-4">
-              <div className="grid sm:grid-cols-4 gap-3">
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-center">
-                  <p className="text-sm text-blue-600 mb-2">{ar ? "متوسط Gmb" : "Average Gmb"}</p>
-                  <p className="text-2xl font-bold text-blue-700">{avgGmb.toFixed(3)}</p>
-                </div>
-                <div className="bg-slate-50 border border-slate-200 rounded-lg p-4 text-center">
-                  <p className="text-sm text-slate-600 mb-2">{ar ? "متوسط الفراغات" : "Average Air Voids"}</p>
-                  <p className="text-2xl font-bold text-slate-800">{avgAirVoids.toFixed(1)}%</p>
-                </div>
-                <div className="bg-slate-50 border border-slate-200 rounded-lg p-4 text-center">
-                  <p className="text-sm text-slate-600 mb-2">{ar ? "متوسط VMA" : "Average VMA"}</p>
-                  <p className="text-2xl font-bold text-slate-800">{avgVMA.toFixed(1)}</p>
-                </div>
-                <div className="bg-slate-50 border border-slate-200 rounded-lg p-4 text-center">
-                  <p className="text-sm text-slate-600 mb-2">{ar ? "متوسط VFB" : "Average VFB"}</p>
-                  <p className="text-2xl font-bold text-slate-800">{avgVFB.toFixed(0)}</p>
-                </div>
+        {/* Section 4: Overall Result */}
+        {validSpecimens.length > 0 && gmm > 0 && (
+          <div
+            className={`mb-4 p-4 rounded-lg border-2 text-center ${
+              overallPass
+                ? "bg-green-50 border-green-500 text-green-900"
+                : "bg-red-50 border-red-500 text-red-900"
+            }`}
+          >
+            <div className="text-2xl font-bold">
+              {overallPass ? (ar ? "مقبول ✓" : "PASS ✓") : ar ? "مرفوض ✗" : "FAIL ✗"}
+            </div>
+            {!overallPass && (
+              <div className="text-sm mt-2 space-y-1">
+                {!airVoidsPass && (
+                  <p>{ar ? "الفراغات الهوائية خارج الحد (3–5%)" : "Air Voids out of spec (3–5%)"}</p>
+                )}
+                {!vmaPass && <p>{ar ? "VMA أقل من الحد الأدنى (13)" : "VMA below minimum (13)"}</p>}
               </div>
-            </CardContent>
-          </Card>
+            )}
+          </div>
         )}
 
         <Card>
           <CardContent className="pt-4">
             <Label className="text-xs text-slate-500 mb-1 block">{ar ? "ملاحظات" : "Notes / Observations"}</Label>
-            <Textarea value={notes} onChange={e => setNotes(e.target.value)} rows={3} disabled={submitted} />
+            <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} disabled={submitted} />
           </CardContent>
         </Card>
       </div>
     </DashboardLayout>
   );
 }
-

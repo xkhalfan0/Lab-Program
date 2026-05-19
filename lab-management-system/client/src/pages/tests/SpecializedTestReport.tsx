@@ -852,44 +852,111 @@ function renderSoilProctor(fd: any, isAr: boolean) {
 }
 
 function renderAsphaltMarshallDensity(fd: any, isAr: boolean) {
-  const specimens = fd.specimens ?? [];
   const L = (en: string, ars: string) => (isAr ? ars : en);
+  const params = fd.parameters ?? {};
+  const averages = fd.averages ?? {};
+  const specimens = (fd.specimens ?? []).map((s: any, i: number) => ({
+    ...s,
+    _i: i + 1,
+    massAir: s.massAir ?? s.weightInAir,
+    massWater: s.massWater ?? s.weightInWater,
+    ssdMass: s.ssdMass ?? s.weightSSD,
+  }));
+  const volumetric = fd.volumetricData;
+  const avgGmb = averages.avgGmb ?? fd.avgGmb;
+  const avgAirVoids = averages.avgAirVoids ?? fd.avgAirVoids;
+  const avgVMA = averages.avgVMA ?? fd.avgVMA;
+  const avgVFB = averages.avgVFB ?? fd.avgVFB;
+  const gmm = params.gmm ?? fd.gmm;
+
   const gmbCols: Column[] = [
-    { header: L("Spec.", "العينة"), field: "specimenNo", align: "center" },
-    { header: L("Wt. Air (g)", "الكتلة في الهواء"), field: "weightInAir", align: "right", render: v => fmt(v, 1) },
-    { header: L("Wt. Water (g)", "الكتلة في الماء"), field: "weightInWater", align: "right", render: v => fmt(v, 1) },
-    { header: L("SSD (g)", "كتلة SSD"), field: "weightSSD", align: "right", render: v => fmt(v, 1) },
+    { header: L("Specimen #", "رقم العينة"), field: "_i", align: "center" },
+    { header: L("Mass in Air (g)", "الكتلة في الهواء"), field: "massAir", align: "right", render: v => fmt(v, 1) },
+    { header: L("Mass in Water (g)", "الكتلة في الماء"), field: "massWater", align: "right", render: v => fmt(v, 1) },
+    { header: L("SSD Mass (g)", "كتلة SSD"), field: "ssdMass", align: "right", render: v => fmt(v, 1) },
     { header: L("Volume (cm³)", "الحجم"), field: "volume", align: "right", render: v => fmt(v, 1) },
-    { header: L("Gmb", "Gmb"), field: "gmb", align: "center", render: v => (v != null ? fmt(v, 3) : "—") },
+    { header: L("Gmb", "Gmb"), field: "gmb", align: "center", render: v => (v != null && Number(v) > 0 ? fmt(v, 3) : "—") },
   ];
-  const airVoidsCols: Column[] = [
-    { header: L("Specimen #", "رقم العينة"), field: "specimenNo", align: "center" },
-    { header: L("Gso", "Gso"), field: "gso", align: "center", render: v => (v ? String(v) : "—") },
-    { header: L("% Air Voids", "نسبة الفراغات الهوائية %"), field: "airVoids", align: "center", render: v => (v != null ? `${fmt(v, 1)}%` : "—") },
-    { header: L("VMA", "الفراغات في الركام المعدني"), field: "vma", align: "center", render: v => (v != null ? fmt(v, 1) : "—") },
-    { header: L("VFB", "الفراغات المملوءة بالإسفلت"), field: "vfb", align: "center", render: v => (v != null ? fmt(v, 0) : "—") },
+  const volCols: Column[] = [
+    { header: L("Specimen #", "رقم العينة"), field: "_i", align: "center" },
+    { header: L("Gsb", "Gsb"), field: "gsb", align: "center", render: v => (v ? String(v) : "—") },
+    { header: L("% Air Voids", "الفراغات الهوائية %"), field: "airVoids", align: "center", render: v => (v != null ? `${fmt(v, 1)}%` : "—") },
+    { header: L("VMA", "VMA"), field: "vma", align: "center", render: v => (v != null ? fmt(v, 1) : "—") },
+    { header: L("VFB", "VFB"), field: "vfb", align: "center", render: v => (v != null ? fmt(v, 0) : "—") },
   ];
+  const volRows = Array.isArray(volumetric)
+    ? volumetric.map((v: any, i: number) => ({ ...v, _i: i + 1 }))
+    : specimens
+        .filter((s: any) => (s.gmb ?? 0) > 0)
+        .map((s: any, i: number) => ({
+          _i: i + 1,
+          gsb: params.gsb ?? s.gso,
+          airVoids: s.airVoids,
+          vma: s.vma,
+          vfb: s.vfb,
+        }));
   return (
     <>
-      <div className="mb-4">
-        <h3 className="text-sm font-semibold mb-2">
-          {L("Bulk Specific Gravity", "الثقل النوعي الظاهري")}
-        </h3>
-        <FlexibleResultsTable columns={gmbCols} rows={specimens} />
-      </div>
+      {(params.pb || params.gsb || params.gse || params.gb || gmm) && (
+        <div className="mb-4 grid grid-cols-2 sm:grid-cols-5 gap-2 text-xs">
+          {params.pb != null && params.pb !== "" && (
+            <div className="border border-slate-200 rounded p-2">
+              <div className="text-slate-500">Pb %</div>
+              <div className="font-semibold">{fmt(params.pb, 2)}</div>
+            </div>
+          )}
+          {params.gsb && (
+            <div className="border border-slate-200 rounded p-2">
+              <div className="text-slate-500">Gsb</div>
+              <div className="font-semibold">{params.gsb}</div>
+            </div>
+          )}
+          {params.gse && (
+            <div className="border border-slate-200 rounded p-2">
+              <div className="text-slate-500">Gse</div>
+              <div className="font-semibold">{params.gse}</div>
+            </div>
+          )}
+          {params.gb && (
+            <div className="border border-slate-200 rounded p-2">
+              <div className="text-slate-500">Gb</div>
+              <div className="font-semibold">{params.gb}</div>
+            </div>
+          )}
+          {gmm != null && Number(gmm) > 0 && (
+            <div className="border border-green-200 bg-green-50 rounded p-2">
+              <div className="text-green-700">Gmm</div>
+              <div className="font-bold text-green-900">{fmt(gmm, 3)}</div>
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="mb-4">
         <h3 className="text-sm font-semibold mb-2">
-          {L("Air Voids Analysis", "تحليل الفراغات الهوائية")}
+          {L("Bulk Specific Gravity (Gmb)", "الثقل النوعي الظاهري (Gmb)")}
         </h3>
-        <FlexibleResultsTable columns={airVoidsCols} rows={specimens} />
+        <FlexibleResultsTable columns={gmbCols} rows={specimens.filter((s: any) => s.massAir || s.weightInAir)} />
+        {avgGmb != null && (
+          <p className="text-xs mt-2 text-right font-semibold text-blue-800">
+            {L("Average Gmb:", "متوسط Gmb:")} {fmt(avgGmb, 3)}
+          </p>
+        )}
+      </div>
+
+      {volRows.length > 0 && (
+      <div className="mb-4">
+        <h3 className="text-sm font-semibold mb-2">
+          {L("Volumetric Analysis", "التحليل الحجمي")}
+        </h3>
+        <FlexibleResultsTable columns={volCols} rows={volRows} />
         <div className="mt-2 grid grid-cols-3 gap-2 text-xs">
           <div className="border border-slate-200 p-2 rounded">
             <div className="text-slate-600">
               {L("Average % Air Voids", "متوسط الفراغات الهوائية")}
             </div>
             <div className="text-lg font-semibold">
-              {fd.avgAirVoids != null ? `${fd.avgAirVoids}%` : "—"}
+              {avgAirVoids != null ? `${fmt(avgAirVoids, 1)}%` : "—"}
             </div>
             <div className="text-slate-500 text-xs">
               {L("Spec: 3 - 5%", "الحد: 3 - 5%")}
@@ -900,7 +967,7 @@ function renderAsphaltMarshallDensity(fd: any, isAr: boolean) {
               {L("Average VMA", "متوسط VMA")}
             </div>
             <div className="text-lg font-semibold">
-              {fd.avgVMA ?? "—"}
+              {avgVMA != null ? fmt(avgVMA, 1) : "—"}
             </div>
             <div className="text-slate-500 text-xs">
               {L("Min: 13", "الحد الأدنى: 13")}
@@ -911,17 +978,11 @@ function renderAsphaltMarshallDensity(fd: any, isAr: boolean) {
               {L("Average VFB", "متوسط VFB")}
             </div>
             <div className="text-lg font-semibold">
-              {fd.avgVFB ?? "—"}
+              {avgVFB != null ? fmt(avgVFB, 0) : "—"}
             </div>
           </div>
         </div>
       </div>
-
-      {fd.avgGmb != null && (
-        <div className="mt-3 bg-blue-50 border border-blue-200 rounded p-3 text-center text-xs">
-          <span className="font-semibold text-blue-800">{L("Average Gmb:", "متوسط Gmb:")} </span>
-          <span className="text-lg font-bold text-blue-900">{fmt(fd.avgGmb, 3)}</span>
-        </div>
       )}
     </>
   );

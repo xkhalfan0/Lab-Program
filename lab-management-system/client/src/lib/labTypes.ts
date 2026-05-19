@@ -1,5 +1,17 @@
 // Shared types for the lab management system
 
+export interface TestCatalogEntry {
+  code: string;
+  nameEn: string;
+  nameAr: string;
+  category: string;
+  testSubType?: string[];
+  requiredTests?: string[];
+  formTemplate?: string;
+  standardRef?: string | null;
+  unitPrice?: string;
+}
+
 export type SampleStatus =
   | "received"
   | "distributed"
