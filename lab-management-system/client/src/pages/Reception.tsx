@@ -22,6 +22,12 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import { useLocation } from "wouter";
 import { useDeletionStatus } from "@/hooks/useDeletionStatus";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  getRequiredTestsForCode,
+  selectedTestsIncludeCode,
+  normalizeTestCode,
+} from "@/lib/testDependencies";
+import { getOfficialTestByCode } from "../../../server/data/official-test-catalog";
 
 // ─── Sub-type options per test CODE ─────────────────────────────────────────
 const SUBTYPES_BY_CODE: Record<string, { value: string; labelAr: string; labelEn: string }[]> = {
@@ -104,27 +110,23 @@ const SUBTYPES_BY_CODE: Record<string, { value: string; labelAr: string; labelEn
   ],
   ASPH_MARSHALL: [
     { value: "wearing_course", labelAr: "طبقة رابطة (ويرنج)", labelEn: "Wearing Course" },
-    { value: "binder_course", labelAr: "طبقة أساس (بايندر)", labelEn: "Binder Course" },
     { value: "base_course", labelAr: "طبقة قاعدة", labelEn: "Base Course" },
   ],
   ASPH_MARSHALL_DENSITY: [
     { value: "wearing_course", labelAr: "طبقة رابطة (ويرنج)", labelEn: "Wearing Course" },
-    { value: "binder_course", labelAr: "طبقة أساس (بايندر)", labelEn: "Binder Course" },
     { value: "base_course", labelAr: "طبقة قاعدة", labelEn: "Base Course" },
   ],
   ASPH_CORE: [
     { value: "wearing_course", labelAr: "طبقة رابطة (ويرنج)", labelEn: "Wearing Course" },
-    { value: "binder_course", labelAr: "طبقة أساس (بايندر)", labelEn: "Binder Course" },
     { value: "base_course", labelAr: "طبقة قاعدة", labelEn: "Base Course" },
   ],
   ASPH_HOTBIN: [
     { value: "wearing_course", labelAr: "طبقة رابطة (ويرنج)", labelEn: "Wearing Course" },
-    { value: "binder_course", labelAr: "طبقة أساس (بايندر)", labelEn: "Binder Course" },
     { value: "base_course", labelAr: "طبقة قاعدة", labelEn: "Base Course" },
   ],
   ASPH_EXTRACTED_SIEVE: [
     { value: "wearing_course", labelAr: "طبقة رابطة (ويرنج)", labelEn: "Wearing Course" },
-    { value: "binder_course", labelAr: "طبقة أساس (بايندر)", labelEn: "Binder Course" },
+    { value: "base_course", labelAr: "طبقة قاعدة", labelEn: "Base Course" },
   ],
   CONC_MORTAR_SAND: [
     { value: "plaster_sand", labelAr: "رمل لياسة", labelEn: "Plaster Sand" },
@@ -485,6 +487,83 @@ export default function Reception() {
     }));
   };
 
+  const findTestTypeByCode = (code: string) => {
+    const norm = normalizeTestCode(code) ?? code;
+    return allTests.find((t) => {
+      if (!t.isActive) return false;
+      const c = normalizeTestCode(t.code) ?? t.code ?? "";
+      return c === norm;
+    });
+  };
+
+  const getRequiredTestDisplayNames = (codes: readonly string[]) =>
+    codes
+      .map((code) => {
+        const reqTest = findTestTypeByCode(code) ?? getOfficialTestByCode(code);
+        return lang === "ar"
+          ? (reqTest as { nameAr?: string })?.nameAr ?? (reqTest as { nameEn?: string })?.nameEn ?? code
+          : (reqTest as { nameEn?: string })?.nameEn ?? code;
+      })
+      .join(", ");
+
+  const makeSelectedTestFromType = (tt: { id: number; code?: string | null; nameAr?: string | null; nameEn: string; formTemplate?: string | null; unitPrice?: string | null }): SelectedTest => {
+    const testTypeCode = tt.code ?? "";
+    const isMixTest = ASPHALT_MIX_TEST_CODES.includes(testTypeCode);
+    return {
+      testTypeId: tt.id,
+      testTypeCode,
+      testTypeName: lang === "ar" && tt.nameAr ? tt.nameAr : tt.nameEn,
+      formTemplate: tt.formTemplate ?? undefined,
+      testSubType:
+        form.sampleType === "asphalt" && isMixTest && asphaltMixCourse
+          ? asphaltMixCourse
+          : undefined,
+      quantity: 1,
+      unitPrice: parseFloat(tt.unitPrice ?? "0"),
+    };
+  };
+
+  /** Returns prerequisite tests to add, [] if none, null if user cancelled or prerequisite missing. */
+  const confirmAndResolveMissingDependencies = (tt: { code?: string | null }): SelectedTest[] | null => {
+    const required = getRequiredTestsForCode(tt.code);
+    const missing = required.filter((reqCode) => !selectedTestsIncludeCode(selectedTests, reqCode));
+    if (missing.length === 0) return [];
+
+    const requiredTestNames = getRequiredTestDisplayNames(missing);
+    const confirmed = window.confirm(
+      lang === "ar"
+        ? `هذا الاختبار يتطلب: ${requiredTestNames}\nسيتم إضافتها تلقائياً. هل تريد المتابعة؟`
+        : `This test requires: ${requiredTestNames}\nThey will be added automatically. Continue?`,
+    );
+    if (!confirmed) return null;
+
+    const toAdd: SelectedTest[] = [];
+    for (const code of missing) {
+      const reqTt = findTestTypeByCode(code);
+      if (!reqTt) {
+        toast.error(
+          lang === "ar"
+            ? `الاختبار المطلوب غير متوفر في النظام: ${code}`
+            : `Required test is not available in the system: ${code}`,
+        );
+        return null;
+      }
+      toAdd.push(makeSelectedTestFromType(reqTt));
+    }
+    return toAdd;
+  };
+
+  const renderTestDependencyHint = (testCode: string | null | undefined) => {
+    const required = getRequiredTestsForCode(testCode);
+    if (required.length === 0) return null;
+    return (
+      <p className="text-xs text-amber-700 mt-0.5">
+        {lang === "ar" ? "يتطلب: " : "Requires: "}
+        {getRequiredTestDisplayNames(required)}
+      </p>
+    );
+  };
+
   const toggleTest = (tt: any) => {
     const isMulti = MULTI_SUBTYPE_TESTS.includes(tt.code);
     if (isMulti) {
@@ -494,7 +573,8 @@ export default function Reception() {
         setSelectedTests(prev => prev.filter(s => s.testTypeId !== tt.id));
         setMultiSubtypes(prev => { const n = { ...prev }; delete n[tt.id]; return n; });
       } else {
-        // Add a placeholder entry so the test appears as "selected"
+        const deps = confirmAndResolveMissingDependencies(tt);
+        if (deps === null) return;
         const placeholder: SelectedTest = {
           testTypeId: tt.id,
           testTypeCode: tt.code,
@@ -504,7 +584,18 @@ export default function Reception() {
           quantity: 0,
           unitPrice: parseFloat(tt.unitPrice ?? "0"),
         };
-        setSelectedTests(prev => [...prev, placeholder]);
+        setSelectedTests(prev => {
+          const ids = new Set(prev.map(s => s.testTypeId));
+          const additions = [...deps, placeholder].filter(t => !ids.has(t.testTypeId));
+          return [...prev, ...additions];
+        });
+        if (deps.length > 0) {
+          toast.info(
+            lang === "ar"
+              ? `تم إضافة الاختبارات المطلوبة: ${getRequiredTestDisplayNames(deps.map(d => d.testTypeCode))}`
+              : `Added required tests: ${getRequiredTestDisplayNames(deps.map(d => d.testTypeCode))}`,
+          );
+        }
         setMultiSubtypes(prev => ({ ...prev, [tt.id]: {} }));
       }
       return;
@@ -516,34 +607,29 @@ export default function Reception() {
       return;
     }
 
-    // Auto-apply asphalt mix course when adding a mix test
+    const deps = confirmAndResolveMissingDependencies(tt);
+    if (deps === null) return;
+
+    const newTest = makeSelectedTestFromType(tt);
     if (form.sampleType === "asphalt" && asphaltKind === "mix" && asphaltMixCourse) {
-      const newMixTest: SelectedTest = {
-        testTypeId: tt.id,
-        testTypeCode: tt.code,
-        testTypeName: lang === "ar" && tt.nameAr ? tt.nameAr : tt.nameEn,
-        formTemplate: tt.formTemplate ?? undefined,
-        testSubType: asphaltMixCourse,
-        quantity: 1,
-        unitPrice: parseFloat(tt.unitPrice ?? "0"),
-      };
-      setSelectedTests(prev => [...prev, newMixTest]);
-      return;
+      newTest.testSubType = asphaltMixCourse;
+    }
+
+    setSelectedTests(prev => {
+      const ids = new Set(prev.map(s => s.testTypeId));
+      const additions = [...deps, newTest].filter(t => !ids.has(t.testTypeId));
+      return [...prev, ...additions];
+    });
+    if (deps.length > 0) {
+      toast.info(
+        lang === "ar"
+          ? `تم إضافة الاختبارات المطلوبة: ${getRequiredTestDisplayNames(deps.map(d => d.testTypeCode))}`
+          : `Added required tests: ${getRequiredTestDisplayNames(deps.map(d => d.testTypeCode))}`,
+      );
     }
 
     const subTypes = SUBTYPES_BY_CODE[tt.code] ?? [];
     const isCasting = CASTING_DATE_TESTS.includes(tt.code);
-    const newTest: SelectedTest = {
-      testTypeId: tt.id,
-      testTypeCode: tt.code,
-      testTypeName: lang === "ar" && tt.nameAr ? tt.nameAr : tt.nameEn,
-      formTemplate: tt.formTemplate ?? undefined,
-      testSubType: undefined,
-      quantity: 1,
-      unitPrice: parseFloat(tt.unitPrice ?? "0"),
-    };
-    setSelectedTests(prev => [...prev, newTest]);
-    // If test has subtypes (and not casting date), prompt for subtype
     if (subTypes.length > 0 && !isCasting) {
       setSubtypeFor(tt.id);
     }
@@ -555,18 +641,24 @@ export default function Reception() {
       return;
     }
 
-    const testTypeCode = tt.code ?? "";
-    const isMixTest = ASPHALT_MIX_TEST_CODES.includes(testTypeCode);
-    const newTest: SelectedTest = {
-      testTypeId: tt.id,
-      testTypeCode,
-      testTypeName: lang === "ar" && tt.nameAr ? tt.nameAr : tt.nameEn,
-      formTemplate: tt.formTemplate ?? undefined,
-      testSubType: isMixTest ? asphaltMixCourse || undefined : undefined,
-      quantity: 1,
-      unitPrice: parseFloat(tt.unitPrice ?? "0"),
-    };
-    setSelectedTests(prev => [...prev.filter(s => s.testTypeId !== tt.id), newTest]);
+    const deps = confirmAndResolveMissingDependencies(tt);
+    if (deps === null) return;
+
+    const newTest = makeSelectedTestFromType(tt);
+    setSelectedTests(prev => {
+      const without = prev.filter(s => s.testTypeId !== tt.id);
+      const ids = new Set(without.map(s => s.testTypeId));
+      const additions = [...deps, newTest].filter(t => !ids.has(t.testTypeId));
+      return [...without, ...additions];
+    });
+
+    if (deps.length > 0) {
+      toast.info(
+        lang === "ar"
+          ? `تم إضافة الاختبارات المطلوبة: ${getRequiredTestDisplayNames(deps.map(d => d.testTypeCode))}`
+          : `Added required tests: ${getRequiredTestDisplayNames(deps.map(d => d.testTypeCode))}`,
+      );
+    }
   };
 
   const toggleBlockSubtype = (testTypeId: number, subtypeValue: string, testTypeName: string, testTypeCode: string, formTemplate: string | undefined, unitPrice: number) => {
@@ -927,7 +1019,10 @@ export default function Reception() {
                                   className="w-4 h-4"
                                 />
                                 <span className="text-sm flex-1">
-                                  {lang === "ar" && test.nameAr ? test.nameAr : test.nameEn}
+                                  <span className="block">
+                                    {lang === "ar" && test.nameAr ? test.nameAr : test.nameEn}
+                                  </span>
+                                  {renderTestDependencyHint(test.code)}
                                 </span>
                                 <span className="text-xs text-slate-500 font-mono">
                                   {Number(test.unitPrice).toFixed(0)} AED
@@ -975,7 +1070,6 @@ export default function Reception() {
                         <div className="flex gap-2">
                           {[
                             { value: "wearing_course", labelEn: "Wearing Course", labelAr: "طبقة رابطة" },
-                            { value: "binder_course", labelEn: "Binder Course", labelAr: "طبقة أساس" },
                             { value: "base_course", labelEn: "Base Course", labelAr: "طبقة قاعدة" },
                           ].map(course => (
                             <button
@@ -1055,6 +1149,7 @@ export default function Reception() {
                                 {tt.code && (
                                   <span className="text-xs text-muted-foreground font-mono">{tt.code}</span>
                                 )}
+                                {renderTestDependencyHint(tt.code)}
                               </label>
                             </div>
                             {/* Multi-subtype UI for CONC_BLOCK */}
