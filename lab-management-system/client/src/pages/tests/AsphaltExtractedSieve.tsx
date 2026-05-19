@@ -9,6 +9,7 @@ import { redirectAfterTestSave } from "@/lib/batchHelpers";
 import { extractBitumenContentFromExtractionResult } from "@/lib/asphaltBitumen";
 import {
   EXTRACTED_SIEVE_SIZES,
+  EXTRACTED_SIEVE_INPUT_SIZES,
   JMF_LIMITS,
   getExtractedSieveSpecLimits,
 } from "@/lib/extractedSieveLimits";
@@ -50,13 +51,13 @@ interface SieveComputed extends SieveInputs {
 }
 
 function createEmptySieves(): SieveInputs[] {
-  return EXTRACTED_SIEVE_SIZES.map((s) => ({
+  return EXTRACTED_SIEVE_INPUT_SIZES.map((s) => ({
     sieveSize: s.size,
     massRetained: "",
   }));
 }
 
-function computeSieves(
+function computeNormalSieves(
   sieves: SieveInputs[],
   massAfterIgnition: number,
   specLimits: Record<string, { lower: number; upper: number }>,
@@ -136,12 +137,46 @@ export default function AsphaltExtractedSieve() {
   const [submitted, setSubmitted] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  const computedSieves = useMemo(
-    () => computeSieves(sieves, massAfterIgnition, specLimits),
+  const computedNormal = useMemo(
+    () => computeNormalSieves(sieves, massAfterIgnition, specLimits),
     [sieves, massAfterIgnition, specLimits],
   );
 
-  const evaluatedSieves = computedSieves.filter((s) => s.result !== "pending");
+  const sumOfRetained = useMemo(
+    () => sieves.reduce((sum, s) => sum + (parseFloat(s.massRetained) || 0), 0),
+    [sieves],
+  );
+
+  const passing75um = massAfterIgnition > 0 ? massAfterIgnition - sumOfRetained : 0;
+  const passing75umPercent =
+    massAfterIgnition > 0
+      ? parseFloat(((passing75um / massAfterIgnition) * 100).toFixed(1))
+      : 0;
+  const hasPassingCalc = massAfterIgnition > 0 && sieves.some((s) => s.massRetained !== "");
+
+  const sieve200 = computedNormal.find((s) => s.sieveSize === "0.075");
+  const percentPassing200 = sieve200?.percentPassing ?? 0;
+  const fillerBitumenRatio = pgBinder > 0 ? percentPassing200 / pgBinder : 0;
+
+  const computedSievesForSave = useMemo(
+    (): SieveComputed[] => [
+      ...computedNormal,
+      {
+        sieveSize: "passing",
+        massRetained: hasPassingCalc ? passing75um.toFixed(1) : "",
+        percentRetained: passing75umPercent,
+        percentPassing: 0,
+        ccLower: 0,
+        ccUpper: 0,
+        specLower: 0,
+        specUpper: 0,
+        result: "pending",
+      },
+    ],
+    [computedNormal, hasPassingCalc, passing75um, passing75umPercent],
+  );
+
+  const evaluatedSieves = computedNormal.filter((s) => s.result !== "pending");
   const failedSieves = evaluatedSieves.filter((s) => s.result === "fail").length;
   const overallPass = evaluatedSieves.length > 0 && failedSieves === 0;
 
@@ -166,7 +201,7 @@ export default function AsphaltExtractedSieve() {
     const saved = (fd.sieves ?? fd.rows) as Array<Record<string, unknown>> | undefined;
     if (Array.isArray(saved) && saved.length > 0) {
       setSieves(
-        EXTRACTED_SIEVE_SIZES.map((info) => {
+        EXTRACTED_SIEVE_INPUT_SIZES.map((info) => {
           const row = saved.find(
             (r) =>
               String(r.sieveSize ?? r.sieve) === info.size ||
@@ -190,19 +225,22 @@ export default function AsphaltExtractedSieve() {
     });
   }, []);
 
-  const chartData = computedSieves
-    .filter((s) => s.result !== "pending")
-    .map((s) => {
-      const info = EXTRACTED_SIEVE_SIZES.find((x) => x.size === s.sieveSize);
-      return {
-        sieve: ar ? info?.labelAr ?? s.sieveSize : info?.label ?? s.sieveSize,
-        "% Passing": s.percentPassing,
-        "Spec Lower": s.specLower,
-        "Spec Upper": s.specUpper,
-        "JMF Lower": s.ccLower,
-        "JMF Upper": s.ccUpper,
-      };
-    });
+  const chartData = useMemo(
+    () =>
+      EXTRACTED_SIEVE_INPUT_SIZES.map((sieveInfo) => {
+        const sieve = computedNormal.find((s) => s.sieveSize === sieveInfo.size);
+        const specs = specLimits[sieveInfo.size] ?? { lower: 0, upper: 100 };
+        return {
+          sieveSize: ar ? sieveInfo.labelAr : sieveInfo.label,
+          percentPassing: sieve?.percentPassing ?? 0,
+          specLower: specs.lower,
+          specUpper: specs.upper,
+        };
+      }),
+    [computedNormal, specLimits, ar],
+  );
+
+  const showChart = massAfterIgnition > 0 && sieves.some((s) => s.massRetained !== "");
 
   const handleSave = async (status: "draft" | "submitted") => {
     if (!dist?.sampleId) {
@@ -234,13 +272,19 @@ export default function AsphaltExtractedSieve() {
           massAfterIgnition,
           pgBinder,
           mixType,
-          sieves: computedSieves,
+          sieves: computedSievesForSave,
+          passing75um: {
+            mass: passing75um,
+            percent: passing75umPercent,
+          },
+          fillerBitumenRatio: parseFloat(fillerBitumenRatio.toFixed(2)),
           failedCount: failedSieves,
           overallPass,
         },
         overallResult: evaluatedSieves.length === 0 ? "pending" : overallPass ? "pass" : "fail",
         summaryValues: {
           failedSieves,
+          fillerBitumenRatio: parseFloat(fillerBitumenRatio.toFixed(2)),
           overallResult: overallPass ? "pass" : "fail",
           massAfterIgnition,
           pgBinder,
@@ -371,14 +415,39 @@ export default function AsphaltExtractedSieve() {
           </CardContent>
         </Card>
 
-        <Card className="border-amber-200 bg-amber-50">
-          <CardContent className="pt-4 text-sm text-amber-800">
-            <Info className="inline w-4 h-4 mr-1 align-text-bottom" />
-            {ar
-              ? "نسبة المحجوز = (الكتلة المحجوزة / الكتلة بعد الاشتعال) × 100. نسبة المار = 100 − مجموع نسب المحجوز المتراكم. المقارنة مع حدود المواصفة حسب نوع الطبقة."
-              : "% Retained = (Mass Retained / Mass After Ignition) × 100. % Passing = 100 − cumulative % retained. Compared to specification limits by mix course."}
-          </CardContent>
-        </Card>
+        <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-4">
+          <div className="flex items-center gap-2 text-amber-900 text-sm">
+            <Info className="w-4 h-4 shrink-0" />
+            <span className="font-semibold">{ar ? "المعادلات:" : "Formulas:"}</span>
+          </div>
+          <div className="mt-2 space-y-1 text-xs text-amber-700">
+            <div>
+              <span className="font-semibold">% Retained:</span>{" "}
+              {ar
+                ? "(الكتلة المحجوزة / الكتلة بعد الاشتعال) × 100"
+                : "(Mass Retained / Mass After Ignition) × 100"}
+            </div>
+            <div>
+              <span className="font-semibold">% Passing:</span>{" "}
+              {ar ? "100 − مجموع نسب المحجوز المتراكم" : "100 − cumulative % retained"}
+            </div>
+            <div>
+              <span className="font-semibold">Passing 75 μm:</span>{" "}
+              {ar
+                ? "الكتلة بعد الاشتعال − مجموع الكتل المحجوزة"
+                : "Mass After Ignition − Σ(all masses retained)"}
+            </div>
+            <div>
+              <span className="font-semibold">Filler/Bitumen Ratio:</span>{" "}
+              {ar ? "% مار #200 / محتوى الرابط PG (Pb)%" : "% Passing #200 / PG Binder (Pb)%"}
+            </div>
+            <p className="mt-2 text-xs italic">
+              {ar
+                ? "يتم مقارنة نسبة المار بحدود المواصفات حسب نوع الخليط"
+                : "Compared to specification limits by mix course."}
+            </p>
+          </div>
+        </div>
 
         <Card>
           <CardHeader>
@@ -427,8 +496,35 @@ export default function AsphaltExtractedSieve() {
                   </tr>
                 </thead>
                 <tbody>
-                  {EXTRACTED_SIEVE_SIZES.map((sieveInfo, idx) => {
-                    const sieve = computedSieves[idx];
+                  {EXTRACTED_SIEVE_SIZES.map((sieveInfo) => {
+                    if (sieveInfo.size === "passing") {
+                      return (
+                        <tr key="passing">
+                          <td className="border border-slate-300 px-2 py-2 font-semibold whitespace-nowrap">
+                            {ar ? sieveInfo.labelAr : sieveInfo.label}
+                          </td>
+                          <td className="border border-slate-300 px-2 py-2 text-center bg-blue-50 font-semibold">
+                            {hasPassingCalc ? passing75um.toFixed(1) : "—"}
+                          </td>
+                          <td className="border border-slate-300 px-2 py-2 text-center bg-blue-50 font-semibold">
+                            {hasPassingCalc ? passing75umPercent.toFixed(1) : "—"}
+                          </td>
+                          <td className="border border-slate-300 px-2 py-2 text-center bg-slate-100">—</td>
+                          <td className="border border-slate-300 px-2 py-2 text-center bg-amber-50">—</td>
+                          <td className="border border-slate-300 px-2 py-2 text-center bg-amber-50">—</td>
+                          <td className="border border-slate-300 px-2 py-2 text-center bg-blue-50">—</td>
+                          <td className="border border-slate-300 px-2 py-2 text-center bg-blue-50">—</td>
+                          <td className="border border-slate-300 px-2 py-2 text-center">—</td>
+                        </tr>
+                      );
+                    }
+
+                    const inputIdx = EXTRACTED_SIEVE_INPUT_SIZES.findIndex(
+                      (s) => s.size === sieveInfo.size,
+                    );
+                    const sieve = computedNormal[inputIdx];
+                    const inputRow = sieves[inputIdx];
+
                     return (
                       <tr key={sieveInfo.size}>
                         <td className="border border-slate-300 px-2 py-2 font-semibold whitespace-nowrap">
@@ -438,14 +534,14 @@ export default function AsphaltExtractedSieve() {
                           <Input
                             type="number"
                             step="0.1"
-                            value={sieves[idx].massRetained}
-                            onChange={(e) => updateMass(idx, e.target.value)}
+                            value={inputRow?.massRetained ?? ""}
+                            onChange={(e) => updateMass(inputIdx, e.target.value)}
                             className="h-7 text-xs min-w-[72px]"
                             disabled={submitted}
                           />
                         </td>
                         <td className="border border-slate-300 px-2 py-2 text-center bg-blue-50 font-semibold">
-                          {sieve.percentRetained > 0 || sieves[idx].massRetained
+                          {sieve.percentRetained > 0 || inputRow?.massRetained
                             ? sieve.percentRetained.toFixed(1)
                             : "—"}
                         </td>
@@ -489,13 +585,33 @@ export default function AsphaltExtractedSieve() {
                       </tr>
                     );
                   })}
+                  <tr className="bg-green-50">
+                    <td className="border border-slate-300 px-2 py-2 font-semibold" colSpan={3}>
+                      {ar
+                        ? "نسبة الحشو/البيتومين (Filler/Bitumen Ratio)"
+                        : "Filler/Bitumen Ratio"}
+                    </td>
+                    <td
+                      className="border border-slate-300 px-2 py-2 text-center font-bold text-base"
+                      colSpan={5}
+                    >
+                      {pgBinder > 0 && sieve200?.result !== "pending"
+                        ? fillerBitumenRatio.toFixed(2)
+                        : "—"}
+                    </td>
+                    <td className="border border-slate-300 px-2 py-2 text-center text-xs text-muted-foreground">
+                      {pgBinder > 0 && sieve200?.result !== "pending"
+                        ? `= ${percentPassing200.toFixed(1)}% ÷ ${pgBinder.toFixed(2)}%`
+                        : "—"}
+                    </td>
+                  </tr>
                 </tbody>
               </table>
             </div>
           </CardContent>
         </Card>
 
-        {chartData.length > 0 && (
+        {showChart && (
           <Card>
             <CardHeader>
               <CardTitle className="text-base">
@@ -504,27 +620,50 @@ export default function AsphaltExtractedSieve() {
             </CardHeader>
             <CardContent>
               <ResponsiveContainer width="100%" height={300}>
-                <LineChart data={chartData} margin={{ top: 10, right: 20, left: 0, bottom: 40 }}>
+                <LineChart data={chartData} margin={{ top: 10, right: 20, left: 10, bottom: 60 }}>
                   <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="sieve" angle={-35} textAnchor="end" height={70} interval={0} />
-                  <YAxis domain={[0, 100]} label={{ value: "% Passing", angle: -90, position: "insideLeft" }} />
+                  <XAxis
+                    dataKey="sieveSize"
+                    angle={-45}
+                    textAnchor="end"
+                    height={80}
+                    interval={0}
+                    tick={{ fontSize: 10 }}
+                  />
+                  <YAxis
+                    domain={[0, 100]}
+                    label={{
+                      value: ar ? "% المار" : "% Passing",
+                      angle: -90,
+                      position: "insideLeft",
+                    }}
+                  />
                   <Tooltip />
-                  <Legend verticalAlign="top" />
-                  <Line type="monotone" dataKey="% Passing" stroke="#d97706" strokeWidth={2.5} dot={{ r: 4 }} />
+                  <Legend />
                   <Line
                     type="monotone"
-                    dataKey="Spec Upper"
-                    stroke="#dc2626"
-                    strokeWidth={1.5}
-                    strokeDasharray="6 3"
+                    dataKey="percentPassing"
+                    stroke="#f97316"
+                    strokeWidth={2}
+                    name={ar ? "% المار" : "% Passing"}
+                    dot={{ r: 4 }}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="specUpper"
+                    stroke="#10b981"
+                    strokeWidth={1}
+                    strokeDasharray="5 5"
+                    name={ar ? "الحد الأعلى" : "Spec Upper"}
                     dot={false}
                   />
                   <Line
                     type="monotone"
-                    dataKey="Spec Lower"
-                    stroke="#16a34a"
-                    strokeWidth={1.5}
-                    strokeDasharray="6 3"
+                    dataKey="specLower"
+                    stroke="#10b981"
+                    strokeWidth={1}
+                    strokeDasharray="5 5"
+                    name={ar ? "الحد الأدنى" : "Spec Lower"}
                     dot={false}
                   />
                 </LineChart>

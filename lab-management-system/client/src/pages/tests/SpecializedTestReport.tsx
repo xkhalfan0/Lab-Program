@@ -991,6 +991,30 @@ function renderAsphaltExtractedSieve(fd: any, isAr: boolean) {
         </div>
       </div>
       <FlexibleResultsTable columns={cols} rows={rows} />
+      {(fd.passing75um || fd.fillerBitumenRatio != null) && (
+        <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+          {fd.passing75um && (
+            <div className="border border-blue-200 bg-blue-50 rounded p-3">
+              <p className="font-semibold text-slate-800 mb-1">
+                {L("Passing 75 μm", "مار 75 ميكرون")}
+              </p>
+              <p>
+                {L("Mass", "الكتلة")}: {fmt((fd.passing75um as { mass?: number }).mass, 1)} gm —{" "}
+                {L("% Retained", "نسبة المحجوز")}:{" "}
+                {fmt((fd.passing75um as { percent?: number }).percent, 1)}%
+              </p>
+            </div>
+          )}
+          {fd.fillerBitumenRatio != null && (
+            <div className="border border-green-200 bg-green-50 rounded p-3">
+              <p className="font-semibold text-slate-800 mb-1">
+                {L("Filler/Bitumen Ratio", "نسبة الحشو/البيتومين")}
+              </p>
+              <p className="font-bold text-lg">{fmt(fd.fillerBitumenRatio, 2)}</p>
+            </div>
+          )}
+        </div>
+      )}
       <div
         className={`mt-4 p-4 rounded-lg border-2 text-center font-bold ${
           overallPass ? "bg-green-50 border-green-500 text-green-900" : "bg-red-50 border-red-500 text-red-900"

@@ -13,6 +13,9 @@ export const EXTRACTED_SIEVE_SIZES = [
   { size: "passing", label: "Passing 75 μm", labelAr: "مار 75 ميكرون" },
 ] as const;
 
+/** Sieves with user-entered mass retained (excludes auto-calculated Passing 75 μm). */
+export const EXTRACTED_SIEVE_INPUT_SIZES = EXTRACTED_SIEVE_SIZES.filter((s) => s.size !== "passing");
+
 export type SieveLimit = { lower: number; upper: number };
 
 export const JMF_LIMITS: Record<string, SieveLimit> = {
