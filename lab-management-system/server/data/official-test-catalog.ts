@@ -10,6 +10,7 @@ export const TEST_CODE_ALIASES: Record<string, string> = {
   "DIST-2026-039": "ASPH_EXTRACTED_SIEVE",
   "DIST-2026-040": "ASPH_MARSHALL",
   "DIST-2026-042": "ASPH_MARSHALL_DENSITY",
+  "DIST-2026-083": "ASPH_CORE",
 };
 
 export interface OfficialTest {
@@ -111,12 +112,14 @@ export const OFFICIAL_TEST_CATALOG: OfficialTest[] = [
   },
   {
     category: "asphalt",
-    nameEn: "Density and Compaction of Asphalt Core",
-    nameAr: "كثافة نواة أسفلت",
+    nameEn:
+      "HMA Pavement Thickness, Bulk Specific Gravity and Compaction Test (ASTM D 3549, D 2726)",
+    nameAr:
+      "اختبار سماكة الرصف HMA والثقل النوعي الظاهري ونسبة الدمك (ASTM D 3549, D 2726)",
     code: "ASPH_CORE",
     unitPrice: "75",
-    unit: "Mg/m³",
-    standardRef: "—",
+    unit: "%",
+    standardRef: "ASTM D3549 / ASTM D2726 / BS EN 12697-36",
     formTemplate: "asphalt_core",
     sortOrder: 345,
     testSubType: ASPHALT_MIX_COURSE_OPTIONS,

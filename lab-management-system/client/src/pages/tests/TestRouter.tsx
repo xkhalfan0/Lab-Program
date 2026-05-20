@@ -25,7 +25,7 @@ import SoilFieldDensity from "./SoilFieldDensity";
 import SoilCBR from "./SoilCBR";
 import AsphaltMarshall from "./AsphaltMarshall";
 import AsphaltMarshallDensity from "./AsphaltMarshallDensity";
-import AsphaltCore from "./AsphaltCore";
+import AsphaltCoreThickness from "./AsphaltCoreThickness";
 import AsphaltBitumenExtraction from "./AsphaltBitumenExtraction";
 import AggSpecificGravity from "./AggSpecificGravity";
 import AggShapeIndex from "./AggShapeIndex";
@@ -70,7 +70,7 @@ const FORM_MAP: Record<string, React.ComponentType> = {
   "AsphaltExtractedSieve":    AsphaltExtractedSieve,
   "AsphaltMarshall":          AsphaltMarshall,
   "AsphaltMarshallDensity":   AsphaltMarshallDensity,
-  "AsphaltCore":              AsphaltCore,
+  "AsphaltCore":              AsphaltCoreThickness,
   "AsphaltSprayRate":         AsphaltSprayRate,
   "BatchOverview":            BatchOverview,
   "BatchReport":              BatchReport,
@@ -97,7 +97,8 @@ const FORM_MAP: Record<string, React.ComponentType> = {
   "soil_cbr":                 SoilCBR,
   "asphalt_marshall":         AsphaltMarshall,
   "asphalt_marshall_density": AsphaltMarshallDensity,
-  "asphalt_core":             AsphaltCore,
+  "asphalt_core":             AsphaltCoreThickness,
+  "asphalt_core_thickness":   AsphaltCoreThickness,
   "asphalt_bitumen_extraction": AsphaltBitumenExtraction,
   "steel_structural":         SteelStructural,
   "cement_setting_time":      CementSettingTime,
@@ -148,7 +149,8 @@ const CODE_TO_COMPONENT: Record<string, React.ComponentType> = {
   "ASPH_ACWC":              AsphaltMarshall,
   "ASPH_ACBC":              AsphaltMarshall,
   "ASPH_DBM":               AsphaltMarshall,
-  "ASPH_CORE":              AsphaltCore,
+  "ASPH_CORE":              AsphaltCoreThickness,
+  "DIST-2026-083":          AsphaltCoreThickness,
   "ASPH_SPRAY":             AsphaltSprayRate,
   "ASPH_SPRAY_SS1":         AsphaltSprayRate,
   "ASPH_SPRAY_SS1H":        AsphaltSprayRate,
