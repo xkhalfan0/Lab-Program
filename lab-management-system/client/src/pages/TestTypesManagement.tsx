@@ -1,6 +1,7 @@
 import { useState, useMemo } from "react";
 import DashboardLayout from "@/components/DashboardLayout";
 import { trpc } from "@/lib/trpc";
+import { getOfficialTestCatalog } from "@/lib/officialTestCatalog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -114,7 +115,25 @@ function TestTypesTab() {
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [editingPrice, setEditingPrice] = useState<{ testId: number; value: string } | null>(null);
 
-  const { data: allTestTypes = [] } = trpc.testTypes.list.useQuery();
+  // DB rows used only for numeric ids and stored prices; catalog is the test list source of truth.
+  const { data: dbTestTypes = [] } = trpc.testTypes.list.useQuery();
+
+  const allTestTypes = useMemo(() => {
+    const dbByCode = new Map(dbTestTypes.map((t) => [t.code ?? "", t]));
+    return getOfficialTestCatalog().map((test) => {
+      const db = dbByCode.get(test.code);
+      return {
+        id: db?.id ?? 0,
+        code: test.code,
+        nameEn: test.nameEn,
+        nameAr: test.nameAr,
+        category: test.category,
+        unitPrice: db?.unitPrice ?? test.unitPrice,
+        unit: test.unit,
+        standardRef: test.standardRef ?? "",
+      };
+    });
+  }, [dbTestTypes]);
 
   const updatePriceMutation = trpc.testTypes.updatePrice.useMutation({
     onSuccess: () => {

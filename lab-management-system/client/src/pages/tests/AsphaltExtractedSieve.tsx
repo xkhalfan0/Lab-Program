@@ -22,7 +22,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { Send, FlaskConical, Info, Printer } from "lucide-react";
+import { Send, FlaskConical, Info, Printer, AlertCircle, Loader2 } from "lucide-react";
 import {
   LineChart,
   Line,
@@ -101,21 +101,26 @@ export default function AsphaltExtractedSieve() {
   const ar = lang === "ar";
   const distId = parseInt(distributionId ?? "0", 10);
 
-  const { data: dist } = trpc.distributions.get.useQuery({ id: distId }, { enabled: !!distId });
+  const { data: dist, isLoading: distLoading } = trpc.distributions.get.useQuery(
+    { id: distId },
+    { enabled: !!distId },
+  );
   const { data: existing } = trpc.specializedTests.getByDistribution.useQuery(
     { distributionId: distId },
     { enabled: !!distId },
   );
-  const { data: bitumenResults = [] } = trpc.specializedTests.getBySampleAndTestType.useQuery(
-    {
-      sampleId: dist?.sampleId ?? 0,
-      testTypeCode: "ASPH_BITUMEN_EXTRACT",
-      status: "submitted",
-    },
-    { enabled: !!dist?.sampleId },
-  );
+  const { data: bitumenResults = [], isLoading: bitumenLoading } =
+    trpc.specializedTests.getBySampleAndTestType.useQuery(
+      {
+        sampleId: dist?.sampleId ?? 0,
+        testTypeCode: "ASPH_BITUMEN_EXTRACT",
+        status: "submitted",
+      },
+      { enabled: !!dist?.sampleId },
+    );
 
   const bitumenData = bitumenResults[0];
+  const bitumenCompleted = bitumenData?.status === "submitted";
   const bitumenForm = (bitumenData?.formData ?? {}) as Record<string, unknown>;
   const bitumenSample = (bitumenForm.sample ?? {}) as Record<string, unknown>;
 
@@ -156,7 +161,9 @@ export default function AsphaltExtractedSieve() {
 
   const sieve200 = computedNormal.find((s) => s.sieveSize === "0.075");
   const percentPassing200 = sieve200?.percentPassing ?? 0;
-  const fillerBitumenRatio = pgBinder > 0 ? percentPassing200 / pgBinder : 0;
+  const rawFillerBitumenRatio = pgBinder > 0 ? percentPassing200 / pgBinder : 0;
+  // Round to nearest 0.1 (e.g. 1.04→1.0, 1.05→1.1, 1.06→1.1)
+  const fillerBitumenRatio = Math.round(rawFillerBitumenRatio * 10) / 10;
 
   const computedSievesForSave = useMemo(
     (): SieveComputed[] => [
@@ -227,12 +234,12 @@ export default function AsphaltExtractedSieve() {
 
   const chartData = useMemo(
     () =>
-      EXTRACTED_SIEVE_INPUT_SIZES.map((sieveInfo) => {
+      [...EXTRACTED_SIEVE_INPUT_SIZES].reverse().map((sieveInfo) => {
         const sieve = computedNormal.find((s) => s.sieveSize === sieveInfo.size);
         const specs = specLimits[sieveInfo.size] ?? { lower: 0, upper: 100 };
         return {
           sieveSize: ar ? sieveInfo.labelAr : sieveInfo.label,
-          percentPassing: sieve?.percentPassing ?? 0,
+          percentPassing: Math.round(sieve?.percentPassing ?? 0),
           specLower: specs.lower,
           specUpper: specs.upper,
         };
@@ -277,14 +284,14 @@ export default function AsphaltExtractedSieve() {
             mass: passing75um,
             percent: passing75umPercent,
           },
-          fillerBitumenRatio: parseFloat(fillerBitumenRatio.toFixed(2)),
+          fillerBitumenRatio: parseFloat(fillerBitumenRatio.toFixed(1)),
           failedCount: failedSieves,
           overallPass,
         },
         overallResult: evaluatedSieves.length === 0 ? "pending" : overallPass ? "pass" : "fail",
         summaryValues: {
           failedSieves,
-          fillerBitumenRatio: parseFloat(fillerBitumenRatio.toFixed(2)),
+          fillerBitumenRatio: parseFloat(fillerBitumenRatio.toFixed(1)),
           overallResult: overallPass ? "pass" : "fail",
           massAfterIgnition,
           pgBinder,
@@ -302,6 +309,36 @@ export default function AsphaltExtractedSieve() {
       <DashboardLayout>
         <div className="p-6 text-center text-red-600">
           {ar ? "معرف التوزيع غير صالح" : "Invalid distribution ID"}
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  if (distLoading || (dist?.sampleId && bitumenLoading)) {
+    return (
+      <DashboardLayout>
+        <div className="flex items-center justify-center p-16 gap-2 text-muted-foreground">
+          <Loader2 className="w-5 h-5 animate-spin" />
+          {ar ? "جاري التحميل..." : "Loading..."}
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  if (dist?.sampleId && !bitumenCompleted) {
+    return (
+      <DashboardLayout>
+        <div className="max-w-lg mx-auto p-8 text-center">
+          <AlertCircle className="w-12 h-12 text-amber-500 mx-auto mb-4" />
+          <h3 className="text-lg font-semibold mb-2">{ar ? "اختبار مقفل" : "Test Locked"}</h3>
+          <p className="text-muted-foreground mb-4">
+            {ar
+              ? "يجب إكمال اختبار استخلاص البيتومين أولاً"
+              : "Bitumen Extraction test must be completed first"}
+          </p>
+          <Button variant="outline" onClick={() => setLocation("/technician")}>
+            {ar ? "رجوع" : "Go Back"}
+          </Button>
         </div>
       </DashboardLayout>
     );
@@ -471,10 +508,10 @@ export default function AsphaltExtractedSieve() {
                       {ar ? "نسبة المار %" : "% Passing"}
                     </th>
                     <th className="border border-slate-300 px-2 py-2 bg-amber-50" colSpan={2}>
-                      CC (JMF)
+                      {ar ? "حدود JMF" : "JMF Limit"}
                     </th>
                     <th className="border border-slate-300 px-2 py-2 bg-blue-50" colSpan={2}>
-                      {ar ? "حدود المواصفات" : "Specification Limits"}
+                      {ar ? "حد المواصفات" : "Specification Limit"}
                     </th>
                     <th className="border border-slate-300 px-2 py-2" rowSpan={2}>
                       {ar ? "النتيجة" : "Result"}
@@ -482,16 +519,16 @@ export default function AsphaltExtractedSieve() {
                   </tr>
                   <tr>
                     <th className="border border-slate-300 px-2 py-2 bg-amber-50 text-xs">
-                      {ar ? "الحد الأدنى" : "Lower"}
+                      {ar ? "أدنى" : "Lower"}
                     </th>
                     <th className="border border-slate-300 px-2 py-2 bg-amber-50 text-xs">
-                      {ar ? "الحد الأعلى" : "Upper"}
+                      {ar ? "أعلى" : "Upper"}
                     </th>
                     <th className="border border-slate-300 px-2 py-2 bg-blue-50 text-xs">
-                      {ar ? "الحد الأدنى" : "Lower"}
+                      {ar ? "أدنى" : "Lower"}
                     </th>
                     <th className="border border-slate-300 px-2 py-2 bg-blue-50 text-xs">
-                      {ar ? "الحد الأعلى" : "Upper"}
+                      {ar ? "أعلى" : "Upper"}
                     </th>
                   </tr>
                 </thead>
@@ -550,7 +587,7 @@ export default function AsphaltExtractedSieve() {
                             sieve.result === "fail" ? "text-red-700" : ""
                           }`}
                         >
-                          {sieve.result !== "pending" ? sieve.percentPassing.toFixed(1) : "—"}
+                          {sieve.result !== "pending" ? sieve.percentPassing.toFixed(0) : "—"}
                         </td>
                         <td className="border border-slate-300 px-2 py-2 text-center bg-amber-50">
                           {sieve.ccLower}
@@ -596,7 +633,7 @@ export default function AsphaltExtractedSieve() {
                       colSpan={5}
                     >
                       {pgBinder > 0 && sieve200?.result !== "pending"
-                        ? fillerBitumenRatio.toFixed(2)
+                        ? fillerBitumenRatio.toFixed(1)
                         : "—"}
                     </td>
                     <td className="border border-slate-300 px-2 py-2 text-center text-xs text-muted-foreground">

@@ -926,7 +926,7 @@ function renderAsphaltExtractedSieve(fd: any, isAr: boolean) {
       header: L("% Passing", "نسبة المار %"),
       field: "percentPassing",
       align: "center",
-      render: (v) => fmt(v, 1),
+      render: (v) => fmt(v, 0),
     },
     {
       header: L("CC Lower", "CC أدنى"),
@@ -1010,7 +1010,7 @@ function renderAsphaltExtractedSieve(fd: any, isAr: boolean) {
               <p className="font-semibold text-slate-800 mb-1">
                 {L("Filler/Bitumen Ratio", "نسبة الحشو/البيتومين")}
               </p>
-              <p className="font-bold text-lg">{fmt(fd.fillerBitumenRatio, 2)}</p>
+              <p className="font-bold text-lg">{fmt(fd.fillerBitumenRatio, 1)}</p>
             </div>
           )}
         </div>

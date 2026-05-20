@@ -223,8 +223,20 @@ export default function AsphaltMarshallDensity() {
       ? validVolumetric.reduce((sum, v) => sum + v.vfb, 0) / validVolumetric.length
       : 0;
 
-  const airVoidsPass = validVolumetric.length > 0 && avgAirVoids >= 3 && avgAirVoids <= 5;
-  const vmaPass = validVolumetric.length > 0 && avgVMA >= 13;
+  const avgAirVoidsRounded = parseFloat(avgAirVoids.toFixed(1));
+  const avgVMARounded = parseFloat(avgVMA.toFixed(1));
+  const mixType = dist?.testSubType ?? "base_course";
+  const isWearingCourse = mixType === "wearing_course";
+  const specs = {
+    airVoids: { min: 3, max: 5 },
+    vma: { min: isWearingCourse ? 14 : 13 },
+  };
+
+  const airVoidsPass =
+    validVolumetric.length > 0 &&
+    avgAirVoidsRounded >= specs.airVoids.min &&
+    avgAirVoidsRounded <= specs.airVoids.max;
+  const vmaPass = validVolumetric.length > 0 && avgVMARounded >= specs.vma.min;
   const overallPass = validVolumetric.length > 0 && gmm > 0 && airVoidsPass && vmaPass;
   const overallResult = overallPass ? "pass" : "fail";
 
@@ -259,6 +271,7 @@ export default function AsphaltMarshallDensity() {
     }
 
     const formData = {
+      mixType,
       parameters: { ...parameters, gmm },
       specimens: computedSpecimens,
       volumetricData,
@@ -685,7 +698,9 @@ export default function AsphaltMarshallDensity() {
                   }`}
                 >
                   <div className="text-xs font-semibold">{ar ? "حد VMA الأدنى:" : "VMA Minimum:"}</div>
-                  <div className="text-sm">≥ 13 {vmaPass ? "✓" : "✗"}</div>
+                  <div className="text-sm">
+                    ≥ {specs.vma.min} {vmaPass ? "✓" : "✗"}
+                  </div>
                 </div>
               </div>
             </CardContent>
@@ -709,7 +724,13 @@ export default function AsphaltMarshallDensity() {
                 {!airVoidsPass && (
                   <p>{ar ? "الفراغات الهوائية خارج الحد (3–5%)" : "Air Voids out of spec (3–5%)"}</p>
                 )}
-                {!vmaPass && <p>{ar ? "VMA أقل من الحد الأدنى (13)" : "VMA below minimum (13)"}</p>}
+                {!vmaPass && (
+                  <p>
+                    {ar
+                      ? `VMA أقل من الحد الأدنى (${specs.vma.min})`
+                      : `VMA below minimum (${specs.vma.min})`}
+                  </p>
+                )}
               </div>
             )}
           </div>

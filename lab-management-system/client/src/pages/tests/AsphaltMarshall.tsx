@@ -187,10 +187,11 @@ export default function AsphaltMarshall() {
     (s) => parseFloat(s.readingKN) > 0 || parseFloat(s.flowMm) > 0,
   );
 
-  const avgCorrStability =
+  const rawAvgCorrStability =
     enteredSpecimens.length > 0
       ? enteredSpecimens.reduce((sum, s) => sum + s.corrStabilityN, 0) / enteredSpecimens.length
       : 0;
+  const avgCorrStability = Math.round(rawAvgCorrStability / 50) * 50;
   const avgFlow =
     enteredSpecimens.length > 0
       ? enteredSpecimens.reduce((sum, s) => sum + s.flowUnits, 0) / enteredSpecimens.length

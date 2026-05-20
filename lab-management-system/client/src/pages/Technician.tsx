@@ -13,6 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { trpc } from "@/lib/trpc";
+import { getOfficialTestDisplayName } from "@/lib/officialTestCatalog";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useDeletionStatus } from "@/hooks/useDeletionStatus";
 import {
@@ -306,7 +307,8 @@ function TechnicianAssignmentCard({
   const startDisabled = combinedPending || prerequisitesLocked;
 
   const testTitle =
-    lang === "ar" ? dist.testNameAr || dist.testName : dist.testNameEn || dist.testName;
+    getOfficialTestDisplayName(dist.testType, lang === "ar" ? "ar" : "en") ??
+    (lang === "ar" ? dist.testNameAr || dist.testName : dist.testNameEn || dist.testName);
   const subLabel = getSubTypeLabel(dist.sampleSubType, lang);
   const contractor = sample?.contractorName ?? "—";
   const contractNo = sample?.contractNumber ?? "—";
@@ -885,9 +887,10 @@ export default function Technician() {
                 <div>
                   <span className="text-muted-foreground">{tx("testType", lang)}:</span>{" "}
                   <span className="font-medium">
-                    {lang === "ar"
-                      ? selectedDist.testNameAr || selectedDist.testName
-                      : selectedDist.testNameEn || selectedDist.testName}
+                    {getOfficialTestDisplayName(selectedDist.testType, lang === "ar" ? "ar" : "en") ??
+                      (lang === "ar"
+                        ? selectedDist.testNameAr || selectedDist.testName
+                        : selectedDist.testNameEn || selectedDist.testName)}
                   </span>
                 </div>
                 <div>

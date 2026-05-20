@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { PassFailBadge, ResultBanner } from "@/components/PassFailBadge";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { formatCalendarDate } from "@/lib/dateFormat";
+import { getOfficialTestDisplayName } from "@/lib/officialTestCatalog";
 import {
   Loader2,
   Printer,
@@ -289,22 +290,13 @@ export default function BatchReport() {
             (sibling.testType === "DIST-2026-042" && t.code === "ASPH_MARSHALL_DENSITY") ||
             (sibling.testType.startsWith("ASPH_EXTRACTED_SIEVE") && t.code === "ASPH_EXTRACTED_SIEVE"),
         );
-        const isMarshallDensity =
-          sibling.testType === "ASPH_MARSHALL_DENSITY" ||
-          sibling.testType === "DIST-2026-042" ||
-          sibling.specializedTestResults?.[0]?.formTemplate === "asphalt_marshall_density";
+        const catalogName = getOfficialTestDisplayName(sibling.testType, isAr ? "ar" : "en");
         return {
           sibling,
           overallResult,
           summaryValues,
-          testName: isMarshallDensity
-            ? isAr
-              ? "الثقل النوعي الظاهري للخلطة الإسفلتية المدموكة (ASTM D 2726)"
-              : "Bulk Specific Gravity of Compacted HMA (ASTM D 2726)"
-            : isAr
-              ? tt?.nameAr ?? tt?.nameEn ?? sibling.testName
-              : tt?.nameEn ?? tt?.nameAr ?? sibling.testName,
-          standard: isMarshallDensity ? "ASTM D 2726" : tt?.standardRef ?? EM_DASH,
+          testName: catalogName ?? (isAr ? tt?.nameAr ?? tt?.nameEn ?? sibling.testName : tt?.nameEn ?? tt?.nameAr ?? sibling.testName),
+          standard: tt?.standardRef ?? EM_DASH,
           formTemplate: sibling.specializedTestResults?.[0]?.formTemplate ?? null,
           testedBy: sibling.specializedTestResults?.[0]?.testedBy ?? undefined,
         };

@@ -5,6 +5,7 @@
 import { useMemo } from "react";
 import { useParams, useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
+import { getOfficialTestDisplayName } from "@/lib/officialTestCatalog";
 import DashboardLayout from "@/components/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -77,8 +78,6 @@ export default function BatchOverview() {
     { enabled: sampleId > 0 && orderId > 0 },
   );
 
-  const { data: testTypes = [] } = trpc.testTypes.list.useQuery();
-
   const sorted = useMemo(() => sortBatchSiblings(siblings as BatchSibling[]), [siblings]);
 
   const total = sorted.length;
@@ -86,11 +85,8 @@ export default function BatchOverview() {
   const allComplete = total > 0 && completedCount === total;
   const progressPct = total > 0 ? Math.round((completedCount / total) * 100) : 0;
   const testLabel = (dist: BatchSibling) => {
-    const code = dist.testType;
-    const match = testTypes.find(
-      t => t.code === code || (code.startsWith("ASPH_EXTRACTED_SIEVE") && t.code === "ASPH_EXTRACTED_SIEVE"),
-    );
-    if (match) return isAr ? match.nameAr ?? match.nameEn : match.nameEn ?? match.nameAr;
+    const fromCatalog = getOfficialTestDisplayName(dist.testType, isAr ? "ar" : "en");
+    if (fromCatalog) return fromCatalog;
     return dist.testName;
   };
 
