@@ -22,7 +22,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { Send, FlaskConical, Info, Printer, Plus, X } from "lucide-react";
+import { Send, FlaskConical, Info, Printer, Plus, X, ArrowLeftRight } from "lucide-react";
 import {
   LineChart,
   Line,
@@ -449,168 +449,212 @@ export default function AsphaltHotBin() {
               </Button>
             )}
           </CardHeader>
-          <CardContent className="overflow-x-auto">
-            <table className="w-full text-xs border-collapse min-w-[900px]">
-              <thead className="bg-slate-50">
-                <tr>
-                  <th className="border border-slate-300 px-2 py-2" rowSpan={2}>
-                    {ar ? "المنخل (mm)" : "Sieve (mm)"}
-                  </th>
-                  {computedSamples.map((sample, idx) => (
-                    <th
-                      key={sample.id}
-                      className="border border-slate-300 px-2 py-2 bg-yellow-50"
-                      colSpan={2}
-                    >
-                      <div className="flex items-center justify-center gap-2">
-                        <Input
-                          type="number"
-                          step="0.1"
-                          value={aggregateSamples[idx]?.percentage ?? ""}
-                          onChange={(e) => updateSamplePercentage(idx, e.target.value)}
-                          className="h-7 w-16 text-xs"
-                          placeholder="%"
-                          disabled={submitted}
-                        />
-                        {aggregateSamples.length > 1 && !submitted && (
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => removeSample(sample.id)}
-                            className="h-6 w-6 p-0"
+          <CardContent>
+            <div className="relative">
+              <div className="overflow-x-auto shadow-inner rounded-lg border border-slate-200">
+                <table className="w-full text-xs border-collapse min-w-[1400px]">
+                  <thead className="bg-slate-50">
+                    <tr>
+                      <th
+                        className="border border-slate-300 px-3 py-2 font-semibold sticky left-0 bg-slate-100 z-10"
+                        rowSpan={2}
+                        style={{ minWidth: "70px" }}
+                      >
+                        {ar ? "المنخل (mm)" : "Sieve (mm)"}
+                      </th>
+                      {computedSamples.map((sample) => {
+                        const sampleIdx = aggregateSamples.findIndex((s) => s.id === sample.id);
+                        return (
+                          <th
+                            key={sample.id}
+                            className="border border-slate-300 px-2 py-2 bg-yellow-50"
+                            colSpan={2}
+                            style={{ minWidth: "140px" }}
                           >
-                            <X className="w-3 h-3" />
-                          </Button>
-                        )}
-                      </div>
-                    </th>
-                  ))}
-                  <th className="border border-slate-300 px-2 py-2 bg-green-100" rowSpan={2}>
-                    {ar ? "الدرجة المجمعة" : "Combined Grading"}
-                  </th>
-                  <th className="border border-slate-300 px-2 py-2 bg-blue-100" colSpan={2}>
-                    {ar ? "حدود JMF" : "JMF Limit"}
-                  </th>
-                  <th className="border border-slate-300 px-2 py-2 bg-purple-100" colSpan={2}>
-                    {ar ? "حد المواصفات" : "Specification Limit"}
-                  </th>
-                  <th className="border border-slate-300 px-2 py-2" rowSpan={2}>
-                    {ar ? "الحالة" : "Status"}
-                  </th>
-                </tr>
-                <tr>
-                  {computedSamples.map((sample) => (
-                    <Fragment key={`sub-${sample.id}`}>
-                      <th className="border border-slate-300 px-2 py-1 text-xs bg-yellow-50">
-                        {ar ? "التدرج الأصلي" : "Orig. Grad."}
+                            <div className="flex items-center justify-between gap-2">
+                              <Input
+                                type="number"
+                                step="0.1"
+                                value={aggregateSamples[sampleIdx]?.percentage ?? ""}
+                                onChange={(e) =>
+                                  updateSamplePercentage(sampleIdx, e.target.value)
+                                }
+                                className="h-7 w-16 text-xs font-bold text-center"
+                                placeholder="%"
+                                disabled={submitted}
+                              />
+                              {aggregateSamples.length > 1 && !submitted && (
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => removeSample(sample.id)}
+                                  className="h-6 w-6 p-0 hover:bg-red-100"
+                                >
+                                  <X className="w-3 h-3 text-red-600" />
+                                </Button>
+                              )}
+                            </div>
+                          </th>
+                        );
+                      })}
+                      <th
+                        className="border border-slate-300 px-3 py-2 bg-green-100 font-bold text-green-900"
+                        rowSpan={2}
+                        style={{ minWidth: "90px" }}
+                      >
+                        <div className="flex flex-col items-center gap-1">
+                          <span className="text-xs">{ar ? "الدرجة" : "Combined"}</span>
+                          <span className="text-xs">{ar ? "المجمعة" : "Grading"}</span>
+                        </div>
                       </th>
-                      <th className="border border-slate-300 px-2 py-1 text-xs bg-yellow-100">
-                        {ar ? "مطلوب" : "Required"}
+                      <th
+                        className="border border-slate-300 px-2 py-2 bg-blue-100"
+                        colSpan={2}
+                        style={{ minWidth: "120px" }}
+                      >
+                        {ar ? "حدود JMF" : "JMF Limit"}
                       </th>
-                    </Fragment>
-                  ))}
-                  <th className="border border-slate-300 px-2 py-1 text-xs bg-blue-100">
-                    {ar ? "أدنى" : "Lower"}
-                  </th>
-                  <th className="border border-slate-300 px-2 py-1 text-xs bg-blue-100">
-                    {ar ? "أعلى" : "Upper"}
-                  </th>
-                  <th className="border border-slate-300 px-2 py-1 text-xs bg-purple-100">
-                    {ar ? "أدنى" : "Lower"}
-                  </th>
-                  <th className="border border-slate-300 px-2 py-1 text-xs bg-purple-100">
-                    {ar ? "أعلى" : "Upper"}
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {HOT_BIN_SIEVE_SIZES.map((sieve) => {
-                  const combined = combinedGrading[sieve.size] || 0;
-                  const specLower = specLimits?.[sieve.size]?.lower ?? 0;
-                  const specUpper = specLimits?.[sieve.size]?.upper ?? 0;
-                  const result = sieveResults.find((r) => r.size === sieve.size);
-                  const pass = result?.pass;
-                  const showStatus = params.mixType && hasGradationInput;
+                      <th
+                        className="border border-slate-300 px-2 py-2 bg-purple-100"
+                        colSpan={2}
+                        style={{ minWidth: "120px" }}
+                      >
+                        {ar ? "حد المواصفات" : "Specification Limit"}
+                      </th>
+                      <th
+                        className="border border-slate-300 px-2 py-2"
+                        rowSpan={2}
+                        style={{ minWidth: "80px" }}
+                      >
+                        {ar ? "الحالة" : "Status"}
+                      </th>
+                    </tr>
+                    <tr>
+                      {computedSamples.map((sample) => (
+                        <Fragment key={`sub-${sample.id}`}>
+                          <th className="border border-slate-300 px-2 py-1 text-xs bg-yellow-50 font-medium">
+                            {ar ? "التدرج الأصلي" : "Orig. Grad."}
+                          </th>
+                          <th className="border border-slate-300 px-2 py-1 text-xs bg-yellow-100 font-medium">
+                            {ar ? "مطلوب" : "Required"}
+                          </th>
+                        </Fragment>
+                      ))}
+                      <th className="border border-slate-300 px-2 py-1 text-xs bg-blue-100 font-medium">
+                        {ar ? "أدنى" : "Lower"}
+                      </th>
+                      <th className="border border-slate-300 px-2 py-1 text-xs bg-blue-100 font-medium">
+                        {ar ? "أعلى" : "Upper"}
+                      </th>
+                      <th className="border border-slate-300 px-2 py-1 text-xs bg-purple-100 font-medium">
+                        {ar ? "أدنى" : "Lower"}
+                      </th>
+                      <th className="border border-slate-300 px-2 py-1 text-xs bg-purple-100 font-medium">
+                        {ar ? "أعلى" : "Upper"}
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {HOT_BIN_SIEVE_SIZES.map((sieve) => {
+                      const combined = combinedGrading[sieve.size] || 0;
+                      const specLower = specLimits?.[sieve.size]?.lower ?? 0;
+                      const specUpper = specLimits?.[sieve.size]?.upper ?? 0;
+                      const result = sieveResults.find((r) => r.size === sieve.size);
+                      const pass = result?.pass;
+                      const showStatus = params.mixType && hasGradationInput;
 
-                  return (
-                    <tr key={sieve.size}>
-                      <td className="border border-slate-300 px-2 py-2 font-semibold">
-                        {sieve.label}
-                      </td>
-                      {computedSamples.map((sample, idx) => (
-                        <Fragment key={`data-${sample.id}-${sieve.size}`}>
-                          <td className="border border-slate-300 px-2 py-2 bg-yellow-50">
+                      return (
+                        <tr key={sieve.size} className="hover:bg-slate-50">
+                          <td
+                            className="border border-slate-300 px-3 py-2 font-bold text-center sticky left-0 bg-white z-10"
+                            style={{ minWidth: "70px" }}
+                          >
+                            {sieve.label}
+                          </td>
+                          {computedSamples.map((sample, idx) => (
+                            <Fragment key={`data-${sample.id}-${sieve.size}`}>
+                              <td className="border border-slate-300 px-1 py-1 bg-yellow-50">
+                                <Input
+                                  type="number"
+                                  step="0.1"
+                                  value={
+                                    aggregateSamples[idx]?.originalGradations[sieve.size] ?? ""
+                                  }
+                                  onChange={(e) => updateOrigGrad(idx, sieve.size, e.target.value)}
+                                  className="h-7 text-xs text-center border-0 bg-transparent focus:bg-white min-w-[52px]"
+                                  placeholder="0"
+                                  disabled={submitted}
+                                />
+                              </td>
+                              <td className="border border-slate-300 px-2 py-2 text-center bg-yellow-100 font-semibold text-xs">
+                                {(sample.requiredGradations[sieve.size] ?? 0).toFixed(1)}
+                              </td>
+                            </Fragment>
+                          ))}
+                          <td className="border border-slate-300 px-3 py-2 text-center bg-green-100 font-bold text-sm text-green-900">
+                            {hasGradationInput ? combined.toFixed(1) : "—"}
+                          </td>
+                          <td className="border border-slate-300 px-1 py-1 bg-blue-50">
                             <Input
                               type="number"
-                              step="0.1"
-                              value={aggregateSamples[idx]?.originalGradations[sieve.size] ?? ""}
-                              onChange={(e) => updateOrigGrad(idx, sieve.size, e.target.value)}
-                              className="h-7 text-xs min-w-[56px]"
+                              step="1"
+                              value={jmfLimits.lower[sieve.size] ?? ""}
+                              onChange={(e) =>
+                                setJmfLimits((prev) => ({
+                                  ...prev,
+                                  lower: { ...prev.lower, [sieve.size]: e.target.value },
+                                }))
+                              }
+                              className="h-7 text-xs text-center border-0 bg-transparent focus:bg-white min-w-[44px]"
                               placeholder="0"
                               disabled={submitted}
                             />
                           </td>
-                          <td className="border border-slate-300 px-2 py-2 text-center bg-yellow-100 font-semibold">
-                            {(sample.requiredGradations[sieve.size] ?? 0).toFixed(1)}
+                          <td className="border border-slate-300 px-1 py-1 bg-blue-50">
+                            <Input
+                              type="number"
+                              step="1"
+                              value={jmfLimits.upper[sieve.size] ?? ""}
+                              onChange={(e) =>
+                                setJmfLimits((prev) => ({
+                                  ...prev,
+                                  upper: { ...prev.upper, [sieve.size]: e.target.value },
+                                }))
+                              }
+                              className="h-7 text-xs text-center border-0 bg-transparent focus:bg-white min-w-[44px]"
+                              placeholder="0"
+                              disabled={submitted}
+                            />
                           </td>
-                        </Fragment>
-                      ))}
-                      <td className="border border-slate-300 px-2 py-2 text-center bg-green-100 font-bold">
-                        {hasGradationInput ? combined.toFixed(1) : "—"}
-                      </td>
-                      <td className="border border-slate-300 px-2 py-2 bg-blue-50">
-                        <Input
-                          type="number"
-                          step="1"
-                          value={jmfLimits.lower[sieve.size] ?? ""}
-                          onChange={(e) =>
-                            setJmfLimits((prev) => ({
-                              ...prev,
-                              lower: { ...prev.lower, [sieve.size]: e.target.value },
-                            }))
-                          }
-                          className="h-7 text-xs min-w-[48px]"
-                          disabled={submitted}
-                        />
-                      </td>
-                      <td className="border border-slate-300 px-2 py-2 bg-blue-50">
-                        <Input
-                          type="number"
-                          step="1"
-                          value={jmfLimits.upper[sieve.size] ?? ""}
-                          onChange={(e) =>
-                            setJmfLimits((prev) => ({
-                              ...prev,
-                              upper: { ...prev.upper, [sieve.size]: e.target.value },
-                            }))
-                          }
-                          className="h-7 text-xs min-w-[48px]"
-                          disabled={submitted}
-                        />
-                      </td>
-                      <td className="border border-slate-300 px-2 py-2 text-center bg-purple-50 text-xs">
-                        {params.mixType ? specLower : "—"}
-                      </td>
-                      <td className="border border-slate-300 px-2 py-2 text-center bg-purple-50 text-xs">
-                        {params.mixType ? specUpper : "—"}
-                      </td>
-                      <td className="border border-slate-300 px-2 py-2 text-center">
-                        {!showStatus ? (
-                          "—"
-                        ) : (
-                          <Badge
-                            variant={pass ? "default" : "destructive"}
-                            className="text-xs"
-                          >
-                            {pass ? (ar ? "مطابق" : "Pass") : ar ? "غير مطابق" : "Fail"}
-                          </Badge>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                          <td className="border border-slate-300 px-2 py-2 text-center bg-purple-50 text-xs font-medium">
+                            {params.mixType ? specLower : "—"}
+                          </td>
+                          <td className="border border-slate-300 px-2 py-2 text-center bg-purple-50 text-xs font-medium">
+                            {params.mixType ? specUpper : "—"}
+                          </td>
+                          <td className="border border-slate-300 px-2 py-2 text-center">
+                            {!showStatus ? (
+                              "—"
+                            ) : (
+                              <Badge
+                                variant={pass ? "default" : "destructive"}
+                                className={`text-xs font-bold ${pass ? "bg-green-500 hover:bg-green-600" : "bg-red-500 hover:bg-red-600"}`}
+                              >
+                                {pass ? (ar ? "مطابق" : "Pass") : ar ? "غير مطابق" : "Fail"}
+                              </Badge>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              <div className="flex md:hidden items-center justify-center gap-2 mt-2 text-xs text-muted-foreground">
+                <ArrowLeftRight className="w-3 h-3" />
+                <span>{ar ? "مرر لليمين لرؤية المزيد" : "Scroll to see more"}</span>
+              </div>
+            </div>
           </CardContent>
         </Card>
 
@@ -622,48 +666,95 @@ export default function AsphaltHotBin() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <ResponsiveContainer width="100%" height={400}>
-                <LineChart data={chartData} margin={{ top: 10, right: 20, left: 10, bottom: 50 }}>
-                  <CartesianGrid strokeDasharray="3 3" />
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-2 mb-4 p-3 bg-slate-50 rounded-lg border border-slate-200">
+                <div className="flex items-center gap-2">
+                  <div className="w-6 h-1 bg-green-500 rounded-sm shrink-0" />
+                  <span className="text-xs font-semibold text-green-700">
+                    {ar ? "الدرجة المجمعة" : "Combined Grading"}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-6 h-0 border-t-2 border-dashed border-blue-500 shrink-0" />
+                  <span className="text-xs font-medium text-blue-700">
+                    {ar ? "JMF أعلى" : "JMF Upper"}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-6 h-0 border-t-2 border-dashed border-blue-500 shrink-0" />
+                  <span className="text-xs font-medium text-blue-700">
+                    {ar ? "JMF أدنى" : "JMF Lower"}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-6 h-0 border-t-2 border-dotted border-red-500 shrink-0" />
+                  <span className="text-xs font-medium text-red-700">
+                    {ar ? "مواصفات أعلى" : "Spec Upper"}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-6 h-0 border-t-2 border-dotted border-red-500 shrink-0" />
+                  <span className="text-xs font-medium text-red-700">
+                    {ar ? "مواصفات أدنى" : "Spec Lower"}
+                  </span>
+                </div>
+              </div>
+
+              <ResponsiveContainer width="100%" height={450}>
+                <LineChart
+                  data={chartData}
+                  margin={{ top: 20, right: 30, left: 20, bottom: 60 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
                   <XAxis
                     dataKey="sieve"
                     angle={-45}
                     textAnchor="end"
-                    height={70}
+                    height={80}
                     interval={0}
-                    tick={{ fontSize: 10 }}
+                    tick={{ fontSize: 11, fill: "#475569" }}
                     label={{
-                      value: ar ? "المناخل" : "SIEVES",
+                      value: ar ? "المناخل (mm)" : "SIEVES (mm)",
                       position: "insideBottom",
-                      offset: -5,
+                      offset: -45,
+                      style: { fontSize: 12, fontWeight: 600, fill: "#1e293b" },
                     }}
                   />
                   <YAxis
                     domain={[0, 100]}
+                    tick={{ fontSize: 11, fill: "#475569" }}
                     label={{
                       value: "% Passing",
                       angle: -90,
                       position: "insideLeft",
+                      style: { fontSize: 12, fontWeight: 600, fill: "#1e293b" },
                     }}
-                    tick={{ fontSize: 10 }}
                   />
-                  <Tooltip />
-                  <Legend />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: "white",
+                      border: "1px solid #cbd5e1",
+                      borderRadius: "6px",
+                      fontSize: "12px",
+                    }}
+                    formatter={(value: number) => `${Number(value).toFixed(1)}%`}
+                  />
+                  <Legend content={() => null} />
                   <Line
                     type="monotone"
                     dataKey="combined"
                     stroke="#22c55e"
-                    strokeWidth={3}
+                    strokeWidth={3.5}
                     name={ar ? "الدرجة المجمعة" : "Combined Grading"}
-                    dot={{ r: 5 }}
+                    dot={{ r: 5, fill: "#22c55e", strokeWidth: 2, stroke: "#fff" }}
+                    activeDot={{ r: 7 }}
                   />
                   <Line
                     type="monotone"
                     dataKey="jmfUpper"
                     stroke="#3b82f6"
                     strokeWidth={2}
-                    strokeDasharray="5 5"
-                    name={ar ? "حد JMF العلوي" : "JMF UPPER LIMIT"}
+                    strokeDasharray="8 4"
+                    name={ar ? "JMF أعلى" : "JMF Upper"}
                     dot={false}
                   />
                   <Line
@@ -671,8 +762,8 @@ export default function AsphaltHotBin() {
                     dataKey="jmfLower"
                     stroke="#3b82f6"
                     strokeWidth={2}
-                    strokeDasharray="5 5"
-                    name={ar ? "حد JMF السفلي" : "JMF LOWER LIMIT"}
+                    strokeDasharray="8 4"
+                    name={ar ? "JMF أدنى" : "JMF Lower"}
                     dot={false}
                   />
                   <Line
@@ -680,8 +771,8 @@ export default function AsphaltHotBin() {
                     dataKey="specUpper"
                     stroke="#dc2626"
                     strokeWidth={2}
-                    strokeDasharray="3 3"
-                    name={ar ? "حد المواصفات العلوي" : "SPEC UPPER LIMIT"}
+                    strokeDasharray="2 2"
+                    name={ar ? "مواصفات أعلى" : "Spec Upper"}
                     dot={false}
                   />
                   <Line
@@ -689,8 +780,8 @@ export default function AsphaltHotBin() {
                     dataKey="specLower"
                     stroke="#dc2626"
                     strokeWidth={2}
-                    strokeDasharray="3 3"
-                    name={ar ? "حد المواصفات السفلي" : "SPEC LOWER LIMIT"}
+                    strokeDasharray="2 2"
+                    name={ar ? "مواصفات أدنى" : "Spec Lower"}
                     dot={false}
                   />
                 </LineChart>
