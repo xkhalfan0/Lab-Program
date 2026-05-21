@@ -15,6 +15,7 @@ import {
   flattenBatchesToCores,
   parseBatchesFromFormData,
   renumberBatchSpecimens,
+  specimenHasCompactionData,
   type CoreBatchInput,
   type CoreLayerType,
   type CoreOffset,
@@ -43,7 +44,7 @@ const TEST_TITLE_EN =
 const TEST_TITLE_AR =
   "اختبار سماكة الرصف HMA والثقل النوعي الظاهري ونسبة الدمك (ASTM D 3549, D 2726)";
 
-const TABLE_COLS = 11;
+const TABLE_COLS = 12;
 
 export default function AsphaltCoreThickness() {
   const { distributionId } = useParams<{ distributionId: string }>();
@@ -70,12 +71,7 @@ export default function AsphaltCoreThickness() {
     [computedBatches],
   );
 
-  const coresWithCompaction = allSpecimens.filter(
-    (s) =>
-      parseFloat(s.refMarshallBulkSG) > 0 &&
-      s.specimenVolume > 0 &&
-      parseFloat(s.massInAir) > 0,
-  );
+  const coresWithCompaction = allSpecimens.filter(specimenHasCompactionData);
 
   const overallAvgCompaction =
     coresWithCompaction.length > 0
@@ -409,6 +405,9 @@ export default function AsphaltCoreThickness() {
                   <th className="border border-slate-300 px-2 py-2 bg-green-50" rowSpan={2}>
                     {ar ? "نسبة الدمك %" : "% Compaction"}
                   </th>
+                  <th className="border border-slate-300 px-2 py-2 bg-purple-50" rowSpan={2}>
+                    {ar ? "متوسط المجموعة %" : "Batch Avg %"}
+                  </th>
                   <th className="border border-slate-300 px-2 py-2" rowSpan={2}>
                     {ar ? "الإجراء" : "Action"}
                   </th>
@@ -493,7 +492,13 @@ export default function AsphaltCoreThickness() {
                         </td>
                       </tr>
                     ) : (
-                      batch.specimens.map((specimen, specimenIdx) => (
+                      batch.specimens.map((specimen, specimenIdx) => {
+                        const showCompaction = specimenHasCompactionData(specimen);
+                        const batchHasAvg =
+                          batch.specimens.some(specimenHasCompactionData) &&
+                          batch.averageCompaction > 0;
+
+                        return (
                         <tr key={specimen.id} className="hover:bg-slate-50/50">
                           <td className="border border-slate-300 px-2 py-2 text-center font-semibold">
                             {specimen.specimenNumber}
@@ -595,10 +600,38 @@ export default function AsphaltCoreThickness() {
                             {specimen.coreBulkSG > 0 ? specimen.coreBulkSG.toFixed(3) : "—"}
                           </td>
                           <td className="border border-slate-300 px-2 py-2 text-center bg-green-50 font-bold">
-                            {specimen.compactionPercent > 0
+                            {showCompaction
                               ? `${specimen.compactionPercent.toFixed(1)}%`
                               : "—"}
                           </td>
+                          {specimenIdx === 0 ? (
+                            <td
+                              rowSpan={batch.specimens.length}
+                              className="border border-slate-300 px-2 py-2 text-center bg-purple-50 font-bold align-middle"
+                            >
+                              <div className="flex flex-col items-center justify-center gap-1 min-h-[48px]">
+                                <span className="text-base text-purple-900">
+                                  {batchHasAvg
+                                    ? `${batch.averageCompaction.toFixed(1)}%`
+                                    : "—"}
+                                </span>
+                                <span className="text-[10px] text-purple-700 font-normal">
+                                  ({batch.specimens.length}{" "}
+                                  {ar
+                                    ? "عينات"
+                                    : batch.specimens.length === 1
+                                      ? "core"
+                                      : "cores"}
+                                  )
+                                </span>
+                                {parseFloat(batch.refMarshallBulkSG) > 0 && (
+                                  <span className="text-[10px] text-slate-500 font-normal">
+                                    SG {parseFloat(batch.refMarshallBulkSG).toFixed(3)}
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+                          ) : null}
                           <td className="border border-slate-300 px-2 py-2 text-center">
                             {!submitted && (
                               <Button
@@ -612,28 +645,8 @@ export default function AsphaltCoreThickness() {
                             )}
                           </td>
                         </tr>
-                      ))
-                    )}
-
-                    {batch.specimens.length > 0 && (
-                      <tr key={`${batch.id}-avg`} className="bg-purple-100 font-semibold">
-                        <td
-                          colSpan={9}
-                          className="border border-slate-300 px-3 py-2 text-right text-purple-900"
-                        >
-                          {ar
-                            ? `متوسط المجموعة ${batchIdx + 1}:`
-                            : `Batch ${batchIdx + 1} Average:`}
-                        </td>
-                        <td
-                          colSpan={2}
-                          className="border border-slate-300 px-2 py-2 text-center text-purple-900 text-base"
-                        >
-                          {batch.averageCompaction > 0
-                            ? `${batch.averageCompaction.toFixed(1)}%`
-                            : "—"}
-                        </td>
-                      </tr>
+                        );
+                      })
                     )}
 
                     {batchIdx < computedBatches.length - 1 && (
@@ -657,10 +670,15 @@ export default function AsphaltCoreThickness() {
                   <td className="border border-slate-300 px-2 py-2 text-center bg-green-100 font-bold text-base">
                     {hasCompactionData ? `${overallAvgCompaction.toFixed(1)}%` : "—"}
                   </td>
+                  <td className="border border-slate-300 px-2 py-2 text-center bg-purple-100 text-xs text-purple-800">
+                    {computedBatches.length > 0
+                      ? `${computedBatches.length} ${ar ? "مجموعات" : computedBatches.length === 1 ? "batch" : "batches"}`
+                      : "—"}
+                  </td>
                   <td />
                 </tr>
                 <tr>
-                  <td className="border border-slate-300 px-2 py-2 text-xs" colSpan={9}>
+                  <td className="border border-slate-300 px-2 py-2 text-xs" colSpan={10}>
                     {ar ? "حدود المواصفات:" : "Specification Limits:"}
                   </td>
                   <td

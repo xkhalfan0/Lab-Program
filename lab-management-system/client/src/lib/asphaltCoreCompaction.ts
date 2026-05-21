@@ -58,6 +58,13 @@ export function renumberBatchSpecimens(specimens: CoreSpecimenInput[]): CoreSpec
   return specimens.map((s, i) => ({ ...s, specimenNumber: i + 1 }));
 }
 
+/** Specimen has enough data to compute % compaction. */
+export function specimenHasCompactionData(specimen: CoreSpecimenComputed): boolean {
+  const refMarshall = parseFloat(specimen.refMarshallBulkSG) || 0;
+  const massAir = parseFloat(specimen.massInAir) || 0;
+  return refMarshall > 0 && specimen.specimenVolume > 0 && massAir > 0;
+}
+
 export function computeCoreSpecimen(
   specimen: CoreSpecimenInput,
   refMarshallBulkSG: string,
@@ -84,13 +91,12 @@ export function computeCoreBatch(batch: CoreBatchInput): CoreBatchComputed {
   const computedSpecimens = batch.specimens.map((s) =>
     computeCoreSpecimen(s, batch.refMarshallBulkSG),
   );
-  const withCompaction = computedSpecimens.filter((s) => s.compactionPercent > 0);
+  const forAverage = computedSpecimens.filter(specimenHasCompactionData);
   const averageCompaction =
-    withCompaction.length > 0
+    forAverage.length > 0
       ? parseFloat(
           (
-            withCompaction.reduce((sum, s) => sum + s.compactionPercent, 0) /
-            withCompaction.length
+            forAverage.reduce((sum, s) => sum + s.compactionPercent, 0) / forAverage.length
           ).toFixed(1),
         )
       : 0;
