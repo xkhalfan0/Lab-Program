@@ -595,16 +595,14 @@ function circleAreaFromDiameterMm(diameterMm: number): number {
   return ((22 / 7) * diameterMm * diameterMm) / 4;
 }
 
-function computeReductionOfAreaPercent(
-  nominalSizeMm: number,
-  sizeIncrementMm: number,
+function computeElongationPercent(
+  glMm: string,
+  sizeIncrementMm: string,
 ): number | undefined {
-  if (nominalSizeMm <= 0) return undefined;
-  const originalArea = circleAreaFromDiameterMm(nominalSizeMm);
-  const finalDiameter = nominalSizeMm - 2 * sizeIncrementMm;
-  if (finalDiameter <= 0 || originalArea <= 0) return undefined;
-  const finalArea = circleAreaFromDiameterMm(finalDiameter);
-  return ((originalArea - finalArea) / originalArea) * 100;
+  const gl = parseFloat(glMm);
+  const inc = parseFloat(sizeIncrementMm);
+  if (!gl || gl <= 0 || !Number.isFinite(inc)) return undefined;
+  return parseFloat(((inc / gl) * 100).toFixed(1));
 }
 
 // ─── Anchor Bolt Pull-out Calculations (legacy min load check) ─────────────────
@@ -632,9 +630,9 @@ describe("Anchor Bolt Tensile calculations (BS EN ISO 898-1)", () => {
     expect(rm).toBeCloseTo(975.8, 0);
   });
 
-  it("computes %RA: final dia = nominal − 2×increment", () => {
-    const ra = computeReductionOfAreaPercent(20, 3);
-    expect(ra).toBeCloseTo(51, 0);
+  it("computes elongation % = (size increment / GL) × 100", () => {
+    const elong = computeElongationPercent("82", "14");
+    expect(elong).toBeCloseTo(17.1, 1);
   });
 });
 

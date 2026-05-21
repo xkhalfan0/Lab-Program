@@ -29,16 +29,15 @@ export function circleAreaFromDiameterMm(diameterMm: number): number {
   return (PI_EXCEL * diameterMm * diameterMm) / 4;
 }
 
-export function computeReductionOfAreaPercent(
-  nominalSizeMm: number,
-  sizeIncrementMm: number,
+/** Elongation % = (size increment / GL) × 100 */
+export function computeElongationPercent(
+  glMm: string,
+  sizeIncrementMm: string,
 ): number | undefined {
-  if (nominalSizeMm <= 0) return undefined;
-  const originalArea = circleAreaFromDiameterMm(nominalSizeMm);
-  const finalDiameter = nominalSizeMm - 2 * sizeIncrementMm;
-  if (finalDiameter <= 0 || originalArea <= 0) return undefined;
-  const finalArea = circleAreaFromDiameterMm(finalDiameter);
-  return ((originalArea - finalArea) / originalArea) * 100;
+  const gl = parseFloat(glMm);
+  const inc = parseFloat(sizeIncrementMm);
+  if (!gl || gl <= 0 || !Number.isFinite(inc)) return undefined;
+  return parseFloat(((inc / gl) * 100).toFixed(1));
 }
 
 const BOLT_TYPES = {
@@ -77,11 +76,12 @@ interface AnchorBoltSpecimen {
   loadKN: string;
   glMm: string;
   sizeIncrementMm: string;
-  elongationPercent: string;
+  raPercent: string;
   grade: string;
   notes: string;
   cutSectionArea?: number;
   tensileStrengthMPa?: number;
+  elongation?: number;
   reductionOfArea?: number;
   rmResult?: "pass" | "fail" | "pending";
   elongationResult?: "pass" | "fail" | "pending";
@@ -99,7 +99,7 @@ function newSpecimen(n: number): AnchorBoltSpecimen {
     loadKN: "",
     glMm: "",
     sizeIncrementMm: "",
-    elongationPercent: "",
+    raPercent: "",
     grade: "8.8",
     notes: "",
   };
@@ -113,8 +113,6 @@ export function computeAnchorBoltSpecimen(row: AnchorBoltSpecimen): AnchorBoltSp
   const cutDiameter = parseFloat(row.cutSectionDiameter) || 0;
   const load = parseFloat(row.loadKN) || 0;
   const nominalSize = parseFloat(row.nominalSize) || 0;
-  const sizeIncrement = parseFloat(row.sizeIncrementMm) || 0;
-  const elongation = parseFloat(row.elongationPercent);
 
   const cutSectionArea =
     cutDiameter > 0 ? parseFloat(circleAreaFromDiameterMm(cutDiameter).toFixed(3)) : undefined;
@@ -124,19 +122,22 @@ export function computeAnchorBoltSpecimen(row: AnchorBoltSpecimen): AnchorBoltSp
       ? parseFloat(((load * 1000) / cutSectionArea).toFixed(1))
       : undefined;
 
-  const raRaw = computeReductionOfAreaPercent(nominalSize, sizeIncrement);
-  const reductionOfArea =
-    raRaw !== undefined ? parseFloat(raRaw.toFixed(1)) : undefined;
+  const elongation = computeElongationPercent(row.glMm, row.sizeIncrementMm);
 
-  if (tensileStrengthMPa === undefined) {
-    return { ...row, cutSectionArea, tensileStrengthMPa, reductionOfArea };
-  }
+  const raParsed = parseFloat(row.raPercent);
+  const reductionOfArea = Number.isFinite(raParsed)
+    ? parseFloat(raParsed.toFixed(1))
+    : undefined;
 
   const spec = getGrade88Spec(nominalSize || cutDiameter);
-  const rmResult: "pass" | "fail" =
-    tensileStrengthMPa >= spec.minRm ? "pass" : "fail";
+  const rmResult: "pass" | "fail" | "pending" =
+    tensileStrengthMPa !== undefined
+      ? tensileStrengthMPa >= spec.minRm
+        ? "pass"
+        : "fail"
+      : "pending";
   const elongationResult: "pass" | "fail" | "pending" =
-    Number.isFinite(elongation)
+    elongation !== undefined
       ? elongation >= spec.minElongation
         ? "pass"
         : "fail"
@@ -156,6 +157,7 @@ export function computeAnchorBoltSpecimen(row: AnchorBoltSpecimen): AnchorBoltSp
     ...row,
     cutSectionArea,
     tensileStrengthMPa,
+    elongation,
     reductionOfArea,
     rmResult,
     elongationResult,
@@ -176,7 +178,13 @@ function parseSpecimenFromSaved(raw: Record<string, unknown>, index: number): An
     loadKN: String(raw.loadKN ?? raw.maxLoad ?? raw.load ?? ""),
     glMm: String(raw.glMm ?? raw.gaugeLength ?? ""),
     sizeIncrementMm: String(raw.sizeIncrementMm ?? ""),
-    elongationPercent: String(raw.elongationPercent ?? raw.elongation ?? ""),
+    raPercent: String(
+      raw.raPercent != null && String(raw.raPercent) !== ""
+        ? raw.raPercent
+        : raw.reductionOfArea != null && String(raw.reductionOfArea) !== ""
+          ? String(raw.reductionOfArea)
+          : "",
+    ),
     grade: String(raw.grade ?? "8.8"),
     notes: String(raw.notes ?? raw.location ?? ""),
   };
@@ -411,13 +419,11 @@ export default function SteelAnchorBolt() {
             <div>Rm (MPa) = (Load × 1000) / Cut Section area</div>
             <div className="font-bold">
               {ar
-                ? "%RA = ((المساحة الأصلية − المساحة النهائية) / المساحة الأصلية) × 100"
-                : "%RA = ((Original Area − Final Area) / Original Area) × 100"}
+                ? "الاستطالة % = (زيادة الحجم / GL) × 100"
+                : "Elongation % = (size increment / GL) × 100"}
             </div>
             <div className="text-xs">
-              {ar
-                ? "المساحة النهائية: قطر نهائي = الحجم الاسمي − (2 × زيادة الحجم)"
-                : "Final diameter = Nominal Size − (2 × size increment)"}
+              {ar ? "%RA — إدخال يدوي" : "%RA — entered manually"}
             </div>
           </AlertDescription>
         </Alert>
@@ -538,7 +544,7 @@ export default function SteelAnchorBolt() {
                   <th className={`${th} bg-purple-50`} colSpan={2}>
                     {ar ? "الاستطالة" : "Elongation, A"}
                   </th>
-                  <th className={`${th} bg-purple-50`} rowSpan={2}>
+                  <th className={`${th} bg-yellow-50`} rowSpan={2}>
                     %RA
                   </th>
                   <th className={th} rowSpan={2}>
@@ -562,8 +568,8 @@ export default function SteelAnchorBolt() {
                   <th className={`${th} bg-yellow-50`}>
                     {ar ? "زيادة الحجم (mm)" : "size increment (mm)"}
                   </th>
-                  <th className={`${th} bg-yellow-50`}>
-                    {ar ? "الاستطالة %" : "Elongation (%)"}
+                  <th className={`${th} bg-purple-100`}>
+                    {ar ? "الاستطالة %" : "Elongation (%)"} *
                   </th>
                 </tr>
               </thead>
@@ -665,35 +671,33 @@ export default function SteelAnchorBolt() {
                           disabled={submitted}
                         />
                       </td>
-                      <td className={`${tdIn} bg-yellow-50`}>
-                        <Input
-                          type="number"
-                          step="0.1"
-                          value={input.elongationPercent}
-                          onChange={(e) =>
-                            updateSpecimen(row.id, "elongationPercent", e.target.value)
-                          }
-                          className={LAB_NUMERIC_INPUT_SM}
-                          placeholder="17"
-                          disabled={submitted}
-                        />
-                      </td>
-                      <td className={`${tdCalc} bg-purple-100`}>
-                        {row.reductionOfArea != null ? (
+                      <td className={`${tdCalc} bg-purple-100 font-semibold`}>
+                        {row.elongation != null ? (
                           <span
                             className={
-                              row.raResult === "pass"
+                              row.elongationResult === "pass"
                                 ? "text-emerald-800"
-                                : row.raResult === "fail"
+                                : row.elongationResult === "fail"
                                   ? "text-red-700"
                                   : ""
                             }
                           >
-                            {row.reductionOfArea.toFixed(1)}
+                            {row.elongation.toFixed(1)}%
                           </span>
                         ) : (
                           "—"
                         )}
+                      </td>
+                      <td className={`${tdIn} bg-yellow-50`}>
+                        <Input
+                          type="number"
+                          step="0.1"
+                          value={input.raPercent}
+                          onChange={(e) => updateSpecimen(row.id, "raPercent", e.target.value)}
+                          className={LAB_NUMERIC_INPUT_SM}
+                          placeholder="52"
+                          disabled={submitted}
+                        />
                       </td>
                       <td className={tdIn}>
                         <Input

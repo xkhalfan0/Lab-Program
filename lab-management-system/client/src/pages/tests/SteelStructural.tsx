@@ -56,13 +56,45 @@ const STEEL_GRADES = {
 type SteelGrade = keyof typeof STEEL_GRADES;
 type GradeSpec = (typeof STEEL_GRADES)[SteelGrade];
 
+/** Section types — selected on technician form (not at reception). */
+const SECTION_TYPES: { value: string; labelEn: string; labelAr: string }[] = [
+  { value: "flat_bar", labelEn: "Flat Bar", labelAr: "شريط مسطح" },
+  { value: "angle_L50x50x5", labelEn: "Angle 50×50×5", labelAr: "زاوية 50×50×5" },
+  { value: "angle_L63x63x6", labelEn: "Angle 63×63×6", labelAr: "زاوية 63×63×6" },
+  { value: "angle_L75x75x8", labelEn: "Angle 75×75×8", labelAr: "زاوية 75×75×8" },
+  { value: "angle_L100x100x10", labelEn: "Angle 100×100×10", labelAr: "زاوية 100×100×10" },
+  { value: "angle_L120x120x12", labelEn: "Angle 120×120×12", labelAr: "زاوية 120×120×12" },
+  { value: "angle_L150x150x15", labelEn: "Angle 150×150×15", labelAr: "زاوية 150×150×15" },
+  { value: "rhs_40x20x2", labelEn: "Rect. Tube 40×20×2", labelAr: "أنبوب مستطيل 40×20×2" },
+  { value: "rhs_50x25x2", labelEn: "Rect. Tube 50×25×2", labelAr: "أنبوب مستطيل 50×25×2" },
+  { value: "rhs_60x40x3", labelEn: "Rect. Tube 60×40×3", labelAr: "أنبوب مستطيل 60×40×3" },
+  { value: "rhs_80x40x3", labelEn: "Rect. Tube 80×40×3", labelAr: "أنبوب مستطيل 80×40×3" },
+  { value: "rhs_100x50x3", labelEn: "Rect. Tube 100×50×3", labelAr: "أنبوب مستطيل 100×50×3" },
+  { value: "rhs_120x60x4", labelEn: "Rect. Tube 120×60×4", labelAr: "أنبوب مستطيل 120×60×4" },
+  { value: "hea_100", labelEn: "HEA 100", labelAr: "HEA 100" },
+  { value: "hea_120", labelEn: "HEA 120", labelAr: "HEA 120" },
+  { value: "hea_160", labelEn: "HEA 160", labelAr: "HEA 160" },
+  { value: "heb_100", labelEn: "HEB 100", labelAr: "HEB 100" },
+  { value: "ipe_100", labelEn: "IPE 100", labelAr: "IPE 100" },
+  { value: "ipe_160", labelEn: "IPE 160", labelAr: "IPE 160" },
+  { value: "hollow_section", labelEn: "Hollow Section", labelAr: "قطاع مجوف" },
+  { value: "other", labelEn: "Other", labelAr: "أخرى" },
+];
+
+function calcAreaMm2(width: string, thickness: string): number | undefined {
+  const w = parseFloat(width);
+  const t = parseFloat(thickness);
+  if (!w || !t || w <= 0 || t <= 0) return undefined;
+  return parseFloat((w * t).toFixed(2));
+}
+
 interface SpecimenRow {
   id: string;
   specimenNumber: number;
+  sectionType: string;
   section: string;
   width: string;
   thickness: string;
-  area: string;
   scale: string;
   yieldLoad: string;
   maxLoad: string;
@@ -70,6 +102,7 @@ interface SpecimenRow {
   yieldStrength?: number;
   tensileStrength?: number;
   elongation?: number;
+  area?: number;
   yieldResult?: "pass" | "fail" | "pending";
   tensileResult?: "pass" | "fail" | "pending";
   elongationResult?: "pass" | "fail" | "pending";
@@ -77,7 +110,7 @@ interface SpecimenRow {
 }
 
 function computeSpecimen(row: SpecimenRow, spec: GradeSpec): SpecimenRow {
-  const area = parseFloat(row.area) || 0;
+  const area = calcAreaMm2(row.width, row.thickness) ?? 0;
   const scale = parseFloat(row.scale) || 0;
   const measuredBy = parseFloat(row.measuredBy) || 0;
   const yl = parseFloat(row.yieldLoad) || 0;
@@ -103,6 +136,7 @@ function computeSpecimen(row: SpecimenRow, spec: GradeSpec): SpecimenRow {
 
   return {
     ...row,
+    area: area > 0 ? area : undefined,
     yieldStrength: parseFloat(ys.toFixed(1)),
     tensileStrength: parseFloat(ts.toFixed(1)),
     elongation: elong !== undefined ? parseFloat(elong.toFixed(1)) : undefined,
@@ -117,10 +151,10 @@ function newRow(specimenNumber: number): SpecimenRow {
   return {
     id: `sp_${Date.now()}_${specimenNumber}`,
     specimenNumber,
+    sectionType: "flat_bar",
     section: "",
     width: "",
     thickness: "",
-    area: "",
     scale: "",
     yieldLoad: "",
     maxLoad: "",
@@ -148,13 +182,26 @@ function parseSpecimenFromSaved(raw: Record<string, unknown>, index: number): Sp
         ? String(parseFloat(String(legacyFl)) / 10)
         : "";
 
+  const legacySection = String(raw.section ?? "");
+  let sectionType = String(raw.sectionType ?? "");
+  if (!sectionType && legacySection) {
+    const match = SECTION_TYPES.find(
+      (t) =>
+        t.value === legacySection ||
+        t.labelEn.toLowerCase() === legacySection.toLowerCase() ||
+        legacySection.toLowerCase().includes(t.value.replace(/_/g, " ")),
+    );
+    sectionType = match?.value ?? (legacySection ? "other" : "flat_bar");
+  }
+  if (!sectionType) sectionType = "flat_bar";
+
   return {
     id: String(raw.id ?? `sp_${index}`),
     specimenNumber: Number(raw.specimenNumber ?? index + 1),
-    section: String(raw.section ?? ""),
+    sectionType,
+    section: legacySection && sectionType === "other" ? legacySection : "",
     width: String(raw.width ?? ""),
     thickness: String(raw.thickness ?? ""),
-    area: String(raw.area ?? raw.computedArea ?? ""),
     scale,
     yieldLoad: String(raw.yieldLoad ?? ""),
     maxLoad: String(raw.maxLoad ?? ""),
@@ -224,7 +271,16 @@ export default function SteelStructural() {
   }, [existing]);
 
   const updateRow = useCallback((id: string, field: keyof SpecimenRow, value: string) => {
-    setRows((prev) => prev.map((r) => (r.id === id ? { ...r, [field]: value } : r)));
+    setRows((prev) =>
+      prev.map((r) => {
+        if (r.id !== id) return r;
+        const next = { ...r, [field]: value };
+        if (field === "sectionType" && value !== "other") {
+          next.section = "";
+        }
+        return next;
+      }),
+    );
   }, []);
 
   const addSpecimen = useCallback(() => {
@@ -349,6 +405,7 @@ export default function SteelStructural() {
             {ar ? "المعادلات" : "Formulas"}
           </AlertTitle>
           <AlertDescription className="text-blue-800 text-sm space-y-1">
+            <div className="font-bold">{ar ? "المساحة (mm²) = العرض × السمك" : "Area (mm²) = W × T"}</div>
             <div>YS = (Yield × 1000) / Area</div>
             <div>TS = (Max × 1000) / Area</div>
             <div className="font-bold">Elongation % = (Measured by / Scale) × 100</div>
@@ -431,16 +488,16 @@ export default function SteelStructural() {
                     {ar ? "رقم العينة" : "Sp. No."}
                   </th>
                   <th className="border border-slate-300 px-2 py-2">
-                    {ar ? "القطاع" : "Section"}
+                    {ar ? "النوع" : "Type"}
                   </th>
                   <th className="border border-slate-300 px-2 py-2">
-                    {ar ? "العرض (وحدة)" : "W (units)"}
+                    {ar ? "العرض W (mm)" : "W (mm)"}
                   </th>
                   <th className="border border-slate-300 px-2 py-2">
-                    {ar ? "السمك (mm)" : "T (mm)"}
+                    {ar ? "السمك T (mm)" : "T (mm)"}
                   </th>
-                  <th className="border border-slate-300 px-2 py-2 bg-yellow-50">
-                    {ar ? "المساحة (mm²)" : "Area (mm²)"}
+                  <th className="border border-slate-300 px-2 py-2 bg-blue-50">
+                    {ar ? "المساحة (mm²)" : "Area (mm²)"} *
                   </th>
                   <th className="border border-slate-300 px-2 py-2 bg-blue-50">
                     {ar ? "المقياس (cm)" : "Scale (cm)"}
@@ -474,15 +531,33 @@ export default function SteelStructural() {
                     <td className="border border-slate-300 px-2 py-2 text-center font-bold">
                       {row.specimenNumber}
                     </td>
-                    <td className="border border-slate-300 px-1 py-1">
-                      <Input
-                        type="text"
-                        value={rows[idx]?.section ?? ""}
-                        onChange={(e) => updateRow(row.id, "section", e.target.value)}
-                        className="h-8 text-xs text-center bg-white border border-slate-300 w-20"
-                        placeholder="40×10"
+                    <td className="border border-slate-300 px-1 py-1 min-w-[140px]">
+                      <Select
+                        value={rows[idx]?.sectionType || "flat_bar"}
+                        onValueChange={(v) => updateRow(row.id, "sectionType", v)}
                         disabled={submitted}
-                      />
+                      >
+                        <SelectTrigger className="h-8 text-xs bg-white">
+                          <SelectValue placeholder={ar ? "اختر النوع" : "Select type"} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {SECTION_TYPES.map((t) => (
+                            <SelectItem key={t.value} value={t.value}>
+                              {ar ? t.labelAr : t.labelEn}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      {rows[idx]?.sectionType === "other" && (
+                        <Input
+                          type="text"
+                          value={rows[idx]?.section ?? ""}
+                          onChange={(e) => updateRow(row.id, "section", e.target.value)}
+                          className="h-7 text-xs mt-1 bg-white border border-slate-300"
+                          placeholder={ar ? "حدد القطاع" : "Specify section"}
+                          disabled={submitted}
+                        />
+                      )}
                     </td>
                     <td className="border border-slate-300 px-1 py-1">
                       <Input
@@ -506,16 +581,8 @@ export default function SteelStructural() {
                         disabled={submitted}
                       />
                     </td>
-                    <td className="border border-slate-300 px-1 py-1 bg-yellow-50/50">
-                      <Input
-                        type="number"
-                        step="0.1"
-                        value={rows[idx]?.area ?? ""}
-                        onChange={(e) => updateRow(row.id, "area", e.target.value)}
-                        className={`${LAB_NUMERIC_INPUT_SM} w-20`}
-                        placeholder="138.32"
-                        disabled={submitted}
-                      />
+                    <td className="border border-slate-300 px-2 py-2 text-center bg-blue-100 font-semibold">
+                      {row.area != null && row.area > 0 ? row.area.toFixed(2) : "—"}
                     </td>
                     <td className="border border-slate-300 px-1 py-1 bg-blue-50/50">
                       <Input
@@ -616,6 +683,11 @@ export default function SteelStructural() {
                 ))}
               </tbody>
             </table>
+            <p className="text-xs text-muted-foreground italic mt-2">
+              {ar
+                ? "* المساحة محسوبة تلقائياً: العرض (mm) × السمك (mm)"
+                : "* Area calculated automatically: W (mm) × T (mm)"}
+            </p>
           </CardContent>
         </Card>
 
