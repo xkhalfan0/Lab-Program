@@ -68,10 +68,11 @@ export function gradationXAxisProps(
   }
   return {
     ...base,
+    type: "category" as const,
     angle: -45,
     textAnchor: "end" as const,
-    height: 80,
     interval: 0,
+    tickMargin: 8,
     label: {
       value: ar ? "المناخل (mm)" : "SIEVES (mm)",
       position: "insideBottom" as const,
@@ -81,14 +82,14 @@ export function gradationXAxisProps(
   };
 }
 
-export function gradationYAxisProps(ar?: boolean) {
+export function gradationYAxisProps(_ar?: boolean) {
   return {
     domain: [0, 100] as [number, number],
     ticks: [0, 25, 50, 75, 100],
     tick: { fontSize: 11, fill: "#475569", fontWeight: 500 },
     axisLine: { stroke: "#cbd5e1", strokeWidth: 2 },
     tickLine: { stroke: "#cbd5e1" },
-    width: ar ? 52 : undefined,
+    width: 56,
     label: {
       value: ar === false ? "% Passing" : "% Passing",
       angle: -90,

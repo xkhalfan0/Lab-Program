@@ -136,24 +136,18 @@ export default function AsphaltHotBin() {
   const failedSieves = evaluatedSieves.filter((s) => !s.pass).length;
   const overallPass = evaluatedSieves.length > 0 && failedSieves === 0;
 
-  const chartData = useMemo(
-    () =>
-      [...HOT_BIN_SIEVE_SIZES].reverse().map((sieve) => {
-        const jmfLower = parseFloat(jmfLimits.lower[sieve.size] ?? "") || 0;
-        const jmfUpper = parseFloat(jmfLimits.upper[sieve.size] ?? "") || 0;
-        const specLower = specLimits?.[sieve.size]?.lower ?? 0;
-        const specUpper = specLimits?.[sieve.size]?.upper ?? 0;
-        return {
-          sieve: sieve.label,
-          combined: combinedGrading[sieve.size] || 0,
-          jmfLower,
-          jmfUpper,
-          specLower,
-          specUpper,
-        };
-      }),
-    [combinedGrading, jmfLimits, specLimits],
-  );
+  const chartData = useMemo(() => {
+    if (!specLimits) return [];
+    return [...HOT_BIN_SIEVE_SIZES].reverse().map((sieve) => ({
+      sieve: sieve.label,
+      combined: Number(combinedGrading[sieve.size]) || 0,
+      jmfLower: Number(parseFloat(jmfLimits.lower[sieve.size] ?? "") || 0),
+      jmfUpper: Number(parseFloat(jmfLimits.upper[sieve.size] ?? "") || 0),
+      specLower: Number(specLimits[sieve.size]?.lower ?? 0),
+      specUpper: Number(specLimits[sieve.size]?.upper ?? 0),
+    }));
+  }, [combinedGrading, jmfLimits, specLimits]);
+
 
   const saveMut = trpc.specializedTests.save.useMutation({
     onSuccess: (_, vars) => {

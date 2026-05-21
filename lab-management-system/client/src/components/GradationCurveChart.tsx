@@ -102,8 +102,11 @@ export function GradationCurveChart({
         {show && data.length > 0 ? (
           <>
         <GradationChartLegend items={legendItems} />
-        <div className="bg-white p-4 rounded-lg border border-slate-200 shadow-sm">
-          <ResponsiveContainer width="100%" height={height}>
+        <div
+          className="bg-white p-4 rounded-lg border border-slate-200 shadow-sm w-full"
+          style={{ height, minHeight: height }}
+        >
+          <ResponsiveContainer width="100%" height="100%" minHeight={height}>
             <LineChart data={data} margin={GRADATION_CHART_MARGIN}>
               <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" strokeWidth={1} />
               <XAxis {...gradationXAxisProps(ar, xDataKey, xOptions)} />
@@ -123,12 +126,13 @@ export function GradationCurveChart({
                     type="monotone"
                     dataKey={line.dataKey}
                     name={line.dataKey}
-                    connectNulls={line.connectNulls}
+                    connectNulls={line.connectNulls ?? true}
+                    isAnimationActive={false}
                     stroke={line.stroke ?? preset?.stroke ?? "#64748b"}
                     strokeWidth={line.strokeWidth ?? preset?.strokeWidth ?? 2}
                     strokeDasharray={line.strokeDasharray ?? preset?.strokeDasharray}
                     dot={line.dot ?? preset?.dot ?? false}
-                    activeDot={preset?.activeDot}
+                    activeDot={preset?.activeDot ?? { r: 6 }}
                   />
                 );
               })}
