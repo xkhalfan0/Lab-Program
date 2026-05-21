@@ -5,3 +5,5 @@ const BASE =
 export const LAB_NUMERIC_INPUT_SM = `h-7 text-xs ${BASE}`;
 export const LAB_NUMERIC_INPUT_MD = `h-8 text-sm ${BASE}`;
 export const LAB_NUMERIC_INPUT_LG = `h-9 ${BASE}`;
+/** Compact numeric fields inside dense lab tables (Hot Bin, etc.). */
+export const LAB_TABLE_NUMERIC = `h-6 w-full min-w-0 text-[11px] px-1 py-0 ${BASE}`;

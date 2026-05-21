@@ -26,7 +26,7 @@ import { Send, FlaskConical, Info, Printer, Plus, X, ArrowLeftRight } from "luci
 import { useLanguage } from "@/contexts/LanguageContext";
 import { GradationCurveChart } from "@/components/GradationCurveChart";
 import { hotBinGradationLegendItems } from "@/components/GradationChartLegend";
-import { LAB_NUMERIC_INPUT_LG, LAB_NUMERIC_INPUT_SM } from "@/lib/labInputStyles";
+import { LAB_TABLE_NUMERIC } from "@/lib/labInputStyles";
 
 interface TestParams {
   mixType: HotBinMixCourse | "";
@@ -406,6 +406,13 @@ export default function AsphaltHotBin() {
                     </SelectItem>
                   </SelectContent>
                 </Select>
+                {!params.mixType && (
+                  <p className="text-[11px] text-amber-700 mt-1">
+                    {ar
+                      ? "اختر نوع الخلطة لعرض حدود المواصفات ومنحنى التدرج"
+                      : "Select mix type to show specification limits and the gradation curve"}
+                  </p>
+                )}
               </div>
               <div>
                 <Label className="text-xs">
@@ -440,26 +447,24 @@ export default function AsphaltHotBin() {
           <CardContent>
             <div className="relative">
               <div className="overflow-x-auto shadow-inner rounded-lg border border-slate-200">
-                <table className="w-full text-xs border-collapse min-w-[1400px]">
+                <table className="w-full text-[11px] border-collapse min-w-[960px] table-fixed">
                   <thead className="bg-slate-50">
                     <tr>
                       <th
-                        className="border border-slate-300 px-3 py-2 font-semibold sticky left-0 bg-slate-100 z-10"
+                        className="border border-slate-300 px-1.5 py-1 font-semibold sticky left-0 bg-slate-100 z-10 w-12"
                         rowSpan={2}
-                        style={{ minWidth: "70px" }}
                       >
-                        {ar ? "المنخل (mm)" : "Sieve (mm)"}
+                        {ar ? "منخل" : "Sieve"}
                       </th>
                       {computedSamples.map((sample) => {
                         const sampleIdx = aggregateSamples.findIndex((s) => s.id === sample.id);
                         return (
                           <th
                             key={sample.id}
-                            className="border border-slate-300 px-2 py-2 bg-yellow-50"
+                            className="border border-slate-300 px-1 py-1 bg-yellow-50"
                             colSpan={2}
-                            style={{ minWidth: "140px" }}
                           >
-                            <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center justify-center gap-1">
                               <Input
                                 type="number"
                                 step="0.1"
@@ -467,7 +472,7 @@ export default function AsphaltHotBin() {
                                 onChange={(e) =>
                                   updateSamplePercentage(sampleIdx, e.target.value)
                                 }
-                                className={`${LAB_NUMERIC_INPUT_SM} w-16 font-bold`}
+                                className={`${LAB_TABLE_NUMERIC} max-w-[52px] font-bold`}
                                 placeholder="%"
                                 disabled={submitted}
                               />
@@ -486,59 +491,52 @@ export default function AsphaltHotBin() {
                         );
                       })}
                       <th
-                        className="border border-slate-300 px-3 py-2 bg-green-100 font-bold text-green-900"
+                        className="border border-slate-300 px-1 py-1 bg-green-100 font-bold text-green-900 w-14"
                         rowSpan={2}
-                        style={{ minWidth: "90px" }}
                       >
-                        <div className="flex flex-col items-center gap-1">
-                          <span className="text-xs">{ar ? "الدرجة" : "Combined"}</span>
-                          <span className="text-xs">{ar ? "المجمعة" : "Grading"}</span>
-                        </div>
+                        {ar ? "مجمّع" : "Comb."}
                       </th>
                       <th
-                        className="border border-slate-300 px-2 py-2 bg-blue-100"
+                        className="border border-slate-300 px-1 py-1 bg-blue-100 w-20"
                         colSpan={2}
-                        style={{ minWidth: "120px" }}
                       >
-                        {ar ? "حدود JMF" : "JMF Limit"}
+                        JMF
                       </th>
                       <th
-                        className="border border-slate-300 px-2 py-2 bg-purple-100"
+                        className="border border-slate-300 px-1 py-1 bg-purple-100 w-20"
                         colSpan={2}
-                        style={{ minWidth: "120px" }}
                       >
-                        {ar ? "حد المواصفات" : "Specification Limit"}
+                        {ar ? "مواصفات" : "Spec"}
                       </th>
                       <th
-                        className="border border-slate-300 px-2 py-2"
+                        className="border border-slate-300 px-1 py-1 w-14"
                         rowSpan={2}
-                        style={{ minWidth: "80px" }}
                       >
-                        {ar ? "الحالة" : "Status"}
+                        {ar ? "حالة" : "St."}
                       </th>
                     </tr>
                     <tr>
                       {computedSamples.map((sample) => (
                         <Fragment key={`sub-${sample.id}`}>
-                          <th className="border border-slate-300 px-2 py-1 text-xs bg-yellow-50 font-medium">
-                            {ar ? "التدرج الأصلي" : "Orig. Grad."}
+                          <th className="border border-slate-300 px-1 py-0.5 bg-yellow-50 font-medium">
+                            {ar ? "أصلي" : "Orig."}
                           </th>
-                          <th className="border border-slate-300 px-2 py-1 text-xs bg-yellow-100 font-medium">
-                            {ar ? "مطلوب" : "Required"}
+                          <th className="border border-slate-300 px-1 py-0.5 bg-yellow-100 font-medium">
+                            {ar ? "مطلوب" : "Req."}
                           </th>
                         </Fragment>
                       ))}
-                      <th className="border border-slate-300 px-2 py-1 text-xs bg-blue-100 font-medium">
-                        {ar ? "أدنى" : "Lower"}
+                      <th className="border border-slate-300 px-1 py-0.5 bg-blue-100 font-medium">
+                        {ar ? "أدنى" : "Lo"}
                       </th>
-                      <th className="border border-slate-300 px-2 py-1 text-xs bg-blue-100 font-medium">
-                        {ar ? "أعلى" : "Upper"}
+                      <th className="border border-slate-300 px-1 py-0.5 bg-blue-100 font-medium">
+                        {ar ? "أعلى" : "Hi"}
                       </th>
-                      <th className="border border-slate-300 px-2 py-1 text-xs bg-purple-100 font-medium">
-                        {ar ? "أدنى" : "Lower"}
+                      <th className="border border-slate-300 px-1 py-0.5 bg-purple-100 font-medium">
+                        {ar ? "أدنى" : "Lo"}
                       </th>
-                      <th className="border border-slate-300 px-2 py-1 text-xs bg-purple-100 font-medium">
-                        {ar ? "أعلى" : "Upper"}
+                      <th className="border border-slate-300 px-1 py-0.5 bg-purple-100 font-medium">
+                        {ar ? "أعلى" : "Hi"}
                       </th>
                     </tr>
                   </thead>
@@ -552,16 +550,13 @@ export default function AsphaltHotBin() {
                       const showStatus = params.mixType && hasGradationInput;
 
                       return (
-                        <tr key={sieve.size} className="hover:bg-slate-50">
-                          <td
-                            className="border border-slate-300 px-3 py-2 font-bold text-center sticky left-0 bg-white z-10"
-                            style={{ minWidth: "70px" }}
-                          >
+                        <tr key={sieve.size} className="hover:bg-slate-50/80">
+                          <td className="border border-slate-300 px-1 py-0.5 font-bold text-center sticky left-0 bg-white z-10">
                             {sieve.label}
                           </td>
                           {computedSamples.map((sample, idx) => (
                             <Fragment key={`data-${sample.id}-${sieve.size}`}>
-                              <td className="border border-slate-300 px-1 py-1">
+                              <td className="border border-slate-300 px-0.5 py-0.5">
                                 <Input
                                   type="number"
                                   step="0.1"
@@ -569,20 +564,20 @@ export default function AsphaltHotBin() {
                                     aggregateSamples[idx]?.originalGradations[sieve.size] ?? ""
                                   }
                                   onChange={(e) => updateOrigGrad(idx, sieve.size, e.target.value)}
-                                  className={`${LAB_NUMERIC_INPUT_SM} min-w-[52px]`}
+                                  className={LAB_TABLE_NUMERIC}
                                   placeholder="0"
                                   disabled={submitted}
                                 />
                               </td>
-                              <td className="border border-slate-300 px-2 py-2 text-center bg-yellow-100 font-semibold text-xs">
+                              <td className="border border-slate-300 px-1 py-0.5 text-center bg-yellow-100 font-semibold tabular-nums">
                                 {sample.requiredGradations[sieve.size] ?? 0}
                               </td>
                             </Fragment>
                           ))}
-                          <td className="border border-slate-300 px-3 py-2 text-center bg-green-100 font-bold text-sm text-green-900">
+                          <td className="border border-slate-300 px-1 py-0.5 text-center bg-green-100 font-bold text-green-900 tabular-nums">
                             {hasGradationInput ? combined : "—"}
                           </td>
-                          <td className="border border-slate-300 px-1 py-1">
+                          <td className="border border-slate-300 px-0.5 py-0.5">
                             <Input
                               type="number"
                               step="1"
@@ -593,12 +588,12 @@ export default function AsphaltHotBin() {
                                   lower: { ...prev.lower, [sieve.size]: e.target.value },
                                 }))
                               }
-                              className={`${LAB_NUMERIC_INPUT_SM} min-w-[44px]`}
-                              placeholder="0"
+                              className={LAB_TABLE_NUMERIC}
+                              placeholder="—"
                               disabled={submitted}
                             />
                           </td>
-                          <td className="border border-slate-300 px-1 py-1">
+                          <td className="border border-slate-300 px-0.5 py-0.5">
                             <Input
                               type="number"
                               step="1"
@@ -609,26 +604,26 @@ export default function AsphaltHotBin() {
                                   upper: { ...prev.upper, [sieve.size]: e.target.value },
                                 }))
                               }
-                              className={`${LAB_NUMERIC_INPUT_SM} min-w-[44px]`}
-                              placeholder="0"
+                              className={LAB_TABLE_NUMERIC}
+                              placeholder="—"
                               disabled={submitted}
                             />
                           </td>
-                          <td className="border border-slate-300 px-2 py-2 text-center bg-purple-50 text-xs font-medium">
+                          <td className="border border-slate-300 px-1 py-0.5 text-center bg-purple-50 font-medium tabular-nums">
                             {params.mixType ? specLower : "—"}
                           </td>
-                          <td className="border border-slate-300 px-2 py-2 text-center bg-purple-50 text-xs font-medium">
+                          <td className="border border-slate-300 px-1 py-0.5 text-center bg-purple-50 font-medium tabular-nums">
                             {params.mixType ? specUpper : "—"}
                           </td>
-                          <td className="border border-slate-300 px-2 py-2 text-center">
+                          <td className="border border-slate-300 px-0.5 py-0.5 text-center">
                             {!showStatus ? (
-                              "—"
+                              <span className="text-slate-400">—</span>
                             ) : (
                               <Badge
                                 variant={pass ? "default" : "destructive"}
-                                className={`text-xs font-bold ${pass ? "bg-green-500 hover:bg-green-600" : "bg-red-500 hover:bg-red-600"}`}
+                                className={`h-5 px-1.5 text-[10px] font-semibold ${pass ? "bg-green-600 hover:bg-green-600" : "bg-red-600 hover:bg-red-600"}`}
                               >
-                                {pass ? (ar ? "مطابق" : "Pass") : ar ? "غير مطابق" : "Fail"}
+                                {pass ? (ar ? "✓" : "P") : ar ? "✗" : "F"}
                               </Badge>
                             )}
                           </td>
@@ -646,9 +641,10 @@ export default function AsphaltHotBin() {
           </CardContent>
         </Card>
 
-        {params.mixType && hasGradationInput && chartData.length > 0 && (
+        {params.mixType && chartData.length > 0 && (
           <GradationCurveChart
             title={ar ? "منحنى التدرج" : "Gradation Curve"}
+            height={400}
             data={chartData}
             legendItems={hotBinGradationLegendItems(ar)}
             xDataKey="sieve"
@@ -668,9 +664,13 @@ export default function AsphaltHotBin() {
               { dataKey: "specLower", variant: "spec" },
             ]}
             footer={
-              ar
-                ? "الخط الأخضر يمثل التدرج الفعلي، ويجب أن يقع بين الحدود الزرقاء (JMF) والحمراء (المواصفات)"
-                : "Green line shows actual gradation; it must fall within blue (JMF) and red (Spec) limits."
+              hasGradationInput
+                ? ar
+                  ? "الخط الأخضر يمثل التدرج الفعلي، ويجب أن يقع بين الحدود الزرقاء (JMF) والحمراء (المواصفات)"
+                  : "Green line shows actual gradation; it must fall within blue (JMF) and red (Spec) limits."
+                : ar
+                  ? "أدخل نسب الركام والتدرج الأصلي لعرض خط التدرج المجمّع (الحدود الحمراء = المواصفات)"
+                  : "Enter aggregate % and original gradation to plot the combined line (red = specification limits)."
             }
           />
         )}

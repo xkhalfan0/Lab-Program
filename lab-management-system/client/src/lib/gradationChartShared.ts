@@ -82,7 +82,7 @@ export function gradationXAxisProps(
   };
 }
 
-export function gradationYAxisProps(_ar?: boolean) {
+export function gradationYAxisProps(ar?: boolean) {
   return {
     domain: [0, 100] as [number, number],
     ticks: [0, 25, 50, 75, 100],
@@ -91,7 +91,7 @@ export function gradationYAxisProps(_ar?: boolean) {
     tickLine: { stroke: "#cbd5e1" },
     width: 56,
     label: {
-      value: ar === false ? "% Passing" : "% Passing",
+      value: ar ? "% Passing" : "% Passing",
       angle: -90,
       position: "insideLeft" as const,
       offset: 0,
