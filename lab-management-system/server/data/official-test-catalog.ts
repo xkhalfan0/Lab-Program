@@ -80,7 +80,8 @@ export const OFFICIAL_TEST_CATALOG: OfficialTest[] = [
   { category: "concrete", nameEn: "Mix Aggregate Gradation", nameAr: "تدرج ركام الخلطة", code: "CONC_MIX_GRAD", unitPrice: "65", unit: "%", standardRef: "ASTM C33 / BS EN 12620", formTemplate: "concrete_mix_grad", sortOrder: 90 },
   // Bar size / bolt type / section: reception orders test only; technician picks subtype on test form
   { category: "steel", nameEn: "Tensile Strength of Reinforcement Steel", nameAr: "قوة شد حديد التسليح", code: "STEEL_REBAR", unitPrice: "300", unit: "N/mm²", standardRef: "BS 4449", formTemplate: "steel_rebar", sortOrder: 200 },
-  { category: "steel", nameEn: "Bend & Rebend Test", nameAr: "اختبار الانحناء وإعادة الانحناء", code: "STEEL_BEND_REBEND", unitPrice: "100", unit: "—", standardRef: "BS 4449", formTemplate: "steel_bend_rebend", sortOrder: 210 },
+  // STEEL_REBEND removed; bend-only test (rebend is not a separate orderable test)
+  { category: "steel", nameEn: "Bend Test", nameAr: "اختبار ثني قضبان حديد التسليح", code: "STEEL_BEND", unitPrice: "100", unit: "—", standardRef: "BS 4449", formTemplate: "steel_bend_rebend", sortOrder: 210 },
   { category: "steel", nameEn: "Tensile Strength of Anchor Bolts", nameAr: "قوة شد برغي تثبيت", code: "STEEL_ANCHOR", unitPrice: "300", unit: "kN", standardRef: "BS EN ISO 898-1", formTemplate: "steel_anchor_bolt", sortOrder: 220 },
   { category: "steel", nameEn: "Tensile Strength of Structural Steel", nameAr: "قوة شد حديد إنشائي", code: "STEEL_STRUCTURAL", unitPrice: "300", unit: "N/mm²", standardRef: "BS EN 10025", formTemplate: "steel_structural", sortOrder: 230 },
   { category: "soil", nameEn: "Sieve Analysis", nameAr: "تحليل المناخل", code: "SOIL_SIEVE", unitPrice: "100", unit: "%", standardRef: "BS 1377 / BS EN 933-1", formTemplate: "sieve_analysis", sortOrder: 100 },

@@ -53,15 +53,6 @@ const SUBTYPES_BY_CODE: Record<string, { value: string; labelAr: string; labelEn
     { value: "rebar_T25", labelAr: "T25 - قطر 25مم", labelEn: "T25 - 25mm" },
     { value: "rebar_T32", labelAr: "T32 - قطر 32مم", labelEn: "T32 - 32mm" },
   ],
-  STEEL_REBEND: [
-    { value: "rebar_T8", labelAr: "T8 - قطر 8مم", labelEn: "T8 - 8mm" },
-    { value: "rebar_T10", labelAr: "T10 - قطر 10مم", labelEn: "T10 - 10mm" },
-    { value: "rebar_T12", labelAr: "T12 - قطر 12مم", labelEn: "T12 - 12mm" },
-    { value: "rebar_T16", labelAr: "T16 - قطر 16مم", labelEn: "T16 - 16mm" },
-    { value: "rebar_T20", labelAr: "T20 - قطر 20مم", labelEn: "T20 - 20mm" },
-    { value: "rebar_T25", labelAr: "T25 - قطر 25مم", labelEn: "T25 - 25mm" },
-    { value: "rebar_T32", labelAr: "T32 - قطر 32مم", labelEn: "T32 - 32mm" },
-  ],
   AGG_SIEVE: [
     { value: "agg_32mm", labelAr: "ركام 32مم", labelEn: "32mm Aggregate" },
     { value: "agg_20mm", labelAr: "ركام 20مم", labelEn: "20mm Aggregate" },
@@ -133,7 +124,7 @@ interface SelectedTest {
 const MULTI_SUBTYPE_TESTS = [
   "CONC_BLOCK", "CONC_MORTAR_SAND",
   "SOIL_SIEVE",
-  "STEEL_BEND", "STEEL_REBEND",
+  "STEEL_BEND",
   "AGG_SIEVE",
 ];
 

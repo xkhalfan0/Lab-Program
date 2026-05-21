@@ -16,44 +16,29 @@ import { Plus, Trash2, Send, FlaskConical, Info, UserCheck , Printer } from "luc
 import { useAuth } from "@/_core/hooks/useAuth";
 
 import { useLanguage } from "@/contexts/LanguageContext";
-// ─── Bend / Rebend Test Specs (BS 4449) ──────────────────────────────────────
-// Bend Test: 180° bend around mandrel diameter = 4d (B500B/C)
-// Rebend Test: Straighten + rebend 90° after 1h at 100°C
-// Result is VISUAL inspection only — no cracks or fractures = PASS
+// ─── Bend Test Specs (BS 4449 / ASTM A615) — visual inspection only ───────────
 const BEND_STANDARDS = {
   "BS4449_B500B": {
     label: "BS 4449 Grade B500B",
     bendAngle: 180,
     mandrelDiameter: "4d",
-    rebendAngle: 90,
-    rebendCondition: "1h at 100°C then straighten + rebend",
     standard: "BS 4449",
-    code: "STEEL_BEND_BS4449",
   },
   "BS4449_B500C": {
     label: "BS 4449 Grade B500C",
     bendAngle: 180,
     mandrelDiameter: "4d",
-    rebendAngle: 90,
-    rebendCondition: "1h at 100°C then straighten + rebend",
     standard: "BS 4449",
-    code: "STEEL_BEND_BS4449",
   },
   "ASTM_A615_60": {
     label: "ASTM A615 Grade 60",
     bendAngle: 180,
     mandrelDiameter: "6d",
-    rebendAngle: 90,
-    rebendCondition: "N/A",
     standard: "ASTM A615",
-    code: "STEEL_BEND_ASTM",
   },
 };
 
 type BendStandardKey = keyof typeof BEND_STANDARDS;
-
-// Test type: Bend only, Rebend only, or Both
-type TestMode = "BEND_ONLY" | "REBEND_ONLY" | "BOTH";
 
 interface BendRow {
   id: string;
@@ -61,7 +46,6 @@ interface BendRow {
   barSize: string;
   heatNo: string;
   bendResult: "Pass" | "Fail" | "";
-  rebendResult: "Pass" | "Fail" | "";
   observations: string;
   overallResult?: "pass" | "fail" | "pending";
 }
@@ -73,31 +57,13 @@ function newRow(index: number): BendRow {
     barSize: "T12",
     heatNo: "",
     bendResult: "",
-    rebendResult: "",
     observations: "",
   };
 }
 
-function computeRow(row: BendRow, testMode: TestMode): BendRow {
-  const bendRes: "pass" | "fail" | "pending" =
+function computeRow(row: BendRow): BendRow {
+  const overall: "pass" | "fail" | "pending" =
     row.bendResult === "Pass" ? "pass" : row.bendResult === "Fail" ? "fail" : "pending";
-  const rebendRes: "pass" | "fail" | "pending" =
-    row.rebendResult === "Pass" ? "pass" : row.rebendResult === "Fail" ? "fail" : "pending";
-
-  let overall: "pass" | "fail" | "pending" = "pending";
-  if (testMode === "BEND_ONLY") {
-    overall = bendRes;
-  } else if (testMode === "REBEND_ONLY") {
-    overall = rebendRes;
-  } else {
-    // BOTH
-    if (bendRes === "pending" || rebendRes === "pending") {
-      overall = "pending";
-    } else {
-      overall = bendRes === "pass" && rebendRes === "pass" ? "pass" : "fail";
-    }
-  }
-
   return { ...row, overallResult: overall };
 }
 
@@ -114,7 +80,6 @@ export default function SteelBendRebend() {
   const { data: dist } = trpc.distributions.get.useQuery({ id: distId }, { enabled: !!distId });
 
   const [standard, setStandard] = useState<BendStandardKey>("BS4449_B500B");
-  const [testMode, setTestMode] = useState<TestMode>("BOTH");
   const [heatNo, setHeatNo] = useState("");
   const [supplier, setSupplier] = useState("");
   const [notes, setNotes] = useState("");
@@ -123,7 +88,7 @@ export default function SteelBendRebend() {
   const [submitted, setSubmitted] = useState(false);
 
   const spec = BEND_STANDARDS[standard];
-  const computedRows = rows.map(r => computeRow(r, testMode));
+  const computedRows = rows.map(computeRow);
   const validRows = computedRows.filter(r => r.overallResult !== "pending");
   const overallResult: "pass" | "fail" | "pending" =
     validRows.length === 0 ? "pending"
@@ -160,13 +125,12 @@ export default function SteelBendRebend() {
       await saveResult.mutateAsync({
         distributionId: distId,
         sampleId: dist.sampleId,
-        testTypeCode: spec.code,
+        testTypeCode: "STEEL_BEND",
         formTemplate: "steel_bend_rebend",
-        formData: { standard, spec, testMode, heatNo, supplier, specimens: computedRows, overallResult },
+        formData: { standard, spec, heatNo, supplier, specimens: computedRows, overallResult },
         overallResult,
         summaryValues: {
           standard: spec.label,
-          testMode,
           specimensTested: validRows.length,
           overallResult,
         },
@@ -204,15 +168,17 @@ export default function SteelBendRebend() {
           <div>
             <div className="flex items-center gap-2 text-sm text-slate-500 mb-1">
               <FlaskConical size={16} />
-              <span>Steel Tests / Bend & Rebend</span>
+              <span>{ar ? "اختبارات الحديد / الثني" : "Steel Tests / Bend"}</span>
             </div>
-            <h1 className="text-2xl font-bold text-slate-900">Bend & Rebend Test of Reinforcement Bars</h1>
+            <h1 className="text-2xl font-bold text-slate-900">
+              {ar ? "اختبار ثني قضبان حديد التسليح" : "Bend Test of Reinforcement Bars"}
+            </h1>
             <p className="text-slate-500 text-sm mt-1">
               {spec.standard} | Distribution: {dist?.distributionCode ?? `DIST-${distId}`}
             </p>
           </div>
           <div className="flex gap-2">
-                        {submitted ? (
+            {submitted ? (
               <>
                 <Button variant="outline" size="sm" onClick={() => setLocation("/technician")}>
                   {ar ? "العودة للوحة التحكم" : "Back to Dashboard"}
@@ -228,28 +194,24 @@ export default function SteelBendRebend() {
               </>
             ) : (
               <>
-                            {submitted ? (
-              <>
-                <Button variant="outline" size="sm" onClick={() => setLocation("/technician")}>
-                  {ar ? "العودة للوحة التحكم" : "Back to Dashboard"}
+                <Button variant="outline" size="sm" onClick={() => handleSave("draft")} disabled={saving}>
+                  {ar ? "حفظ مسودة" : "Save Draft"}
                 </Button>
                 <Button
+                  className="bg-blue-600 hover:bg-blue-700"
                   size="sm"
-                  className="bg-green-600 hover:bg-green-700 gap-1.5"
-                  onClick={() => window.open(`/test-report/${distId}`, "_blank")}
+                  onClick={() => handleSave("submitted")}
+                  disabled={saving}
                 >
-                  <Printer size={14} />
-                  {ar ? "طباعة التقرير / PDF" : "Print Report / PDF"}
+                  <Send size={14} className="mr-1.5" />
+                  {saving
+                    ? ar
+                      ? "جاري الإرسال..."
+                      : "Submitting..."
+                    : ar
+                      ? "إرسال النتائج"
+                      : "Submit Results"}
                 </Button>
-              </>
-            ) : (
-              <>
-                <Button variant="outline" size="sm" onClick={() => handleSave("draft")} disabled={saving}>{ar ? "حفظ مسودة" : "Save Draft"}</Button>
-            <Button className="bg-blue-600 hover:bg-blue-700" onClick={() => handleSave("submitted")} disabled={saving}>
-              <Send size={14} className="mr-1.5" />{saving ? (ar ? "جاري الإرسال..." : "Submitting...") : (ar ? "إرسال النتائج" : "Submit Results")}
-            </Button>
-              </>
-            )}
               </>
             )}
           </div>
@@ -282,17 +244,6 @@ export default function SteelBendRebend() {
                 </Select>
               </div>
               <div>
-                <Label className="text-xs text-slate-500 mb-1 block">Test Type</Label>
-                <Select value={testMode} onValueChange={v => setTestMode(v as TestMode)}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="BEND_ONLY">Bend Test Only</SelectItem>
-                    <SelectItem value="REBEND_ONLY">Rebend Test Only</SelectItem>
-                    <SelectItem value="BOTH">Bend + Rebend (Both)</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
                 <Label className="text-xs text-slate-500 mb-1 block">Heat / Cast No.</Label>
                 <Input value={heatNo} onChange={e => setHeatNo(e.target.value)} placeholder="Heat number" />
               </div>
@@ -309,10 +260,7 @@ export default function SteelBendRebend() {
               </div>
               <div className="flex items-end">
                 <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 text-xs text-slate-600 w-full space-y-0.5">
-                  <div><span className="font-semibold">Bend:</span> {spec.bendAngle}° around {spec.mandrelDiameter}</div>
-                  {spec.rebendCondition !== "N/A" && (
-                    <div><span className="font-semibold">Rebend:</span> {spec.rebendAngle}° ({spec.rebendCondition})</div>
-                  )}
+                  <div><span className="font-semibold">{ar ? "الثني:" : "Bend:"}</span> {spec.bendAngle}° {ar ? "حول" : "around"} {spec.mandrelDiameter}</div>
                 </div>
               </div>
             </div>
@@ -337,16 +285,9 @@ export default function SteelBendRebend() {
                   <th className="border border-slate-200 px-2 py-2 text-xs font-semibold text-slate-600">Spec. No.</th>
                   <th className="border border-slate-200 px-2 py-2 text-xs font-semibold text-slate-600">Bar Size</th>
                   <th className="border border-slate-200 px-2 py-2 text-xs font-semibold text-slate-600">Heat No.</th>
-                  {(testMode === "BEND_ONLY" || testMode === "BOTH") && (
-                    <th className="border border-slate-200 px-2 py-2 text-xs font-semibold text-slate-600">
-                      Bend ({spec.bendAngle}° / {spec.mandrelDiameter})
-                    </th>
-                  )}
-                  {(testMode === "REBEND_ONLY" || testMode === "BOTH") && (
-                    <th className="border border-slate-200 px-2 py-2 text-xs font-semibold text-slate-600">
-                      Rebend ({spec.rebendAngle}°)
-                    </th>
-                  )}
+                  <th className="border border-slate-200 px-2 py-2 text-xs font-semibold text-slate-600">
+                    {ar ? "الثني" : "Bend"} ({spec.bendAngle}° / {spec.mandrelDiameter})
+                  </th>
                   <th className="border border-slate-200 px-2 py-2 text-xs font-semibold text-slate-600">Observations</th>
                   <th className="border border-slate-200 px-2 py-2 text-xs font-semibold text-slate-600">Overall</th>
                   <th className="border border-slate-200 px-2 py-2"></th>
@@ -369,28 +310,15 @@ export default function SteelBendRebend() {
                     <td className="border border-slate-200 px-1 py-1">
                       <Input value={row.heatNo} onChange={e => updateRow(row.id, "heatNo", e.target.value)} className="h-7 text-xs w-20" placeholder="—" />
                     </td>
-                    {(testMode === "BEND_ONLY" || testMode === "BOTH") && (
-                      <td className="border border-slate-200 px-1 py-1">
-                        <Select value={row.bendResult} onValueChange={v => updateRow(row.id, "bendResult", v)}>
-                          <SelectTrigger className="h-7 text-xs w-20"><SelectValue placeholder="—" /></SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="Pass">Pass ✓</SelectItem>
-                            <SelectItem value="Fail">Fail ✗</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </td>
-                    )}
-                    {(testMode === "REBEND_ONLY" || testMode === "BOTH") && (
-                      <td className="border border-slate-200 px-1 py-1">
-                        <Select value={row.rebendResult} onValueChange={v => updateRow(row.id, "rebendResult", v)}>
-                          <SelectTrigger className="h-7 text-xs w-20"><SelectValue placeholder="—" /></SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="Pass">Pass ✓</SelectItem>
-                            <SelectItem value="Fail">Fail ✗</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </td>
-                    )}
+                    <td className="border border-slate-200 px-1 py-1">
+                      <Select value={row.bendResult} onValueChange={v => updateRow(row.id, "bendResult", v)}>
+                        <SelectTrigger className="h-7 text-xs w-20"><SelectValue placeholder="—" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="Pass">{ar ? "مطابق" : "Pass"} ✓</SelectItem>
+                          <SelectItem value="Fail">{ar ? "غير مطابق" : "Fail"} ✗</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </td>
                     <td className="border border-slate-200 px-1 py-1">
                       <Input value={row.observations} onChange={e => updateRow(row.id, "observations", e.target.value)} className="h-7 text-xs w-40" placeholder="e.g. No cracks" />
                     </td>
@@ -420,7 +348,7 @@ export default function SteelBendRebend() {
             <CardContent className="pt-4">
               <ResultBanner
                 result={overallResult}
-                testName={`Bend & Rebend Test — ${spec.label} (${testMode === "BEND_ONLY" ? "Bend" : testMode === "REBEND_ONLY" ? "Rebend" : "Bend + Rebend"})`}
+                testName={`${ar ? "اختبار الثني" : "Bend Test"} — ${spec.label}`}
                 standard={spec.standard}
               />
             </CardContent>

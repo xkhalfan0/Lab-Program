@@ -135,7 +135,8 @@ const CODE_TO_COMPONENT: Record<string, React.ComponentType> = {
   // Steel (5)
   "STEEL_REBAR":            SteelRebar,
   "STEEL_BEND":             SteelBendRebend,
-  "STEEL_REBEND":           SteelBendRebend,
+  "STEEL_BEND_REBEND":      SteelBendRebend, // legacy code → same bend form
+  "STEEL_REBEND":           SteelBendRebend, // legacy code → same bend form
   "STEEL_ANCHOR":           SteelAnchorBolt,
   "STEEL_STRUCTURAL":       SteelStructural,
   // Asphalt (6)
