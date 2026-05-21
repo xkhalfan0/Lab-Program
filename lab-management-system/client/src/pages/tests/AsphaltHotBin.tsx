@@ -659,133 +659,218 @@ export default function AsphaltHotBin() {
         </Card>
 
         {params.mixType && hasGradationInput && chartData.length > 0 && (
-          <Card className="mb-4">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-semibold">
+          <Card className="mb-6">
+            <CardHeader>
+              <CardTitle className="text-base font-semibold text-slate-800">
                 {ar ? "منحنى التدرج" : "Gradation Curve"}
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-2 md:grid-cols-5 gap-2 mb-4 p-3 bg-slate-50 rounded-lg border border-slate-200">
-                <div className="flex items-center gap-2">
-                  <div className="w-6 h-1 bg-green-500 rounded-sm shrink-0" />
-                  <span className="text-xs font-semibold text-green-700">
-                    {ar ? "الدرجة المجمعة" : "Combined Grading"}
-                  </span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-6 h-0 border-t-2 border-dashed border-blue-500 shrink-0" />
-                  <span className="text-xs font-medium text-blue-700">
-                    {ar ? "JMF أعلى" : "JMF Upper"}
-                  </span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-6 h-0 border-t-2 border-dashed border-blue-500 shrink-0" />
-                  <span className="text-xs font-medium text-blue-700">
-                    {ar ? "JMF أدنى" : "JMF Lower"}
-                  </span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-6 h-0 border-t-2 border-dotted border-red-500 shrink-0" />
-                  <span className="text-xs font-medium text-red-700">
-                    {ar ? "مواصفات أعلى" : "Spec Upper"}
-                  </span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-6 h-0 border-t-2 border-dotted border-red-500 shrink-0" />
-                  <span className="text-xs font-medium text-red-700">
-                    {ar ? "مواصفات أدنى" : "Spec Lower"}
-                  </span>
+              <div className="mb-6 p-4 bg-gradient-to-br from-slate-50 to-slate-100 rounded-lg border border-slate-200">
+                <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+                  <div className="flex items-center gap-3 p-2 bg-white rounded-md shadow-sm">
+                    <div className="flex items-center gap-2 shrink-0">
+                      <div className="w-8 h-1 bg-green-500 rounded-full" />
+                      <div className="w-2 h-2 bg-green-500 rounded-full border-2 border-white shadow" />
+                    </div>
+                    <div className="flex flex-col">
+                      <span className="text-xs font-bold text-green-700">
+                        {ar ? "الدرجة المجمعة" : "Combined"}
+                      </span>
+                      <span className="text-[10px] text-green-600">
+                        {ar ? "التدرج" : "Grading"}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-3 p-2 bg-white rounded-md shadow-sm">
+                    <div className="w-8 border-t-2 border-dashed border-blue-500 shrink-0" />
+                    <div className="flex flex-col">
+                      <span className="text-xs font-semibold text-blue-700">JMF</span>
+                      <span className="text-[10px] text-blue-600">
+                        {ar ? "الحد الأعلى" : "Upper Limit"}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-3 p-2 bg-white rounded-md shadow-sm">
+                    <div className="w-8 border-t-2 border-dashed border-blue-500 shrink-0" />
+                    <div className="flex flex-col">
+                      <span className="text-xs font-semibold text-blue-700">JMF</span>
+                      <span className="text-[10px] text-blue-600">
+                        {ar ? "الحد الأدنى" : "Lower Limit"}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-3 p-2 bg-white rounded-md shadow-sm">
+                    <div className="w-8 border-t-2 border-dotted border-red-500 shrink-0" />
+                    <div className="flex flex-col">
+                      <span className="text-xs font-semibold text-red-700">
+                        {ar ? "مواصفات" : "Spec"}
+                      </span>
+                      <span className="text-[10px] text-red-600">
+                        {ar ? "الحد الأعلى" : "Upper Limit"}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-3 p-2 bg-white rounded-md shadow-sm">
+                    <div className="w-8 border-t-2 border-dotted border-red-500 shrink-0" />
+                    <div className="flex flex-col">
+                      <span className="text-xs font-semibold text-red-700">
+                        {ar ? "مواصفات" : "Spec"}
+                      </span>
+                      <span className="text-[10px] text-red-600">
+                        {ar ? "الحد الأدنى" : "Lower Limit"}
+                      </span>
+                    </div>
+                  </div>
                 </div>
               </div>
 
-              <ResponsiveContainer width="100%" height={450}>
-                <LineChart
-                  data={chartData}
-                  margin={{ top: 20, right: 30, left: 20, bottom: 60 }}
-                >
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                  <XAxis
-                    dataKey="sieve"
-                    angle={-45}
-                    textAnchor="end"
-                    height={80}
-                    interval={0}
-                    tick={{ fontSize: 11, fill: "#475569" }}
-                    label={{
-                      value: ar ? "المناخل (mm)" : "SIEVES (mm)",
-                      position: "insideBottom",
-                      offset: -45,
-                      style: { fontSize: 12, fontWeight: 600, fill: "#1e293b" },
-                    }}
-                  />
-                  <YAxis
-                    domain={[0, 100]}
-                    tick={{ fontSize: 11, fill: "#475569" }}
-                    label={{
-                      value: "% Passing",
-                      angle: -90,
-                      position: "insideLeft",
-                      style: { fontSize: 12, fontWeight: 600, fill: "#1e293b" },
-                    }}
-                  />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: "white",
-                      border: "1px solid #cbd5e1",
-                      borderRadius: "6px",
-                      fontSize: "12px",
-                    }}
-                    formatter={(value: number) => `${Number(value).toFixed(1)}%`}
-                  />
-                  <Legend content={() => null} />
-                  <Line
-                    type="monotone"
-                    dataKey="combined"
-                    stroke="#22c55e"
-                    strokeWidth={3.5}
-                    name={ar ? "الدرجة المجمعة" : "Combined Grading"}
-                    dot={{ r: 5, fill: "#22c55e", strokeWidth: 2, stroke: "#fff" }}
-                    activeDot={{ r: 7 }}
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="jmfUpper"
-                    stroke="#3b82f6"
-                    strokeWidth={2}
-                    strokeDasharray="8 4"
-                    name={ar ? "JMF أعلى" : "JMF Upper"}
-                    dot={false}
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="jmfLower"
-                    stroke="#3b82f6"
-                    strokeWidth={2}
-                    strokeDasharray="8 4"
-                    name={ar ? "JMF أدنى" : "JMF Lower"}
-                    dot={false}
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="specUpper"
-                    stroke="#dc2626"
-                    strokeWidth={2}
-                    strokeDasharray="2 2"
-                    name={ar ? "مواصفات أعلى" : "Spec Upper"}
-                    dot={false}
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="specLower"
-                    stroke="#dc2626"
-                    strokeWidth={2}
-                    strokeDasharray="2 2"
-                    name={ar ? "مواصفات أدنى" : "Spec Lower"}
-                    dot={false}
-                  />
-                </LineChart>
-              </ResponsiveContainer>
+              <div className="bg-white p-4 rounded-lg border border-slate-200 shadow-sm">
+                <ResponsiveContainer width="100%" height={500}>
+                  <LineChart
+                    data={chartData}
+                    margin={{ top: 25, right: 40, left: 20, bottom: 80 }}
+                  >
+                    <CartesianGrid
+                      strokeDasharray="3 3"
+                      stroke="#e2e8f0"
+                      strokeWidth={1}
+                    />
+                    <XAxis
+                      dataKey="sieve"
+                      angle={-45}
+                      textAnchor="end"
+                      height={80}
+                      interval={0}
+                      tick={{ fontSize: 11, fill: "#475569", fontWeight: 500 }}
+                      axisLine={{ stroke: "#cbd5e1", strokeWidth: 2 }}
+                      tickLine={{ stroke: "#cbd5e1" }}
+                      label={{
+                        value: ar ? "المناخل (mm)" : "SIEVES (mm)",
+                        position: "insideBottom",
+                        offset: -50,
+                        style: {
+                          fontSize: 13,
+                          fontWeight: 700,
+                          fill: "#1e293b",
+                          letterSpacing: "0.5px",
+                        },
+                      }}
+                    />
+                    <YAxis
+                      domain={[0, 100]}
+                      ticks={[0, 25, 50, 75, 100]}
+                      tick={{ fontSize: 11, fill: "#475569", fontWeight: 500 }}
+                      axisLine={{ stroke: "#cbd5e1", strokeWidth: 2 }}
+                      tickLine={{ stroke: "#cbd5e1" }}
+                      label={{
+                        value: "% Passing",
+                        angle: -90,
+                        position: "insideLeft",
+                        offset: 0,
+                        style: {
+                          fontSize: 13,
+                          fontWeight: 700,
+                          fill: "#1e293b",
+                          letterSpacing: "0.5px",
+                        },
+                      }}
+                    />
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: "rgba(255, 255, 255, 0.98)",
+                        border: "2px solid #cbd5e1",
+                        borderRadius: "8px",
+                        padding: "8px 12px",
+                        boxShadow:
+                          "0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)",
+                        fontSize: "12px",
+                      }}
+                      labelStyle={{
+                        fontWeight: 700,
+                        color: "#1e293b",
+                        marginBottom: "4px",
+                      }}
+                      formatter={(value: number, name: string) => {
+                        const labels: Record<string, string> = {
+                          combined: ar ? "الدرجة المجمعة" : "Combined",
+                          jmfUpper: ar ? "JMF أعلى" : "JMF Upper",
+                          jmfLower: ar ? "JMF أدنى" : "JMF Lower",
+                          specUpper: ar ? "مواصفات أعلى" : "Spec Upper",
+                          specLower: ar ? "مواصفات أدنى" : "Spec Lower",
+                        };
+                        return [`${Number(value).toFixed(1)}%`, labels[name] ?? name];
+                      }}
+                    />
+                    <Legend content={() => null} />
+                    <Line
+                      type="monotone"
+                      dataKey="combined"
+                      stroke="#22c55e"
+                      strokeWidth={4}
+                      name="combined"
+                      dot={{
+                        r: 6,
+                        fill: "#22c55e",
+                        strokeWidth: 3,
+                        stroke: "#fff",
+                      }}
+                      activeDot={{
+                        r: 8,
+                        stroke: "#22c55e",
+                        strokeWidth: 3,
+                        fill: "#fff",
+                      }}
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="jmfUpper"
+                      stroke="#3b82f6"
+                      strokeWidth={2.5}
+                      strokeDasharray="8 4"
+                      name="jmfUpper"
+                      dot={false}
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="jmfLower"
+                      stroke="#3b82f6"
+                      strokeWidth={2.5}
+                      strokeDasharray="8 4"
+                      name="jmfLower"
+                      dot={false}
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="specUpper"
+                      stroke="#dc2626"
+                      strokeWidth={2.5}
+                      strokeDasharray="2 3"
+                      name="specUpper"
+                      dot={false}
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="specLower"
+                      stroke="#dc2626"
+                      strokeWidth={2.5}
+                      strokeDasharray="2 3"
+                      name="specLower"
+                      dot={false}
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+
+              <div className="mt-4 text-xs text-center text-muted-foreground">
+                {ar
+                  ? "الخط الأخضر يمثل التدرج الفعلي، ويجب أن يقع بين الحدود الزرقاء (JMF) والحمراء (المواصفات)"
+                  : "Green line shows actual gradation; it must fall within blue (JMF) and red (Spec) limits."}
+              </div>
             </CardContent>
           </Card>
         )}
