@@ -22,8 +22,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { Send, FlaskConical, Info, Printer } from "lucide-react";
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine } from "recharts";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { GradationCurveChart } from "@/components/GradationCurveChart";
+import { concreteMixGradationLegendItems } from "@/components/GradationChartLegend";
 
 // ─── ASTM C33 Grading Limits for Combined Aggregate ─────────────────────────
 // Nominal max size 20mm (3/4") — typical for structural concrete
@@ -137,9 +138,9 @@ export default function ConcreteMixGrad() {
     .filter(r => r.percentPassing !== undefined)
     .map(r => ({
       sieve: r.sieve,
-      "% Passing": r.percentPassing,
-      "Upper Limit": ASTM_C33_LIMITS[r.sieve]?.upper,
-      "Lower Limit": ASTM_C33_LIMITS[r.sieve]?.lower,
+      percentPassing: r.percentPassing,
+      specUpper: ASTM_C33_LIMITS[r.sieve]?.upper,
+      specLower: ASTM_C33_LIMITS[r.sieve]?.lower,
     }));
 
   const handleSave = async (status: "draft" | "submitted") => {
@@ -290,23 +291,23 @@ export default function ConcreteMixGrad() {
 
         {/* Gradation Chart */}
         {chartData.length > 0 && (
-          <Card>
-            <CardHeader><CardTitle className="text-base">{ar ? "منحنى التدرج الحبيبي" : "Gradation Curve"}</CardTitle></CardHeader>
-            <CardContent>
-              <ResponsiveContainer width="100%" height={320}>
-                <LineChart data={chartData} margin={{ top: 10, right: 20, left: 0, bottom: 20 }}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="sieve" label={{ value: ar ? "حجم المنخل (mm)" : "Sieve Size (mm)", position: "insideBottom", offset: -10 }} />
-                  <YAxis domain={[0, 100]} label={{ value: ar ? "% العابر" : "% Passing", angle: -90, position: "insideLeft" }} />
-                  <Tooltip />
-                  <Legend verticalAlign="top" />
-                  <Line type="monotone" dataKey="% Passing" stroke="#2563eb" strokeWidth={2.5} dot={{ r: 4 }} />
-                  <Line type="monotone" dataKey="Upper Limit" stroke="#dc2626" strokeWidth={1.5} strokeDasharray="6 3" dot={false} />
-                  <Line type="monotone" dataKey="Lower Limit" stroke="#16a34a" strokeWidth={1.5} strokeDasharray="6 3" dot={false} />
-                </LineChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
+          <GradationCurveChart
+            title={ar ? "منحنى التدرج الحبيبي" : "Gradation Curve"}
+            data={chartData}
+            legendItems={concreteMixGradationLegendItems(ar)}
+            xDataKey="sieve"
+            ar={ar}
+            tooltipLabels={{
+              percentPassing: ar ? "نسبة المرور" : "% Passing",
+              specUpper: ar ? "الحد الأعلى" : "Spec Upper",
+              specLower: ar ? "الحد الأدنى" : "Spec Lower",
+            }}
+            lines={[
+              { dataKey: "percentPassing", variant: "primary" },
+              { dataKey: "specUpper", variant: "spec" },
+              { dataKey: "specLower", variant: "spec" },
+            ]}
+          />
         )}
 
         {/* Overall Result */}

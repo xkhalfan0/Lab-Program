@@ -23,17 +23,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { Send, FlaskConical, Info, Printer, AlertCircle, Loader2 } from "lucide-react";
-import {
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-  ResponsiveContainer,
-} from "recharts";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { GradationCurveChart } from "@/components/GradationCurveChart";
+import { extractedSieveLegendItems } from "@/components/GradationChartLegend";
+import { LAB_NUMERIC_INPUT_SM } from "@/lib/labInputStyles";
 
 interface SieveInputs {
   sieveSize: string;
@@ -573,7 +566,7 @@ export default function AsphaltExtractedSieve() {
                             step="0.1"
                             value={inputRow?.massRetained ?? ""}
                             onChange={(e) => updateMass(inputIdx, e.target.value)}
-                            className="h-7 text-xs min-w-[72px]"
+                            className={`${LAB_NUMERIC_INPUT_SM} min-w-[72px]`}
                             disabled={submitted}
                           />
                         </td>
@@ -649,64 +642,23 @@ export default function AsphaltExtractedSieve() {
         </Card>
 
         {showChart && (
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">
-                {ar ? "منحنى التدرج الحبيبي" : "Gradation Curve"}
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <ResponsiveContainer width="100%" height={300}>
-                <LineChart data={chartData} margin={{ top: 10, right: 20, left: 10, bottom: 60 }}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis
-                    dataKey="sieveSize"
-                    angle={-45}
-                    textAnchor="end"
-                    height={80}
-                    interval={0}
-                    tick={{ fontSize: 10 }}
-                  />
-                  <YAxis
-                    domain={[0, 100]}
-                    label={{
-                      value: ar ? "% المار" : "% Passing",
-                      angle: -90,
-                      position: "insideLeft",
-                    }}
-                  />
-                  <Tooltip />
-                  <Legend />
-                  <Line
-                    type="monotone"
-                    dataKey="percentPassing"
-                    stroke="#f97316"
-                    strokeWidth={2}
-                    name={ar ? "% المار" : "% Passing"}
-                    dot={{ r: 4 }}
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="specUpper"
-                    stroke="#10b981"
-                    strokeWidth={1}
-                    strokeDasharray="5 5"
-                    name={ar ? "الحد الأعلى" : "Spec Upper"}
-                    dot={false}
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="specLower"
-                    stroke="#10b981"
-                    strokeWidth={1}
-                    strokeDasharray="5 5"
-                    name={ar ? "الحد الأدنى" : "Spec Lower"}
-                    dot={false}
-                  />
-                </LineChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
+          <GradationCurveChart
+            title={ar ? "منحنى التدرج الحبيبي" : "Gradation Curve"}
+            data={chartData}
+            legendItems={extractedSieveLegendItems(ar)}
+            xDataKey="sieveSize"
+            ar={ar}
+            tooltipLabels={{
+              percentPassing: ar ? "نسبة المرور" : "% Passing",
+              specUpper: ar ? "حد المواصفات الأعلى" : "Spec Upper",
+              specLower: ar ? "حد المواصفات الأدنى" : "Spec Lower",
+            }}
+            lines={[
+              { dataKey: "percentPassing", variant: "primary" },
+              { dataKey: "specUpper", variant: "spec" },
+              { dataKey: "specLower", variant: "spec" },
+            ]}
+          />
         )}
 
         {evaluatedSieves.length > 0 && (

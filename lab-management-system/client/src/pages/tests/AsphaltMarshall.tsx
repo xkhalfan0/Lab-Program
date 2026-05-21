@@ -14,6 +14,7 @@ import { toast } from "sonner";
 import { Send, FlaskConical, UserCheck, Printer, AlertCircle, Info, Loader2 } from "lucide-react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { LAB_NUMERIC_INPUT_SM } from "@/lib/labInputStyles";
 
 interface SpecimenInput {
   id: string;
@@ -464,7 +465,7 @@ export default function AsphaltMarshall() {
                             step="0.01"
                             value={spec.readingKN}
                             onChange={(e) => updateSpecimen(idx, "readingKN", e.target.value)}
-                            className="h-7 text-xs"
+                            className={LAB_NUMERIC_INPUT_SM}
                             placeholder="10.5"
                             disabled={submitted}
                           />
@@ -487,7 +488,7 @@ export default function AsphaltMarshall() {
                             step="0.1"
                             value={spec.flowMm}
                             onChange={(e) => updateSpecimen(idx, "flowMm", e.target.value)}
-                            className="h-7 text-xs"
+                            className={LAB_NUMERIC_INPUT_SM}
                             placeholder="3.5"
                             disabled={submitted}
                           />

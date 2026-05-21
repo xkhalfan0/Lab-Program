@@ -320,6 +320,23 @@
 .status-revision_requested { background-color: #fef3c7; color: #78350f; }
 .status-deleted { background-color: #f1f5f9; color: #475569; border-color: #cbd5e1; text-decoration: line-through; }
 
+/* Lab forms: hide number input spinners */
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+/* User-entered numeric fields (calculated cells keep their own backgrounds) */
+.lab-numeric-input {
+  background-color: #fff;
+}
+
 /* ─── Print Styles ──────────────────────────────────────────────────────────── */
 @media print {
   /* Hide sidebar, top bar, nav, buttons, language toggle */

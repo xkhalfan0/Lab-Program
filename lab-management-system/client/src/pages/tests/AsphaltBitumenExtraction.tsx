@@ -16,6 +16,7 @@ import { toast } from "sonner";
 import { Send, FlaskConical, Info, UserCheck, Printer } from "lucide-react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { LAB_NUMERIC_INPUT_SM } from "@/lib/labInputStyles";
 
 // Bitumen Extraction — Ignition Furnace (ASTM D6307)
 
@@ -462,7 +463,7 @@ export default function AsphaltBitumenExtraction() {
                         step="0.1"
                         value={sample.massBeforeIgnition}
                         onChange={(e) => setSample({ ...sample, massBeforeIgnition: e.target.value })}
-                        className="h-7 text-xs"
+                        className={LAB_NUMERIC_INPUT_SM}
                         placeholder="3050"
                         disabled={submitted}
                       />
@@ -473,7 +474,7 @@ export default function AsphaltBitumenExtraction() {
                         step="0.1"
                         value={sample.lossOfIgnition}
                         onChange={(e) => setSample({ ...sample, lossOfIgnition: e.target.value })}
-                        className="h-7 text-xs"
+                        className={LAB_NUMERIC_INPUT_SM}
                         placeholder="166.5"
                         disabled={submitted}
                       />
@@ -492,7 +493,7 @@ export default function AsphaltBitumenExtraction() {
                         step="0.01"
                         value={sample.tempComp}
                         onChange={(e) => setSample({ ...sample, tempComp: e.target.value })}
-                        className="h-7 text-xs"
+                        className={LAB_NUMERIC_INPUT_SM}
                         placeholder="0.00"
                         disabled={submitted}
                       />
@@ -503,7 +504,7 @@ export default function AsphaltBitumenExtraction() {
                         step="0.01"
                         value={sample.ignitionFactor}
                         onChange={(e) => setSample({ ...sample, ignitionFactor: e.target.value })}
-                        className="h-7 text-xs"
+                        className={LAB_NUMERIC_INPUT_SM}
                         placeholder="0.00"
                         disabled={submitted}
                       />

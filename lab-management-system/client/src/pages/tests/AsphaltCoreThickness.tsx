@@ -27,6 +27,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { toast } from "sonner";
 import { Send, FlaskConical, Info, Printer, Plus, Trash2 } from "lucide-react";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { LAB_NUMERIC_INPUT_SM } from "@/lib/labInputStyles";
 
 interface TestParams {
   layerType: CoreLayerType | "";
@@ -475,29 +476,29 @@ export default function AsphaltCoreThickness() {
                             </SelectContent>
                           </Select>
                         </td>
-                        <td className="border border-slate-300 px-2 py-2 bg-yellow-50">
+                        <td className="border border-slate-300 px-2 py-2">
                           <Input
                             type="number"
                             step="0.1"
                             value={cores[coreIdx]?.massInAir ?? ""}
                             onChange={(e) => updateCore(coreIdx, { massInAir: e.target.value })}
-                            className="h-7 text-xs"
+                            className={LAB_NUMERIC_INPUT_SM}
                             placeholder="1688.4"
                             disabled={submitted}
                           />
                         </td>
-                        <td className="border border-slate-300 px-2 py-2 bg-yellow-50">
+                        <td className="border border-slate-300 px-2 py-2">
                           <Input
                             type="number"
                             step="0.1"
                             value={cores[coreIdx]?.massAtSSD ?? ""}
                             onChange={(e) => updateCore(coreIdx, { massAtSSD: e.target.value })}
-                            className="h-7 text-xs"
+                            className={LAB_NUMERIC_INPUT_SM}
                             placeholder="1690"
                             disabled={submitted}
                           />
                         </td>
-                        <td className="border border-slate-300 px-2 py-2 bg-yellow-50">
+                        <td className="border border-slate-300 px-2 py-2">
                           <Input
                             type="number"
                             step="0.1"
@@ -505,7 +506,7 @@ export default function AsphaltCoreThickness() {
                             onChange={(e) =>
                               updateCore(coreIdx, { massInWater: e.target.value })
                             }
-                            className="h-7 text-xs"
+                            className={LAB_NUMERIC_INPUT_SM}
                             placeholder="1038.4"
                             disabled={submitted}
                           />
@@ -524,7 +525,7 @@ export default function AsphaltCoreThickness() {
                             onChange={(e) =>
                               updateCore(coreIdx, { refMarshallBulkSG: e.target.value })
                             }
-                            className="h-7 text-xs min-w-[72px]"
+                            className={`${LAB_NUMERIC_INPUT_SM} min-w-[72px]`}
                             placeholder="2.551"
                             disabled={submitted}
                           />

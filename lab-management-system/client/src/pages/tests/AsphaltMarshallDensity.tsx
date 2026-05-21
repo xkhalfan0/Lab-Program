@@ -14,6 +14,7 @@ import { Plus, Trash2, Send, FlaskConical, UserCheck, Printer } from "lucide-rea
 import { useAuth } from "@/_core/hooks/useAuth";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { extractBitumenContentFromExtractionResult } from "@/lib/asphaltBitumen";
+import { LAB_NUMERIC_INPUT_MD, LAB_NUMERIC_INPUT_SM } from "@/lib/labInputStyles";
 
 // Bulk Specific Gravity of Compacted HMA — ASTM D 2726
 
@@ -433,7 +434,7 @@ export default function AsphaltMarshallDensity() {
                   step="0.001"
                   value={parameters.gsb}
                   onChange={(e) => setParameters({ ...parameters, gsb: e.target.value })}
-                  className="h-8 text-sm mt-1"
+                  className={`${LAB_NUMERIC_INPUT_MD} mt-1`}
                   placeholder="2.650"
                   disabled={submitted}
                 />
@@ -448,7 +449,7 @@ export default function AsphaltMarshallDensity() {
                   step="0.001"
                   value={parameters.gse}
                   onChange={(e) => setParameters({ ...parameters, gse: e.target.value })}
-                  className="h-8 text-sm mt-1"
+                  className={`${LAB_NUMERIC_INPUT_MD} mt-1`}
                   placeholder="2.700"
                   disabled={submitted}
                 />
@@ -463,7 +464,7 @@ export default function AsphaltMarshallDensity() {
                   step="0.001"
                   value={parameters.gb}
                   onChange={(e) => setParameters({ ...parameters, gb: e.target.value })}
-                  className="h-8 text-sm mt-1"
+                  className={`${LAB_NUMERIC_INPUT_MD} mt-1`}
                   placeholder="1.030"
                   disabled={submitted}
                 />
@@ -539,7 +540,7 @@ export default function AsphaltMarshallDensity() {
                             step="0.1"
                             value={spec.massAir}
                             onChange={(e) => updateSpecimen(idx, "massAir", e.target.value)}
-                            className="h-7 text-xs"
+                            className={LAB_NUMERIC_INPUT_SM}
                             disabled={submitted}
                           />
                         </td>
@@ -549,7 +550,7 @@ export default function AsphaltMarshallDensity() {
                             step="0.1"
                             value={spec.massWater}
                             onChange={(e) => updateSpecimen(idx, "massWater", e.target.value)}
-                            className="h-7 text-xs"
+                            className={LAB_NUMERIC_INPUT_SM}
                             disabled={submitted}
                           />
                         </td>
@@ -559,7 +560,7 @@ export default function AsphaltMarshallDensity() {
                             step="0.1"
                             value={spec.ssdMass}
                             onChange={(e) => updateSpecimen(idx, "ssdMass", e.target.value)}
-                            className="h-7 text-xs"
+                            className={LAB_NUMERIC_INPUT_SM}
                             disabled={submitted}
                           />
                         </td>

@@ -14,17 +14,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { toast } from "sonner";
 import { Send, FlaskConical, Info, UserCheck, Printer } from "lucide-react";
 import { useAuth } from "@/_core/hooks/useAuth";
-import {
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-  ResponsiveContainer,
-} from "recharts";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { GradationCurveChart } from "@/components/GradationCurveChart";
+import { sandBlendGradationLegendItems } from "@/components/GradationChartLegend";
+import { LAB_NUMERIC_INPUT_MD, LAB_NUMERIC_INPUT_SM } from "@/lib/labInputStyles";
 
 // ─── Sand blend — sieve stacks (limits % passing) ───────────────────────────
 
@@ -532,7 +525,7 @@ export default function SieveAnalysis() {
                     value={whiteUsedPct ?? ""}
                     onChange={e => setUsedPct("white", e.target.value)}
                     placeholder="e.g. 60"
-                    className="mt-2 font-mono"
+                    className={`mt-2 font-mono ${LAB_NUMERIC_INPUT_MD}`}
                     disabled={submitted}
                   />
                 </div>
@@ -548,7 +541,7 @@ export default function SieveAnalysis() {
                     value={blackUsedPct ?? ""}
                     onChange={e => setUsedPct("black", e.target.value)}
                     placeholder="e.g. 40"
-                    className="mt-2 font-mono"
+                    className={`mt-2 font-mono ${LAB_NUMERIC_INPUT_MD}`}
                     disabled={submitted}
                   />
                 </div>
@@ -640,7 +633,7 @@ export default function SieveAnalysis() {
                         </td>
                         <td className="border border-slate-300 px-2 py-2 text-center bg-slate-50 font-mono">{row.lowerLimit}</td>
                         <td className="border border-slate-300 px-2 py-2 text-center bg-slate-50 font-mono">{row.upperLimit}</td>
-                        <td className="border border-slate-300 px-1 py-1 bg-green-50">
+                        <td className="border border-slate-300 px-1 py-1">
                           <Input
                             type="number"
                             min={0}
@@ -648,14 +641,14 @@ export default function SieveAnalysis() {
                             step={0.1}
                             value={row.whitePassPct ?? ""}
                             onChange={e => updateRow(idx, "whitePassPct", e.target.value)}
-                            className="h-8 w-20 text-center font-mono mx-auto text-sm"
+                            className={`${LAB_NUMERIC_INPUT_MD} w-20 font-mono mx-auto`}
                             disabled={submitted}
                           />
                         </td>
                         <td className="border border-slate-300 px-2 py-2 text-center bg-blue-50 font-mono font-medium">
                           {whiteUsedPct ?? "—"}
                         </td>
-                        <td className="border border-slate-300 px-1 py-1 bg-green-50">
+                        <td className="border border-slate-300 px-1 py-1">
                           <Input
                             type="number"
                             min={0}
@@ -663,7 +656,7 @@ export default function SieveAnalysis() {
                             step={0.1}
                             value={row.blackPassPct ?? ""}
                             onChange={e => updateRow(idx, "blackPassPct", e.target.value)}
-                            className="h-8 w-20 text-center font-mono mx-auto text-sm"
+                            className={`${LAB_NUMERIC_INPUT_MD} w-20 font-mono mx-auto`}
                             disabled={submitted}
                           />
                         </td>
@@ -699,99 +692,68 @@ export default function SieveAnalysis() {
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base">
-              {ar ? "منحنى التدرج" : "Grading Curve / منحنى التدرج"}
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {blendAnyData ? (
-              <ResponsiveContainer width="100%" height={400}>
-                <LineChart data={chartData} margin={{ top: 8, right: 24, left: 16, bottom: 36 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                  <XAxis
-                    type="number"
-                    dataKey="sieveLog"
-                    scale="log"
-                    domain={[0.05, 10]}
-                    tick={{ fontSize: 11 }}
-                    tickFormatter={v => formatDisplaySieveMm(Number(v))}
-                    label={{
-                      value: ar ? "مقاس المنخل (مم)" : "Sieve Size (mm) / مقاس المنخل",
-                      position: "insideBottom",
-                      offset: -22,
-                      fontSize: 11,
-                    }}
-                  />
-                  <YAxis
-                    domain={[0, 100]}
-                    tick={{ fontSize: 11 }}
-                    width={52}
-                    label={{
-                      value: ar ? "النسبة المارة %" : "% Passing / النسبة المارة",
-                      angle: -90,
-                      position: "insideLeft",
-                      style: { fontSize: 11 },
-                    }}
-                  />
-                  <Tooltip formatter={(v: number) => (v != null && Number.isFinite(v) ? `${Number(v).toFixed(1)}%` : "—")} />
-                  <Legend wrapperStyle={{ fontSize: 11 }} />
-                  <Line
-                    type="monotone"
-                    dataKey={chartKeys.kLo}
-                    stroke="#888888"
-                    strokeDasharray="5 5"
-                    dot={false}
-                    strokeWidth={2}
-                    name={chartKeys.kLo}
-                    connectNulls
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey={chartKeys.kUp}
-                    stroke="#888888"
-                    strokeDasharray="5 5"
-                    dot={false}
-                    strokeWidth={2}
-                    name={chartKeys.kUp}
-                    connectNulls
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey={chartKeys.kWhite}
-                    stroke="#3b82f6"
-                    strokeWidth={2}
-                    dot={{ r: 4 }}
-                    name={chartKeys.kWhite}
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey={chartKeys.kBlack}
-                    stroke="#374151"
-                    strokeWidth={2}
-                    dot={{ r: 4 }}
-                    name={chartKeys.kBlack}
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey={chartKeys.kBlend}
-                    stroke="#ef4444"
-                    strokeWidth={3}
-                    dot={{ r: 5, fill: "#ef4444" }}
-                    name={chartKeys.kBlend}
-                    connectNulls
-                  />
-                </LineChart>
-              </ResponsiveContainer>
-            ) : (
-              <div className="h-64 flex items-center justify-center text-slate-400 text-sm">
-                <FlaskConical size={32} className="opacity-30" />
-                <span className="ms-2">{ar ? "أدخل البيانات لعرض المنحنى" : "Enter data to plot the curve"}</span>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+        <GradationCurveChart
+          title={ar ? "منحنى التدرج" : "Grading Curve / منحنى التدرج"}
+          data={chartData}
+          show={blendAnyData}
+          legendItems={sandBlendGradationLegendItems(ar, {
+            blend: chartKeys.kBlend,
+            white: chartKeys.kWhite,
+            black: chartKeys.kBlack,
+            upper: chartKeys.kUp,
+            lower: chartKeys.kLo,
+          })}
+          xDataKey="sieveLog"
+          xAxisOptions={{ logScale: true }}
+          xTickFormatter={(v) => formatDisplaySieveMm(Number(v))}
+          ar={ar}
+          tooltipLabels={{
+            [chartKeys.kBlend]: chartKeys.kBlend,
+            [chartKeys.kWhite]: chartKeys.kWhite,
+            [chartKeys.kBlack]: chartKeys.kBlack,
+            [chartKeys.kUp]: chartKeys.kUp,
+            [chartKeys.kLo]: chartKeys.kLo,
+          }}
+          lines={[
+            { dataKey: chartKeys.kBlend, variant: "primary", connectNulls: true },
+            {
+              dataKey: chartKeys.kWhite,
+              variant: "custom",
+              stroke: "#3b82f6",
+              strokeWidth: 2,
+              dot: { r: 4, fill: "#3b82f6" },
+            },
+            {
+              dataKey: chartKeys.kBlack,
+              variant: "custom",
+              stroke: "#374151",
+              strokeWidth: 2,
+              dot: { r: 4, fill: "#374151" },
+            },
+            {
+              dataKey: chartKeys.kUp,
+              variant: "custom",
+              stroke: "#888888",
+              strokeWidth: 2,
+              strokeDasharray: "5 5",
+              connectNulls: true,
+            },
+            {
+              dataKey: chartKeys.kLo,
+              variant: "custom",
+              stroke: "#888888",
+              strokeWidth: 2,
+              strokeDasharray: "5 5",
+              connectNulls: true,
+            },
+          ]}
+          emptyContent={
+            <div className="h-64 flex items-center justify-center text-slate-400 text-sm">
+              <FlaskConical size={32} className="opacity-30" />
+              <span className="ms-2">{ar ? "أدخل البيانات لعرض المنحنى" : "Enter data to plot the curve"}</span>
+            </div>
+          }
+        />
 
         <Card className="bg-slate-50 border-slate-200">
           <CardContent className="pt-4">
