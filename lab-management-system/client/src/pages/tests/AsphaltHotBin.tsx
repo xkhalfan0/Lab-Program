@@ -64,7 +64,8 @@ function computeSamples(samples: AggregateSample[]): AggregateSampleComputed[] {
     const requiredGradations: Record<string, number> = {};
     HOT_BIN_SIEVE_SIZES.forEach((sieve) => {
       const origGrad = parseFloat(sample.originalGradations[sieve.size]) || 0;
-      requiredGradations[sieve.size] = parseFloat(((percentage / 100) * origGrad).toFixed(1));
+      const rawRequired = (percentage / 100) * origGrad;
+      requiredGradations[sieve.size] = Math.round(rawRequired);
     });
     return { ...sample, requiredGradations };
   });
@@ -98,11 +99,11 @@ export default function AsphaltHotBin() {
   const combinedGrading = useMemo(() => {
     const combined: Record<string, number> = {};
     HOT_BIN_SIEVE_SIZES.forEach((sieve) => {
-      combined[sieve.size] = parseFloat(
-        computedSamples
-          .reduce((sum, sample) => sum + (sample.requiredGradations[sieve.size] || 0), 0)
-          .toFixed(1),
+      const sum = computedSamples.reduce(
+        (total, sample) => total + (sample.requiredGradations[sieve.size] || 0),
+        0,
       );
+      combined[sieve.size] = Math.round(sum);
     });
     return combined;
   }, [computedSamples]);
@@ -580,12 +581,12 @@ export default function AsphaltHotBin() {
                                 />
                               </td>
                               <td className="border border-slate-300 px-2 py-2 text-center bg-yellow-100 font-semibold text-xs">
-                                {(sample.requiredGradations[sieve.size] ?? 0).toFixed(1)}
+                                {sample.requiredGradations[sieve.size] ?? 0}
                               </td>
                             </Fragment>
                           ))}
                           <td className="border border-slate-300 px-3 py-2 text-center bg-green-100 font-bold text-sm text-green-900">
-                            {hasGradationInput ? combined.toFixed(1) : "—"}
+                            {hasGradationInput ? combined : "—"}
                           </td>
                           <td className="border border-slate-300 px-1 py-1">
                             <Input
