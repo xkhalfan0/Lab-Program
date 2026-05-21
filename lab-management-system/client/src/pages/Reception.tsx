@@ -27,7 +27,10 @@ import {
   selectedTestsIncludeCode,
   normalizeTestCode,
 } from "@/lib/testDependencies";
-import { getOfficialTestByCode } from "../../../server/data/official-test-catalog";
+import {
+  getOfficialTestByCode,
+  getSteelDeferredSubtypeOrderHint,
+} from "../../../server/data/official-test-catalog";
 
 // ─── Sub-type options per test CODE ─────────────────────────────────────────
 const SUBTYPES_BY_CODE: Record<string, { value: string; labelAr: string; labelEn: string }[]> = {
@@ -40,15 +43,6 @@ const SUBTYPES_BY_CODE: Record<string, { value: string; labelAr: string; labelEn
     { value: "solid_block", labelAr: "بلوك صلب", labelEn: "Solid Block" },
     { value: "hollow_block", labelAr: "بلوك مجوف", labelEn: "Hollow Block" },
     { value: "thermal_block", labelAr: "بلوك حراري", labelEn: "Thermal Block" },
-  ],
-  STEEL_REBAR: [
-    { value: "rebar_T8", labelAr: "T8 - قطر 8مم", labelEn: "T8 - 8mm" },
-    { value: "rebar_T10", labelAr: "T10 - قطر 10مم", labelEn: "T10 - 10mm" },
-    { value: "rebar_T12", labelAr: "T12 - قطر 12مم", labelEn: "T12 - 12mm" },
-    { value: "rebar_T16", labelAr: "T16 - قطر 16مم", labelEn: "T16 - 16mm" },
-    { value: "rebar_T20", labelAr: "T20 - قطر 20مم", labelEn: "T20 - 20mm" },
-    { value: "rebar_T25", labelAr: "T25 - قطر 25مم", labelEn: "T25 - 25mm" },
-    { value: "rebar_T32", labelAr: "T32 - قطر 32مم", labelEn: "T32 - 32mm" },
   ],
   STEEL_BEND: [
     { value: "rebar_T8", labelAr: "T8 - قطر 8مم", labelEn: "T8 - 8mm" },
@@ -67,27 +61,6 @@ const SUBTYPES_BY_CODE: Record<string, { value: string; labelAr: string; labelEn
     { value: "rebar_T20", labelAr: "T20 - قطر 20مم", labelEn: "T20 - 20mm" },
     { value: "rebar_T25", labelAr: "T25 - قطر 25مم", labelEn: "T25 - 25mm" },
     { value: "rebar_T32", labelAr: "T32 - قطر 32مم", labelEn: "T32 - 32mm" },
-  ],
-  STEEL_STRUCTURAL: [
-    { value: "hea_100", labelAr: "HEA 100", labelEn: "HEA 100" },
-    { value: "hea_120", labelAr: "HEA 120", labelEn: "HEA 120" },
-    { value: "hea_160", labelAr: "HEA 160", labelEn: "HEA 160" },
-    { value: "heb_100", labelAr: "HEB 100", labelEn: "HEB 100" },
-    { value: "ipe_100", labelAr: "IPE 100", labelEn: "IPE 100" },
-    { value: "ipe_160", labelAr: "IPE 160", labelEn: "IPE 160" },
-    { value: "angle_steel", labelAr: "حديد زاوية", labelEn: "Angle Steel" },
-    { value: "flat_bar", labelAr: "شريط مسطح", labelEn: "Flat Bar" },
-    { value: "hollow_section", labelAr: "قطاع مجوف", labelEn: "Hollow Section" },
-  ],
-  STEEL_ANCHOR: [
-    { value: "anchor_12mm", labelAr: "أنكر بولت 12مم", labelEn: "Anchor Bolt 12mm" },
-    { value: "anchor_16mm", labelAr: "أنكر بولت 16مم", labelEn: "Anchor Bolt 16mm" },
-    { value: "anchor_20mm", labelAr: "أنكر بولت 20مم", labelEn: "Anchor Bolt 20mm" },
-    { value: "anchor_24mm", labelAr: "أنكر بولت 24مم", labelEn: "Anchor Bolt 24mm" },
-    { value: "anchor_30mm", labelAr: "أنكر بولت 30مم", labelEn: "Anchor Bolt 30mm" },
-    { value: "anchor_40mm", labelAr: "أنكر بولت 40مم", labelEn: "Anchor Bolt 40mm" },
-    { value: "anchor_50mm", labelAr: "أنكر بولت 50مم", labelEn: "Anchor Bolt 50mm" },
-    { value: "anchor_other", labelAr: "قطر آخر", labelEn: "Other Dia." },
   ],
   AGG_SIEVE: [
     { value: "agg_32mm", labelAr: "ركام 32مم", labelEn: "32mm Aggregate" },
@@ -160,7 +133,7 @@ interface SelectedTest {
 const MULTI_SUBTYPE_TESTS = [
   "CONC_BLOCK", "CONC_MORTAR_SAND",
   "SOIL_SIEVE",
-  "STEEL_REBAR", "STEEL_BEND", "STEEL_REBEND", "STEEL_STRUCTURAL", "STEEL_ANCHOR",
+  "STEEL_BEND", "STEEL_REBEND",
   "AGG_SIEVE",
 ];
 
@@ -1152,11 +1125,19 @@ export default function Reception() {
                                 {renderTestDependencyHint(tt.code)}
                               </label>
                             </div>
-                            {/* Multi-subtype UI for CONC_BLOCK */}
+                            {/* Steel tensile: subtype chosen on technician test form */}
+                            {isSelected && getSteelDeferredSubtypeOrderHint(tt.code, lang) && (
+                              <p className="mt-2 ms-7 text-sm text-muted-foreground">
+                                {getSteelDeferredSubtypeOrderHint(tt.code, lang)}
+                              </p>
+                            )}
+                            {/* Multi-subtype UI (blocks, bend diameters, sieve types, …) */}
                             {isSelected && MULTI_SUBTYPE_TESTS.includes(tt.code) && (
                               <div className="mt-2 ms-7 space-y-1.5">
                                 <p className="text-xs text-muted-foreground font-medium">
-                                  {lang === "ar" ? "حدد أنواع البلوكات والكميات:" : "Select block types and quantities:"}
+                                  {tt.code === "CONC_BLOCK"
+                                    ? (lang === "ar" ? "حدد أنواع البلوكات والكميات:" : "Select block types and quantities:")
+                                    : (lang === "ar" ? "حدد الأنواع والكميات:" : "Select types and quantities:")}
                                 </p>
                                 {(SUBTYPES_BY_CODE[tt.code] ?? []).map(st => {
                                   const isSubSelected = (multiSubtypes[tt.id] ?? {})[st.value] !== undefined;

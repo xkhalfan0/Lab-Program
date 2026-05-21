@@ -589,7 +589,25 @@ describe("Sieve Analysis — v5 Sieve Requirements", () => {
   });
 });
 
-// ─── Anchor Bolt Pull-out Calculations (ASTM E488 / BS 8539) ─────────────────
+// ─── Anchor Bolt Tensile (BS EN ISO 898-1) — Excel worksheet formulas ─────────
+function circleAreaFromDiameterMm(diameterMm: number): number {
+  if (diameterMm <= 0) return 0;
+  return ((22 / 7) * diameterMm * diameterMm) / 4;
+}
+
+function computeReductionOfAreaPercent(
+  nominalSizeMm: number,
+  sizeIncrementMm: number,
+): number | undefined {
+  if (nominalSizeMm <= 0) return undefined;
+  const originalArea = circleAreaFromDiameterMm(nominalSizeMm);
+  const finalDiameter = nominalSizeMm - 2 * sizeIncrementMm;
+  if (finalDiameter <= 0 || originalArea <= 0) return undefined;
+  const finalArea = circleAreaFromDiameterMm(finalDiameter);
+  return ((originalArea - finalArea) / originalArea) * 100;
+}
+
+// ─── Anchor Bolt Pull-out Calculations (legacy min load check) ─────────────────
 function computeAnchorResult(maxLoadKN: number, minLoadKN: number): "pass" | "fail" {
   return maxLoadKN >= minLoadKN ? "pass" : "fail";
 }
@@ -601,6 +619,24 @@ function computeAnchorSprayRate(
 ): number {
   return parseFloat(((massGainedG / 1000) / densityKgL / padAreaM2).toFixed(3));
 }
+
+describe("Anchor Bolt Tensile calculations (BS EN ISO 898-1)", () => {
+  it("computes cut section area for 16.3 mm diameter (22/7 π)", () => {
+    const area = circleAreaFromDiameterMm(16.3);
+    expect(area).toBeCloseTo(208.756, 2);
+  });
+
+  it("computes Rm from load and cut section area", () => {
+    const area = circleAreaFromDiameterMm(16.3);
+    const rm = (203.7 * 1000) / area;
+    expect(rm).toBeCloseTo(975.8, 0);
+  });
+
+  it("computes %RA: final dia = nominal − 2×increment", () => {
+    const ra = computeReductionOfAreaPercent(20, 3);
+    expect(ra).toBeCloseTo(51, 0);
+  });
+});
 
 describe("Anchor Bolt Pull-out Test (ASTM E488 / BS 8539)", () => {
   it("should pass M20 anchor when load >= 70 kN", () => {

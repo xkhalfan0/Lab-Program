@@ -4,6 +4,45 @@ export type TestCategory = "concrete" | "soil" | "steel" | "asphalt" | "aggregat
 export const ASPHALT_MIX_COURSE_OPTIONS = ["wearing_course", "base_course"] as const;
 export type AsphaltMixCourse = (typeof ASPHALT_MIX_COURSE_OPTIONS)[number];
 
+/**
+ * Steel tensile tests: bar size, bolt type, and section are chosen on the technician
+ * test form — not as reception order sub-types.
+ */
+export const STEEL_TESTS_DEFER_SUBTYPE_AT_TEST = [
+  "STEEL_REBAR",
+  "STEEL_ANCHOR",
+  "STEEL_STRUCTURAL",
+] as const;
+
+export type SteelDeferSubtypeTestCode = (typeof STEEL_TESTS_DEFER_SUBTYPE_AT_TEST)[number];
+
+const STEEL_DEFERRED_SUBTYPE_HINTS: Record<
+  SteelDeferSubtypeTestCode,
+  { ar: string; en: string }
+> = {
+  STEEL_ANCHOR: {
+    ar: "سيختار الفني نوع المسمار عند الاختبار",
+    en: "Technician will select bolt type during testing",
+  },
+  STEEL_REBAR: {
+    ar: "سيختار الفني قطر السيخ عند الاختبار",
+    en: "Technician will select bar size during testing",
+  },
+  STEEL_STRUCTURAL: {
+    ar: "سيختار الفني نوع القطاع عند الاختبار",
+    en: "Technician will select section type during testing",
+  },
+};
+
+export function getSteelDeferredSubtypeOrderHint(
+  code: string,
+  lang: "ar" | "en",
+): string | null {
+  if (!(STEEL_TESTS_DEFER_SUBTYPE_AT_TEST as readonly string[]).includes(code)) return null;
+  const h = STEEL_DEFERRED_SUBTYPE_HINTS[code as SteelDeferSubtypeTestCode];
+  return h ? (lang === "ar" ? h.ar : h.en) : null;
+}
+
 /** Legacy / alias codes mapped to canonical catalog codes. */
 export const TEST_CODE_ALIASES: Record<string, string> = {
   "DIST-2026-038": "ASPH_BITUMEN_EXTRACT",
@@ -39,9 +78,10 @@ export const OFFICIAL_TEST_CATALOG: OfficialTest[] = [
   { category: "concrete", nameEn: "Initial Setting Time of Cement", nameAr: "زمن التصلب الابتدائي للأسمنت", code: "CEM_SETTING_TIME", unitPrice: "100", unit: "min", standardRef: "ASTM C191 / BS EN 196-3", formTemplate: "cement_setting_time", sortOrder: 60 },
   { category: "concrete", nameEn: "Flexural Strength of Concrete Beams", nameAr: "مقاومة الانحناء لعوارض الخرسانة", code: "CONC_BEAM", unitPrice: "80", unit: "MPa", standardRef: "ASTM C78", formTemplate: "concrete_beam", sortOrder: 80 },
   { category: "concrete", nameEn: "Mix Aggregate Gradation", nameAr: "تدرج ركام الخلطة", code: "CONC_MIX_GRAD", unitPrice: "65", unit: "%", standardRef: "ASTM C33 / BS EN 12620", formTemplate: "concrete_mix_grad", sortOrder: 90 },
+  // Bar size / bolt type / section: reception orders test only; technician picks subtype on test form
   { category: "steel", nameEn: "Tensile Strength of Reinforcement Steel", nameAr: "قوة شد حديد التسليح", code: "STEEL_REBAR", unitPrice: "300", unit: "N/mm²", standardRef: "BS 4449", formTemplate: "steel_rebar", sortOrder: 200 },
   { category: "steel", nameEn: "Bend & Rebend Test", nameAr: "اختبار الانحناء وإعادة الانحناء", code: "STEEL_BEND_REBEND", unitPrice: "100", unit: "—", standardRef: "BS 4449", formTemplate: "steel_bend_rebend", sortOrder: 210 },
-  { category: "steel", nameEn: "Tensile Strength of Anchor Bolts", nameAr: "قوة شد برغي تثبيت", code: "STEEL_ANCHOR", unitPrice: "300", unit: "kN", standardRef: "—", formTemplate: "steel_anchor_bolt", sortOrder: 220 },
+  { category: "steel", nameEn: "Tensile Strength of Anchor Bolts", nameAr: "قوة شد برغي تثبيت", code: "STEEL_ANCHOR", unitPrice: "300", unit: "kN", standardRef: "BS EN ISO 898-1", formTemplate: "steel_anchor_bolt", sortOrder: 220 },
   { category: "steel", nameEn: "Tensile Strength of Structural Steel", nameAr: "قوة شد حديد إنشائي", code: "STEEL_STRUCTURAL", unitPrice: "300", unit: "N/mm²", standardRef: "BS EN 10025", formTemplate: "steel_structural", sortOrder: 230 },
   { category: "soil", nameEn: "Sieve Analysis", nameAr: "تحليل المناخل", code: "SOIL_SIEVE", unitPrice: "100", unit: "%", standardRef: "BS 1377 / BS EN 933-1", formTemplate: "sieve_analysis", sortOrder: 100 },
   { category: "soil", nameEn: "Atterberg Limits (Plasticity Index)", nameAr: "حدود أتربرج", code: "SOIL_ATTERBERG", unitPrice: "150", unit: "%", standardRef: "BS 1377-2", formTemplate: "soil_atterberg", sortOrder: 110 },

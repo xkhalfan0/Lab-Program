@@ -82,31 +82,38 @@ const BAR_MASS_PER_M: Record<string, number> = {
   "T20": 2.466, "T25": 3.854, "T32": 6.313, "T40": 9.865,
 };
 
-// Calculate cross-section area from measured mass
-// area_mm2 = (mass_kg / length_mm) * 1e6 / 7850
-function calcAreaFromMass(massKg: string, lengthMm: string): number | undefined {
+/** Steel density constant (kg/mm²·m) — Area (mm²) = mass per meter (kg/m) ÷ 0.00785 */
+const STEEL_MASS_TO_AREA_DIVISOR = 0.00785;
+
+function calcAreaFromMassPerMeterRun(massPerMeterRun: string): number | undefined {
+  const m = parseFloat(massPerMeterRun);
+  if (!m || m <= 0) return undefined;
+  return parseFloat((m / STEEL_MASS_TO_AREA_DIVISOR).toFixed(2));
+}
+
+/** Legacy drafts: specimen mass (kg) + length (mm) → kg/m */
+function legacyMassPerMeterRun(massKg: string, lengthMm: string): string {
   const m = parseFloat(massKg);
   const l = parseFloat(lengthMm);
-  if (!m || !l || m <= 0 || l <= 0) return undefined;
-  // density of steel = 7850 kg/m³ = 7.85e-6 kg/mm³
-  return parseFloat(((m / l) / 7.85e-6).toFixed(1));
+  if (!m || !l || m <= 0 || l <= 0) return "";
+  return String(parseFloat(((m * 1000) / l).toFixed(3)));
 }
 
 interface RebarRow {
   id: string;
   specimenNo: string;
   barSize: string;
-  specimenLength: string;  // length of specimen in mm (for mass-based area calculation)
-  massKg: string;          // measured mass of specimen (kg)
+  specimenLength: string;  // length of specimen in mm
+  massPerMeterRun: string; // mass per meter run (kg/m)
   gaugeLength: string;     // L₀ in mm (default 100mm per CMW)
   yieldLoadKN: string;
   maxLoadKN: string;
   finalGaugeLength: string; // L₁ after fracture
   bendResult: "Pass" | "Fail" | "";
   // computed
-  calculatedArea?: number;  // from mass measurement (preferred)
-  nominalArea?: number;     // fallback from bar size table
-  effectiveArea?: number;   // calculatedArea if available, else nominalArea
+  calculatedArea?: number;  // massPerMeterRun / 0.00785 (mm²)
+  nominalArea?: number;     // reference from bar size table
+  effectiveArea?: number;   // calculated area used for strength
   yieldStrength?: number;
   tensileStrength?: number;
   tsYsRatio?: number;
@@ -124,7 +131,7 @@ function newRow(index: number, spec: typeof STEEL_STANDARDS[StandardKey]): Rebar
     specimenNo: `S${index + 1}`,
     barSize: "T12",
     specimenLength: "500",
-    massKg: "",
+    massPerMeterRun: "",
     gaugeLength: spec.gaugeLengthDefault,
     yieldLoadKN: "",
     maxLoadKN: "",
@@ -135,8 +142,15 @@ function newRow(index: number, spec: typeof STEEL_STANDARDS[StandardKey]): Rebar
 
 function computeRow(row: RebarRow, spec: typeof STEEL_STANDARDS[StandardKey]): RebarRow {
   const nominalArea = BAR_AREAS[row.barSize] ?? 0;
-  const calculatedArea = calcAreaFromMass(row.massKg, row.specimenLength);
-  const effectiveArea = calculatedArea ?? nominalArea;
+  const massPerMeter =
+    row.massPerMeterRun.trim() !== ""
+      ? row.massPerMeterRun
+      : legacyMassPerMeterRun(
+          (row as RebarRow & { massKg?: string }).massKg ?? "",
+          row.specimenLength,
+        );
+  const calculatedArea = calcAreaFromMassPerMeterRun(massPerMeter);
+  const effectiveArea = calculatedArea ?? 0;
 
   const yieldLoad = parseFloat(row.yieldLoadKN);
   const maxLoad = parseFloat(row.maxLoadKN);
@@ -144,13 +158,14 @@ function computeRow(row: RebarRow, spec: typeof STEEL_STANDARDS[StandardKey]): R
   const gl1 = parseFloat(row.finalGaugeLength);
 
   if (!effectiveArea || !yieldLoad || !maxLoad) {
-    return { ...row, nominalArea, calculatedArea, effectiveArea: effectiveArea || nominalArea };
+    return { ...row, nominalArea, calculatedArea, effectiveArea: effectiveArea || undefined };
   }
 
   const ys = (yieldLoad * 1000) / effectiveArea;
   const ts = (maxLoad * 1000) / effectiveArea;
-  const ratio = ts / ys;
-  const elong = gl0 && gl1 && gl1 > gl0 ? ((gl1 - gl0) / gl0) * 100 : undefined;
+  const ratio = ys > 0 ? ts / ys : 0;
+  const elong =
+    gl0 > 0 && Number.isFinite(gl1) ? ((gl1 - gl0) / gl0) * 100 : undefined;
 
   const yieldResult: "pass" | "fail" = ys >= spec.yieldMin ? "pass" : "fail";
   const tensileResult: "pass" | "fail" = ts >= spec.tensileMin ? "pass" : "fail";
@@ -333,9 +348,9 @@ export default function SteelRebar() {
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-xs text-blue-800">
           <Info size={12} className="inline mr-1" />
           {ar ? (
-            <><strong>ممارسة مختبر CMW (BS 4449):</strong> طول القياس L₀ = <strong>100 مم</strong> لجميع الأقطار. حد الاستطالة = <strong>≥ 5%</strong>. تُحسب مساحة المقطع من الكتلة المقاسة عند توفرها.</>
+            <><strong>ممارسة مختبر CMW (BS 4449):</strong> طول القياس L₀ = <strong>100 مم</strong> لجميع الأقطار. حد الاستطالة = <strong>≥ 5%</strong>. المساحة (مم²) = كتلة لكل متر (كجم/م) ÷ 0.00785.</>
           ) : (
-            <><strong>CMW Lab Practice (BS 4449):</strong> Gauge length L₀ = <strong>100 mm</strong> for all bar sizes. Elongation acceptance limit = <strong>≥ 5%</strong> (with L₀=100mm). Cross-section area is calculated from measured specimen mass when available.</>
+            <><strong>CMW Lab Practice (BS 4449):</strong> Gauge length L₀ = <strong>100 mm</strong> for all bar sizes. Elongation acceptance limit = <strong>≥ 5%</strong> (with L₀=100mm). Area (mm²) = Mass per meter run (kg/m) ÷ 0.00785.</>
           )}
         </div>
 
@@ -400,8 +415,18 @@ export default function SteelRebar() {
                   <th className="border border-slate-200 px-2 py-2 text-xs font-semibold text-slate-600">{ar ? "رقم العينة" : "Spec. No."}</th>
                   <th className="border border-slate-200 px-2 py-2 text-xs font-semibold text-slate-600">{ar ? "القطر" : "Bar Size"}</th>
                   <th className="border border-slate-200 px-2 py-2 text-xs font-semibold text-slate-600">{ar ? "الطول (مم)" : "Length (mm)"}</th>
-                  <th className="border border-slate-200 px-2 py-2 text-xs font-semibold text-slate-600">{ar ? "الكتلة (كجم)" : "Mass (kg)"}</th>
-                  <th className="border border-slate-200 px-2 py-2 text-xs font-semibold text-slate-600">{ar ? "المساحة (مم²)" : "Area (mm²)"}</th>
+                  <th className="border border-slate-200 px-2 py-2 text-xs font-semibold text-slate-600 bg-yellow-50">
+                    <div className="flex flex-col items-center gap-0.5">
+                      <span>{ar ? "الكتلة لكل متر" : "Mass per"}</span>
+                      <span>{ar ? "(كجم/م)" : "meter run (kg)"}</span>
+                    </div>
+                  </th>
+                  <th className="border border-slate-200 px-2 py-2 text-xs font-semibold text-slate-600 bg-blue-50">
+                    <div className="flex flex-col items-center gap-0.5">
+                      <span>{ar ? "المساحة" : "Area"}</span>
+                      <span className="text-[10px] font-normal text-slate-500">(mm²) *</span>
+                    </div>
+                  </th>
                   <th className="border border-slate-200 px-2 py-2 text-xs font-semibold text-slate-600">GL₀ (mm)</th>
                   <th className="border border-slate-200 px-2 py-2 text-xs font-semibold text-slate-600">{ar ? "حمل الخضوع (كن)" : "Yield Load (kN)"}</th>
                   <th className="border border-slate-200 px-2 py-2 text-xs font-semibold text-slate-600">{ar ? "الحمل الأقصى (كن)" : "Max Load (kN)"}</th>
@@ -432,12 +457,22 @@ export default function SteelRebar() {
                     <td className="border border-slate-200 px-1 py-1">
                       <Input value={row.specimenLength} onChange={e => updateRow(row.id, "specimenLength", e.target.value)} className="h-7 text-xs w-16 text-center font-mono" placeholder="500" />
                     </td>
-                    <td className="border border-slate-200 px-1 py-1">
-                      <Input value={row.massKg} onChange={e => updateRow(row.id, "massKg", e.target.value)} className="h-7 text-xs w-20 text-center font-mono" placeholder="—" />
+                    <td className="border border-slate-200 px-1 py-1 bg-yellow-50">
+                      <Input
+                        type="number"
+                        step="0.001"
+                        value={rows[idx]?.massPerMeterRun ?? ""}
+                        onChange={e => updateRow(row.id, "massPerMeterRun", e.target.value)}
+                        className="h-7 text-xs w-20 text-center font-mono bg-white"
+                        placeholder={BAR_MASS_PER_M[row.barSize] != null ? String(BAR_MASS_PER_M[row.barSize]) : "0.617"}
+                        disabled={submitted}
+                      />
                     </td>
-                    <td className="border border-slate-200 px-1 py-1 text-center">
-                      <span className={`font-mono text-xs ${row.calculatedArea ? "text-blue-700 font-bold" : "text-slate-400"}`}>
-                        {row.calculatedArea ? `${row.calculatedArea}*` : (row.nominalArea ?? BAR_AREAS[row.barSize])}
+                    <td className="border border-slate-200 px-2 py-1 text-center bg-blue-100">
+                      <span className="font-mono text-xs font-semibold text-blue-800">
+                        {row.calculatedArea != null && row.calculatedArea > 0
+                          ? row.calculatedArea.toFixed(2)
+                          : "—"}
                       </span>
                     </td>
                     <td className="border border-slate-200 px-1 py-1">
@@ -502,7 +537,11 @@ export default function SteelRebar() {
               </tbody>
             </table>
 </div>
-            <p className="text-xs text-blue-600 mt-2">{ar ? "* المساحة باللون الأزرق = محسوبة من الكتلة المقاسة (أفضل من الاسمية)" : "* Area marked in blue = calculated from measured mass (preferred over nominal area)"}</p>
+            <p className="text-xs text-muted-foreground italic mt-2">
+              {ar
+                ? "* المساحة محسوبة من: كتلة لكل متر (كجم/م) ÷ 0.00785"
+                : "* Area calculated from: Mass per meter run (kg) ÷ 0.00785"}
+            </p>
           </CardContent>
         </Card>
 
