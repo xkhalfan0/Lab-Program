@@ -9,9 +9,13 @@ import { redirectAfterTestSave } from "@/lib/batchHelpers";
 import {
   CORE_COMPACTION_MIN,
   CORE_COMPACTION_MAX,
-  computeCoreSpecimen,
+  computeCoreBatches,
+  createCoreBatch,
   createCoreSpecimen,
-  buildCoreBatchTableLayout,
+  flattenBatchesToCores,
+  parseBatchesFromFormData,
+  renumberBatchSpecimens,
+  type CoreBatchInput,
   type CoreLayerType,
   type CoreOffset,
   type CoreSpecimenInput,
@@ -39,9 +43,7 @@ const TEST_TITLE_EN =
 const TEST_TITLE_AR =
   "اختبار سماكة الرصف HMA والثقل النوعي الظاهري ونسبة الدمك (ASTM D 3549, D 2726)";
 
-function renumberCores(list: CoreSpecimenInput[]): CoreSpecimenInput[] {
-  return list.map((c, i) => ({ ...c, specimenNumber: i + 1 }));
-}
+const TABLE_COLS = 11;
 
 export default function AsphaltCoreThickness() {
   const { distributionId } = useParams<{ distributionId: string }>();
@@ -57,34 +59,38 @@ export default function AsphaltCoreThickness() {
   );
 
   const [params, setParams] = useState<TestParams>({ layerType: "", roadLocation: "" });
-  const [cores, setCores] = useState<CoreSpecimenInput[]>([createCoreSpecimen("1", 1)]);
+  const [batches, setBatches] = useState<CoreBatchInput[]>([createCoreBatch("1")]);
   const [notes, setNotes] = useState("");
   const [submitted, setSubmitted] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  const computedCores = useMemo(() => cores.map(computeCoreSpecimen), [cores]);
-  const { sortedCores, batches, coreIdToBatch } = useMemo(
-    () => buildCoreBatchTableLayout(computedCores),
-    [computedCores],
+  const computedBatches = useMemo(() => computeCoreBatches(batches), [batches]);
+  const allSpecimens = useMemo(
+    () => computedBatches.flatMap((b) => b.specimens),
+    [computedBatches],
   );
 
-  const coresWithCompaction = computedCores.filter(
-    (c) => parseFloat(c.refMarshallBulkSG) > 0 && c.specimenVolume > 0 && parseFloat(c.massInAir) > 0,
+  const coresWithCompaction = allSpecimens.filter(
+    (s) =>
+      parseFloat(s.refMarshallBulkSG) > 0 &&
+      s.specimenVolume > 0 &&
+      parseFloat(s.massInAir) > 0,
   );
 
   const overallAvgCompaction =
     coresWithCompaction.length > 0
       ? parseFloat(
           (
-            coresWithCompaction.reduce((sum, c) => sum + c.compactionPercent, 0) /
+            coresWithCompaction.reduce((sum, s) => sum + s.compactionPercent, 0) /
             coresWithCompaction.length
           ).toFixed(1),
         )
       : 0;
 
   const avgHeight =
-    computedCores.length > 0
-      ? computedCores.reduce((sum, c) => sum + (parseFloat(c.heightMm) || 0), 0) / computedCores.length
+    allSpecimens.length > 0
+      ? allSpecimens.reduce((sum, s) => sum + (parseFloat(s.heightMm) || 0), 0) /
+        allSpecimens.length
       : 0;
 
   const hasCompactionData = coresWithCompaction.length > 0;
@@ -123,24 +129,7 @@ export default function AsphaltCoreThickness() {
     const road = fd.roadLocation ?? fd.roadName;
     if (road != null) setParams((p) => ({ ...p, roadLocation: String(road) }));
 
-    const savedCores = fd.cores as Array<Record<string, unknown>> | undefined;
-    if (Array.isArray(savedCores) && savedCores.length > 0) {
-      setCores(
-        savedCores.map((c, i) => ({
-          id: String(c.id ?? i + 1),
-          specimenNumber: Number(c.specimenNumber ?? i + 1),
-          heightMm: String(c.heightMm ?? c.avgThickness ?? ""),
-          spotLocation: String(c.spotLocation ?? c.location ?? ""),
-          offset: (c.offset as CoreOffset) ?? "",
-          massInAir: String(c.massInAir ?? c.weightInAir ?? ""),
-          massAtSSD: String(c.massAtSSD ?? c.weightSSD ?? ""),
-          massInWater: String(c.massInWater ?? c.weightInWater ?? ""),
-          refMarshallBulkSG: String(
-            c.refMarshallBulkSG ?? fd.marshallDensity ?? fd.marshallDensityStr ?? "",
-          ),
-        })),
-      );
-    }
+    setBatches(parseBatchesFromFormData(fd));
 
     if (existing.status === "submitted") setSubmitted(true);
   }, [existing]);
@@ -152,24 +141,67 @@ export default function AsphaltCoreThickness() {
     }
   }, [dist?.testSubType, params.layerType]);
 
-  const addCore = useCallback(() => {
-    setCores((prev) => {
-      const next = createCoreSpecimen(String(prev.length + 1), prev.length + 1);
-      return renumberCores([...prev, next]);
+  const addBatch = useCallback(() => {
+    setBatches((prev) => [...prev, createCoreBatch(`batch-${Date.now()}`)]);
+  }, []);
+
+  const deleteBatch = useCallback((batchId: string) => {
+    setBatches((prev) => {
+      if (prev.length <= 1) return prev;
+      return prev.filter((b) => b.id !== batchId);
     });
   }, []);
 
-  const removeCore = useCallback((id: string) => {
-    setCores((prev) => renumberCores(prev.filter((c) => c.id !== id)));
-  }, []);
-
-  const updateCore = useCallback((index: number, patch: Partial<CoreSpecimenInput>) => {
-    setCores((prev) => {
+  const updateBatchRef = useCallback((batchIdx: number, refMarshallBulkSG: string) => {
+    setBatches((prev) => {
       const updated = [...prev];
-      updated[index] = { ...updated[index], ...patch };
+      updated[batchIdx] = { ...updated[batchIdx], refMarshallBulkSG };
       return updated;
     });
   }, []);
+
+  const addSpecimenToBatch = useCallback((batchId: string) => {
+    setBatches((prev) =>
+      prev.map((batch) => {
+        if (batch.id !== batchId) return batch;
+        const nextNum = batch.specimens.length + 1;
+        return {
+          ...batch,
+          specimens: [
+            ...batch.specimens,
+            createCoreSpecimen(batch.id, nextNum),
+          ],
+        };
+      }),
+    );
+  }, []);
+
+  const deleteSpecimen = useCallback((batchId: string, specimenId: string) => {
+    setBatches((prev) =>
+      prev.map((batch) => {
+        if (batch.id !== batchId) return batch;
+        return {
+          ...batch,
+          specimens: renumberBatchSpecimens(
+            batch.specimens.filter((s) => s.id !== specimenId),
+          ),
+        };
+      }),
+    );
+  }, []);
+
+  const updateSpecimen = useCallback(
+    (batchIdx: number, specimenIdx: number, patch: Partial<CoreSpecimenInput>) => {
+      setBatches((prev) => {
+        const updated = [...prev];
+        const specimens = [...updated[batchIdx].specimens];
+        specimens[specimenIdx] = { ...specimens[specimenIdx], ...patch };
+        updated[batchIdx] = { ...updated[batchIdx], specimens };
+        return updated;
+      });
+    },
+    [],
+  );
 
   const handleSave = async (status: "draft" | "submitted") => {
     if (!dist?.sampleId) {
@@ -189,6 +221,8 @@ export default function AsphaltCoreThickness() {
       return;
     }
 
+    const flatCores = flattenBatchesToCores(computedBatches);
+
     setSaving(true);
     try {
       await saveMut.mutateAsync({
@@ -199,12 +233,13 @@ export default function AsphaltCoreThickness() {
         formData: {
           layerType: params.layerType,
           roadLocation: params.roadLocation,
-          cores: computedCores,
-          batches: batches.map((b) => ({
+          batches: computedBatches.map((b) => ({
+            id: b.id,
             refMarshallBulkSG: b.refMarshallBulkSG,
-            specimenCount: b.specimens.length,
+            specimens: b.specimens,
             averageCompaction: b.averageCompaction,
           })),
+          cores: flatCores,
           averages: {
             thickness: parseFloat(avgHeight.toFixed(0)),
             compaction: parseFloat(overallAvgCompaction.toFixed(1)),
@@ -289,8 +324,8 @@ export default function AsphaltCoreThickness() {
         <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-800">
           <Info className="inline w-4 h-4 mr-1 align-text-bottom" />
           {ar
-            ? "الحجم = SSD − الماء. الثقل النوعي = في الهواء ÷ الحجم. نسبة الدمك = (ثقل اللب ÷ ثقل مارشال المرجعي) × 100. المطابقة: متوسط الدمك 97.0%–100.5%."
-            : "Volume = SSD − Water. Bulk SG = In Air ÷ Volume. % Compaction = (Core SG ÷ Ref Marshall SG) × 100. Pass: overall avg 97.0%–100.5%."}
+            ? "أضف مجموعة وأدخل ثقل مارشال المرجعي، ثم أضف العينات القلبية. الحجم = SSD − الماء. نسبة الدمك = (ثقل اللب ÷ المرجعي) × 100. المطابقة: متوسط الدمك 97.0%–100.5%."
+            : "Add a batch and enter Ref. Marshall bulk SG, then add core specimens. Volume = SSD − Water. % Compaction = (Core SG ÷ Ref SG) × 100. Pass: overall avg 97.0%–100.5%."}
         </div>
 
         <Card className="mb-4">
@@ -343,14 +378,14 @@ export default function AsphaltCoreThickness() {
               {ar ? "نتائج العينات الأساسية" : "Core Results"}
             </CardTitle>
             {!submitted && (
-              <Button size="sm" variant="outline" onClick={addCore}>
+              <Button size="sm" variant="outline" onClick={addBatch}>
                 <Plus className="w-4 h-4 mr-1" />
-                {ar ? "إضافة عينة" : "Add Core"}
+                {ar ? "إضافة مجموعة جديدة" : "Add New Batch"}
               </Button>
             )}
           </CardHeader>
           <CardContent className="overflow-x-auto">
-            <table className="w-full text-xs border-collapse min-w-[1100px]">
+            <table className="w-full text-xs border-collapse min-w-[1000px]">
               <thead className="bg-slate-50">
                 <tr>
                   <th className="border border-slate-300 px-2 py-2" rowSpan={2}>
@@ -371,14 +406,8 @@ export default function AsphaltCoreThickness() {
                   <th className="border border-slate-300 px-2 py-2 bg-blue-50" colSpan={2}>
                     {ar ? "النتائج" : "Results"}
                   </th>
-                  <th className="border border-slate-300 px-2 py-2" rowSpan={2}>
-                    {ar ? "الثقل النوعي المرجعي" : "Ref. Marshall Bulk SG"}
-                  </th>
                   <th className="border border-slate-300 px-2 py-2 bg-green-50" rowSpan={2}>
                     {ar ? "نسبة الدمك %" : "% Compaction"}
-                  </th>
-                  <th className="border border-slate-300 px-2 py-2 bg-purple-50" rowSpan={2}>
-                    {ar ? "متوسط المجموعة %" : "Batch Avg %"}
                   </th>
                   <th className="border border-slate-300 px-2 py-2" rowSpan={2}>
                     {ar ? "الإجراء" : "Action"}
@@ -403,179 +432,217 @@ export default function AsphaltCoreThickness() {
                 </tr>
               </thead>
               <tbody>
-                {sortedCores.map((core, rowIdx) => {
-                  const coreIdx = cores.findIndex((c) => c.id === core.id);
-                  const batch = coreIdToBatch.get(core.id);
-                  const isFirstInBatch = batch?.specimens[0]?.id === core.id;
-                  const isLastInBatch =
-                    batch?.specimens[batch.specimens.length - 1]?.id === core.id;
-                  const batchHasAvg = batch && batch.rowCount > 0 && batch.averageCompaction > 0;
-
-                  return (
-                    <Fragment key={core.id}>
-                      {isFirstInBatch && rowIdx > 0 && (
-                        <tr className="bg-slate-200">
-                          <td
-                            colSpan={13}
-                            className="border border-slate-400 px-2 py-0.5 h-1"
-                          />
-                        </tr>
-                      )}
-                      <tr
-                        className={
-                          batch
-                            ? isFirstInBatch
-                              ? "border-t-2 border-t-purple-300"
-                              : isLastInBatch
-                                ? "border-b-2 border-b-purple-300"
-                                : ""
-                            : ""
-                        }
-                      >
-                        <td className="border border-slate-300 px-2 py-2 text-center font-semibold">
-                          {core.specimenNumber}
-                        </td>
-                        <td className="border border-slate-300 px-2 py-2">
-                          <Input
-                            type="number"
-                            step="1"
-                            value={cores[coreIdx]?.heightMm ?? ""}
-                            onChange={(e) => updateCore(coreIdx, { heightMm: e.target.value })}
-                            className="h-7 text-xs w-16"
-                            placeholder="60"
-                            disabled={submitted}
-                          />
-                        </td>
-                        <td className="border border-slate-300 px-2 py-2">
-                          <Input
-                            type="text"
-                            value={cores[coreIdx]?.spotLocation ?? ""}
-                            onChange={(e) =>
-                              updateCore(coreIdx, { spotLocation: e.target.value })
-                            }
-                            className="h-7 text-xs w-20"
-                            placeholder="N/G"
-                            disabled={submitted}
-                          />
-                        </td>
-                        <td className="border border-slate-300 px-2 py-2">
-                          <Select
-                            value={cores[coreIdx]?.offset || undefined}
-                            onValueChange={(value) =>
-                              updateCore(coreIdx, { offset: value as CoreOffset })
-                            }
-                            disabled={submitted}
-                          >
-                            <SelectTrigger className="h-7 text-xs w-20">
-                              <SelectValue placeholder="—" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="LHS">LHS</SelectItem>
-                              <SelectItem value="CA">CA</SelectItem>
-                              <SelectItem value="RHS">RHS</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </td>
-                        <td className="border border-slate-300 px-2 py-2">
-                          <Input
-                            type="number"
-                            step="0.1"
-                            value={cores[coreIdx]?.massInAir ?? ""}
-                            onChange={(e) => updateCore(coreIdx, { massInAir: e.target.value })}
-                            className={LAB_NUMERIC_INPUT_SM}
-                            placeholder="1688.4"
-                            disabled={submitted}
-                          />
-                        </td>
-                        <td className="border border-slate-300 px-2 py-2">
-                          <Input
-                            type="number"
-                            step="0.1"
-                            value={cores[coreIdx]?.massAtSSD ?? ""}
-                            onChange={(e) => updateCore(coreIdx, { massAtSSD: e.target.value })}
-                            className={LAB_NUMERIC_INPUT_SM}
-                            placeholder="1690"
-                            disabled={submitted}
-                          />
-                        </td>
-                        <td className="border border-slate-300 px-2 py-2">
-                          <Input
-                            type="number"
-                            step="0.1"
-                            value={cores[coreIdx]?.massInWater ?? ""}
-                            onChange={(e) =>
-                              updateCore(coreIdx, { massInWater: e.target.value })
-                            }
-                            className={LAB_NUMERIC_INPUT_SM}
-                            placeholder="1038.4"
-                            disabled={submitted}
-                          />
-                        </td>
-                        <td className="border border-slate-300 px-2 py-2 text-center bg-blue-50 font-semibold">
-                          {core.specimenVolume > 0 ? core.specimenVolume.toFixed(1) : "—"}
-                        </td>
-                        <td className="border border-slate-300 px-2 py-2 text-center bg-blue-50 font-semibold">
-                          {core.coreBulkSG > 0 ? core.coreBulkSG.toFixed(3) : "—"}
-                        </td>
-                        <td className="border border-slate-300 px-2 py-2">
-                          <Input
-                            type="number"
-                            step="0.001"
-                            value={cores[coreIdx]?.refMarshallBulkSG ?? ""}
-                            onChange={(e) =>
-                              updateCore(coreIdx, { refMarshallBulkSG: e.target.value })
-                            }
-                            className={`${LAB_NUMERIC_INPUT_SM} min-w-[72px]`}
-                            placeholder="2.551"
-                            disabled={submitted}
-                          />
-                        </td>
-                        <td className="border border-slate-300 px-2 py-2 text-center bg-green-50 font-bold">
-                          {core.compactionPercent > 0
-                            ? `${core.compactionPercent.toFixed(1)}%`
-                            : "—"}
-                        </td>
-                        {isFirstInBatch && batch ? (
-                          <td
-                            rowSpan={batch.rowCount}
-                            className="border border-slate-300 px-2 py-2 text-center bg-purple-50 font-bold align-middle"
-                          >
-                            <div className="flex flex-col items-center justify-center gap-1 min-h-[48px]">
-                              <span className="text-base">
-                                {batchHasAvg
-                                  ? `${batch.averageCompaction.toFixed(1)}%`
-                                  : "—"}
-                              </span>
-                              <span className="text-[10px] text-purple-700 font-normal">
-                                ({batch.rowCount}{" "}
-                                {ar ? "عينات" : batch.rowCount === 1 ? "core" : "cores"})
-                              </span>
-                              <span className="text-[10px] text-slate-500 font-normal">
-                                SG {batch.refMarshallBulkSG.toFixed(3)}
-                              </span>
+                {computedBatches.map((batch, batchIdx) => (
+                  <Fragment key={batch.id}>
+                    <tr className="bg-purple-50 border-t-2 border-purple-300">
+                      <td colSpan={TABLE_COLS} className="border border-slate-300 px-3 py-2">
+                        <div className="flex items-center justify-between flex-wrap gap-2">
+                          <div className="flex items-center gap-3 flex-wrap">
+                            <span className="font-bold text-purple-900">
+                              {ar ? `المجموعة ${batchIdx + 1}` : `Batch ${batchIdx + 1}`}
+                            </span>
+                            <div className="flex items-center gap-2">
+                              <Label className="text-xs font-semibold text-purple-800 whitespace-nowrap">
+                                {ar ? "الثقل النوعي المرجعي:" : "Ref. Marshall Bulk SG:"}
+                              </Label>
+                              <Input
+                                type="number"
+                                step="0.001"
+                                value={batches[batchIdx]?.refMarshallBulkSG ?? ""}
+                                onChange={(e) => updateBatchRef(batchIdx, e.target.value)}
+                                className="h-8 w-24 text-xs font-bold text-center bg-white border-2 border-purple-300"
+                                placeholder="2.551"
+                                disabled={submitted}
+                              />
                             </div>
-                          </td>
-                        ) : !batch ? (
-                          <td className="border border-slate-300 px-2 py-2 text-center bg-purple-50 text-slate-400">
-                            —
-                          </td>
-                        ) : null}
-                        <td className="border border-slate-300 px-2 py-2 text-center">
-                          {cores.length > 1 && !submitted && (
+                            {!submitted && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => addSpecimenToBatch(batch.id)}
+                                className="h-7"
+                              >
+                                <Plus className="w-3 h-3 mr-1" />
+                                {ar ? "إضافة عينة" : "Add Core"}
+                              </Button>
+                            )}
+                          </div>
+                          {!submitted && batches.length > 1 && (
                             <Button
                               size="sm"
                               variant="ghost"
-                              onClick={() => removeCore(core.id)}
-                              className="h-6 w-6 p-0"
+                              onClick={() => deleteBatch(batch.id)}
+                              className="h-7 text-red-600 hover:bg-red-100"
                             >
-                              <Trash2 className="w-3 h-3 text-red-600" />
+                              <Trash2 className="w-4 h-4" />
                             </Button>
                           )}
+                        </div>
+                      </td>
+                    </tr>
+
+                    {batch.specimens.length === 0 ? (
+                      <tr key={`${batch.id}-empty`} className="bg-slate-50">
+                        <td
+                          colSpan={TABLE_COLS}
+                          className="border border-slate-300 px-4 py-6 text-center text-slate-500 italic"
+                        >
+                          {ar
+                            ? "لا توجد عينات. انقر على «إضافة عينة» لإضافة عينة أساسية."
+                            : "No cores yet. Click \"Add Core\" to add a core specimen."}
                         </td>
                       </tr>
-                    </Fragment>
-                  );
-                })}
+                    ) : (
+                      batch.specimens.map((specimen, specimenIdx) => (
+                        <tr key={specimen.id} className="hover:bg-slate-50/50">
+                          <td className="border border-slate-300 px-2 py-2 text-center font-semibold">
+                            {specimen.specimenNumber}
+                          </td>
+                          <td className="border border-slate-300 px-2 py-2">
+                            <Input
+                              type="number"
+                              step="1"
+                              value={batches[batchIdx]?.specimens[specimenIdx]?.heightMm ?? ""}
+                              onChange={(e) =>
+                                updateSpecimen(batchIdx, specimenIdx, { heightMm: e.target.value })
+                              }
+                              className={`${LAB_NUMERIC_INPUT_SM} w-16`}
+                              placeholder="60"
+                              disabled={submitted}
+                            />
+                          </td>
+                          <td className="border border-slate-300 px-2 py-2">
+                            <Input
+                              type="text"
+                              value={batches[batchIdx]?.specimens[specimenIdx]?.spotLocation ?? ""}
+                              onChange={(e) =>
+                                updateSpecimen(batchIdx, specimenIdx, {
+                                  spotLocation: e.target.value,
+                                })
+                              }
+                              className={`${LAB_NUMERIC_INPUT_SM} w-20`}
+                              placeholder="N/G"
+                              disabled={submitted}
+                            />
+                          </td>
+                          <td className="border border-slate-300 px-2 py-2">
+                            <Select
+                              value={batches[batchIdx]?.specimens[specimenIdx]?.offset || undefined}
+                              onValueChange={(value) =>
+                                updateSpecimen(batchIdx, specimenIdx, {
+                                  offset: value as CoreOffset,
+                                })
+                              }
+                              disabled={submitted}
+                            >
+                              <SelectTrigger className="h-7 text-xs w-20">
+                                <SelectValue placeholder="—" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="LHS">LHS</SelectItem>
+                                <SelectItem value="CA">CA</SelectItem>
+                                <SelectItem value="RHS">RHS</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </td>
+                          <td className="border border-slate-300 px-2 py-2">
+                            <Input
+                              type="number"
+                              step="0.1"
+                              value={batches[batchIdx]?.specimens[specimenIdx]?.massInAir ?? ""}
+                              onChange={(e) =>
+                                updateSpecimen(batchIdx, specimenIdx, { massInAir: e.target.value })
+                              }
+                              className={LAB_NUMERIC_INPUT_SM}
+                              placeholder="1688.4"
+                              disabled={submitted}
+                            />
+                          </td>
+                          <td className="border border-slate-300 px-2 py-2">
+                            <Input
+                              type="number"
+                              step="0.1"
+                              value={batches[batchIdx]?.specimens[specimenIdx]?.massAtSSD ?? ""}
+                              onChange={(e) =>
+                                updateSpecimen(batchIdx, specimenIdx, { massAtSSD: e.target.value })
+                              }
+                              className={LAB_NUMERIC_INPUT_SM}
+                              placeholder="1690"
+                              disabled={submitted}
+                            />
+                          </td>
+                          <td className="border border-slate-300 px-2 py-2">
+                            <Input
+                              type="number"
+                              step="0.1"
+                              value={batches[batchIdx]?.specimens[specimenIdx]?.massInWater ?? ""}
+                              onChange={(e) =>
+                                updateSpecimen(batchIdx, specimenIdx, {
+                                  massInWater: e.target.value,
+                                })
+                              }
+                              className={LAB_NUMERIC_INPUT_SM}
+                              placeholder="1038.4"
+                              disabled={submitted}
+                            />
+                          </td>
+                          <td className="border border-slate-300 px-2 py-2 text-center bg-blue-50 font-semibold">
+                            {specimen.specimenVolume > 0
+                              ? specimen.specimenVolume.toFixed(1)
+                              : "—"}
+                          </td>
+                          <td className="border border-slate-300 px-2 py-2 text-center bg-blue-50 font-semibold">
+                            {specimen.coreBulkSG > 0 ? specimen.coreBulkSG.toFixed(3) : "—"}
+                          </td>
+                          <td className="border border-slate-300 px-2 py-2 text-center bg-green-50 font-bold">
+                            {specimen.compactionPercent > 0
+                              ? `${specimen.compactionPercent.toFixed(1)}%`
+                              : "—"}
+                          </td>
+                          <td className="border border-slate-300 px-2 py-2 text-center">
+                            {!submitted && (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => deleteSpecimen(batch.id, specimen.id)}
+                                className="h-6 w-6 p-0"
+                              >
+                                <Trash2 className="w-3 h-3 text-red-600" />
+                              </Button>
+                            )}
+                          </td>
+                        </tr>
+                      ))
+                    )}
+
+                    {batch.specimens.length > 0 && (
+                      <tr key={`${batch.id}-avg`} className="bg-purple-100 font-semibold">
+                        <td
+                          colSpan={9}
+                          className="border border-slate-300 px-3 py-2 text-right text-purple-900"
+                        >
+                          {ar
+                            ? `متوسط المجموعة ${batchIdx + 1}:`
+                            : `Batch ${batchIdx + 1} Average:`}
+                        </td>
+                        <td
+                          colSpan={2}
+                          className="border border-slate-300 px-2 py-2 text-center text-purple-900 text-base"
+                        >
+                          {batch.averageCompaction > 0
+                            ? `${batch.averageCompaction.toFixed(1)}%`
+                            : "—"}
+                        </td>
+                      </tr>
+                    )}
+
+                    {batchIdx < computedBatches.length - 1 && (
+                      <tr className="bg-slate-200">
+                        <td colSpan={TABLE_COLS} className="border border-slate-400 h-1 p-0" />
+                      </tr>
+                    )}
+                  </Fragment>
+                ))}
               </tbody>
               <tfoot className="bg-slate-100 font-semibold">
                 <tr>
@@ -586,19 +653,14 @@ export default function AsphaltCoreThickness() {
                     {ar ? "السُمك:" : "Thickness:"}{" "}
                     {avgHeight > 0 ? `${avgHeight.toFixed(0)} mm` : "—"}
                   </td>
-                  <td colSpan={6} />
+                  <td colSpan={5} />
                   <td className="border border-slate-300 px-2 py-2 text-center bg-green-100 font-bold text-base">
                     {hasCompactionData ? `${overallAvgCompaction.toFixed(1)}%` : "—"}
-                  </td>
-                  <td className="border border-slate-300 px-2 py-2 text-center bg-purple-100 text-xs">
-                    {batches.length > 0
-                      ? `${batches.length} ${ar ? "مجموعات" : batches.length === 1 ? "batch" : "batches"}`
-                      : "—"}
                   </td>
                   <td />
                 </tr>
                 <tr>
-                  <td className="border border-slate-300 px-2 py-2 text-xs" colSpan={10}>
+                  <td className="border border-slate-300 px-2 py-2 text-xs" colSpan={9}>
                     {ar ? "حدود المواصفات:" : "Specification Limits:"}
                   </td>
                   <td
@@ -609,7 +671,7 @@ export default function AsphaltCoreThickness() {
                           ? "bg-green-200 text-green-900"
                           : "bg-red-200 text-red-900"
                     }`}
-                    colSpan={3}
+                    colSpan={2}
                   >
                     {CORE_COMPACTION_MIN.toFixed(1)}% Min – {CORE_COMPACTION_MAX.toFixed(1)}% Max
                   </td>
