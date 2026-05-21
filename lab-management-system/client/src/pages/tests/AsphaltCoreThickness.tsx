@@ -2,7 +2,7 @@
  * HMA Pavement Thickness, Bulk Specific Gravity and Compaction Test
  * ASTM D3549, ASTM D2726, BS EN 12697-36
  */
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { Fragment, useState, useEffect, useMemo, useCallback } from "react";
 import { useParams, useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { redirectAfterTestSave } from "@/lib/batchHelpers";
@@ -11,7 +11,7 @@ import {
   CORE_COMPACTION_MAX,
   computeCoreSpecimen,
   createCoreSpecimen,
-  groupCoreBatches,
+  buildCoreBatchTableLayout,
   type CoreLayerType,
   type CoreOffset,
   type CoreSpecimenInput,
@@ -62,7 +62,10 @@ export default function AsphaltCoreThickness() {
   const [saving, setSaving] = useState(false);
 
   const computedCores = useMemo(() => cores.map(computeCoreSpecimen), [cores]);
-  const batches = useMemo(() => groupCoreBatches(computedCores), [computedCores]);
+  const { sortedCores, batches, coreIdToBatch } = useMemo(
+    () => buildCoreBatchTableLayout(computedCores),
+    [computedCores],
+  );
 
   const coresWithCompaction = computedCores.filter(
     (c) => parseFloat(c.refMarshallBulkSG) > 0 && c.specimenVolume > 0 && parseFloat(c.massInAir) > 0,
@@ -166,15 +169,6 @@ export default function AsphaltCoreThickness() {
       return updated;
     });
   }, []);
-
-  const getBatchForCore = useCallback(
-    (core: (typeof computedCores)[0]) => {
-      const ref = parseFloat(core.refMarshallBulkSG);
-      if (Number.isNaN(ref)) return undefined;
-      return batches.find((b) => b.refMarshallBulkSG === ref);
-    },
-    [batches],
-  );
 
   const handleSave = async (status: "draft" | "submitted") => {
     if (!dist?.sampleId) {
@@ -408,142 +402,199 @@ export default function AsphaltCoreThickness() {
                 </tr>
               </thead>
               <tbody>
-                {computedCores.map((core, idx) => {
-                  const batch = getBatchForCore(core);
-                  const showBatchAvg =
-                    batch && batch.specimens[0]?.id === core.id && batch.specimens.length > 0;
+                {sortedCores.map((core, rowIdx) => {
+                  const coreIdx = cores.findIndex((c) => c.id === core.id);
+                  const batch = coreIdToBatch.get(core.id);
+                  const isFirstInBatch = batch?.specimens[0]?.id === core.id;
+                  const isLastInBatch =
+                    batch?.specimens[batch.specimens.length - 1]?.id === core.id;
+                  const batchHasAvg = batch && batch.rowCount > 0 && batch.averageCompaction > 0;
 
                   return (
-                    <tr key={core.id}>
-                      <td className="border border-slate-300 px-2 py-2 text-center font-semibold">
-                        {core.specimenNumber}
-                      </td>
-                      <td className="border border-slate-300 px-2 py-2">
-                        <Input
-                          type="number"
-                          step="1"
-                          value={cores[idx]?.heightMm ?? ""}
-                          onChange={(e) => updateCore(idx, { heightMm: e.target.value })}
-                          className="h-7 text-xs w-16"
-                          placeholder="60"
-                          disabled={submitted}
-                        />
-                      </td>
-                      <td className="border border-slate-300 px-2 py-2">
-                        <Input
-                          type="text"
-                          value={cores[idx]?.spotLocation ?? ""}
-                          onChange={(e) => updateCore(idx, { spotLocation: e.target.value })}
-                          className="h-7 text-xs"
-                          placeholder="N/G"
-                          disabled={submitted}
-                        />
-                      </td>
-                      <td className="border border-slate-300 px-2 py-2">
-                        <Select
-                          value={cores[idx]?.offset || undefined}
-                          onValueChange={(value) =>
-                            updateCore(idx, { offset: value as CoreOffset })
-                          }
-                          disabled={submitted}
-                        >
-                          <SelectTrigger className="h-7 text-xs w-20">
-                            <SelectValue placeholder="—" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="LHS">LHS</SelectItem>
-                            <SelectItem value="CA">CA</SelectItem>
-                            <SelectItem value="RHS">RHS</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </td>
-                      <td className="border border-slate-300 px-2 py-2 bg-yellow-50">
-                        <Input
-                          type="number"
-                          step="0.1"
-                          value={cores[idx]?.massInAir ?? ""}
-                          onChange={(e) => updateCore(idx, { massInAir: e.target.value })}
-                          className="h-7 text-xs"
-                          placeholder="1688.4"
-                          disabled={submitted}
-                        />
-                      </td>
-                      <td className="border border-slate-300 px-2 py-2 bg-yellow-50">
-                        <Input
-                          type="number"
-                          step="0.1"
-                          value={cores[idx]?.massAtSSD ?? ""}
-                          onChange={(e) => updateCore(idx, { massAtSSD: e.target.value })}
-                          className="h-7 text-xs"
-                          placeholder="1690"
-                          disabled={submitted}
-                        />
-                      </td>
-                      <td className="border border-slate-300 px-2 py-2 bg-yellow-50">
-                        <Input
-                          type="number"
-                          step="0.1"
-                          value={cores[idx]?.massInWater ?? ""}
-                          onChange={(e) => updateCore(idx, { massInWater: e.target.value })}
-                          className="h-7 text-xs"
-                          placeholder="1038.4"
-                          disabled={submitted}
-                        />
-                      </td>
-                      <td className="border border-slate-300 px-2 py-2 text-center bg-blue-50 font-semibold">
-                        {core.specimenVolume > 0 ? core.specimenVolume.toFixed(1) : "—"}
-                      </td>
-                      <td className="border border-slate-300 px-2 py-2 text-center bg-blue-50 font-semibold">
-                        {core.coreBulkSG > 0 ? core.coreBulkSG.toFixed(3) : "—"}
-                      </td>
-                      <td className="border border-slate-300 px-2 py-2">
-                        <Input
-                          type="number"
-                          step="0.001"
-                          value={cores[idx]?.refMarshallBulkSG ?? ""}
-                          onChange={(e) =>
-                            updateCore(idx, { refMarshallBulkSG: e.target.value })
-                          }
-                          className="h-7 text-xs min-w-[72px]"
-                          placeholder="2.551"
-                          disabled={submitted}
-                        />
-                      </td>
-                      <td className="border border-slate-300 px-2 py-2 text-center bg-green-50 font-bold">
-                        {core.compactionPercent > 0 ? `${core.compactionPercent.toFixed(1)}%` : "—"}
-                      </td>
-                      <td className="border border-slate-300 px-2 py-2 text-center bg-purple-50 font-bold">
-                        {showBatchAvg ? `${batch!.averageCompaction.toFixed(1)}%` : "—"}
-                      </td>
-                      <td className="border border-slate-300 px-2 py-2 text-center">
-                        {cores.length > 1 && !submitted && (
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => removeCore(core.id)}
-                            className="h-6 w-6 p-0"
+                    <Fragment key={core.id}>
+                      {isFirstInBatch && rowIdx > 0 && (
+                        <tr className="bg-slate-200">
+                          <td
+                            colSpan={13}
+                            className="border border-slate-400 px-2 py-0.5 h-1"
+                          />
+                        </tr>
+                      )}
+                      <tr
+                        className={
+                          batch
+                            ? isFirstInBatch
+                              ? "border-t-2 border-t-purple-300"
+                              : isLastInBatch
+                                ? "border-b-2 border-b-purple-300"
+                                : ""
+                            : ""
+                        }
+                      >
+                        <td className="border border-slate-300 px-2 py-2 text-center font-semibold">
+                          {core.specimenNumber}
+                        </td>
+                        <td className="border border-slate-300 px-2 py-2">
+                          <Input
+                            type="number"
+                            step="1"
+                            value={cores[coreIdx]?.heightMm ?? ""}
+                            onChange={(e) => updateCore(coreIdx, { heightMm: e.target.value })}
+                            className="h-7 text-xs w-16"
+                            placeholder="60"
+                            disabled={submitted}
+                          />
+                        </td>
+                        <td className="border border-slate-300 px-2 py-2">
+                          <Input
+                            type="text"
+                            value={cores[coreIdx]?.spotLocation ?? ""}
+                            onChange={(e) =>
+                              updateCore(coreIdx, { spotLocation: e.target.value })
+                            }
+                            className="h-7 text-xs w-20"
+                            placeholder="N/G"
+                            disabled={submitted}
+                          />
+                        </td>
+                        <td className="border border-slate-300 px-2 py-2">
+                          <Select
+                            value={cores[coreIdx]?.offset || undefined}
+                            onValueChange={(value) =>
+                              updateCore(coreIdx, { offset: value as CoreOffset })
+                            }
+                            disabled={submitted}
                           >
-                            <Trash2 className="w-3 h-3 text-red-600" />
-                          </Button>
-                        )}
-                      </td>
-                    </tr>
+                            <SelectTrigger className="h-7 text-xs w-20">
+                              <SelectValue placeholder="—" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="LHS">LHS</SelectItem>
+                              <SelectItem value="CA">CA</SelectItem>
+                              <SelectItem value="RHS">RHS</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </td>
+                        <td className="border border-slate-300 px-2 py-2 bg-yellow-50">
+                          <Input
+                            type="number"
+                            step="0.1"
+                            value={cores[coreIdx]?.massInAir ?? ""}
+                            onChange={(e) => updateCore(coreIdx, { massInAir: e.target.value })}
+                            className="h-7 text-xs"
+                            placeholder="1688.4"
+                            disabled={submitted}
+                          />
+                        </td>
+                        <td className="border border-slate-300 px-2 py-2 bg-yellow-50">
+                          <Input
+                            type="number"
+                            step="0.1"
+                            value={cores[coreIdx]?.massAtSSD ?? ""}
+                            onChange={(e) => updateCore(coreIdx, { massAtSSD: e.target.value })}
+                            className="h-7 text-xs"
+                            placeholder="1690"
+                            disabled={submitted}
+                          />
+                        </td>
+                        <td className="border border-slate-300 px-2 py-2 bg-yellow-50">
+                          <Input
+                            type="number"
+                            step="0.1"
+                            value={cores[coreIdx]?.massInWater ?? ""}
+                            onChange={(e) =>
+                              updateCore(coreIdx, { massInWater: e.target.value })
+                            }
+                            className="h-7 text-xs"
+                            placeholder="1038.4"
+                            disabled={submitted}
+                          />
+                        </td>
+                        <td className="border border-slate-300 px-2 py-2 text-center bg-blue-50 font-semibold">
+                          {core.specimenVolume > 0 ? core.specimenVolume.toFixed(1) : "—"}
+                        </td>
+                        <td className="border border-slate-300 px-2 py-2 text-center bg-blue-50 font-semibold">
+                          {core.coreBulkSG > 0 ? core.coreBulkSG.toFixed(3) : "—"}
+                        </td>
+                        <td className="border border-slate-300 px-2 py-2">
+                          <Input
+                            type="number"
+                            step="0.001"
+                            value={cores[coreIdx]?.refMarshallBulkSG ?? ""}
+                            onChange={(e) =>
+                              updateCore(coreIdx, { refMarshallBulkSG: e.target.value })
+                            }
+                            className="h-7 text-xs min-w-[72px]"
+                            placeholder="2.551"
+                            disabled={submitted}
+                          />
+                        </td>
+                        <td className="border border-slate-300 px-2 py-2 text-center bg-green-50 font-bold">
+                          {core.compactionPercent > 0
+                            ? `${core.compactionPercent.toFixed(1)}%`
+                            : "—"}
+                        </td>
+                        {isFirstInBatch && batch ? (
+                          <td
+                            rowSpan={batch.rowCount}
+                            className="border border-slate-300 px-2 py-2 text-center bg-purple-50 font-bold align-middle"
+                          >
+                            <div className="flex flex-col items-center justify-center gap-1 min-h-[48px]">
+                              <span className="text-base">
+                                {batchHasAvg
+                                  ? `${batch.averageCompaction.toFixed(1)}%`
+                                  : "—"}
+                              </span>
+                              <span className="text-[10px] text-purple-700 font-normal">
+                                ({batch.rowCount}{" "}
+                                {ar ? "عينات" : batch.rowCount === 1 ? "core" : "cores"})
+                              </span>
+                              <span className="text-[10px] text-slate-500 font-normal">
+                                SG {batch.refMarshallBulkSG.toFixed(3)}
+                              </span>
+                            </div>
+                          </td>
+                        ) : !batch ? (
+                          <td className="border border-slate-300 px-2 py-2 text-center bg-purple-50 text-slate-400">
+                            —
+                          </td>
+                        ) : null}
+                        <td className="border border-slate-300 px-2 py-2 text-center">
+                          {cores.length > 1 && !submitted && (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => removeCore(core.id)}
+                              className="h-6 w-6 p-0"
+                            >
+                              <Trash2 className="w-3 h-3 text-red-600" />
+                            </Button>
+                          )}
+                        </td>
+                      </tr>
+                    </Fragment>
                   );
                 })}
               </tbody>
               <tfoot className="bg-slate-100 font-semibold">
                 <tr>
                   <td className="border border-slate-300 px-2 py-2" colSpan={2}>
-                    {ar ? "المتوسط" : "Average"}
+                    {ar ? "المتوسط الكلي" : "Overall Average"}
                   </td>
                   <td className="border border-slate-300 px-2 py-2 text-center" colSpan={2}>
+                    {ar ? "السُمك:" : "Thickness:"}{" "}
                     {avgHeight > 0 ? `${avgHeight.toFixed(0)} mm` : "—"}
                   </td>
                   <td colSpan={6} />
                   <td className="border border-slate-300 px-2 py-2 text-center bg-green-100 font-bold text-base">
                     {hasCompactionData ? `${overallAvgCompaction.toFixed(1)}%` : "—"}
                   </td>
-                  <td colSpan={2} />
+                  <td className="border border-slate-300 px-2 py-2 text-center bg-purple-100 text-xs">
+                    {batches.length > 0
+                      ? `${batches.length} ${ar ? "مجموعات" : batches.length === 1 ? "batch" : "batches"}`
+                      : "—"}
+                  </td>
+                  <td />
                 </tr>
                 <tr>
                   <td className="border border-slate-300 px-2 py-2 text-xs" colSpan={10}>

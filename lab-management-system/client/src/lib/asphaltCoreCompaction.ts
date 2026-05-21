@@ -29,6 +29,18 @@ export interface CoreBatch {
   averageCompaction: number;
 }
 
+/** Batch metadata for table rowSpan rendering (after sort-by-ref display order). */
+export interface CoreBatchLayout extends CoreBatch {
+  startIndex: number;
+  rowCount: number;
+}
+
+export interface CoreBatchTableLayout {
+  sortedCores: CoreSpecimenComputed[];
+  batches: CoreBatchLayout[];
+  coreIdToBatch: Map<string, CoreBatchLayout>;
+}
+
 export function computeCoreSpecimen(core: CoreSpecimenInput): CoreSpecimenComputed {
   const massAir = parseFloat(core.massInAir) || 0;
   const massSSD = parseFloat(core.massAtSSD) || 0;
@@ -48,30 +60,66 @@ export function computeCoreSpecimen(core: CoreSpecimenInput): CoreSpecimenComput
 }
 
 export function groupCoreBatches(computedCores: CoreSpecimenComputed[]): CoreBatch[] {
-  const grouped = new Map<string, CoreSpecimenComputed[]>();
+  return buildCoreBatchTableLayout(sortCoresForBatchDisplay(computedCores)).batches;
+}
 
-  computedCores.forEach((core) => {
-    const refKey = core.refMarshallBulkSG?.trim() || "";
-    if (!refKey) return;
-    const list = grouped.get(refKey) ?? [];
-    list.push(core);
-    grouped.set(refKey, list);
+/** Sort cores so specimens sharing the same Ref Marshall SG appear together. */
+export function sortCoresForBatchDisplay(
+  computedCores: CoreSpecimenComputed[],
+): CoreSpecimenComputed[] {
+  return [...computedCores].sort((a, b) => {
+    const refA = parseFloat(a.refMarshallBulkSG) || 0;
+    const refB = parseFloat(b.refMarshallBulkSG) || 0;
+    if (refA !== refB) return refA - refB;
+    return a.specimenNumber - b.specimenNumber;
   });
+}
 
-  const batches: CoreBatch[] = [];
-  grouped.forEach((specimens, refKey) => {
+/** Build batch groups with row indices for rowSpan cells (uses sorted display order). */
+export function buildCoreBatchTableLayout(
+  computedCores: CoreSpecimenComputed[],
+): CoreBatchTableLayout {
+  const sortedCores = sortCoresForBatchDisplay(computedCores);
+  const batches: CoreBatchLayout[] = [];
+  const coreIdToBatch = new Map<string, CoreBatchLayout>();
+  let index = 0;
+
+  while (index < sortedCores.length) {
+    const refKey = sortedCores[index].refMarshallBulkSG?.trim() || "";
     const refMarshallBulkSG = parseFloat(refKey);
-    if (Number.isNaN(refMarshallBulkSG) || specimens.length === 0) return;
+    if (!refKey || Number.isNaN(refMarshallBulkSG)) {
+      index++;
+      continue;
+    }
+
+    const startIndex = index;
+    const specimens: CoreSpecimenComputed[] = [];
+    while (
+      index < sortedCores.length &&
+      (sortedCores[index].refMarshallBulkSG?.trim() || "") === refKey
+    ) {
+      specimens.push(sortedCores[index]);
+      index++;
+    }
+
+    const withCompaction = specimens.filter((s) => s.compactionPercent > 0);
     const avgCompaction =
-      specimens.reduce((sum, s) => sum + s.compactionPercent, 0) / specimens.length;
-    batches.push({
+      withCompaction.length > 0
+        ? withCompaction.reduce((sum, s) => sum + s.compactionPercent, 0) / withCompaction.length
+        : 0;
+
+    const batch: CoreBatchLayout = {
       refMarshallBulkSG,
       specimens,
       averageCompaction: parseFloat(avgCompaction.toFixed(1)),
-    });
-  });
+      startIndex,
+      rowCount: specimens.length,
+    };
+    batches.push(batch);
+    specimens.forEach((s) => coreIdToBatch.set(s.id, batch));
+  }
 
-  return batches.sort((a, b) => a.refMarshallBulkSG - b.refMarshallBulkSG);
+  return { sortedCores, batches, coreIdToBatch };
 }
 
 export function createCoreSpecimen(id: string, specimenNumber: number): CoreSpecimenInput {
