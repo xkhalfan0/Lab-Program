@@ -89,13 +89,61 @@ interface AnchorBoltSpecimen {
   overallResult?: "pass" | "fail" | "pending";
 }
 
-function newSpecimen(n: number): AnchorBoltSpecimen {
+const TRIAL_ORDINALS_EN = [
+  "",
+  "First",
+  "Second",
+  "Third",
+  "Fourth",
+  "Fifth",
+  "Sixth",
+  "Seventh",
+  "Eighth",
+  "Ninth",
+  "Tenth",
+  "Eleventh",
+  "Twelfth",
+  "Thirteenth",
+  "Fourteenth",
+  "Fifteenth",
+  "Sixteenth",
+  "Seventeenth",
+  "Eighteenth",
+  "Nineteenth",
+  "Twentieth",
+] as const;
+
+/** Default trial label for row n (1-based): "First trial", "Second trial", … */
+export function defaultTrialLabel(n: number, ar = false): string {
+  if (n < 1) return "";
+  if (ar) {
+    const arOrdinals = [
+      "",
+      "الأولى",
+      "الثانية",
+      "الثالثة",
+      "الرابعة",
+      "الخامسة",
+      "السادسة",
+      "السابعة",
+      "الثامنة",
+      "التاسعة",
+      "العاشرة",
+    ];
+    if (n <= 10) return `التجربة ${arOrdinals[n]}`;
+    return `التجربة ${n}`;
+  }
+  const ord = TRIAL_ORDINALS_EN[n];
+  return ord ? `${ord} trial` : `Trial ${n}`;
+}
+
+function newSpecimen(n: number, ar = false): AnchorBoltSpecimen {
   return {
     id: `ab_${Date.now()}_${n}`,
     specimenNumber: n,
     nominalSize: "",
     cutSectionDiameter: "",
-    trials: "",
+    trials: defaultTrialLabel(n, ar),
     loadKN: "",
     glMm: "",
     sizeIncrementMm: "",
@@ -105,8 +153,16 @@ function newSpecimen(n: number): AnchorBoltSpecimen {
   };
 }
 
-function renumber(rows: AnchorBoltSpecimen[]): AnchorBoltSpecimen[] {
-  return rows.map((r, i) => ({ ...r, specimenNumber: i + 1 }));
+function renumber(
+  rows: AnchorBoltSpecimen[],
+  options?: { ar?: boolean; refreshTrialLabels?: boolean },
+): AnchorBoltSpecimen[] {
+  const ar = options?.ar ?? false;
+  return rows.map((r, i) => ({
+    ...r,
+    specimenNumber: i + 1,
+    ...(options?.refreshTrialLabels ? { trials: defaultTrialLabel(i + 1, ar) } : {}),
+  }));
 }
 
 export function computeAnchorBoltSpecimen(row: AnchorBoltSpecimen): AnchorBoltSpecimen {
@@ -174,7 +230,10 @@ function parseSpecimenFromSaved(raw: Record<string, unknown>, index: number): An
       : index + 1,
     nominalSize: String(raw.nominalSize ?? ""),
     cutSectionDiameter: String(raw.cutSectionDiameter ?? ""),
-    trials: String(raw.trials ?? ""),
+    trials:
+      String(raw.trials ?? "").trim() !== ""
+        ? String(raw.trials)
+        : defaultTrialLabel(index + 1, false),
     loadKN: String(raw.loadKN ?? raw.maxLoad ?? raw.load ?? ""),
     glMm: String(raw.glMm ?? raw.gaugeLength ?? ""),
     sizeIncrementMm: String(raw.sizeIncrementMm ?? ""),
@@ -208,7 +267,7 @@ export default function SteelAnchorBolt() {
     embedmentDepth: "",
     concreteGrade: "C25",
   });
-  const [specimens, setSpecimens] = useState<AnchorBoltSpecimen[]>([newSpecimen(1)]);
+  const [specimens, setSpecimens] = useState<AnchorBoltSpecimen[]>(() => [newSpecimen(1, ar)]);
   const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
   const [submitted, setSubmitted] = useState(false);
@@ -275,15 +334,15 @@ export default function SteelAnchorBolt() {
   );
 
   const addSpecimen = useCallback(() => {
-    setSpecimens((prev) => [...prev, newSpecimen(prev.length + 1)]);
-  }, []);
+    setSpecimens((prev) => [...prev, newSpecimen(prev.length + 1, ar)]);
+  }, [ar]);
 
   const deleteSpecimen = useCallback((id: string) => {
     setSpecimens((prev) => {
       if (prev.length <= 1) return prev;
-      return renumber(prev.filter((r) => r.id !== id));
+      return renumber(prev.filter((r) => r.id !== id), { ar, refreshTrialLabels: true });
     });
-  }, []);
+  }, [ar]);
 
   const handleBoltTypeChange = (boltType: BoltType) => {
     const nominal = String(BOLT_TYPES[boltType].nominalMm);
@@ -514,6 +573,9 @@ export default function SteelAnchorBolt() {
                   <th className={th} rowSpan={2}>
                     {ar ? "رقم العينة" : "Sample No."}
                   </th>
+                  <th className={th} rowSpan={2}>
+                    {ar ? "التجربة" : "Trial"}
+                  </th>
                   <th className={`${th} bg-yellow-50`} rowSpan={2}>
                     <div className="flex flex-col gap-0.5">
                       <span>{ar ? "الحجم الاسمي" : "Nominal"}</span>
@@ -531,9 +593,6 @@ export default function SteelAnchorBolt() {
                       <span>{ar ? "مساحة المقطع" : "Cut Section"}</span>
                       <span>(mm²)</span>
                     </div>
-                  </th>
-                  <th className={th} rowSpan={2}>
-                    {ar ? "التجارب" : "Trials"}
                   </th>
                   <th className={`${th} bg-green-50`} colSpan={2}>
                     {ar ? "إجهاد الشد" : "Tensile Strength"}
@@ -580,6 +639,16 @@ export default function SteelAnchorBolt() {
                   return (
                     <tr key={row.id} className="hover:bg-slate-50">
                       <td className={`${tdCalc} font-bold`}>{row.specimenNumber}</td>
+                      <td className={tdIn}>
+                        <Input
+                          type="text"
+                          value={input.trials}
+                          onChange={(e) => updateSpecimen(row.id, "trials", e.target.value)}
+                          className="h-8 text-xs text-center bg-white border border-slate-300 min-w-[88px]"
+                          placeholder={defaultTrialLabel(row.specimenNumber, ar)}
+                          disabled={submitted}
+                        />
+                      </td>
                       <td className={`${tdIn} bg-yellow-50`}>
                         <Input
                           type="number"
@@ -608,16 +677,6 @@ export default function SteelAnchorBolt() {
                         {row.cutSectionArea != null && row.cutSectionArea > 0
                           ? row.cutSectionArea.toFixed(3)
                           : "—"}
-                      </td>
-                      <td className={tdIn}>
-                        <Input
-                          type="text"
-                          value={input.trials}
-                          onChange={(e) => updateSpecimen(row.id, "trials", e.target.value)}
-                          className="h-8 text-xs text-center bg-white border border-slate-300"
-                          placeholder={ar ? "التجربة الأولى" : "first trial"}
-                          disabled={submitted}
-                        />
                       </td>
                       <td className={`${tdIn} bg-yellow-50`}>
                         <Input
