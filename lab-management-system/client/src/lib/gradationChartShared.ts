@@ -5,7 +5,7 @@ export const GRADATION_CHART_HEIGHT = 500;
 export const GRADATION_CHART_MARGIN = {
   top: 25,
   right: 40,
-  left: 20,
+  left: 48,
   bottom: 80,
 } as const;
 
@@ -30,6 +30,12 @@ export const GRADATION_AXIS_LABEL_STYLE = {
   fill: "#1e293b",
   letterSpacing: "0.5px",
 } as const;
+
+/** Clamp values to 0–100 for % passing gradation charts (plot scale). */
+export function clampChartPercent(value: number): number {
+  if (!Number.isFinite(value)) return 0;
+  return Math.min(100, Math.max(0, value));
+}
 
 export function gradationTooltipFormatter(
   labelMap: Record<string, string>,
@@ -84,17 +90,21 @@ export function gradationXAxisProps(
 
 export function gradationYAxisProps(ar?: boolean) {
   return {
+    type: "number" as const,
     domain: [0, 100] as [number, number],
+    allowDataOverflow: true,
+    allowDecimals: false,
+    reversed: false,
     ticks: [0, 25, 50, 75, 100],
     tick: { fontSize: 11, fill: "#475569", fontWeight: 500 },
     axisLine: { stroke: "#cbd5e1", strokeWidth: 2 },
     tickLine: { stroke: "#cbd5e1" },
-    width: 56,
+    width: 48,
     label: {
-      value: ar ? "% Passing" : "% Passing",
+      value: "% Passing",
       angle: -90,
       position: "insideLeft" as const,
-      offset: 0,
+      offset: 10,
       style: GRADATION_AXIS_LABEL_STYLE,
     },
   };

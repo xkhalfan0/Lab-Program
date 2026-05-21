@@ -105,6 +105,7 @@ export function GradationCurveChart({
         <div
           className="bg-white p-4 rounded-lg border border-slate-200 shadow-sm w-full"
           style={{ height, minHeight: height }}
+          dir="ltr"
         >
           <ResponsiveContainer width="100%" height="100%" minHeight={height}>
             <LineChart data={data} margin={GRADATION_CHART_MARGIN}>

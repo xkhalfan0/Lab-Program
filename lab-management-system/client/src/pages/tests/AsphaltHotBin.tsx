@@ -26,6 +26,7 @@ import { Send, FlaskConical, Info, Printer, Plus, X, ArrowLeftRight } from "luci
 import { useLanguage } from "@/contexts/LanguageContext";
 import { GradationCurveChart } from "@/components/GradationCurveChart";
 import { hotBinGradationLegendItems } from "@/components/GradationChartLegend";
+import { clampChartPercent } from "@/lib/gradationChartShared";
 import {
   LAB_HOTBIN_INPUT,
   LAB_HOTBIN_JMF_INPUT,
@@ -142,13 +143,14 @@ export default function AsphaltHotBin() {
 
   const chartData = useMemo(() => {
     if (!specLimits) return [];
-    return [...HOT_BIN_SIEVE_SIZES].reverse().map((sieve) => ({
+    // Coarse → fine left-to-right (25 mm … 0.075 mm); Y values clamped to 0–100% plot scale
+    return HOT_BIN_SIEVE_SIZES.map((sieve) => ({
       sieve: sieve.label,
-      combined: Number(combinedGrading[sieve.size]) || 0,
-      jmfLower: Number(parseFloat(jmfLimits.lower[sieve.size] ?? "") || 0),
-      jmfUpper: Number(parseFloat(jmfLimits.upper[sieve.size] ?? "") || 0),
-      specLower: Number(specLimits[sieve.size]?.lower ?? 0),
-      specUpper: Number(specLimits[sieve.size]?.upper ?? 0),
+      combined: clampChartPercent(Number(combinedGrading[sieve.size]) || 0),
+      jmfLower: clampChartPercent(Number(parseFloat(jmfLimits.lower[sieve.size] ?? "") || 0)),
+      jmfUpper: clampChartPercent(Number(parseFloat(jmfLimits.upper[sieve.size] ?? "") || 0)),
+      specLower: clampChartPercent(Number(specLimits[sieve.size]?.lower ?? 0)),
+      specUpper: clampChartPercent(Number(specLimits[sieve.size]?.upper ?? 0)),
     }));
   }, [combinedGrading, jmfLimits, specLimits]);
 
