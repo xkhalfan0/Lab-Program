@@ -26,7 +26,11 @@ import { Send, FlaskConical, Info, Printer, Plus, X, ArrowLeftRight } from "luci
 import { useLanguage } from "@/contexts/LanguageContext";
 import { GradationCurveChart } from "@/components/GradationCurveChart";
 import { hotBinGradationLegendItems } from "@/components/GradationChartLegend";
-import { LAB_TABLE_NUMERIC } from "@/lib/labInputStyles";
+import {
+  LAB_HOTBIN_INPUT,
+  LAB_HOTBIN_JMF_INPUT,
+  LAB_HOTBIN_PCT_INPUT,
+} from "@/lib/labInputStyles";
 
 interface TestParams {
   mixType: HotBinMixCourse | "";
@@ -432,39 +436,47 @@ export default function AsphaltHotBin() {
           </CardContent>
         </Card>
 
-        <Card className="mb-4">
+        <Card className="mb-6">
           <CardHeader className="flex flex-row items-center justify-between pb-3">
-            <CardTitle className="text-sm font-semibold">
+            <CardTitle className="text-base font-semibold text-slate-800">
               {ar ? "بيانات تحليل المنخل" : "Sieve Analysis Data"}
             </CardTitle>
             {!submitted && (
-              <Button size="sm" variant="outline" onClick={addSample}>
-                <Plus className="w-4 h-4 mr-1" />
+              <Button size="sm" onClick={addSample} className="gap-2">
+                <Plus className="w-4 h-4" />
                 {ar ? "إضافة عينة ركام" : "Add Aggregate Sample"}
               </Button>
             )}
           </CardHeader>
           <CardContent>
-            <div className="relative">
-              <div className="overflow-x-auto shadow-inner rounded-lg border border-slate-200">
-                <table className="w-full text-[11px] border-collapse min-w-[960px] table-fixed">
-                  <thead className="bg-slate-50">
-                    <tr>
-                      <th
-                        className="border border-slate-300 px-1.5 py-1 font-semibold sticky left-0 bg-slate-100 z-10 w-12"
-                        rowSpan={2}
-                      >
-                        {ar ? "منخل" : "Sieve"}
-                      </th>
-                      {computedSamples.map((sample) => {
-                        const sampleIdx = aggregateSamples.findIndex((s) => s.id === sample.id);
-                        return (
-                          <th
-                            key={sample.id}
-                            className="border border-slate-300 px-1 py-1 bg-yellow-50"
-                            colSpan={2}
-                          >
-                            <div className="flex items-center justify-center gap-1">
+            <div className="overflow-x-auto rounded-lg border border-slate-200 shadow-sm">
+              <table className="w-full text-xs border-collapse min-w-[1600px] bg-white">
+                <thead>
+                  <tr className="bg-gradient-to-r from-slate-100 to-slate-50">
+                    <th
+                      className="border-r border-slate-300 px-4 py-3 text-left font-bold text-slate-700 sticky left-0 bg-slate-100 z-20"
+                      rowSpan={2}
+                      style={{ minWidth: "80px" }}
+                    >
+                      <div className="flex flex-col gap-1">
+                        <span className="text-sm">{ar ? "المنخل" : "Sieve"}</span>
+                        <span className="text-[10px] text-slate-500 font-normal">(mm)</span>
+                      </div>
+                    </th>
+                    {computedSamples.map((sample) => {
+                      const sampleIdx = aggregateSamples.findIndex((s) => s.id === sample.id);
+                      return (
+                        <th
+                          key={sample.id}
+                          className="border-r border-slate-300 px-3 py-2 bg-amber-50"
+                          colSpan={2}
+                          style={{ minWidth: "200px" }}
+                        >
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="flex items-center gap-2 flex-1 min-w-0">
+                              <span className="text-xs font-semibold text-amber-800 whitespace-nowrap">
+                                {ar ? "ركام" : "Aggregate"}
+                              </span>
                               <Input
                                 type="number"
                                 step="0.1"
@@ -472,171 +484,241 @@ export default function AsphaltHotBin() {
                                 onChange={(e) =>
                                   updateSamplePercentage(sampleIdx, e.target.value)
                                 }
-                                className={`${LAB_TABLE_NUMERIC} max-w-[52px] font-bold`}
+                                className={LAB_HOTBIN_PCT_INPUT}
                                 placeholder="%"
                                 disabled={submitted}
+                                title={ar ? "نسبة الركام المستخدمة" : "Aggregate used %"}
                               />
-                              {aggregateSamples.length > 1 && !submitted && (
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  onClick={() => removeSample(sample.id)}
-                                  className="h-6 w-6 p-0 hover:bg-red-100"
-                                >
-                                  <X className="w-3 h-3 text-red-600" />
-                                </Button>
-                              )}
                             </div>
-                          </th>
-                        );
-                      })}
-                      <th
-                        className="border border-slate-300 px-1 py-1 bg-green-100 font-bold text-green-900 w-14"
-                        rowSpan={2}
-                      >
-                        {ar ? "مجمّع" : "Comb."}
-                      </th>
-                      <th
-                        className="border border-slate-300 px-1 py-1 bg-blue-100 w-20"
-                        colSpan={2}
-                      >
-                        JMF
-                      </th>
-                      <th
-                        className="border border-slate-300 px-1 py-1 bg-purple-100 w-20"
-                        colSpan={2}
-                      >
-                        {ar ? "مواصفات" : "Spec"}
-                      </th>
-                      <th
-                        className="border border-slate-300 px-1 py-1 w-14"
-                        rowSpan={2}
-                      >
-                        {ar ? "حالة" : "St."}
-                      </th>
-                    </tr>
-                    <tr>
-                      {computedSamples.map((sample) => (
-                        <Fragment key={`sub-${sample.id}`}>
-                          <th className="border border-slate-300 px-1 py-0.5 bg-yellow-50 font-medium">
-                            {ar ? "أصلي" : "Orig."}
-                          </th>
-                          <th className="border border-slate-300 px-1 py-0.5 bg-yellow-100 font-medium">
-                            {ar ? "مطلوب" : "Req."}
-                          </th>
-                        </Fragment>
-                      ))}
-                      <th className="border border-slate-300 px-1 py-0.5 bg-blue-100 font-medium">
-                        {ar ? "أدنى" : "Lo"}
-                      </th>
-                      <th className="border border-slate-300 px-1 py-0.5 bg-blue-100 font-medium">
-                        {ar ? "أعلى" : "Hi"}
-                      </th>
-                      <th className="border border-slate-300 px-1 py-0.5 bg-purple-100 font-medium">
-                        {ar ? "أدنى" : "Lo"}
-                      </th>
-                      <th className="border border-slate-300 px-1 py-0.5 bg-purple-100 font-medium">
-                        {ar ? "أعلى" : "Hi"}
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {HOT_BIN_SIEVE_SIZES.map((sieve) => {
-                      const combined = combinedGrading[sieve.size] || 0;
-                      const specLower = specLimits?.[sieve.size]?.lower ?? 0;
-                      const specUpper = specLimits?.[sieve.size]?.upper ?? 0;
-                      const result = sieveResults.find((r) => r.size === sieve.size);
-                      const pass = result?.pass;
-                      const showStatus = params.mixType && hasGradationInput;
+                            {aggregateSamples.length > 1 && !submitted && (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => removeSample(sample.id)}
+                                className="h-7 w-7 p-0 shrink-0 hover:bg-red-100 text-red-600"
+                              >
+                                <X className="w-4 h-4" />
+                              </Button>
+                            )}
+                          </div>
+                        </th>
+                      );
+                    })}
+                    <th
+                      className="border-r border-slate-300 px-4 py-3 bg-green-100"
+                      rowSpan={2}
+                      style={{ minWidth: "100px" }}
+                    >
+                      <div className="flex flex-col items-center gap-1">
+                        <span className="text-sm font-bold text-green-800">
+                          {ar ? "الدرجة" : "Combined"}
+                        </span>
+                        <span className="text-xs font-semibold text-green-700">
+                          {ar ? "المجمعة" : "Grading"}
+                        </span>
+                      </div>
+                    </th>
+                    <th
+                      className="border-r border-slate-300 px-3 py-2 bg-blue-100"
+                      colSpan={2}
+                      style={{ minWidth: "160px" }}
+                    >
+                      <div className="flex flex-col items-center gap-1">
+                        <span className="text-sm font-bold text-blue-800">
+                          {ar ? "حدود JMF" : "JMF Limits"}
+                        </span>
+                        <span className="text-[10px] text-blue-600">
+                          {ar ? "(من المصنع)" : "(Factory Mix)"}
+                        </span>
+                      </div>
+                    </th>
+                    <th
+                      className="border-r border-slate-300 px-3 py-2 bg-purple-100"
+                      colSpan={2}
+                      style={{ minWidth: "160px" }}
+                    >
+                      <div className="flex flex-col items-center gap-1">
+                        <span className="text-sm font-bold text-purple-800">
+                          {ar ? "حدود المواصفات" : "Spec Limits"}
+                        </span>
+                        <span className="text-[10px] text-purple-600">
+                          {ar ? "(المعايير)" : "(Standards)"}
+                        </span>
+                      </div>
+                    </th>
+                    <th
+                      className="px-3 py-3 bg-slate-100"
+                      rowSpan={2}
+                      style={{ minWidth: "90px" }}
+                    >
+                      <span className="text-sm font-bold text-slate-700">
+                        {ar ? "الحالة" : "Status"}
+                      </span>
+                    </th>
+                  </tr>
+                  <tr className="bg-slate-50">
+                    {computedSamples.map((sample) => (
+                      <Fragment key={`sub-${sample.id}`}>
+                        <th className="border-r border-t border-slate-300 px-3 py-2 text-xs font-semibold text-amber-800 bg-amber-50/80">
+                          {ar ? "التدرج الأصلي" : "Original"}
+                        </th>
+                        <th className="border-r border-t border-slate-300 px-3 py-2 text-xs font-semibold text-amber-900 bg-amber-100/70">
+                          {ar ? "مطلوب" : "Required"}
+                        </th>
+                      </Fragment>
+                    ))}
+                    <th className="border-r border-t border-slate-300 px-3 py-2 text-xs font-semibold text-blue-800 bg-blue-50">
+                      {ar ? "أدنى" : "Lower"}
+                    </th>
+                    <th className="border-r border-t border-slate-300 px-3 py-2 text-xs font-semibold text-blue-800 bg-blue-50">
+                      {ar ? "أعلى" : "Upper"}
+                    </th>
+                    <th className="border-r border-t border-slate-300 px-3 py-2 text-xs font-semibold text-purple-800 bg-purple-50">
+                      {ar ? "أدنى" : "Lower"}
+                    </th>
+                    <th className="border-r border-t border-slate-300 px-3 py-2 text-xs font-semibold text-purple-800 bg-purple-50">
+                      {ar ? "أعلى" : "Upper"}
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {HOT_BIN_SIEVE_SIZES.map((sieve, sieveIdx) => {
+                    const combined = combinedGrading[sieve.size] || 0;
+                    const specLower = specLimits?.[sieve.size]?.lower ?? 0;
+                    const specUpper = specLimits?.[sieve.size]?.upper ?? 0;
+                    const result = sieveResults.find((r) => r.size === sieve.size);
+                    const pass = result?.pass;
+                    const showStatus = params.mixType && hasGradationInput;
+                    const rowBg = sieveIdx % 2 === 0 ? "bg-white" : "bg-slate-50/40";
 
-                      return (
-                        <tr key={sieve.size} className="hover:bg-slate-50/80">
-                          <td className="border border-slate-300 px-1 py-0.5 font-bold text-center sticky left-0 bg-white z-10">
-                            {sieve.label}
-                          </td>
-                          {computedSamples.map((sample, idx) => (
+                    return (
+                      <tr
+                        key={sieve.size}
+                        className={`${rowBg} hover:bg-slate-50 transition-colors`}
+                      >
+                        <td
+                          className={`border-r border-slate-300 px-4 py-2.5 font-bold text-sm text-slate-700 text-center sticky left-0 z-10 ${rowBg}`}
+                          style={{ minWidth: "80px" }}
+                        >
+                          {sieve.label}
+                        </td>
+                        {computedSamples.map((sample) => {
+                          const sampleIdx = aggregateSamples.findIndex((s) => s.id === sample.id);
+                          return (
                             <Fragment key={`data-${sample.id}-${sieve.size}`}>
-                              <td className="border border-slate-300 px-0.5 py-0.5">
+                              <td className="border-r border-slate-300 px-2 py-2 bg-amber-50/40">
                                 <Input
                                   type="number"
                                   step="0.1"
                                   value={
-                                    aggregateSamples[idx]?.originalGradations[sieve.size] ?? ""
+                                    aggregateSamples[sampleIdx]?.originalGradations[sieve.size] ??
+                                    ""
                                   }
-                                  onChange={(e) => updateOrigGrad(idx, sieve.size, e.target.value)}
-                                  className={LAB_TABLE_NUMERIC}
+                                  onChange={(e) =>
+                                    updateOrigGrad(sampleIdx, sieve.size, e.target.value)
+                                  }
+                                  className={LAB_HOTBIN_INPUT}
                                   placeholder="0"
                                   disabled={submitted}
                                 />
                               </td>
-                              <td className="border border-slate-300 px-1 py-0.5 text-center bg-yellow-100 font-semibold tabular-nums">
-                                {sample.requiredGradations[sieve.size] ?? 0}
+                              <td className="border-r border-slate-300 px-3 py-2.5 text-center bg-amber-100/50">
+                                <span className="font-semibold text-sm text-amber-900 tabular-nums">
+                                  {sample.requiredGradations[sieve.size] ?? 0}
+                                </span>
                               </td>
                             </Fragment>
-                          ))}
-                          <td className="border border-slate-300 px-1 py-0.5 text-center bg-green-100 font-bold text-green-900 tabular-nums">
+                          );
+                        })}
+                        <td className="border-r border-slate-300 px-3 py-2.5 text-center bg-green-100/70">
+                          <span className="font-bold text-base text-green-900 tabular-nums">
                             {hasGradationInput ? combined : "—"}
-                          </td>
-                          <td className="border border-slate-300 px-0.5 py-0.5">
-                            <Input
-                              type="number"
-                              step="1"
-                              value={jmfLimits.lower[sieve.size] ?? ""}
-                              onChange={(e) =>
-                                setJmfLimits((prev) => ({
-                                  ...prev,
-                                  lower: { ...prev.lower, [sieve.size]: e.target.value },
-                                }))
-                              }
-                              className={LAB_TABLE_NUMERIC}
-                              placeholder="—"
-                              disabled={submitted}
-                            />
-                          </td>
-                          <td className="border border-slate-300 px-0.5 py-0.5">
-                            <Input
-                              type="number"
-                              step="1"
-                              value={jmfLimits.upper[sieve.size] ?? ""}
-                              onChange={(e) =>
-                                setJmfLimits((prev) => ({
-                                  ...prev,
-                                  upper: { ...prev.upper, [sieve.size]: e.target.value },
-                                }))
-                              }
-                              className={LAB_TABLE_NUMERIC}
-                              placeholder="—"
-                              disabled={submitted}
-                            />
-                          </td>
-                          <td className="border border-slate-300 px-1 py-0.5 text-center bg-purple-50 font-medium tabular-nums">
+                          </span>
+                        </td>
+                        <td className="border-r border-slate-300 px-2 py-2 bg-blue-50/40">
+                          <Input
+                            type="number"
+                            step="1"
+                            value={jmfLimits.lower[sieve.size] ?? ""}
+                            onChange={(e) =>
+                              setJmfLimits((prev) => ({
+                                ...prev,
+                                lower: { ...prev.lower, [sieve.size]: e.target.value },
+                              }))
+                            }
+                            className={LAB_HOTBIN_JMF_INPUT}
+                            placeholder="—"
+                            disabled={submitted}
+                          />
+                        </td>
+                        <td className="border-r border-slate-300 px-2 py-2 bg-blue-50/40">
+                          <Input
+                            type="number"
+                            step="1"
+                            value={jmfLimits.upper[sieve.size] ?? ""}
+                            onChange={(e) =>
+                              setJmfLimits((prev) => ({
+                                ...prev,
+                                upper: { ...prev.upper, [sieve.size]: e.target.value },
+                              }))
+                            }
+                            className={LAB_HOTBIN_JMF_INPUT}
+                            placeholder="—"
+                            disabled={submitted}
+                          />
+                        </td>
+                        <td className="border-r border-slate-300 px-3 py-2.5 text-center bg-purple-50/50">
+                          <span className="font-medium text-sm text-purple-800 tabular-nums">
                             {params.mixType ? specLower : "—"}
-                          </td>
-                          <td className="border border-slate-300 px-1 py-0.5 text-center bg-purple-50 font-medium tabular-nums">
+                          </span>
+                        </td>
+                        <td className="border-r border-slate-300 px-3 py-2.5 text-center bg-purple-50/50">
+                          <span className="font-medium text-sm text-purple-800 tabular-nums">
                             {params.mixType ? specUpper : "—"}
-                          </td>
-                          <td className="border border-slate-300 px-0.5 py-0.5 text-center">
-                            {!showStatus ? (
-                              <span className="text-slate-400">—</span>
-                            ) : (
-                              <Badge
-                                variant={pass ? "default" : "destructive"}
-                                className={`h-5 px-1.5 text-[10px] font-semibold ${pass ? "bg-green-600 hover:bg-green-600" : "bg-red-600 hover:bg-red-600"}`}
-                              >
-                                {pass ? (ar ? "✓" : "P") : ar ? "✗" : "F"}
-                              </Badge>
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-              <div className="flex md:hidden items-center justify-center gap-2 mt-2 text-xs text-muted-foreground">
-                <ArrowLeftRight className="w-3 h-3" />
-                <span>{ar ? "مرر لليمين لرؤية المزيد" : "Scroll to see more"}</span>
-              </div>
+                          </span>
+                        </td>
+                        <td className="px-3 py-2 text-center">
+                          {!showStatus ? (
+                            <span className="text-slate-400">—</span>
+                          ) : (
+                            <Badge
+                              variant={pass ? "default" : "destructive"}
+                              className={`text-xs font-bold px-3 py-1 ${
+                                pass
+                                  ? "bg-green-500 hover:bg-green-600"
+                                  : "bg-red-500 hover:bg-red-600"
+                              }`}
+                            >
+                              {pass
+                                ? ar
+                                  ? "✓ مطابق"
+                                  : "✓ Pass"
+                                : ar
+                                  ? "✗ غير مطابق"
+                                  : "✗ Fail"}
+                            </Badge>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+                <tfoot>
+                  <tr className="bg-gradient-to-r from-slate-100 to-slate-50">
+                    <td colSpan={100} className="px-4 py-3 text-center border-t border-slate-200">
+                      <p className="text-xs text-slate-600 italic">
+                        {ar
+                          ? "أدخل نسبة الركام (% في الرأس) والتدرج الأصلي. القيم المطلوبة والدرجة المجمعة تُحسب تلقائياً."
+                          : "Enter aggregate % (header) and original gradation. Required and combined grading are calculated automatically."}
+                      </p>
+                    </td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+            <div className="flex md:hidden items-center justify-center gap-2 mt-2 text-xs text-muted-foreground">
+              <ArrowLeftRight className="w-3 h-3" />
+              <span>{ar ? "مرر لليمين لرؤية المزيد" : "Scroll horizontally for more columns"}</span>
             </div>
           </CardContent>
         </Card>
