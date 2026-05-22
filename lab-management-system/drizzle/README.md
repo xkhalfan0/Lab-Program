@@ -10,10 +10,24 @@
 
 ### Start Phase
 
-Migrations run when the app starts, when `DATABASE_URL` is available:
+Production start **only** runs the server (so a failed migration cannot take the site offline):
 
 ```bash
-pnpm run db:full-migration && node dist/index.js
+node dist/index.js
+```
+
+Run migrations manually when needed (Railway shell / CLI):
+
+```bash
+pnpm run db:full-migration
+# or sector logins only:
+pnpm db:seed:sectors
+```
+
+Optional local/Railway one-shot with migration before server:
+
+```bash
+pnpm run start:migrate
 ```
 
 `db:full-migration` uses the existing custom startup migration script:

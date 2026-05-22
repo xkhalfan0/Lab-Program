@@ -235,6 +235,8 @@ pnpm run build
 pnpm start
 ```
 
+Production (`pnpm start`) starts the server only. Database setup is separate: `pnpm db:seed:sectors` or `pnpm run db:full-migration` (see `drizzle/README.md`).
+
 Then open the URL shown in the terminal (usually `http://localhost:3000/`).
 
 ---

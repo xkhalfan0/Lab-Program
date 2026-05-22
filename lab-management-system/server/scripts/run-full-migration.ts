@@ -79,8 +79,12 @@ async function main() {
       throw e;
     }
 
-    console.log("[migration] Step 8: Seed sector portal accounts");
-    execSync("tsx server/scripts/seed-sector-accounts.ts", { stdio: "inherit" });
+    console.log("[migration] Step 8: Seed sector portal accounts (non-fatal)");
+    try {
+      execSync("tsx server/scripts/seed-sector-accounts.ts", { stdio: "inherit" });
+    } catch (e) {
+      console.warn("[migration] ⚠️ Sector seed skipped or failed — run: pnpm db:seed:sectors", e);
+    }
 
     console.log("[migration] ✅ All steps complete!");
     process.exit(0);
