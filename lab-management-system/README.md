@@ -207,6 +207,19 @@ http://localhost:3000/
 
 (or another port if 3000 is busy). Open that address in **Chrome**, **Edge**, or **Firefox**.
 
+### Sector portal (contractors / sectors)
+
+Separate login area for external sectors (not the same as lab staff login):
+
+- URL: `http://localhost:3000/sector/login` (on your server, use the same path after your domain)
+- First-time setup (creates tables + demo accounts):
+
+```bash
+pnpm db:seed:sectors
+```
+
+- Demo logins: `sector1` … `sector5` with password `123123`
+
 To stop the app, go to the terminal window and press **Ctrl + C**.
 
 ---

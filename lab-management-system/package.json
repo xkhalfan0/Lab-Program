@@ -26,6 +26,7 @@
     "db:reset:tests": "tsx server/scripts/reset-test-data.ts",
     "db:seed:contractors": "tsx server/scripts/seed-contractors-projects.ts",
     "db:seed:users": "tsx server/scripts/seed-role-users.ts",
+    "db:seed:sectors": "tsx server/scripts/seed-sector-accounts.ts",
     "db:check-deletion-table": "tsx server/scripts/check-deletion-table.ts",
     "db:seed:test-types": "tsx server/scripts/seed-test-types.ts",
     "seed:demo": "tsx server/scripts/seedDemo.ts",

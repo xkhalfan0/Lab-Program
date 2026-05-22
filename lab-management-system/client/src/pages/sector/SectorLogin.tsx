@@ -42,8 +42,23 @@ export default function SectorLogin() {
       localStorage.setItem("sector_info", JSON.stringify(data.sector));
       setLocation("/sector/inbox");
     },
-    onError: () => {
-      setError(t[lang].error);
+    onError: (err) => {
+      const msg = err.message ?? "";
+      if (msg.includes("sector_accounts") || msg.includes("Failed query")) {
+        setError(
+          lang === "ar"
+            ? "بوابة القطاع غير مهيأة في قاعدة البيانات. شغّل: pnpm db:seed:sectors"
+            : "Sector portal database is not set up. Run: pnpm db:seed:sectors",
+        );
+      } else if (msg.includes("JWT_SECRET")) {
+        setError(
+          lang === "ar"
+            ? "إعدادات الخادم ناقصة (JWT_SECRET)"
+            : "Server misconfigured (JWT_SECRET missing)",
+        );
+      } else {
+        setError(t[lang].error);
+      }
     },
   });
 

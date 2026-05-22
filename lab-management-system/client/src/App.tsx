@@ -137,8 +137,35 @@ function SectorGuard({ component: Component }: { component: React.ComponentType 
     }
   }, [token, setLocation]);
 
-  if (!token) return null;
+  if (!token) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+      </div>
+    );
+  }
   return <Component />;
+}
+
+function SectorPage({ component: Component }: { component: React.ComponentType }) {
+  return (
+    <SectorLangProvider>
+      <SectorGuard component={Component} />
+    </SectorLangProvider>
+  );
+}
+
+function SectorRootRedirect() {
+  const [, setLocation] = useLocation();
+  useEffect(() => {
+    const token = localStorage.getItem("sector_token");
+    setLocation(token ? "/sector/inbox" : "/sector/login");
+  }, [setLocation]);
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-slate-50">
+      <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+    </div>
+  );
 }
 
 // ─── Protected Route wrapper ─────────────────────────────────────────────────
@@ -285,37 +312,15 @@ function Router() {
         {() => <ProtectedRoute component={Home} path="/" />}
       </Route>
 
-      {/* Sector Portal routes — completely separate from lab staff */}
+      {/* Sector Portal — separate from lab staff (flat routes for reliable matching) */}
       <Route path="/sector/login" component={SectorLogin} />
-      <Route path="/sector/:rest*">
-        {() => (
-          <SectorLangProvider>
-            <Switch>
-              <Route path="/sector/inbox">
-                {() => <SectorGuard component={SectorInbox} />}
-              </Route>
-              <Route path="/sector/dashboard">
-                {() => <SectorGuard component={SectorDashboard} />}
-              </Route>
-              <Route path="/sector/samples">
-                {() => <SectorGuard component={SectorSamples} />}
-              </Route>
-              <Route path="/sector/results">
-                {() => <SectorGuard component={SectorResults} />}
-              </Route>
-              <Route path="/sector/clearances">
-                {() => <SectorGuard component={SectorClearances} />}
-              </Route>
-              <Route path="/sector/notifications">
-                {() => <SectorGuard component={SectorNotifications} />}
-              </Route>
-              <Route>
-                {() => <SectorGuard component={SectorInbox} />}
-              </Route>
-            </Switch>
-          </SectorLangProvider>
-        )}
-      </Route>
+      <Route path="/sector" component={SectorRootRedirect} />
+      <Route path="/sector/inbox">{() => <SectorPage component={SectorInbox} />}</Route>
+      <Route path="/sector/dashboard">{() => <SectorPage component={SectorDashboard} />}</Route>
+      <Route path="/sector/samples">{() => <SectorPage component={SectorSamples} />}</Route>
+      <Route path="/sector/results">{() => <SectorPage component={SectorResults} />}</Route>
+      <Route path="/sector/clearances">{() => <SectorPage component={SectorClearances} />}</Route>
+      <Route path="/sector/notifications">{() => <SectorPage component={SectorNotifications} />}</Route>
 
       <Route path="/404" component={NotFound} />
       <Route component={NotFound} />

@@ -79,6 +79,9 @@ async function main() {
       throw e;
     }
 
+    console.log("[migration] Step 8: Seed sector portal accounts");
+    execSync("tsx server/scripts/seed-sector-accounts.ts", { stdio: "inherit" });
+
     console.log("[migration] ✅ All steps complete!");
     process.exit(0);
   } catch (error) {

@@ -68,6 +68,12 @@ export const sectorRouter = router({
   login: publicProcedure
     .input(z.object({ username: z.string(), password: z.string() }))
     .mutation(async ({ input }) => {
+      if (!process.env.JWT_SECRET?.trim()) {
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "JWT_SECRET is not configured on the server",
+        });
+      }
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
 
@@ -789,7 +795,7 @@ export const sectorRouter = router({
       type: "notification" as const,
       title: n.title,
       titleEn: n.title,
-      subtitle: n.content,
+      subtitle: n.message,
       status: n.isRead ? "read" : "unread",
       isRead: !!n.isRead,
       createdAt: n.createdAt,
