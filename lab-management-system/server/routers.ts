@@ -136,6 +136,27 @@ import { generateMonthlyReportPdf } from "./monthlyReportPdf";
 import { invokeLLM } from "./_core/llm";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
+
+/**
+ * Number of billable units for a test. Most tests bill once (1 unit), but
+ * Field Density (Compaction) is billed per test point/location, so its unit
+ * count is the number of points recorded in the submitted result.
+ */
+function billingUnitCount(
+  testType: { code?: string | null; formTemplate?: string | null } | null,
+  distTestType: string | null | undefined,
+  specResult: unknown,
+): number {
+  const isFieldDensity =
+    testType?.formTemplate === "soil_field_density" ||
+    testType?.code === "SOIL_FIELD_DENSITY" ||
+    distTestType === "SOIL_FIELD_DENSITY";
+  if (!isFieldDensity) return 1;
+  const fd = (specResult as { formData?: { testPoints?: unknown[]; points?: unknown[] } } | null)?.formData;
+  const points = fd?.testPoints ?? fd?.points;
+  return Array.isArray(points) && points.length > 0 ? points.length : 1;
+}
+
 function calculateStats(values: number[], min?: number | null, max?: number | null) {
   const n = values.length;
   if (n === 0) return null;
@@ -2323,10 +2344,12 @@ ${testSummaries.length > 0 ? testSummaries.join("\n\n") : "لم تُجرَ اخ�
             // dist.testType is the code string, find matching test type by code
             const allTT = await getAllTestTypes();
             const testType = allTT.find(tt => tt.code === dist.testType) ?? null;
-            const price = testType ? Number(testType.unitPrice) : 0;
-            totalAmount += price;
             // Check result
             const specResult = await getSpecializedTestResultByDistribution(dist.id);
+            // Field Density bills per recorded point; other tests bill once.
+            const units = billingUnitCount(testType, dist.testType, specResult);
+            const price = (testType ? Number(testType.unitPrice) : 0) * units;
+            totalAmount += price;
             const legacyResults = await getTestResultBySample(sample.id);
             const legacyResult = Array.isArray(legacyResults) ? legacyResults[0] : legacyResults;
             let result = "pending";
@@ -2342,6 +2365,8 @@ ${testSummaries.length > 0 ? testSummaries.join("\n\n") : "لم تُجرَ اخ�
               testCode: testType?.code ?? dist.testType,
               category: testType?.category ?? "concrete",
               standard: testType?.standardRef ?? "",
+              units,
+              unitPrice: testType ? Number(testType.unitPrice) : 0,
               price,
               result,
               distributionCode: dist.distributionCode,
@@ -2691,7 +2716,7 @@ ${testSummaries.length > 0 ? testSummaries.join("\n\n") : "لم تُجرَ اخ�
               testNameEn: tt?.nameEn ?? dist.testType,
               testNameAr: tt?.nameAr ?? "",
               category: tt?.category ?? "concrete",
-              price: tt ? Number(tt.unitPrice) : 0,
+              price: (tt ? Number(tt.unitPrice) : 0) * billingUnitCount(tt, dist.testType, specResult),
               result,
               createdAt: new Date(sample.createdAt),
             });

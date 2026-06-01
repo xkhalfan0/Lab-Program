@@ -2,7 +2,7 @@
  * BatchOverview — Progress dashboard for all tests in a lab-order batch (same sample + order)
  * URL: /batch/:sampleId/:orderId
  */
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { useParams, useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { getOfficialTestDisplayName } from "@/lib/officialTestCatalog";
@@ -79,6 +79,20 @@ export default function BatchOverview() {
   );
 
   const sorted = useMemo(() => sortBatchSiblings(siblings as BatchSibling[]), [siblings]);
+
+  // Single-test orders are not a "batch": skip this overview and go straight to
+  // the one report (when complete) or its test form (when still pending).
+  useEffect(() => {
+    if (siblingsLoading) return;
+    if (sampleId <= 0 || orderId <= 0) return;
+    if (sorted.length !== 1) return;
+    const only = sorted[0];
+    if (isCompleted(only.status)) {
+      navigate(`/test-report/${only.id}`, { replace: true });
+    } else {
+      navigate(testFormPath(only), { replace: true });
+    }
+  }, [siblingsLoading, sorted, sampleId, orderId, navigate]);
 
   const total = sorted.length;
   const completedCount = sorted.filter(s => isCompleted(s.status)).length;

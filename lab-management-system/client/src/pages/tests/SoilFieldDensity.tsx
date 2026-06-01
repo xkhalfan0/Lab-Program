@@ -37,6 +37,7 @@ interface TestPoint {
   id: string;
   pointNumber: number;
   // User inputs
+  location: string;
   depth: string;
   wtWetSoilFromHole: string;
   wtSandInCylinderBefore: string;
@@ -61,6 +62,7 @@ function createEmptyTestPoint(pointNumber: number): TestPoint {
   return {
     id: `pt_${Date.now()}_${pointNumber}`,
     pointNumber,
+    location: "",
     depth: "",
     wtWetSoilFromHole: "",
     wtSandInCylinderBefore: "",
@@ -196,6 +198,7 @@ export default function SoilFieldDensity() {
         location: params.location,
         testPoints: computedPoints.map((p) => ({
           pointNumber: p.pointNumber,
+          location: p.location,
           depth: parseFloat(p.depth) || 0,
           wtWetSoilFromHole: parseFloat(p.wtWetSoilFromHole) || 0,
           wtSandInCylinderBefore: parseFloat(p.wtSandInCylinderBefore) || 0,
@@ -424,6 +427,7 @@ export default function SoilFieldDensity() {
                   {/* Main header row */}
                   <tr className="bg-slate-100">
                     <th rowSpan={2} className={thCls}>{ar ? "رقم النقطة" : "Point No."}</th>
+                    <th rowSpan={2} className={thCls}>{ar ? "الموقع" : "Location"}</th>
                     <th rowSpan={2} className={thCls}>{ar ? "العمق (م)" : "Depth (m)"}</th>
                     <th colSpan={3} className={thCls}>{ar ? "استبدال الرمل" : "Sand Replacement"}</th>
                     <th rowSpan={2} className={`${thCls} bg-blue-50`}>
@@ -452,6 +456,11 @@ export default function SoilFieldDensity() {
                     <tr key={point.id}>
                       <td className="border border-slate-200 px-2 py-1 text-center font-semibold text-xs text-slate-700">
                         P{point.pointNumber}
+                      </td>
+                      <td className={inputTdCls}>
+                        <Input type="text" value={point.location}
+                          onChange={(e) => updatePoint(idx, "location", e.target.value)}
+                          className={`${inputCls} text-left`} placeholder={ar ? "نقطة 1" : "Point 1"} />
                       </td>
                       <td className={inputTdCls}>
                         <Input type="number" step="0.1" value={point.depth}
@@ -534,7 +543,7 @@ export default function SoilFieldDensity() {
                 </tbody>
                 <tfoot>
                   <tr>
-                    <td colSpan={14} className="border border-slate-200 px-3 py-2 text-[11px] text-slate-500 bg-slate-50">
+                    <td colSpan={15} className="border border-slate-200 px-3 py-2 text-[11px] text-slate-500 bg-slate-50">
                       {ar
                         ? `نسبة الدمك المطلوبة: ${params.requiredCompaction || 95}% | النجاح = نسبة الدمك ≥ ${params.requiredCompaction || 95}%`
                         : `Required Compaction: ${params.requiredCompaction || 95}% | Pass = RC ≥ ${params.requiredCompaction || 95}%`}
