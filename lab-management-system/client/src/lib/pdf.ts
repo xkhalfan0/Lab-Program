@@ -108,16 +108,28 @@ export async function generatePdfFromElement(
   ${styleLinks}
   ${inlineStyles}
   <style>
-    /* Full-bleed A4: the .lab-print-root sheet is exactly 210mm wide and
-       provides its own internal padding, so the page itself has no margin. */
+    /* The PDF supplies a 6mm gutter; the sheet fills the rest fluidly. */
     @page { size: A4; margin: 0; }
     /* Ensure Arabic glyphs have a font; keep a Latin-first stack with Arabic fallbacks */
     html, body, .lab-print-root, .lab-print-root * {
       font-family: 'Noto Sans', 'Cairo', 'Noto Naskh Arabic', system-ui, -apple-system, 'Segoe UI', Arial, sans-serif;
     }
     body { margin: 0; padding: 0; background: white; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
-    /* Keep the sheet's 15mm padding inside the 210mm width and drop the on-screen shadow/margins for print */
-    .lab-print-root { box-sizing: border-box !important; width: 210mm !important; margin: 0 !important; box-shadow: none !important; }
+    /* Make the report sheet fluid so it always fits the PDF's printable area
+       (no fixed 210mm that can overflow/clip). It supplies its own 10mm padding
+       as the content margin; the on-screen React preview is unaffected. */
+    .lab-print-root {
+      box-sizing: border-box !important;
+      width: 100% !important;
+      max-width: 100% !important;
+      min-height: auto !important;
+      margin: 0 !important;
+      padding: 10mm !important;
+      box-shadow: none !important;
+    }
+    /* Keep wide content (tables, charts, images) inside the sheet */
+    .lab-print-root table { width: 100% !important; max-width: 100% !important; }
+    .lab-print-root img, .lab-print-root svg, .lab-print-root canvas { max-width: 100% !important; }
     .print\\:hidden { display: none !important; }
     /* Fallback when linked stylesheets fail to load in isolated PDF HTML */
     table { border-collapse: collapse !important; }
