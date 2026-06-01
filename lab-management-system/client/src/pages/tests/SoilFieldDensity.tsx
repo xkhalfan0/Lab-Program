@@ -4,7 +4,6 @@ import { trpc } from "@/lib/trpc";
 import { redirectAfterTestSave } from "@/lib/batchHelpers";
 import DashboardLayout from "@/components/DashboardLayout";
 import { SampleInfoCard } from "@/components/SampleInfoCard";
-import { PassFailBadge, ResultBanner } from "@/components/PassFailBadge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -12,106 +11,111 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Plus, Trash2, Send, FlaskConical, Info , UserCheck , Printer } from "lucide-react";
-
+import { Plus, Trash2, Send, FlaskConical, Printer } from "lucide-react";
 import { useLanguage } from "@/contexts/LanguageContext";
-// ─── Field Density Test (BS 1377-9 / ASTM D1556) ─────────────────────────────
+
+// ─── Field Density Test (Relative Compaction) — Sand Replacement Method ───────
+// Standards: BS 1377-9 / ASTM D1556
 const METHODS = {
-  "SAND_REPLACEMENT": { label: "Sand Replacement Method (BS 1377-9)", code: "SOIL_FIELD_DENSITY" },
-  "CORE_CUTTER": { label: "Core Cutter Method (BS 1377-9)", code: "SOIL_FIELD_DENSITY" },
-  "NUCLEAR": { label: "Nuclear Gauge (ASTM D6938)", code: "SOIL_FIELD_DENSITY" },
-};
+  SAND_REPLACEMENT: { label: "Sand Replacement Method (BS 1377-9)" },
+  CORE_CUTTER: { label: "Core Cutter Method" },
+} as const;
 
 type Method = keyof typeof METHODS;
 
-interface TestPoint {
-  id: string;
-  pointNo: string;
+interface FieldDensityParams {
+  testMethod: Method;
+  mdd: string; // MDD (g/cm³)
+  coneNo: string;
+  wtSandInCone: string; // g
+  bulkDensityOfSand: string; // g/cc
+  requiredCompaction: string; // %
   location: string;
-  depth: string;
-  // Sand Replacement
-  massHoleSand?: string;
-  massConeAndSand?: string;
-  massCone?: string;
-  massSandCone?: string;
-  sandDensity?: string;
-  massWetSoil?: string;
-  moistureContent?: string;
-  // Core Cutter
-  coreMass?: string;
-  coreVolume?: string;
-  // Computed
-  wetDensity?: number;
-  dryDensity?: number;
-  relativeCompaction?: number;
-  result?: "pass" | "fail" | "pending";
 }
 
-function computePoint(pt: TestPoint, method: Method, mdd: number, requiredRC: number): TestPoint {
-  let wetDensity: number | undefined;
-  let dryDensity: number | undefined;
+interface TestPoint {
+  id: string;
+  pointNumber: number;
+  // User inputs
+  depth: string;
+  wtWetSoilFromHole: string;
+  wtSandInCylinderBefore: string;
+  wtSandInCylinderAfter: string;
+  containerNo: string;
+  wtWetSoilPlusContainer: string;
+  wtDrySoilPlusContainer: string;
+  wtContainer: string;
+}
 
-  if (method === "SAND_REPLACEMENT") {
-    const massSandInHole = parseFloat(pt.massHoleSand ?? "0");
-    const sandDens = parseFloat(pt.sandDensity ?? "0");
-    const massWetSoil = parseFloat(pt.massWetSoil ?? "0");
-    const wc = parseFloat(pt.moistureContent ?? "0");
+interface ComputedPoint extends TestPoint {
+  bulkDensity: number;
+  wtMoisture: number;
+  wtDrySoil: number;
+  moistureContent: number;
+  dryDensity: number;
+  compaction: number;
+  result: "pass" | "fail" | null;
+}
 
-    if (massSandInHole > 0 && sandDens > 0 && massWetSoil > 0) {
-      const holeVolume = massSandInHole / sandDens; // cm³
-      wetDensity = massWetSoil / holeVolume;
-      dryDensity = wetDensity / (1 + wc / 100);
-    }
-  } else if (method === "CORE_CUTTER") {
-    const coreMass = parseFloat(pt.coreMass ?? "0");
-    const coreVol = parseFloat(pt.coreVolume ?? "1000"); // cm³
-    const wc = parseFloat(pt.moistureContent ?? "0");
-    if (coreMass > 0 && coreVol > 0) {
-      wetDensity = coreMass / coreVol;
-      dryDensity = wetDensity / (1 + wc / 100);
-    }
-  } else if (method === "NUCLEAR") {
-    const wet = parseFloat(pt.massWetSoil ?? "0"); // direct reading
-    const wc = parseFloat(pt.moistureContent ?? "0");
-    if (wet > 0) {
-      wetDensity = wet;
-      dryDensity = wet / (1 + wc / 100);
-    }
-  }
-
-  const relativeCompaction = mdd > 0 && dryDensity !== undefined
-    ? parseFloat(((dryDensity / mdd) * 100).toFixed(1))
-    : undefined;
-
-  const result: "pass" | "fail" | "pending" =
-    relativeCompaction !== undefined
-      ? relativeCompaction >= requiredRC ? "pass" : "fail"
-      : "pending";
-
+function createEmptyTestPoint(pointNumber: number): TestPoint {
   return {
-    ...pt,
-    wetDensity: wetDensity !== undefined ? parseFloat(wetDensity.toFixed(3)) : undefined,
-    dryDensity: dryDensity !== undefined ? parseFloat(dryDensity.toFixed(3)) : undefined,
-    relativeCompaction,
-    result,
+    id: `pt_${Date.now()}_${pointNumber}`,
+    pointNumber,
+    depth: "",
+    wtWetSoilFromHole: "",
+    wtSandInCylinderBefore: "",
+    wtSandInCylinderAfter: "",
+    containerNo: "",
+    wtWetSoilPlusContainer: "",
+    wtDrySoilPlusContainer: "",
+    wtContainer: "",
   };
 }
 
-function newPoint(index: number): TestPoint {
+function computePoint(point: TestPoint, params: FieldDensityParams): ComputedPoint {
+  const mdd = parseFloat(params.mdd) || 0;
+  const wtSandInCone = parseFloat(params.wtSandInCone) || 0;
+  const bulkDensitySand = parseFloat(params.bulkDensityOfSand) || 0;
+  const requiredCompaction = parseFloat(params.requiredCompaction) || 95;
+
+  const wtWetSoil = parseFloat(point.wtWetSoilFromHole) || 0;
+  const sandBefore = parseFloat(point.wtSandInCylinderBefore) || 0;
+  const sandAfter = parseFloat(point.wtSandInCylinderAfter) || 0;
+  const wtWetSoilPlusCont = parseFloat(point.wtWetSoilPlusContainer) || 0;
+  const wtDrySoilPlusCont = parseFloat(point.wtDrySoilPlusContainer) || 0;
+  const wtCont = parseFloat(point.wtContainer) || 0;
+
+  // Bulk Density (g/cc) = wtWetSoil / ((sandBefore - sandAfter - wtSandInCone) / bulkDensitySand)
+  const volumeHole = bulkDensitySand > 0 ? (sandBefore - sandAfter - wtSandInCone) / bulkDensitySand : 0;
+  const bulkDensity = volumeHole > 0 ? wtWetSoil / volumeHole : 0;
+
+  // Wt. of moisture = wtWetSoilPlusContainer - wtDrySoilPlusContainer
+  const wtMoisture = wtWetSoilPlusCont - wtDrySoilPlusCont;
+
+  // Wt. of dry soil = wtDrySoilPlusContainer - wtContainer
+  const wtDrySoil = wtDrySoilPlusCont - wtCont;
+
+  // Moisture content % = (wtMoisture / wtDrySoil) × 100
+  const moistureContent = wtDrySoil > 0 ? (wtMoisture / wtDrySoil) * 100 : 0;
+
+  // Dry Density (g/cc) = bulkDensity / (100 + moistureContent) × 100
+  const dryDensity = bulkDensity > 0 ? (bulkDensity / (100 + moistureContent)) * 100 : 0;
+
+  // Compaction % = (dryDensity / MDD) × 100
+  const compaction = mdd > 0 && dryDensity > 0 ? (dryDensity / mdd) * 100 : 0;
+
+  const result: "pass" | "fail" | null =
+    compaction > 0 ? (compaction >= requiredCompaction ? "pass" : "fail") : null;
+
   return {
-    id: `pt_${Date.now()}_${index}`,
-    pointNo: `P${index + 1}`,
-    location: "",
-    depth: "0.3",
-    massHoleSand: "",
-    massConeAndSand: "",
-    massCone: "",
-    massSandCone: "",
-    sandDensity: "1.55",
-    massWetSoil: "",
-    moistureContent: "",
-    coreMass: "",
-    coreVolume: "1000",
+    ...point,
+    bulkDensity: parseFloat(bulkDensity.toFixed(3)),
+    wtMoisture: parseFloat(wtMoisture.toFixed(2)),
+    wtDrySoil: parseFloat(wtDrySoil.toFixed(2)),
+    moistureContent: parseFloat(moistureContent.toFixed(2)),
+    dryDensity: parseFloat(dryDensity.toFixed(3)),
+    compaction: parseFloat(compaction.toFixed(1)),
+    result,
   };
 }
 
@@ -123,17 +127,19 @@ export default function SoilFieldDensity() {
   const distId = parseInt(distributionId ?? "0");
   const { data: dist } = trpc.distributions.get.useQuery({ id: distId }, { enabled: !!distId });
 
-  const [method, setMethod] = useState<Method>("SAND_REPLACEMENT");
-  const [mddStr, setMddStr] = useState("");
-  const [requiredRCStr, setRequiredRCStr] = useState("95");
-  const [location, setLocation2] = useState("");
+  const [params, setParams] = useState<FieldDensityParams>({
+    testMethod: "SAND_REPLACEMENT",
+    mdd: "",
+    coneNo: "",
+    wtSandInCone: "",
+    bulkDensityOfSand: "",
+    requiredCompaction: "95",
+    location: "",
+  });
   const [notes, setNotes] = useState("");
-  const [points, setPoints] = useState<TestPoint[]>(Array.from({ length: 3 }, (_, i) => newPoint(i)));
+  const [testPoints, setTestPoints] = useState<TestPoint[]>([createEmptyTestPoint(1)]);
   const [saving, setSaving] = useState(false);
   const [submitted, setSubmitted] = useState(false);
-
-  const mdd = parseFloat(mddStr) || 0;
-  const requiredRC = parseFloat(requiredRCStr) || 95;
 
   const saveResult = trpc.specializedTests.save.useMutation({
     onSuccess: (_, vars) => {
@@ -148,35 +154,84 @@ export default function SoilFieldDensity() {
     onError: (e) => toast.error(e.message),
   });
 
-  const computedPoints = points.map(p => computePoint(p, method, mdd, requiredRC));
-  const validPoints = computedPoints.filter(p => p.dryDensity !== undefined);
+  const computedPoints = testPoints.map((p) => computePoint(p, params));
+  const allResults = computedPoints.filter((p) => p.result !== null);
+  const overallPass = allResults.length > 0 && allResults.every((p) => p.result === "pass");
+  const failedPoints = allResults.filter((p) => p.result === "fail").length;
   const overallResult: "pass" | "fail" | "pending" =
-    validPoints.length === 0 ? "pending"
-    : validPoints.every(p => p.result === "pass") ? "pass" : "fail";
+    allResults.length === 0 ? "pending" : overallPass ? "pass" : "fail";
 
-  const updatePoint = (id: string, field: keyof TestPoint, value: string) => {
-    setPoints(prev => prev.map(p => p.id === id ? { ...p, [field]: value } : p));
+  const updatePoint = (idx: number, field: keyof TestPoint, value: string) => {
+    setTestPoints((prev) => prev.map((p, i) => (i === idx ? { ...p, [field]: value } : p)));
+  };
+
+  const addTestPoint = () => {
+    setTestPoints((prev) => [...prev, createEmptyTestPoint(prev.length + 1)]);
+  };
+
+  const deletePoint = (id: string) => {
+    setTestPoints((prev) =>
+      prev.filter((p) => p.id !== id).map((p, idx) => ({ ...p, pointNumber: idx + 1 }))
+    );
   };
 
   const handleSave = async (status: "draft" | "submitted") => {
     if (!dist?.sampleId) {
-      toast.error(lang === "ar" ? "معرف العينة مفقود" : "Sample ID missing");
+      toast.error(ar ? "معرف العينة مفقود" : "Sample ID missing");
       return;
     }
-    if (status === "submitted" && validPoints.length === 0) {
-      toast.error("Please enter at least one test point result");
+    if (status === "submitted" && allResults.length === 0) {
+      toast.error(ar ? "الرجاء إدخال نتيجة نقطة اختبار واحدة على الأقل" : "Please enter at least one test point result");
       return;
     }
     setSaving(true);
     try {
+      const formData = {
+        testMethod: params.testMethod,
+        mdd: parseFloat(params.mdd) || 0,
+        coneNo: params.coneNo,
+        wtSandInCone: parseFloat(params.wtSandInCone) || 0,
+        bulkDensityOfSand: parseFloat(params.bulkDensityOfSand) || 0,
+        requiredCompaction: parseFloat(params.requiredCompaction) || 95,
+        location: params.location,
+        testPoints: computedPoints.map((p) => ({
+          pointNumber: p.pointNumber,
+          depth: parseFloat(p.depth) || 0,
+          wtWetSoilFromHole: parseFloat(p.wtWetSoilFromHole) || 0,
+          wtSandInCylinderBefore: parseFloat(p.wtSandInCylinderBefore) || 0,
+          wtSandInCylinderAfter: parseFloat(p.wtSandInCylinderAfter) || 0,
+          containerNo: p.containerNo,
+          wtWetSoilPlusContainer: parseFloat(p.wtWetSoilPlusContainer) || 0,
+          wtDrySoilPlusContainer: parseFloat(p.wtDrySoilPlusContainer) || 0,
+          wtContainer: parseFloat(p.wtContainer) || 0,
+          bulkDensity: p.bulkDensity,
+          wtMoisture: p.wtMoisture,
+          wtDrySoil: p.wtDrySoil,
+          moistureContent: p.moistureContent,
+          dryDensity: p.dryDensity,
+          compaction: p.compaction,
+          result: p.result,
+        })),
+        overallResult,
+        failedPoints,
+        totalPoints: allResults.length,
+      };
+
       await saveResult.mutateAsync({
         distributionId: distId,
         sampleId: dist.sampleId,
         testTypeCode: "SOIL_FIELD_DENSITY",
         formTemplate: "soil_field_density",
-        formData: { method, mdd, requiredRC, location, points: computedPoints, overallResult },
+        formData,
         overallResult,
-        summaryValues: { method, mdd, requiredRC, pointsTested: validPoints.length, overallResult },
+        summaryValues: {
+          method: params.testMethod,
+          mdd: parseFloat(params.mdd) || 0,
+          requiredCompaction: parseFloat(params.requiredCompaction) || 95,
+          pointsTested: allResults.length,
+          failedPoints,
+          overallResult,
+        },
         notes,
         status,
       });
@@ -185,36 +240,47 @@ export default function SoilFieldDensity() {
     }
   };
 
-  const isSandReplacement = method === "SAND_REPLACEMENT";
-  const isCoreMethod = method === "CORE_CUTTER";
-  const isNuclear = method === "NUCLEAR";
-
   if (!distId || distId === 0) {
     return (
       <DashboardLayout>
         <div className="p-6">
           <div className="text-center text-red-600">
-            {lang === "ar" ? "معرف التوزيع غير صالح" : "Invalid distribution ID"}
+            {ar ? "معرف التوزيع غير صالح" : "Invalid distribution ID"}
           </div>
         </div>
       </DashboardLayout>
     );
   }
 
+  const inputCls = "h-8 text-xs text-center bg-white border border-slate-300";
+  const inputTdCls = "border border-slate-200 px-1 py-1 bg-amber-50/60";
+  const thCls = "border border-slate-200 px-2 py-2 text-[11px] font-semibold text-slate-600";
+  const subThCls = "border border-slate-200 px-1.5 py-1.5 text-[10px] font-medium text-slate-500 leading-tight";
+
   return (
     <DashboardLayout>
+      {/* Remove number input spinners */}
+      <style>{`
+        input[type="number"]::-webkit-inner-spin-button,
+        input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+        input[type="number"] { -moz-appearance: textfield; }
+      `}</style>
+
       <div className="max-w-6xl mx-auto p-6 space-y-6">
         <SampleInfoCard dist={dist} />
+
         {/* Header */}
         <div className="flex items-start justify-between flex-wrap gap-3">
           <div>
             <div className="flex items-center gap-2 text-sm text-slate-500 mb-1">
               <FlaskConical size={16} />
-              <span>Soil Tests / Field Density</span>
+              <span>{ar ? "اختبارات التربة / الكثافة الحقلية" : "Soil Tests / Field Density"}</span>
             </div>
-            <h1 className="text-2xl font-bold text-slate-900">Field Density Test (Relative Compaction)</h1>
+            <h1 className="text-2xl font-bold text-slate-900">
+              {ar ? "اختبار الكثافة الحقلية (نسبة الدمك)" : "Field Density Test (Relative Compaction)"}
+            </h1>
             <p className="text-slate-500 text-sm mt-1">
-              BS 1377-9 / ASTM D1556 | Distribution: {dist?.distributionCode ?? `DIST-${distId}`}
+              BS 1377-9 / ASTM D1556 | {ar ? "التوزيع" : "Distribution"}: {dist?.distributionCode ?? `DIST-${distId}`}
             </p>
           </div>
           <div className="flex gap-2">
@@ -246,14 +312,23 @@ export default function SoilFieldDensity() {
           </div>
         </div>
 
-        {/* Test Info */}
+        {/* SECTION 1: Test Parameters */}
         <Card>
-          <CardContent className="pt-4">
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">{ar ? "معاملات الاختبار" : "Test Parameters"}</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {/* Row 1 */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               <div>
-                <Label className="text-xs text-slate-500 mb-1 block">Test Method</Label>
-                <Select value={method} onValueChange={v => setMethod(v as Method)}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
+                <Label className="text-xs text-slate-500 mb-1 block">{ar ? "طريقة الاختبار" : "Test Method"}</Label>
+                <Select
+                  value={params.testMethod}
+                  onValueChange={(v) => setParams({ ...params, testMethod: v as Method })}
+                >
+                  <SelectTrigger className="h-9">
+                    <SelectValue />
+                  </SelectTrigger>
                   <SelectContent>
                     {Object.entries(METHODS).map(([k, m]) => (
                       <SelectItem key={k} value={k}>{m.label}</SelectItem>
@@ -262,135 +337,258 @@ export default function SoilFieldDensity() {
                 </Select>
               </div>
               <div>
-                <Label className="text-xs text-slate-500 mb-1 block">MDD from Proctor (g/cm³)</Label>
-                <Input value={mddStr} onChange={e => setMddStr(e.target.value)} className="font-mono" placeholder="e.g. 1.85" />
+                <Label className="text-xs text-slate-500 mb-1 block">{ar ? "أقصى كثافة جافة (g/cm³)" : "MDD (g/cm³)"}</Label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  value={params.mdd}
+                  onChange={(e) => setParams({ ...params, mdd: e.target.value })}
+                  className="h-9 bg-white border border-slate-300 font-mono"
+                  placeholder="2.35"
+                />
               </div>
               <div>
-                <Label className="text-xs text-slate-500 mb-1 block">Required Relative Compaction (%)</Label>
-                <Input value={requiredRCStr} onChange={e => setRequiredRCStr(e.target.value)} className="font-mono" placeholder="95" />
+                <Label className="text-xs text-slate-500 mb-1 block">{ar ? "رقم المخروط" : "Cone No."}</Label>
+                <Input
+                  type="text"
+                  value={params.coneNo}
+                  onChange={(e) => setParams({ ...params, coneNo: e.target.value })}
+                  className="h-9 bg-white border border-slate-300"
+                  placeholder="C"
+                />
+              </div>
+            </div>
+            {/* Row 2 */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div>
+                <Label className="text-xs text-slate-500 mb-1 block">{ar ? "وزن الرمل في المخروط (g)" : "Wt. of sand in cone (g)"}</Label>
+                <Input
+                  type="number"
+                  step="0.1"
+                  value={params.wtSandInCone}
+                  onChange={(e) => setParams({ ...params, wtSandInCone: e.target.value })}
+                  className="h-9 bg-white border border-slate-300 font-mono"
+                  placeholder="1390"
+                />
               </div>
               <div>
-                <Label className="text-xs text-slate-500 mb-1 block">Location / Area</Label>
-                <Input value={location} onChange={e => setLocation2(e.target.value)} placeholder="e.g. Road base layer, Layer 3" />
+                <Label className="text-xs text-slate-500 mb-1 block">{ar ? "الكثافة الظاهرية للرمل (g/cc)" : "Bulk Density of Sand (g/cc)"}</Label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  value={params.bulkDensityOfSand}
+                  onChange={(e) => setParams({ ...params, bulkDensityOfSand: e.target.value })}
+                  className="h-9 bg-white border border-slate-300 font-mono"
+                  placeholder="1.45"
+                />
+              </div>
+              <div>
+                <Label className="text-xs text-slate-500 mb-1 block">{ar ? "نسبة الدمك المطلوبة (%)" : "Required Relative Compaction (%)"}</Label>
+                <Input
+                  type="number"
+                  step="0.1"
+                  value={params.requiredCompaction}
+                  onChange={(e) => setParams({ ...params, requiredCompaction: e.target.value })}
+                  className="h-9 bg-white border border-slate-300 font-mono"
+                  placeholder="95"
+                />
+              </div>
+              <div>
+                <Label className="text-xs text-slate-500 mb-1 block">{ar ? "الموقع / المنطقة" : "Location / Area"}</Label>
+                <Input
+                  type="text"
+                  value={params.location}
+                  onChange={(e) => setParams({ ...params, location: e.target.value })}
+                  className="h-9 bg-white border border-slate-300"
+                  placeholder={ar ? "مثال: طبقة الأساس، الطبقة 3" : "e.g. Road base layer, Layer 3"}
+                />
               </div>
             </div>
           </CardContent>
         </Card>
 
-        {/* Test Points Table */}
+        {/* SECTION 2 + 4: Test Points Table */}
         <Card>
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
-              <CardTitle className="text-base">Field Test Points</CardTitle>
-              <Button variant="outline" size="sm" onClick={() => setPoints(p => [...p, newPoint(p.length)])}>
-                <Plus size={14} className="mr-1" /> Add Point
+              <CardTitle className="text-base">{ar ? "نقاط الاختبار الميداني" : "Field Test Points"}</CardTitle>
+              <Button variant="outline" size="sm" onClick={addTestPoint}>
+                <Plus size={14} className="mr-1" /> {ar ? "إضافة نقطة" : "Add Point"}
               </Button>
             </div>
           </CardHeader>
           <CardContent>
             <div className="overflow-x-auto">
-<table className="w-full text-sm border-collapse">
-              <thead>
-                <tr className="bg-slate-50">
-                  <th className="border border-slate-200 px-2 py-2 text-xs font-semibold text-slate-600">Point No.</th>
-                  <th className="border border-slate-200 px-2 py-2 text-xs font-semibold text-slate-600">Location</th>
-                  <th className="border border-slate-200 px-2 py-2 text-xs font-semibold text-slate-600">Depth (m)</th>
-                  {isSandReplacement && <>
-                    <th className="border border-slate-200 px-2 py-2 text-xs font-semibold text-slate-600">Sand in Hole (g)</th>
-                    <th className="border border-slate-200 px-2 py-2 text-xs font-semibold text-slate-600">Sand Density (g/cm³)</th>
-                    <th className="border border-slate-200 px-2 py-2 text-xs font-semibold text-slate-600">Wet Soil (g)</th>
-                  </>}
-                  {isCoreMethod && <>
-                    <th className="border border-slate-200 px-2 py-2 text-xs font-semibold text-slate-600">Core Mass (g)</th>
-                    <th className="border border-slate-200 px-2 py-2 text-xs font-semibold text-slate-600">Core Volume (cm³)</th>
-                  </>}
-                  {isNuclear && <>
-                    <th className="border border-slate-200 px-2 py-2 text-xs font-semibold text-slate-600">Wet Density (g/cm³)</th>
-                  </>}
-                  <th className="border border-slate-200 px-2 py-2 text-xs font-semibold text-slate-600">W.C. (%)</th>
-                  <th className="border border-slate-200 px-2 py-2 text-xs font-semibold text-slate-600">Dry Density (g/cm³)</th>
-                  <th className="border border-slate-200 px-2 py-2 text-xs font-semibold text-slate-600">RC (%)</th>
-                  <th className="border border-slate-200 px-2 py-2 text-xs font-semibold text-slate-600">Result</th>
-                  <th className="border border-slate-200 px-2 py-2"></th>
-                </tr>
-              </thead>
-              <tbody>
-                {computedPoints.map((pt, idx) => (
-                  <tr key={pt.id} className={idx % 2 === 0 ? "bg-white" : "bg-slate-50/50"}>
-                    <td className="border border-slate-200 px-1 py-1">
-                      <Input value={pt.pointNo} onChange={e => updatePoint(pt.id, "pointNo", e.target.value)} className="h-7 text-xs w-14" />
-                    </td>
-                    <td className="border border-slate-200 px-1 py-1">
-                      <Input value={pt.location} onChange={e => updatePoint(pt.id, "location", e.target.value)} className="h-7 text-xs w-24" placeholder="—" />
-                    </td>
-                    <td className="border border-slate-200 px-1 py-1">
-                      <Input value={pt.depth} onChange={e => updatePoint(pt.id, "depth", e.target.value)} className="h-7 text-xs w-16 text-center font-mono" />
-                    </td>
-                    {isSandReplacement && <>
-                      <td className="border border-slate-200 px-1 py-1">
-                        <Input value={pt.massHoleSand ?? ""} onChange={e => updatePoint(pt.id, "massHoleSand", e.target.value)} className="h-7 text-xs w-20 text-center font-mono" placeholder="—" />
+              <table className="w-full text-sm border-collapse">
+                <thead>
+                  {/* Main header row */}
+                  <tr className="bg-slate-100">
+                    <th rowSpan={2} className={thCls}>{ar ? "رقم النقطة" : "Point No."}</th>
+                    <th rowSpan={2} className={thCls}>{ar ? "العمق (م)" : "Depth (m)"}</th>
+                    <th colSpan={3} className={thCls}>{ar ? "استبدال الرمل" : "Sand Replacement"}</th>
+                    <th rowSpan={2} className={`${thCls} bg-blue-50`}>
+                      {ar ? "الكثافة الظاهرية" : "Bulk Density"}<br />(g/cc)
+                    </th>
+                    <th colSpan={4} className={thCls}>{ar ? "تحليل الرطوبة" : "Moisture Analysis"}</th>
+                    <th colSpan={3} className={`${thCls} bg-green-50`}>{ar ? "النتائج" : "Results"}</th>
+                    <th rowSpan={2} className={thCls}>{ar ? "الإجراء" : "Action"}</th>
+                  </tr>
+                  {/* Sub-header row */}
+                  <tr className="bg-slate-50">
+                    <th className={subThCls}>{ar ? "وزن التربة الرطبة من الحفرة (g)" : "Wt. wet soil from hole (g)"}</th>
+                    <th className={subThCls}>{ar ? "وزن الرمل في الأسطوانة قبل (g)" : "Wt. sand in cylinder before (g)"}</th>
+                    <th className={subThCls}>{ar ? "وزن الرمل في الأسطوانة بعد (g)" : "Wt. sand in cylinder after (g)"}</th>
+                    <th className={subThCls}>{ar ? "رقم العلبة" : "Container No."}</th>
+                    <th className={subThCls}>{ar ? "تربة رطبة + علبة (g)" : "Wet soil + container (g)"}</th>
+                    <th className={subThCls}>{ar ? "تربة جافة + علبة (g)" : "Dry soil + container (g)"}</th>
+                    <th className={subThCls}>{ar ? "وزن العلبة (g)" : "Wt. container (g)"}</th>
+                    <th className={`${subThCls} bg-green-50`}>{ar ? "محتوى الرطوبة %" : "W.C. (%)"}</th>
+                    <th className={`${subThCls} bg-green-50`}>{ar ? "الكثافة الجافة (g/cc)" : "Dry Density (g/cc)"}</th>
+                    <th className={`${subThCls} bg-green-50`}>{ar ? "نسبة الدمك (%)" : "RC (%)"}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {computedPoints.map((point, idx) => (
+                    <tr key={point.id}>
+                      <td className="border border-slate-200 px-2 py-1 text-center font-semibold text-xs text-slate-700">
+                        P{point.pointNumber}
                       </td>
-                      <td className="border border-slate-200 px-1 py-1">
-                        <Input value={pt.sandDensity ?? ""} onChange={e => updatePoint(pt.id, "sandDensity", e.target.value)} className="h-7 text-xs w-16 text-center font-mono" placeholder="1.55" />
+                      <td className={inputTdCls}>
+                        <Input type="number" step="0.1" value={point.depth}
+                          onChange={(e) => updatePoint(idx, "depth", e.target.value)}
+                          className={inputCls} placeholder="0.3" />
                       </td>
-                      <td className="border border-slate-200 px-1 py-1">
-                        <Input value={pt.massWetSoil ?? ""} onChange={e => updatePoint(pt.id, "massWetSoil", e.target.value)} className="h-7 text-xs w-20 text-center font-mono" placeholder="—" />
+                      <td className={inputTdCls}>
+                        <Input type="number" step="0.1" value={point.wtWetSoilFromHole}
+                          onChange={(e) => updatePoint(idx, "wtWetSoilFromHole", e.target.value)}
+                          className={inputCls} placeholder="8189" />
                       </td>
-                    </>}
-                    {isCoreMethod && <>
-                      <td className="border border-slate-200 px-1 py-1">
-                        <Input value={pt.coreMass ?? ""} onChange={e => updatePoint(pt.id, "coreMass", e.target.value)} className="h-7 text-xs w-20 text-center font-mono" placeholder="—" />
+                      <td className={inputTdCls}>
+                        <Input type="number" step="0.1" value={point.wtSandInCylinderBefore}
+                          onChange={(e) => updatePoint(idx, "wtSandInCylinderBefore", e.target.value)}
+                          className={inputCls} placeholder="8000" />
                       </td>
-                      <td className="border border-slate-200 px-1 py-1">
-                        <Input value={pt.coreVolume ?? ""} onChange={e => updatePoint(pt.id, "coreVolume", e.target.value)} className="h-7 text-xs w-20 text-center font-mono" placeholder="1000" />
+                      <td className={inputTdCls}>
+                        <Input type="number" step="0.1" value={point.wtSandInCylinderAfter}
+                          onChange={(e) => updatePoint(idx, "wtSandInCylinderAfter", e.target.value)}
+                          className={inputCls} placeholder="1288" />
                       </td>
-                    </>}
-                    {isNuclear && <>
-                      <td className="border border-slate-200 px-1 py-1">
-                        <Input value={pt.massWetSoil ?? ""} onChange={e => updatePoint(pt.id, "massWetSoil", e.target.value)} className="h-7 text-xs w-20 text-center font-mono" placeholder="—" />
+                      {/* Bulk Density — calculated (blue) */}
+                      <td className="border border-slate-200 px-2 py-1 text-center font-mono text-xs font-bold bg-blue-50 text-blue-800">
+                        {point.bulkDensity > 0 ? point.bulkDensity.toFixed(3) : "—"}
                       </td>
-                    </>}
-                    <td className="border border-slate-200 px-1 py-1">
-                      <Input value={pt.moistureContent ?? ""} onChange={e => updatePoint(pt.id, "moistureContent", e.target.value)} className="h-7 text-xs w-16 text-center font-mono" placeholder="—" />
-                    </td>
-                    <td className="border border-slate-200 px-1 py-1 text-center font-mono text-xs font-bold text-slate-800">
-                      {pt.dryDensity ?? "—"}
-                    </td>
-                    <td className="border border-slate-200 px-1 py-1 text-center">
-                      {pt.relativeCompaction !== undefined ? (
-                        <span className={`font-mono text-xs font-bold ${pt.result === "pass" ? "text-emerald-700" : "text-red-700"}`}>
-                          {pt.relativeCompaction}%
-                        </span>
-                      ) : "—"}
-                    </td>
-                    <td className="border border-slate-200 px-1 py-1 text-center">
-                      {pt.result && pt.result !== "pending" ? <PassFailBadge result={pt.result} size="sm" /> : "—"}
-                    </td>
-                    <td className="border border-slate-200 px-1 py-1 text-center">
-                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-red-600 hover:text-red-700" onClick={() => setPoints(p => p.filter(r => r.id !== pt.id))} disabled={points.length <= 1}>
-                        <Trash2 size={12} />
-                      </Button>
+                      <td className={inputTdCls}>
+                        <Input type="text" value={point.containerNo}
+                          onChange={(e) => updatePoint(idx, "containerNo", e.target.value)}
+                          className={inputCls} placeholder="28" />
+                      </td>
+                      <td className={inputTdCls}>
+                        <Input type="number" step="0.1" value={point.wtWetSoilPlusContainer}
+                          onChange={(e) => updatePoint(idx, "wtWetSoilPlusContainer", e.target.value)}
+                          className={inputCls} placeholder="1531" />
+                      </td>
+                      <td className={inputTdCls}>
+                        <Input type="number" step="0.1" value={point.wtDrySoilPlusContainer}
+                          onChange={(e) => updatePoint(idx, "wtDrySoilPlusContainer", e.target.value)}
+                          className={inputCls} placeholder="1478" />
+                      </td>
+                      <td className={inputTdCls}>
+                        <Input type="number" step="0.1" value={point.wtContainer}
+                          onChange={(e) => updatePoint(idx, "wtContainer", e.target.value)}
+                          className={inputCls} placeholder="291.3" />
+                      </td>
+                      {/* Moisture Content — calculated (blue) */}
+                      <td className="border border-slate-200 px-2 py-1 text-center font-mono text-xs font-semibold bg-blue-50 text-blue-800">
+                        {point.moistureContent > 0 ? `${point.moistureContent.toFixed(2)}%` : "—"}
+                      </td>
+                      {/* Dry Density — final (green) */}
+                      <td className="border border-slate-200 px-2 py-1 text-center font-mono text-xs font-bold bg-green-50 text-green-800">
+                        {point.dryDensity > 0 ? point.dryDensity.toFixed(3) : "—"}
+                      </td>
+                      {/* RC % — final (green, pass/fail tint) */}
+                      <td
+                        className={`border border-slate-200 px-2 py-1 text-center font-mono text-xs font-bold ${
+                          point.result === "pass"
+                            ? "bg-green-50 text-emerald-700"
+                            : point.result === "fail"
+                            ? "bg-red-50 text-red-700"
+                            : "bg-green-50 text-slate-500"
+                        }`}
+                      >
+                        {point.compaction > 0 ? `${point.compaction.toFixed(1)}%` : "—"}
+                      </td>
+                      <td className="border border-slate-200 px-1 py-1 text-center">
+                        {testPoints.length > 1 && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => deletePoint(point.id)}
+                            className="h-7 w-7 p-0 text-red-600 hover:text-red-700"
+                          >
+                            <Trash2 size={12} />
+                          </Button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr>
+                    <td colSpan={14} className="border border-slate-200 px-3 py-2 text-[11px] text-slate-500 bg-slate-50">
+                      {ar
+                        ? `نسبة الدمك المطلوبة: ${params.requiredCompaction || 95}% | النجاح = نسبة الدمك ≥ ${params.requiredCompaction || 95}%`
+                        : `Required Compaction: ${params.requiredCompaction || 95}% | Pass = RC ≥ ${params.requiredCompaction || 95}%`}
                     </td>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-</div>
+                </tfoot>
+              </table>
+            </div>
           </CardContent>
         </Card>
 
-        {validPoints.length > 0 && (
-          <ResultBanner
-            result={overallResult}
-            testName={`Field Density — ${METHODS[method].label}`}
-            standard="BS 1377-9"
-          />
+        {/* SECTION 5: Overall Result */}
+        {allResults.length > 0 && (
+          <Card className={overallPass ? "border-emerald-200" : "border-red-200"}>
+            <CardContent className="pt-5">
+              <div className="flex flex-wrap items-center justify-between gap-4">
+                <div
+                  className={`text-xl font-extrabold ${overallPass ? "text-emerald-700" : "text-red-700"}`}
+                >
+                  {overallPass ? (ar ? "✓ مطابق" : "✓ PASS") : (ar ? "✗ غير مطابق" : "✗ FAIL")}
+                </div>
+                <div className="flex gap-6">
+                  <div className="text-center">
+                    <div className="text-xs text-slate-500">{ar ? "إجمالي النقاط" : "Total Points"}</div>
+                    <div className="text-lg font-bold text-slate-800">{allResults.length}</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-xs text-slate-500">{ar ? "ناجح" : "Passed"}</div>
+                    <div className="text-lg font-bold text-emerald-700">
+                      {allResults.filter((p) => p.result === "pass").length}
+                    </div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-xs text-slate-500">{ar ? "راسب" : "Failed"}</div>
+                    <div className="text-lg font-bold text-red-700">{failedPoints}</div>
+                  </div>
+                </div>
+              </div>
+              {!overallPass && failedPoints > 0 && (
+                <div className="mt-3 text-xs text-red-700 bg-red-50 border border-red-100 rounded px-3 py-2">
+                  {ar
+                    ? `${failedPoints} نقطة خارج الحد المطلوب (${params.requiredCompaction || 95}%)`
+                    : `${failedPoints} point(s) below required compaction (${params.requiredCompaction || 95}%)`}
+                </div>
+              )}
+            </CardContent>
+          </Card>
         )}
 
+        {/* Notes */}
         <Card>
           <CardContent className="pt-4">
-            <Label className="text-xs text-slate-500 mb-1 block">Notes</Label>
-            <Textarea value={notes} onChange={e => setNotes(e.target.value)} rows={3} />
+            <Label className="text-xs text-slate-500 mb-1 block">{ar ? "ملاحظات" : "Notes"}</Label>
+            <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} />
           </CardContent>
         </Card>
       </div>
