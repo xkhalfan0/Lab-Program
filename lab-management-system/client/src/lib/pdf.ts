@@ -101,10 +101,18 @@ export async function generatePdfFromElement(
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <base href="${origin}/">
+  <!-- Arabic + Latin web fonts so the PDF server (headless Chromium, no system Arabic font) renders Arabic instead of tofu squares -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&family=Noto+Naskh+Arabic:wght@400;700&family=Noto+Sans:wght@400;600;700&display=swap" rel="stylesheet">
   ${styleLinks}
   ${inlineStyles}
   <style>
     @page { margin: 10mm; }
+    /* Ensure Arabic glyphs have a font; keep a Latin-first stack with Arabic fallbacks */
+    html, body, .lab-print-root, .lab-print-root * {
+      font-family: 'Noto Sans', 'Cairo', 'Noto Naskh Arabic', system-ui, -apple-system, 'Segoe UI', Arial, sans-serif;
+    }
     body { margin: 0; padding: 0; background: white; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
     .print\\:hidden { display: none !important; }
     /* Fallback when linked stylesheets fail to load in isolated PDF HTML */

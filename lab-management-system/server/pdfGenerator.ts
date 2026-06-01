@@ -35,6 +35,20 @@ export function registerPdfRoutes(app: Router) {
       // Set content and wait for fonts/images to load
       await page.setContent(html, { waitUntil: "networkidle0" });
 
+      // Wait for web fonts (e.g. Arabic) to finish loading so glyphs render
+      // instead of tofu squares. Capped so a slow font CDN can't hang the request.
+      try {
+        await page.evaluate(
+          () =>
+            Promise.race([
+              (document as Document & { fonts: { ready: Promise<unknown> } }).fonts.ready,
+              new Promise((resolve) => setTimeout(resolve, 4000)),
+            ])
+        );
+      } catch {
+        /* non-fatal: continue with whatever fonts are available */
+      }
+
       // Generate PDF
       const pdfBuffer = await page.pdf({
         format: "A4",
