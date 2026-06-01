@@ -344,6 +344,130 @@ function renderSteelRebar(fd: any, isAr: boolean) {
   );
 }
 
+// ─── Structural steel & anchor bolt (tensile) report renderers ──────────────────
+const STEEL_SECTION_LABELS: Record<string, { en: string; ar: string }> = {
+  flat_bar: { en: "Flat Bar", ar: "شريط مسطح" },
+  angle_L50x50x5: { en: "Angle 50×50×5", ar: "زاوية 50×50×5" },
+  angle_L63x63x6: { en: "Angle 63×63×6", ar: "زاوية 63×63×6" },
+  angle_L75x75x8: { en: "Angle 75×75×8", ar: "زاوية 75×75×8" },
+  angle_L100x100x10: { en: "Angle 100×100×10", ar: "زاوية 100×100×10" },
+  angle_L120x120x12: { en: "Angle 120×120×12", ar: "زاوية 120×120×12" },
+  angle_L150x150x15: { en: "Angle 150×150×15", ar: "زاوية 150×150×15" },
+  rhs_40x20x2: { en: "Rect. Tube 40×20×2", ar: "أنبوب مستطيل 40×20×2" },
+  rhs_50x25x2: { en: "Rect. Tube 50×25×2", ar: "أنبوب مستطيل 50×25×2" },
+  rhs_60x40x3: { en: "Rect. Tube 60×40×3", ar: "أنبوب مستطيل 60×40×3" },
+  rhs_80x40x3: { en: "Rect. Tube 80×40×3", ar: "أنبوب مستطيل 80×40×3" },
+  rhs_100x50x3: { en: "Rect. Tube 100×50×3", ar: "أنبوب مستطيل 100×50×3" },
+  rhs_120x60x4: { en: "Rect. Tube 120×60×4", ar: "أنبوب مستطيل 120×60×4" },
+  hea_100: { en: "HEA 100", ar: "HEA 100" },
+  hea_120: { en: "HEA 120", ar: "HEA 120" },
+  hea_160: { en: "HEA 160", ar: "HEA 160" },
+  heb_100: { en: "HEB 100", ar: "HEB 100" },
+  ipe_100: { en: "IPE 100", ar: "IPE 100" },
+  ipe_160: { en: "IPE 160", ar: "IPE 160" },
+  hollow_section: { en: "Hollow Section", ar: "قطاع مجوف" },
+  other: { en: "Other", ar: "أخرى" },
+};
+
+function steelSectionLabel(row: any, isAr: boolean): string {
+  const key = String(row?.sectionType ?? "");
+  if (key === "other") return row?.section || (isAr ? "أخرى" : "Other");
+  const m = STEEL_SECTION_LABELS[key];
+  if (m) return isAr ? m.ar : m.en;
+  return row?.section || key.replace(/_/g, " ") || "—";
+}
+
+function steelResultBadge(value: unknown, isAr: boolean) {
+  if (value === "pass") return <span className="text-emerald-800 font-bold">{isAr ? "مطابق" : "PASS"}</span>;
+  if (value === "fail") return <span className="text-red-800 font-bold">{isAr ? "غير مطابق" : "FAIL"}</span>;
+  return "—";
+}
+
+/** Compact colored info band shown above a steel specimen table. */
+function SteelSpecBand({ items }: { items: [string, string][] }) {
+  if (!items.length) return null;
+  return (
+    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 text-xs mb-1">
+      {items.map(([label, value], i) => (
+        <div key={i} className="bg-slate-50 border border-slate-200 rounded px-2 py-1.5 text-center">
+          <p className="text-slate-500 font-semibold leading-tight">{label}</p>
+          <p className="font-bold text-slate-900 leading-tight mt-0.5">{value}</p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function renderSteelStructural(fd: any, isAr: boolean) {
+  const specimens: any[] = Array.isArray(fd?.specimens) ? fd.specimens : [];
+  const spec = fd?.spec ?? {};
+  const gradeLabel = spec.label ?? fd?.grade ?? "—";
+  const cols: Column[] = [
+    { header: isAr ? "رقم" : "No.", field: "_i", align: "center", render: (_v, r) => String((r as any)._i + 1) },
+    { header: isAr ? "القطاع" : "Section", field: "sectionType", align: "center", render: (_v, r) => steelSectionLabel(r, isAr) },
+    { header: isAr ? "العرض (مم)" : "Width (mm)", field: "width", type: "number", decimals: 1 },
+    { header: isAr ? "السمك (مم)" : "Thick. (mm)", field: "thickness", type: "number", decimals: 1 },
+    { header: isAr ? "المساحة (مم²)" : "Area (mm²)", field: "area", type: "number", decimals: 2 },
+    { header: isAr ? "حمل الخضوع (كن)" : "Yield Load (kN)", field: "yieldLoad", type: "number", decimals: 2 },
+    { header: isAr ? "أقصى حمل (كن)" : "Max Load (kN)", field: "maxLoad", type: "number", decimals: 2 },
+    { header: isAr ? "إجهاد الخضوع (MPa)" : "Yield (MPa)", field: "yieldStrength", type: "number", decimals: 1 },
+    { header: isAr ? "إجهاد الشد (MPa)" : "Tensile (MPa)", field: "tensileStrength", type: "number", decimals: 1 },
+    { header: isAr ? "الاستطالة (%)" : "Elong. (%)", field: "elongation", type: "number", decimals: 1 },
+    { header: isAr ? "النتيجة" : "Result", field: "overallResult", align: "center", render: (v) => steelResultBadge(v, isAr) },
+  ];
+  const band: ([string, string] | undefined)[] = [
+    [isAr ? "الدرجة" : "Grade", String(gradeLabel)],
+    fd?.heatNo ? [isAr ? "رقم الصهر" : "Heat No.", String(fd.heatNo)] : undefined,
+    spec.yieldMin != null ? [isAr ? "أدنى خضوع" : "Min Yield", `${spec.yieldMin} MPa`] : undefined,
+    spec.tensileMin != null
+      ? [isAr ? "نطاق الشد" : "Tensile Range", `${spec.tensileMin}–${spec.tensileMax} MPa`]
+      : undefined,
+    spec.elongationMin != null ? [isAr ? "أدنى استطالة" : "Min Elong.", `${spec.elongationMin}%`] : undefined,
+  ];
+  return (
+    <div className="space-y-3">
+      <SteelSpecBand items={band.filter(Boolean) as [string, string][]} />
+      <FlexibleResultsTable columns={cols} rows={specimens.map((s, i) => ({ ...s, _i: i }))} />
+    </div>
+  );
+}
+
+function renderSteelAnchorBolt(fd: any, isAr: boolean) {
+  const specimens: any[] = Array.isArray(fd?.specimens) ? fd.specimens : [];
+  const cols: Column[] = [
+    {
+      header: isAr ? "رقم العينة" : "Sample",
+      field: "specimenNumber",
+      align: "center",
+      render: (_v, r) => String((r as any).specimenNumber ?? (r as any)._i + 1),
+    },
+    { header: isAr ? "التجربة" : "Trial", field: "trials", align: "center", render: (v) => String(v || "—") },
+    { header: isAr ? "الحجم الاسمي (مم)" : "Nominal (mm)", field: "nominalSize", type: "number", decimals: 0 },
+    { header: isAr ? "قطر المقطع (مم)" : "Cut Dia (mm)", field: "cutSectionDiameter", type: "number", decimals: 1 },
+    { header: isAr ? "المساحة (مم²)" : "Area (mm²)", field: "cutSectionArea", type: "number", decimals: 2 },
+    { header: isAr ? "الحمل (كن)" : "Load (kN)", field: "loadKN", type: "number", decimals: 1 },
+    { header: "Rm (MPa)", field: "tensileStrengthMPa", type: "number", decimals: 1 },
+    { header: "GL (mm)", field: "glMm", type: "number", decimals: 0 },
+    { header: isAr ? "الاستطالة (%)" : "Elong. (%)", field: "elongation", type: "number", decimals: 1 },
+    { header: "%RA", field: "reductionOfArea", type: "number", decimals: 1 },
+    { header: isAr ? "الدرجة" : "Grade", field: "grade", align: "center", render: (v) => String(v || "—") },
+    { header: isAr ? "النتيجة" : "Result", field: "overallResult", align: "center", render: (v) => steelResultBadge(v, isAr) },
+  ];
+  const boltLabel = fd?.testInfo?.boltType ?? fd?.boltType;
+  const band: ([string, string] | undefined)[] = [
+    boltLabel ? [isAr ? "نوع البرغي" : "Bolt Type", String(boltLabel)] : undefined,
+    fd?.concreteGrade ? [isAr ? "درجة الخرسانة" : "Concrete Grade", String(fd.concreteGrade)] : undefined,
+    fd?.embedmentDepth ? [isAr ? "عمق التثبيت (مم)" : "Embedment (mm)", String(fd.embedmentDepth)] : undefined,
+    [isAr ? "المعيار" : "Standard", "BS EN ISO 898-1"],
+  ];
+  return (
+    <div className="space-y-3">
+      <SteelSpecBand items={band.filter(Boolean) as [string, string][]} />
+      <FlexibleResultsTable columns={cols} rows={specimens.map((s, i) => ({ ...s, _i: i }))} />
+    </div>
+  );
+}
+
 function _parseReportBlendNum(v: unknown): number | null {
   if (v == null || v === "") return null;
   const n = typeof v === "number" ? v : parseFloat(String(v));
@@ -2279,6 +2403,8 @@ export function renderFormData(formTemplate: string, formData: any, isAr: boolea
     case "concrete_cores": return renderConcreteCore(formData, isAr, castingDateMs);
     case "concrete_beam": return renderConcreteBeam(formData, isAr, castingDateMs);
     case "steel_rebar": return renderSteelRebar(formData, isAr);
+    case "steel_structural": return renderSteelStructural(formData, isAr);
+    case "steel_anchor_bolt": return renderSteelAnchorBolt(formData, isAr);
     case "sieve_analysis": return renderSieveAnalysis(formData, isAr, extras);
     case "soil_proctor": return renderSoilProctor(formData, isAr);
     case "asphalt_bitumen_extraction":
