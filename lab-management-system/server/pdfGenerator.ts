@@ -49,16 +49,16 @@ export function registerPdfRoutes(app: Router) {
         /* non-fatal: continue with whatever fonts are available */
       }
 
-      // Generate PDF
+      // Generate PDF.
+      // The report root is a full A4 sheet (210mm wide) that supplies its own
+      // 15mm internal padding, so the PDF itself must have ZERO margin —
+      // otherwise the full-width content gets squeezed into a smaller printable
+      // area and scaled down. preferCSSPageSize honors the @page { size: A4 }.
       const pdfBuffer = await page.pdf({
         format: "A4",
         printBackground: true,
-        margin: {
-          top: "15mm",
-          bottom: "15mm",
-          left: "15mm",
-          right: "15mm",
-        },
+        preferCSSPageSize: true,
+        margin: { top: "0", bottom: "0", left: "0", right: "0" },
       });
 
       await browser.close();
