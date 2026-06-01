@@ -1,55 +1,46 @@
-import { sql, and, like } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 import { samples } from "../../drizzle/schema";
 import { getDb } from "../db";
 
 /**
- * Timestamp-based sample code: LAB-YYYY-MMDD-HHMMSS-NNN
- * Example: LAB-2026-0513-143052-001
- * NNN increments for multiple samples in the same clock second.
+ * Generate a unique sample code.
+ * Format: LAB-YYYY-MM-NNNN   (e.g. LAB-2026-05-0001)
+ * NNNN is a 4-digit sequence that resets each calendar month.
+ *
+ * Old timestamp codes (LAB-YYYY-MMDD-HHMMSS-NNN) are left untouched in the
+ * database. When computing the next sequence we match ONLY the new monthly
+ * format (exactly 4 trailing digits), so old codes and future retest suffixes
+ * (e.g. LAB-2026-05-0001-R1) are ignored.
  */
-function formatTimestampPrefix(d: Date): string {
-  const y = d.getFullYear();
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
-  const dd = String(d.getDate()).padStart(2, "0");
-  const hh = String(d.getHours()).padStart(2, "0");
-  const mi = String(d.getMinutes()).padStart(2, "0");
-  const ss = String(d.getSeconds()).padStart(2, "0");
-  return `LAB-${y}-${mm}${dd}-${hh}${mi}${ss}`;
-}
-
-/** MySQL REGEXP: exact LAB-YYYY-MMDD-HHMMSS-NNN (NNN = 3 digits). */
-function regexpNewSampleCode(): string {
-  return "^LAB-[0-9]{4}-[0-9]{4}-[0-9]{6}-[0-9]{3}$";
-}
-
 export async function generateSampleCode(): Promise<string> {
   const now = new Date();
-  const prefix = formatTimestampPrefix(now);
-  const likePattern = `${prefix}-%`;
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const prefix = `LAB-${year}-${month}`;
 
-  const db = await getDb();
-  if (!db) {
-    return `${prefix}-001`;
+  // Matches ONLY the new monthly format: LAB-YYYY-MM-NNNN (4 digits, nothing after)
+  const newFormatRegexp = `^LAB-${year}-${month}-[0-9]{4}$`;
+
+  try {
+    const db = await getDb();
+    if (!db) return `${prefix}-0001`;
+
+    const result = await db
+      .select({
+        maxSeq: sql<number>`COALESCE(MAX(CAST(SUBSTRING_INDEX(${samples.sampleCode}, '-', -1) AS UNSIGNED)), 0)`,
+      })
+      .from(samples)
+      .where(sql`${samples.sampleCode} REGEXP ${newFormatRegexp}`);
+
+    let nextSequence = (result[0]?.maxSeq ?? 0) + 1;
+    // Safety: cap at 9999 per month (extremely unlikely to be reached)
+    if (nextSequence > 9999) nextSequence = 9999;
+
+    return `${prefix}-${String(nextSequence).padStart(4, "0")}`;
+  } catch (error) {
+    console.error("Error generating sample code:", error);
+    // Fallback with timestamp tail to keep it unique if the DB is unavailable
+    const fallback = Date.now().toString().slice(-4);
+    return `${prefix}-${fallback}`;
   }
-
-  const result = await db
-    .select({
-      maxSeq: sql<number>`COALESCE(MAX(CAST(SUBSTRING_INDEX(${samples.sampleCode}, '-', -1) AS UNSIGNED)), 0)`,
-    })
-    .from(samples)
-    .where(
-      and(
-        like(samples.sampleCode, likePattern),
-        sql`${samples.sampleCode} REGEXP ${regexpNewSampleCode()}`
-      )
-    );
-
-  const next = (result[0]?.maxSeq ?? 0) + 1;
-  if (next > 999) {
-    // Same-second overflow: bump by 1s in code (extremely rare)
-    const bumped = new Date(now.getTime() + 1000);
-    const p2 = formatTimestampPrefix(bumped);
-    return `${p2}-001`;
-  }
-  return `${prefix}-${String(next).padStart(3, "0")}`;
 }
