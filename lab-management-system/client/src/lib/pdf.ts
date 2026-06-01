@@ -57,18 +57,36 @@ export async function generatePdf(options: PdfOptions): Promise<boolean> {
 
 /**
  * Serialize a DOM element (including its root tag/classes) and send it to the PDF generator.
- * Injects the current page's stylesheet links and inline <style> blocks for rendering.
+ * Inlines the current page's CSS so the isolated PDF HTML renders with full styling.
  */
 export async function generatePdfFromElement(
   element: HTMLElement,
   options: Omit<PdfOptions, "html">
 ): Promise<boolean> {
-  // Collect all stylesheet links from the current page
-  const styleLinks = Array.from(document.querySelectorAll('link[rel="stylesheet"]'))
-    .map((el) => el.outerHTML)
-    .join("\n");
+  const origin = window.location.origin;
 
-  // Collect inline styles
+  // Inline stylesheet contents. The PDF server uses puppeteer's setContent(), which has
+  // no base URL, so linked /assets/*.css cannot be resolved and the report renders unstyled.
+  // Fetching the CSS text (same-origin) and inlining it makes the HTML fully self-contained.
+  const linkEls = Array.from(
+    document.querySelectorAll<HTMLLinkElement>('link[rel="stylesheet"]')
+  );
+  const cssChunks = await Promise.all(
+    linkEls.map(async (el) => {
+      try {
+        const res = await fetch(el.href);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const css = await res.text();
+        return `<style>${css}</style>`;
+      } catch {
+        // Fall back to an absolute-href link tag (resolves via <base>)
+        return `<link rel="stylesheet" href="${el.href}">`;
+      }
+    })
+  );
+  const styleLinks = cssChunks.join("\n");
+
+  // Collect inline styles (e.g. component-level @media print blocks)
   const inlineStyles = Array.from(document.querySelectorAll("style"))
     .map((el) => el.outerHTML)
     .join("\n");
@@ -82,6 +100,7 @@ export async function generatePdfFromElement(
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <base href="${origin}/">
   ${styleLinks}
   ${inlineStyles}
   <style>
