@@ -192,6 +192,9 @@ export default function SoilProctor() {
 
   const [testMethod, setTestMethod] = useState("MODIFIED_PROCTOR");
   const [moldType, setMoldType] = useState<keyof typeof MOLD_VOLUMES>("CBR_MOLD");
+  // Editable mould volume (cm³) — defaults to the selected mould preset but can be
+  // overridden to the lab's actual calibrated volume (e.g. 2303).
+  const [mouldVolumeStr, setMouldVolumeStr] = useState(String(MOLD_VOLUMES.CBR_MOLD.volume));
   const [soilDescription, setSoilDescription] = useState("");
   const [mouldBaseMass, setMouldBaseMass] = useState("");
   const [notes, setNotes] = useState("");
@@ -201,7 +204,9 @@ export default function SoilProctor() {
     Array.from({ length: 4 }, (_, i) => newPoint(i))
   );
 
-  const moldVolume = MOLD_VOLUMES[moldType].volume;
+  const moldVolume = Number.isFinite(num(mouldVolumeStr)) && num(mouldVolumeStr) > 0
+    ? num(mouldVolumeStr)
+    : MOLD_VOLUMES[moldType].volume;
   const mouldBaseMassNum = num(mouldBaseMass);
   const computedPoints = points.map(p => computePoint(p, moldVolume, mouldBaseMassNum));
   const validPoints = computedPoints.filter(p => p.dryDensity != null && p.waterContent != null);
@@ -379,7 +384,14 @@ export default function SoilProctor() {
               </div>
               <div>
                 <Label className="text-xs text-slate-500 mb-1 block">{lang === "ar" ? "نوع القالب" : "Mold Type"}</Label>
-                <Select value={moldType} onValueChange={v => setMoldType(v as keyof typeof MOLD_VOLUMES)}>
+                <Select
+                  value={moldType}
+                  onValueChange={v => {
+                    const key = v as keyof typeof MOLD_VOLUMES;
+                    setMoldType(key);
+                    setMouldVolumeStr(String(MOLD_VOLUMES[key].volume));
+                  }}
+                >
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     {Object.entries(MOLD_VOLUMES).map(([k, v]) => (
@@ -389,12 +401,20 @@ export default function SoilProctor() {
                 </Select>
               </div>
               <div>
-                <Label className="text-xs text-slate-500 mb-1 block">{lang === "ar" ? "وصف التربة" : "Soil Description"}</Label>
-                <Input value={soilDescription} onChange={e => setSoilDescription(e.target.value)} placeholder={lang === "ar" ? "مثال: طين رملي، مواد ردم" : "e.g. Sandy clay, Fill material"} />
+                <Label className="text-xs text-slate-500 mb-1 block">
+                  {lang === "ar" ? "حجم القالب (cm³)" : "Mould Volume (cm³)"}
+                </Label>
+                <Input
+                  type="number"
+                  value={mouldVolumeStr}
+                  onChange={e => setMouldVolumeStr(e.target.value)}
+                  placeholder={lang === "ar" ? "مثال: 2303" : "e.g. 2303"}
+                  className="font-mono"
+                />
               </div>
               <div>
                 <Label className="text-xs text-slate-500 mb-1 block">
-                  {lang === "ar" ? "كتلة القالب + القاعدة (g)" : "Mass of Mould + Base (g)"}
+                  {lang === "ar" ? "كتلة القالب + القاعدة الفارغ (g)" : "Mass of Empty Mould + Base (g)"}
                 </Label>
                 <Input
                   type="number"
@@ -404,11 +424,16 @@ export default function SoilProctor() {
                   className="font-mono"
                 />
               </div>
-              <div className="flex items-end">
+              <div>
+                <Label className="text-xs text-slate-500 mb-1 block">{lang === "ar" ? "وصف التربة" : "Soil Description"}</Label>
+                <Input value={soilDescription} onChange={e => setSoilDescription(e.target.value)} placeholder={lang === "ar" ? "مثال: طين رملي، مواد ردم" : "e.g. Sandy clay, Fill material"} />
+              </div>
+              <div className="md:col-span-4 flex items-end">
                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-xs text-blue-700 w-full">
                   <Info size={12} className="inline mr-1" />
-                  {lang === "ar" ? "حجم القالب" : "Mould volume"}: <strong>{moldVolume} cm³</strong><br />
-                  {lang === "ar" ? "يُنصح بـ 5 نقاط على الأقل للحصول على MDD/OMC دقيق" : "Min. 5 points recommended for accurate MDD/OMC"}
+                  {lang === "ar"
+                    ? <>حجم القالب المستخدم في الحساب: <strong>{moldVolume} cm³</strong>. «كتلة القالب + القاعدة» هي وزن القالب الفارغ (عادةً ~5640 g) وليست الحجم. يُنصح بـ 5 نقاط على الأقل للحصول على MDD/OMC دقيق.</>
+                    : <>Calculation uses Mould Volume <strong>{moldVolume} cm³</strong>. "Mass of Empty Mould + Base" is the weight of the empty mould (typically ~5640 g) — not the volume. Min. 5 points recommended for accurate MDD/OMC.</>}
                 </div>
               </div>
             </div>
