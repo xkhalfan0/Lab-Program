@@ -103,11 +103,13 @@ function computePoint(point: TestPoint, params: FieldDensityParams): ComputedPoi
   // Dry Density (g/cc) = bulkDensity / (100 + moistureContent) × 100
   const dryDensity = bulkDensity > 0 ? (bulkDensity / (100 + moistureContent)) * 100 : 0;
 
-  // Compaction % = (dryDensity / MDD) × 100
-  const compaction = mdd > 0 && dryDensity > 0 ? (dryDensity / mdd) * 100 : 0;
+  // Compaction % = (dryDensity / MDD) × 100, rounded to the nearest whole %
+  // (94.8 → 95, 94.2 → 94). Pass when the rounded RC ≥ required compaction.
+  const compactionRaw = mdd > 0 && dryDensity > 0 ? (dryDensity / mdd) * 100 : 0;
+  const compaction = Math.round(compactionRaw);
 
   const result: "pass" | "fail" | null =
-    compaction > 0 ? (compaction >= requiredCompaction ? "pass" : "fail") : null;
+    compactionRaw > 0 ? (compaction >= requiredCompaction ? "pass" : "fail") : null;
 
   return {
     ...point,
@@ -116,7 +118,7 @@ function computePoint(point: TestPoint, params: FieldDensityParams): ComputedPoi
     wtDrySoil: parseFloat(wtDrySoil.toFixed(2)),
     moistureContent: parseFloat(moistureContent.toFixed(2)),
     dryDensity: parseFloat(dryDensity.toFixed(3)),
-    compaction: parseFloat(compaction.toFixed(1)),
+    compaction,
     result,
   };
 }
@@ -524,7 +526,7 @@ export default function SoilFieldDensity() {
                             : "bg-green-50 text-slate-500"
                         }`}
                       >
-                        {point.compaction > 0 ? `${point.compaction.toFixed(1)}%` : "—"}
+                        {point.compaction > 0 ? `${point.compaction}%` : "—"}
                       </td>
                       <td className="border border-slate-200 px-1 py-1 text-center">
                         {testPoints.length > 1 && (

@@ -1067,6 +1067,68 @@ function renderSoilProctor(fd: any, isAr: boolean) {
   );
 }
 
+function renderSoilFieldDensity(fd: any, isAr: boolean) {
+  const L = (en: string, ars: string) => (isAr ? ars : en);
+  const points = Array.isArray(fd.testPoints) ? fd.testPoints : [];
+  const required = fd.requiredCompaction ?? 95;
+  const passed = points.filter((p: any) => p.result === "pass").length;
+  const failed = points.filter((p: any) => p.result === "fail").length;
+  const total = points.length;
+
+  const cols: Column[] = [
+    { header: L("Point", "النقطة"), field: "pointNumber", align: "center", render: (_v, row) => <span className="font-semibold">{String((row as any).pointNumber ?? "")}</span> },
+    { header: L("Location", "الموقع"), field: "location", align: "center", render: (_v, row) => String((row as any).location || "—") },
+    { header: L("Depth (m)", "العمق (م)"), field: "depth", align: "center", render: v => fmt(v, 2) },
+    { header: L("Bulk Density (g/cc)", "الكثافة الكلية (g/cc)"), field: "bulkDensity", align: "right", render: v => fmt(v, 3) },
+    { header: L("Moisture %", "الرطوبة %"), field: "moistureContent", align: "right", render: v => (v != null ? `${fmt(v, 2)}%` : "—") },
+    { header: L("Dry Density (g/cc)", "الكثافة الجافة (g/cc)"), field: "dryDensity", align: "right", render: v => <span className="font-semibold">{fmt(v, 3)}</span> },
+    { header: L("RC %", "نسبة الدمك %"), field: "compaction", align: "center", render: v => (v != null && v !== "" ? <span className="font-bold">{Math.round(Number(v))}%</span> : "—") },
+    {
+      header: L("Result", "النتيجة"),
+      field: "result",
+      align: "center",
+      render: v =>
+        v === "pass" ? (
+          <span className="text-emerald-700 font-bold">{L("PASS", "ناجح")} ✓</span>
+        ) : v === "fail" ? (
+          <span className="text-red-700 font-bold">{L("FAIL", "راسب")} ✗</span>
+        ) : (
+          <span className="text-gray-500">—</span>
+        ),
+    },
+  ];
+
+  return (
+    <>
+      <div className="grid grid-cols-4 gap-2 text-xs mb-3">
+        <div className="bg-blue-50 border border-blue-200 rounded p-2 text-center">
+          <p className="text-blue-600 font-semibold">{L("Max Dry Density (MDD)", "أقصى كثافة جافة")}</p>
+          <p className="font-bold text-blue-800 text-base">{fmt(fd.mdd, 2)} {L("g/cc", "g/cc")}</p>
+        </div>
+        <div className="bg-amber-50 border border-amber-200 rounded p-2 text-center">
+          <p className="text-amber-700 font-semibold">{L("Required Compaction", "نسبة الدمك المطلوبة")}</p>
+          <p className="font-bold text-amber-800 text-base">≥ {required}%</p>
+        </div>
+        <div className="bg-emerald-50 border border-emerald-200 rounded p-2 text-center">
+          <p className="text-emerald-700 font-semibold">{L("Points Passed", "نقاط ناجحة")}</p>
+          <p className="font-bold text-emerald-800 text-base">{passed} / {total}</p>
+        </div>
+        <div className={`border rounded p-2 text-center ${failed > 0 ? "bg-red-50 border-red-200" : "bg-gray-50 border-gray-200"}`}>
+          <p className={`font-semibold ${failed > 0 ? "text-red-700" : "text-gray-600"}`}>{L("Points Failed", "نقاط راسبة")}</p>
+          <p className={`font-bold text-base ${failed > 0 ? "text-red-800" : "text-gray-800"}`}>{failed}</p>
+        </div>
+      </div>
+      <FlexibleResultsTable columns={cols} rows={points} />
+      <p className="text-[10px] text-slate-500 mt-1">
+        {L(
+          `Relative Compaction (RC) is rounded to the nearest whole %. Pass = RC ≥ ${required}%.`,
+          `نسبة الدمك تُقرّب لأقرب رقم صحيح. النجاح = نسبة الدمك ≥ ${required}%.`,
+        )}
+      </p>
+    </>
+  );
+}
+
 function renderAsphaltBitumenExtraction(fd: any, isAr: boolean) {
   const L = (en: string, ars: string) => (isAr ? ars : en);
   const sample = fd.sample ?? (Array.isArray(fd.samples) ? fd.samples[0] : null);
@@ -2498,6 +2560,7 @@ export function renderFormData(formTemplate: string, formData: any, isAr: boolea
     case "steel_anchor_bolt": return renderSteelAnchorBolt(formData, isAr);
     case "sieve_analysis": return renderSieveAnalysis(formData, isAr, extras);
     case "soil_proctor": return renderSoilProctor(formData, isAr);
+    case "soil_field_density": return renderSoilFieldDensity(formData, isAr);
     case "asphalt_bitumen_extraction":
       return renderAsphaltBitumenExtraction(formData, isAr);
     case "asphalt_extracted_sieve":
