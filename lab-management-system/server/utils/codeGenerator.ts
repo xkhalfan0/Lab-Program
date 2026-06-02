@@ -1,16 +1,21 @@
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { samples } from "../../drizzle/schema";
 import { getDb } from "../db";
 
 /**
  * Generate a unique sample code.
  * Format: LAB-YYYY-MM-NNNN   (e.g. LAB-2026-05-0001)
- * NNNN is a 4-digit sequence that resets each calendar month.
+ * NNNN is a sequence that resets each calendar month. It is normally 4 digits
+ * but is allowed to grow (10000+) so the month is never "stuck" at a cap.
  *
  * Old timestamp codes (LAB-YYYY-MMDD-HHMMSS-NNN) are left untouched in the
  * database. When computing the next sequence we match ONLY the new monthly
- * format (exactly 4 trailing digits), so old codes and future retest suffixes
- * (e.g. LAB-2026-05-0001-R1) are ignored.
+ * format (trailing run of digits with nothing after), so old codes and future
+ * retest suffixes (e.g. LAB-2026-05-0001-R1) are ignored.
+ *
+ * After computing the next sequence we probe for the first code that is not
+ * already taken. This makes generation resilient to gaps, concurrent inserts
+ * and any previously corrupted/high sequence values.
  */
 export async function generateSampleCode(): Promise<string> {
   const now = new Date();
@@ -18,13 +23,17 @@ export async function generateSampleCode(): Promise<string> {
   const month = String(now.getMonth() + 1).padStart(2, "0");
   const prefix = `LAB-${year}-${month}`;
 
-  // Matches ONLY the new monthly format: LAB-YYYY-MM-NNNN (4 digits, nothing after)
-  const newFormatRegexp = `^LAB-${year}-${month}-[0-9]{4}$`;
+  // Matches the new monthly format LAB-YYYY-MM-<digits> (4 or more digits, nothing after).
+  const newFormatRegexp = `^LAB-${year}-${month}-[0-9]+$`;
+
+  const db = await getDb();
+  if (!db) {
+    // DB unavailable: fall back to a wide timestamp tail (different magnitude than
+    // the sequential counter) so it is very unlikely to clash with real sequences.
+    return `${prefix}-${Date.now().toString().slice(-6)}`;
+  }
 
   try {
-    const db = await getDb();
-    if (!db) return `${prefix}-0001`;
-
     const result = await db
       .select({
         maxSeq: sql<number>`COALESCE(MAX(CAST(SUBSTRING_INDEX(${samples.sampleCode}, '-', -1) AS UNSIGNED)), 0)`,
@@ -32,15 +41,25 @@ export async function generateSampleCode(): Promise<string> {
       .from(samples)
       .where(sql`${samples.sampleCode} REGEXP ${newFormatRegexp}`);
 
-    let nextSequence = (result[0]?.maxSeq ?? 0) + 1;
-    // Safety: cap at 9999 per month (extremely unlikely to be reached)
-    if (nextSequence > 9999) nextSequence = 9999;
+    let next = Number(result[0]?.maxSeq ?? 0) + 1;
 
-    return `${prefix}-${String(nextSequence).padStart(4, "0")}`;
+    // Probe forward for the first free code (handles gaps, concurrency and any
+    // stale high values that previously collided).
+    for (let attempt = 0; attempt < 100; attempt++) {
+      const candidate = `${prefix}-${String(next).padStart(4, "0")}`;
+      const existing = await db
+        .select({ id: samples.id })
+        .from(samples)
+        .where(eq(samples.sampleCode, candidate))
+        .limit(1);
+      if (existing.length === 0) return candidate;
+      next++;
+    }
+
+    // Extremely unlikely: could not find a free sequential code; use a timestamp tail.
+    return `${prefix}-${Date.now().toString().slice(-6)}`;
   } catch (error) {
     console.error("Error generating sample code:", error);
-    // Fallback with timestamp tail to keep it unique if the DB is unavailable
-    const fallback = Date.now().toString().slice(-4);
-    return `${prefix}-${fallback}`;
+    return `${prefix}-${Date.now().toString().slice(-6)}`;
   }
 }
