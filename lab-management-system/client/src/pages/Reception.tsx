@@ -936,19 +936,19 @@ export default function Reception() {
 
                 {/* Auto-filled info */}
                 {form.contractId && (
-                  <div className="p-3 bg-muted/40 rounded-lg border border-dashed space-y-2">
-                    <div className="flex items-center gap-2">
-                      <Lock className="w-3.5 h-3.5 text-muted-foreground" />
-                      <span className="text-xs text-muted-foreground font-medium">{t("reception.autoFilled")}</span>
+                  <div className="p-3.5 bg-blue-50 rounded-xl border border-blue-200 space-y-2.5">
+                    <div className="flex items-center gap-1.5">
+                      <Lock className="w-3 h-3 text-blue-600" />
+                      <span className="text-xs text-blue-600 font-medium">{t("reception.autoFilled")}</span>
                     </div>
                     <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <Label className="text-xs text-muted-foreground">{t("reception.contractName")}</Label>
-                        <div className="px-3 py-2 bg-background rounded border text-sm text-muted-foreground truncate">{form.contractName || "—"}</div>
+                      <div className="min-w-0">
+                        <p className="text-[11px] text-blue-400 mb-1">{t("reception.contractName")}</p>
+                        <p className="text-sm font-medium text-blue-900 truncate">{form.contractName || "—"}</p>
                       </div>
-                      <div>
-                        <Label className="text-xs text-muted-foreground">{t("reception.contractorName")}</Label>
-                        <div className="px-3 py-2 bg-background rounded border text-sm text-muted-foreground">{form.contractorName || "—"}</div>
+                      <div className="min-w-0">
+                        <p className="text-[11px] text-blue-400 mb-1">{t("reception.contractorName")}</p>
+                        <p className="text-sm font-medium text-blue-900 truncate">{form.contractorName || "—"}</p>
                       </div>
                     </div>
                   </div>
@@ -1026,9 +1026,12 @@ export default function Reception() {
                     <div className="flex-1 overflow-y-auto px-7 py-6 space-y-5">
 
                 {/* Test Category */}
-                <div className="space-y-1.5">
-                  <Label>{lang === "ar" ? "فئة الاختبار" : "Test Category"} <span className="text-red-500">*</span></Label>
-                  <div className="flex flex-wrap gap-2">
+                <div className="space-y-3">
+                  <Label className="flex items-center gap-2 text-base font-semibold text-foreground">
+                    <Layers className="w-4 h-4 text-blue-600" />
+                    {lang === "ar" ? "فئة الاختبار" : "Test Category"} <span className="text-red-500">*</span>
+                  </Label>
+                  <div className="flex flex-wrap gap-2.5">
                     {CATEGORIES.map(cat => (
                       <button key={cat.value} type="button"
                         onClick={() => {
@@ -1037,7 +1040,7 @@ export default function Reception() {
                           setSubtypeFor(null);
                           setAsphaltKind("");
                         }}
-                        className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all border ${form.sampleType === cat.value ? "bg-primary text-primary-foreground border-primary shadow" : "bg-background text-muted-foreground border-border hover:border-primary/50"}`}>
+                        className={`px-5 py-2.5 rounded-xl text-sm font-medium transition-all border-2 ${form.sampleType === cat.value ? "bg-blue-600 text-white border-blue-600 shadow-sm" : "bg-card text-muted-foreground border-border hover:border-blue-300 hover:text-foreground"}`}>
                         {lang === "ar" ? cat.labelAr : cat.labelEn}
                       </button>
                     ))}
@@ -1046,12 +1049,14 @@ export default function Reception() {
 
                 {form.sampleType === "asphalt" && (
                   <div className="space-y-4">
-                    <Label className="flex items-center gap-1.5">
-                      <CheckSquare className="w-3.5 h-3.5 text-muted-foreground" />
+                    <Label className="flex items-center gap-2 text-base font-semibold text-foreground">
+                      <CheckSquare className="w-4 h-4 text-blue-600" />
                       {lang === "ar" ? "اختبارات الأسفلت المطلوبة" : "Required Asphalt Tests"}
                       <span className="text-red-500">*</span>
                       {selectedTests.length > 0 && (
-                        <Badge variant="secondary" className="ms-1 text-xs">{selectedTests.length} {lang === "ar" ? "محدد" : "selected"}</Badge>
+                        <span className="ms-1 inline-flex items-center rounded-full bg-blue-600 px-2.5 py-0.5 text-xs font-medium text-white">
+                          {selectedTests.length} {lang === "ar" ? "محدد" : "selected"}
+                        </span>
                       )}
                     </Label>
 
@@ -1165,18 +1170,20 @@ export default function Reception() {
                 {form.sampleType &&
                   form.sampleType !== "asphalt" &&
                   (
-                  <div className="space-y-2">
-                    <Label className="flex items-center gap-1.5">
-                      <CheckSquare className="w-3.5 h-3.5 text-muted-foreground" />
+                  <div className="space-y-3">
+                    <Label className="flex items-center gap-2 text-base font-semibold text-foreground">
+                      <CheckSquare className="w-4 h-4 text-blue-600" />
                       {lang === "ar" ? "الاختبارات المطلوبة" : "Required Tests"}
                       <span className="text-red-500">*</span>
                       {selectedTests.length > 0 && (
-                        <Badge variant="secondary" className="ms-1 text-xs">{selectedTests.length} {lang === "ar" ? "محدد" : "selected"}</Badge>
+                        <span className="ms-1 inline-flex items-center rounded-full bg-blue-600 px-2.5 py-0.5 text-xs font-medium text-white">
+                          {selectedTests.length} {lang === "ar" ? "محدد" : "selected"}
+                        </span>
                       )}
                     </Label>
-                    <div className="border rounded-lg divide-y">
+                    <div className="space-y-2.5">
                       {filteredTests.length === 0 ? (
-                        <div className="p-4 text-sm text-muted-foreground text-center space-y-1">
+                        <div className="rounded-xl border-2 border-dashed border-border p-8 text-sm text-muted-foreground text-center space-y-1">
                           <p>
                             {allTests.filter(t => t.isActive).length === 0
                               ? (lang === "ar"
@@ -1193,25 +1200,28 @@ export default function Reception() {
                         const subTypes = SUBTYPES_BY_CODE[tt.code] ?? [];
                         const isCasting = CASTING_DATE_TESTS.includes(tt.code);
                         return (
-                          <div key={tt.id} className={`p-3 transition-colors ${isSelected ? "bg-primary/5" : "hover:bg-muted/30"}`}>
-                            <div className="flex items-center gap-3">
+                          <div key={tt.id} className={`rounded-xl border-2 p-4 transition-all ${isSelected ? "border-blue-400 bg-blue-50/60" : "border-border bg-card hover:border-blue-200 hover:bg-muted/30"}`}>
+                            <div className="flex items-start gap-3">
                               <Checkbox
                                 id={`test-${tt.id}`}
                                 checked={isSelected}
                                 onCheckedChange={() => toggleTest(tt)}
+                                className="mt-1"
                               />
-                              <label htmlFor={`test-${tt.id}`} className="flex-1 cursor-pointer">
-                                <div className="flex items-center justify-between">
-                                  <span className="text-sm font-medium">
-                                    {lang === "ar" && tt.nameAr ? tt.nameAr : tt.nameEn}
-                                  </span>
-                                  <span className="text-xs font-semibold text-green-700">
+                              <label htmlFor={`test-${tt.id}`} className="flex-1 cursor-pointer min-w-0">
+                                <div className="flex items-start justify-between gap-3">
+                                  <div className="min-w-0">
+                                    <span className="block text-[15px] font-semibold text-foreground">
+                                      {lang === "ar" && tt.nameAr ? tt.nameAr : tt.nameEn}
+                                    </span>
+                                    {tt.code && (
+                                      <span className="mt-0.5 block text-xs text-muted-foreground font-mono">{tt.code}</span>
+                                    )}
+                                  </div>
+                                  <span className="flex-shrink-0 rounded-lg bg-green-50 px-2.5 py-1 text-sm font-semibold text-green-700">
                                     {Number(tt.unitPrice).toFixed(0)} {lang === "ar" ? "درهم" : "AED"}
                                   </span>
                                 </div>
-                                {tt.code && (
-                                  <span className="text-xs text-muted-foreground font-mono">{tt.code}</span>
-                                )}
                                 {renderTestDependencyHint(tt.code)}
                               </label>
                             </div>
@@ -1288,18 +1298,28 @@ export default function Reception() {
                             )}
                             {/* Quantity for selected test — hidden for multi-subtype tests */}
                             {isSelected && !MULTI_SUBTYPE_TESTS.includes(tt.code) && (
-                              <div className="mt-2 ms-7 flex items-center gap-2">
-                                <Label className="text-xs text-muted-foreground whitespace-nowrap">
+                              <div className="mt-3 pt-3 ms-8 border-t border-blue-200 flex items-center justify-between gap-2">
+                                <Label className="flex items-center gap-1.5 text-sm font-medium text-blue-700 whitespace-nowrap">
+                                  <Layers className="w-3.5 h-3.5" />
                                   {tt.code === "CONC_INTERLOCK"
-                                    ? (lang === "ar" ? "عدد البلاطات للفحص:" : "No. of blocks to test:")
-                                    : (lang === "ar" ? "العدد:" : "Qty:")}
+                                    ? (lang === "ar" ? "عدد البلاطات للفحص" : "No. of blocks to test")
+                                    : (lang === "ar" ? "الكمية" : "Quantity")}
+                                  <span className="text-red-500">*</span>
                                 </Label>
-                                <Input
-                                  type="number" min={0} max={999}
-                                  value={selectedItem?.quantity ?? 0}
-                                  onChange={e => setTestQuantity(tt.id, parseInt(e.target.value) || 0)}
-                                  className={`h-7 w-20 text-center text-xs ${(selectedItem?.quantity ?? 0) === 0 ? "border-amber-400 text-amber-700" : ""}`}
-                                />
+                                <div className="flex items-center gap-2">
+                                  {(selectedItem?.quantity ?? 0) === 0 && (
+                                    <span className="inline-flex items-center gap-1 rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-xs text-amber-700">
+                                      <AlertTriangle className="w-3 h-3" />
+                                      {lang === "ar" ? "1 على الأقل" : "Min 1"}
+                                    </span>
+                                  )}
+                                  <Input
+                                    type="number" min={0} max={999}
+                                    value={selectedItem?.quantity ?? 0}
+                                    onChange={e => setTestQuantity(tt.id, parseInt(e.target.value) || 0)}
+                                    className={`h-8 w-20 text-center text-sm ${(selectedItem?.quantity ?? 0) === 0 ? "border-amber-400 text-amber-700" : ""}`}
+                                  />
+                                </div>
                               </div>
                             )}
                             {/* Hot Bin optional add-on tests (AGG_SG, AGG_FLAKINESS_ELONGATION) */}
