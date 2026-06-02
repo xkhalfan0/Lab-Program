@@ -76,59 +76,79 @@ const MOLD_VOLUMES = {
 
 interface ProctorPoint {
   id: string;
-  // Method A: direct water content input
-  waterContent: string;
-  moldMass: string;
-  moldPlusSoilMass: string;
-  // Method B: wet + dry mass for auto WC calculation
-  wetMass: string;
-  dryMass: string;
-  // computed
-  dryDensity?: number;
-  bulkDensity?: number;
-  computedWC?: number;
+  // ── Technician inputs ──
+  waterAdded: string;          // Water added % (target / nominal label, reference only)
+  mouldBaseSpecimen: string;   // Mass of Mould + Base + Compacted Specimen (g)
+  containerNo: string;         // Moisture container number/label
+  wetSoilContainer: string;    // Mass of Wet Soil + Container (g)
+  drySoilContainer: string;    // Mass of Dry Soil + Container (g)
+  container: string;           // Mass of Container (g)
+  // ── Computed ──
+  compactedSpecimen?: number;  // (Mould+Base+Specimen) − (Mould+Base)
+  bulkDensity?: number;        // Compacted Specimen / Mould Volume
+  moistureMass?: number;       // (Wet+Container) − (Dry+Container)
+  drySoilMass?: number;        // (Dry+Container) − Container
+  waterContent?: number;       // moistureMass / drySoilMass × 100
+  dryDensity?: number;         // 100 × bulkDensity / (100 + waterContent)
 }
 
 function newPoint(index: number): ProctorPoint {
   return {
     id: `pt_${Date.now()}_${index}`,
-    waterContent: "",
-    moldMass: "",
-    moldPlusSoilMass: "",
-    wetMass: "",
-    dryMass: "",
+    waterAdded: "",
+    mouldBaseSpecimen: "",
+    containerNo: "",
+    wetSoilContainer: "",
+    drySoilContainer: "",
+    container: "",
   };
 }
 
-function computePoint(pt: ProctorPoint, moldVolumeCm3: number): ProctorPoint {
-  // Determine water content: if wet/dry masses provided, compute automatically
-  let wc: number;
-  if (pt.wetMass && pt.dryMass) {
-    const wet = parseFloat(pt.wetMass);
-    const dry = parseFloat(pt.dryMass);
-    if (wet > 0 && dry > 0 && wet > dry) {
-      wc = ((wet - dry) / dry) * 100;
-    } else {
-      wc = parseFloat(pt.waterContent);
-    }
-  } else {
-    wc = parseFloat(pt.waterContent);
+const num = (v: string) => {
+  const n = parseFloat(v);
+  return Number.isFinite(n) ? n : NaN;
+};
+
+/**
+ * Compute a Proctor point following the lab Excel sheet exactly.
+ *  - Mass of Compacted Specimen = (Mould+Base+Specimen) − (Mould+Base)
+ *  - Bulk Density               = Compacted Specimen / Mould Volume
+ *  - Mass of Moisture           = (Wet Soil+Container) − (Dry Soil+Container)
+ *  - Mass of Dry Soil           = (Dry Soil+Container) − Container
+ *  - Moisture Content %         = Mass of Moisture / Mass of Dry Soil × 100
+ *  - Dry Density                = 100 × Bulk Density / (100 + Moisture Content %)
+ */
+function computePoint(pt: ProctorPoint, mouldVolumeCm3: number, mouldBaseMass: number): ProctorPoint {
+  const out: ProctorPoint = { ...pt };
+
+  // ── Moisture content (container method) ──
+  const wsc = num(pt.wetSoilContainer);
+  const dsc = num(pt.drySoilContainer);
+  const cont = num(pt.container);
+  if (Number.isFinite(wsc) && Number.isFinite(dsc)) {
+    out.moistureMass = parseFloat((wsc - dsc).toFixed(2));
+  }
+  if (Number.isFinite(dsc) && Number.isFinite(cont)) {
+    out.drySoilMass = parseFloat((dsc - cont).toFixed(2));
+  }
+  if (out.moistureMass != null && out.drySoilMass != null && out.drySoilMass > 0) {
+    out.waterContent = parseFloat(((out.moistureMass / out.drySoilMass) * 100).toFixed(2));
   }
 
-  const moldMass = parseFloat(pt.moldMass);
-  const totalMass = parseFloat(pt.moldPlusSoilMass);
-  if (!wc || !moldMass || !totalMass || !moldVolumeCm3) {
-    return { ...pt, computedWC: pt.wetMass && pt.dryMass ? wc : undefined };
+  // ── Bulk (wet) density ──
+  const mbs = num(pt.mouldBaseSpecimen);
+  if (Number.isFinite(mbs) && Number.isFinite(mouldBaseMass) && mouldVolumeCm3 > 0) {
+    const specimen = mbs - mouldBaseMass;
+    out.compactedSpecimen = parseFloat(specimen.toFixed(1));
+    if (specimen > 0) out.bulkDensity = parseFloat((specimen / mouldVolumeCm3).toFixed(3));
   }
-  const soilMass = totalMass - moldMass;
-  const bulkDensity = soilMass / moldVolumeCm3; // g/cm³
-  const dryDensity = bulkDensity / (1 + wc / 100);
-  return {
-    ...pt,
-    computedWC: parseFloat(wc.toFixed(2)),
-    bulkDensity: parseFloat(bulkDensity.toFixed(3)),
-    dryDensity: parseFloat(dryDensity.toFixed(3)),
-  };
+
+  // ── Dry density ──
+  if (out.bulkDensity != null && out.waterContent != null) {
+    out.dryDensity = parseFloat(((100 * out.bulkDensity) / (100 + out.waterContent)).toFixed(3));
+  }
+
+  return out;
 }
 
 // Simple polynomial fit to find MDD and OMC
@@ -173,23 +193,22 @@ export default function SoilProctor() {
   const [testMethod, setTestMethod] = useState("MODIFIED_PROCTOR");
   const [moldType, setMoldType] = useState<keyof typeof MOLD_VOLUMES>("CBR_MOLD");
   const [soilDescription, setSoilDescription] = useState("");
+  const [mouldBaseMass, setMouldBaseMass] = useState("");
   const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
   const [submitted, setSubmitted] = useState(false);
-  // WC input mode: "direct" = user types WC%, "auto" = computed from wet/dry masses
-  const [wcMode, setWcMode] = useState<"direct" | "auto">("direct");
   const [points, setPoints] = useState<ProctorPoint[]>(
-    Array.from({ length: 5 }, (_, i) => newPoint(i))
+    Array.from({ length: 4 }, (_, i) => newPoint(i))
   );
 
   const moldVolume = MOLD_VOLUMES[moldType].volume;
-  const computedPoints = points.map(p => computePoint(p, moldVolume));
-  const validPoints = computedPoints.filter(p => p.dryDensity && (p.computedWC || p.waterContent));
+  const mouldBaseMassNum = num(mouldBaseMass);
+  const computedPoints = points.map(p => computePoint(p, moldVolume, mouldBaseMassNum));
+  const validPoints = computedPoints.filter(p => p.dryDensity != null && p.waterContent != null);
 
-  const chartData = validPoints.map(p => ({
-    wc: p.computedWC ?? parseFloat(p.waterContent),
-    dd: p.dryDensity,
-  })).sort((a, b) => a.wc - b.wc);
+  const chartData = validPoints
+    .map(p => ({ wc: p.waterContent as number, dd: p.dryDensity as number }))
+    .sort((a, b) => a.wc - b.wc);
 
   const fitResult = fitParabola(chartData.map(d => ({ x: d.wc, y: d.dd ?? 0 })));
 
@@ -226,9 +245,26 @@ export default function SoilProctor() {
           testMethod,
           moldType,
           moldVolume,
+          mouldVolume: moldVolume,
+          mouldBaseMass: Number.isFinite(mouldBaseMassNum) ? mouldBaseMassNum : null,
           soilDescription,
-          wcMode,
-          points: computedPoints,
+          // Persist raw inputs + computed values, and mirror the field names the
+          // report renderer expects (mouldSoil / mouldWeight / soilWeight / wetDensity / waterContent / dryDensity).
+          points: computedPoints.map(p => ({
+            waterAdded: p.waterAdded,
+            containerNo: p.containerNo,
+            wetSoilContainer: p.wetSoilContainer,
+            drySoilContainer: p.drySoilContainer,
+            container: p.container,
+            moistureMass: p.moistureMass,
+            drySoilMass: p.drySoilMass,
+            mouldSoil: Number.isFinite(num(p.mouldBaseSpecimen)) ? num(p.mouldBaseSpecimen) : null,
+            mouldWeight: Number.isFinite(mouldBaseMassNum) ? mouldBaseMassNum : null,
+            soilWeight: p.compactedSpecimen ?? null,
+            wetDensity: p.bulkDensity ?? null,
+            waterContent: p.waterContent ?? null,
+            dryDensity: p.dryDensity ?? null,
+          })),
           mdd: fitResult?.mdd,
           omc: fitResult?.omc,
         },
@@ -250,7 +286,18 @@ export default function SoilProctor() {
     setPoints(prev => prev.map(p => p.id === id ? { ...p, [field]: value } : p));
   };
 
+  const removePoint = (id: string) => {
+    setPoints(prev => (prev.length > 1 ? prev.filter(p => p.id !== id) : prev));
+  };
+
   const isRtl = dir === "rtl";
+
+  // Shared table cell styles for the transposed Proctor sheet
+  const labelCls = "border border-slate-200 px-2 py-1.5 text-xs font-medium text-slate-600 bg-slate-50 whitespace-nowrap text-start";
+  const inCls = "border border-slate-200 px-1 py-1";
+  const calcCls = "border border-slate-200 px-2 py-1.5 text-center font-mono text-xs";
+  const inputCls = "h-7 text-xs text-center font-mono w-full min-w-[4.5rem]";
+  const fmtN = (v?: number | null, d = 2) => (v == null || !Number.isFinite(v) ? "—" : v.toFixed(d));
 
   if (!distId || distId === 0) {
     return (
@@ -346,19 +393,21 @@ export default function SoilProctor() {
                 <Input value={soilDescription} onChange={e => setSoilDescription(e.target.value)} placeholder={lang === "ar" ? "مثال: طين رملي، مواد ردم" : "e.g. Sandy clay, Fill material"} />
               </div>
               <div>
-                <Label className="text-xs text-slate-500 mb-1 block">{lang === "ar" ? "طريقة إدخال نسبة الرطوبة" : "Moisture Content Input"}</Label>
-                <Select value={wcMode} onValueChange={v => setWcMode(v as "direct" | "auto")}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="direct">{lang === "ar" ? "إدخال مباشر (%)" : "Direct Input (%)"}</SelectItem>
-                    <SelectItem value="auto">{lang === "ar" ? "حساب تلقائي (كتلة رطبة/جافة)" : "Auto-Calculate (Wet/Dry Mass)"}</SelectItem>
-                  </SelectContent>
-                </Select>
+                <Label className="text-xs text-slate-500 mb-1 block">
+                  {lang === "ar" ? "كتلة القالب + القاعدة (g)" : "Mass of Mould + Base (g)"}
+                </Label>
+                <Input
+                  type="number"
+                  value={mouldBaseMass}
+                  onChange={e => setMouldBaseMass(e.target.value)}
+                  placeholder={lang === "ar" ? "مثال: 5640" : "e.g. 5640"}
+                  className="font-mono"
+                />
               </div>
               <div className="flex items-end">
                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-xs text-blue-700 w-full">
                   <Info size={12} className="inline mr-1" />
-                  {lang === "ar" ? "حجم القالب" : "Mold volume"}: <strong>{moldVolume} cm³</strong><br />
+                  {lang === "ar" ? "حجم القالب" : "Mould volume"}: <strong>{moldVolume} cm³</strong><br />
                   {lang === "ar" ? "يُنصح بـ 5 نقاط على الأقل للحصول على MDD/OMC دقيق" : "Min. 5 points recommended for accurate MDD/OMC"}
                 </div>
               </div>
@@ -427,7 +476,7 @@ export default function SoilProctor() {
           </CardContent>
         </Card>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="space-y-6">
           {/* Data Table */}
           <Card>
             <CardHeader className="pb-3">
@@ -440,85 +489,146 @@ export default function SoilProctor() {
             </CardHeader>
             <CardContent>
             <div className="overflow-x-auto">
-<table className="w-full text-sm border-collapse">
+              <table className="w-full text-sm border-collapse min-w-[560px]">
                 <thead>
-                  <tr className="bg-slate-50">
-                    <th className="border border-slate-200 px-2 py-2 text-xs font-semibold text-slate-600">#</th>
-                    {wcMode === "auto" ? (
-                      <>
-                        <th className="border border-slate-200 px-2 py-2 text-xs font-semibold text-slate-600">
-                          {lang === "ar" ? "كتلة رطبة (g)" : "Wet Mass (g)"}
-                        </th>
-                        <th className="border border-slate-200 px-2 py-2 text-xs font-semibold text-slate-600">
-                          {lang === "ar" ? "كتلة جافة (g)" : "Dry Mass (g)"}
-                        </th>
-                        <th className="border border-slate-200 px-2 py-2 text-xs font-semibold text-slate-600 bg-amber-50">
-                          {lang === "ar" ? "W.C. % (محسوب)" : "W.C. % (calc)"}
-                        </th>
-                      </>
-                    ) : (
-                      <th className="border border-slate-200 px-2 py-2 text-xs font-semibold text-slate-600">
-                        {lang === "ar" ? "نسبة الرطوبة (%)" : "W.C. (%)"}
+                  <tr className="bg-slate-100">
+                    <th className={`${labelCls} bg-slate-100 font-semibold`}>
+                      {lang === "ar" ? "البيان" : "Parameter"}
+                    </th>
+                    {computedPoints.map((pt, idx) => (
+                      <th key={pt.id} className="border border-slate-200 px-2 py-2 text-xs font-semibold text-slate-600 min-w-[6rem]">
+                        <div className="flex items-center justify-center gap-1.5">
+                          <span>{lang === "ar" ? `اختبار ${idx + 1}` : `Test ${idx + 1}`}</span>
+                          {points.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => removePoint(pt.id)}
+                              className="text-slate-400 hover:text-red-500 leading-none text-base"
+                              title={lang === "ar" ? "حذف" : "Remove"}
+                            >
+                              ×
+                            </button>
+                          )}
+                        </div>
                       </th>
-                    )}
-                    <th className="border border-slate-200 px-2 py-2 text-xs font-semibold text-slate-600">
-                      {lang === "ar" ? "كتلة القالب (g)" : "Mold Mass (g)"}
-                    </th>
-                    <th className="border border-slate-200 px-2 py-2 text-xs font-semibold text-slate-600">
-                      {lang === "ar" ? "قالب+تربة (g)" : "Mold+Soil (g)"}
-                    </th>
-                    <th className="border border-slate-200 px-2 py-2 text-xs font-semibold text-slate-600">
-                      {lang === "ar" ? "ρ كلية" : "Bulk ρ"}
-                    </th>
-                    <th className="border border-slate-200 px-2 py-2 text-xs font-semibold text-slate-600">
-                      {lang === "ar" ? "ρ جافة" : "Dry ρ"}
-                    </th>
+                    ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {computedPoints.map((pt, idx) => (
-                    <tr key={pt.id} className={idx % 2 === 0 ? "bg-white" : "bg-slate-50/50"}>
-                      <td className="border border-slate-200 px-2 py-1 text-center text-xs font-semibold text-slate-500">{idx + 1}</td>
-                      {wcMode === "auto" ? (
-                        <>
-                          <td className="border border-slate-200 px-1 py-1">
-                            <Input value={pt.wetMass} onChange={e => updatePoint(pt.id, "wetMass", e.target.value)} className="h-7 text-xs w-20 text-center font-mono" placeholder="—" />
-                          </td>
-                          <td className="border border-slate-200 px-1 py-1">
-                            <Input value={pt.dryMass} onChange={e => updatePoint(pt.id, "dryMass", e.target.value)} className="h-7 text-xs w-20 text-center font-mono" placeholder="—" />
-                          </td>
-                          <td className="border border-slate-200 px-1 py-1 text-center font-mono text-xs font-bold text-amber-700 bg-amber-50">
-                            {pt.computedWC !== undefined ? pt.computedWC.toFixed(2) : "—"}
-                          </td>
-                        </>
-                      ) : (
-                        <td className="border border-slate-200 px-1 py-1">
-                          <Input value={pt.waterContent} onChange={e => updatePoint(pt.id, "waterContent", e.target.value)} className="h-7 text-xs w-16 text-center font-mono" placeholder="—" />
-                        </td>
-                      )}
-                      <td className="border border-slate-200 px-1 py-1">
-                        <Input value={pt.moldMass} onChange={e => updatePoint(pt.id, "moldMass", e.target.value)} className="h-7 text-xs w-20 text-center font-mono" placeholder="—" />
+                  {/* Water added % (reference) */}
+                  <tr>
+                    <td className={labelCls}>{lang === "ar" ? "الماء المضاف %" : "Water Added %"}</td>
+                    {computedPoints.map(pt => (
+                      <td key={pt.id} className={inCls}>
+                        <Input value={pt.waterAdded} onChange={e => updatePoint(pt.id, "waterAdded", e.target.value)} className={inputCls} placeholder="—" />
                       </td>
-                      <td className="border border-slate-200 px-1 py-1">
-                        <Input value={pt.moldPlusSoilMass} onChange={e => updatePoint(pt.id, "moldPlusSoilMass", e.target.value)} className="h-7 text-xs w-20 text-center font-mono" placeholder="—" />
+                    ))}
+                  </tr>
+                  {/* Mass of Mould + Base + Compacted Specimen (input) */}
+                  <tr>
+                    <td className={labelCls}>{lang === "ar" ? "كتلة القالب+القاعدة+العينة المدموكة (g)" : "Mass of Mould + Base + Compacted Specimen (g)"}</td>
+                    {computedPoints.map(pt => (
+                      <td key={pt.id} className={inCls}>
+                        <Input type="number" value={pt.mouldBaseSpecimen} onChange={e => updatePoint(pt.id, "mouldBaseSpecimen", e.target.value)} className={inputCls} placeholder="—" />
                       </td>
-                      <td className="border border-slate-200 px-1 py-1 text-center font-mono text-xs text-slate-600">{pt.bulkDensity ?? "—"}</td>
-                      <td className="border border-slate-200 px-1 py-1 text-center font-mono text-xs font-bold text-slate-800">{pt.dryDensity ?? "—"}</td>
-                    </tr>
-                  ))}
+                    ))}
+                  </tr>
+                  {/* Mass of Mould + Base (shared constant) */}
+                  <tr className="bg-slate-50/60">
+                    <td className={labelCls}>{lang === "ar" ? "كتلة القالب + القاعدة (g)" : "Mass of Mould + Base (g)"}</td>
+                    {computedPoints.map(pt => (
+                      <td key={pt.id} className={calcCls}>{fmtN(mouldBaseMassNum, 1)}</td>
+                    ))}
+                  </tr>
+                  {/* Mass of Compacted Specimen (calc) */}
+                  <tr className="bg-blue-50/40">
+                    <td className={labelCls}>{lang === "ar" ? "كتلة العينة المدموكة (g)" : "Mass of Compacted Specimen (g)"}</td>
+                    {computedPoints.map(pt => (
+                      <td key={pt.id} className={calcCls}>{fmtN(pt.compactedSpecimen, 1)}</td>
+                    ))}
+                  </tr>
+                  {/* Bulk Density (calc) */}
+                  <tr className="bg-blue-50/40">
+                    <td className={labelCls}>{lang === "ar" ? "الكثافة الرطبة (Mg/m³)" : "Bulk Density (Mg/m³)"}</td>
+                    {computedPoints.map(pt => (
+                      <td key={pt.id} className={`${calcCls} font-semibold text-slate-800`}>{fmtN(pt.bulkDensity, 3)}</td>
+                    ))}
+                  </tr>
+                  {/* Moisture Container No (input) */}
+                  <tr>
+                    <td className={labelCls}>{lang === "ar" ? "رقم وعاء الرطوبة" : "Moisture Container No."}</td>
+                    {computedPoints.map(pt => (
+                      <td key={pt.id} className={inCls}>
+                        <Input value={pt.containerNo} onChange={e => updatePoint(pt.id, "containerNo", e.target.value)} className={inputCls} placeholder="—" />
+                      </td>
+                    ))}
+                  </tr>
+                  {/* Mass of Wet Soil + Container (input) */}
+                  <tr>
+                    <td className={labelCls}>{lang === "ar" ? "كتلة التربة الرطبة + الوعاء (g)" : "Mass of Wet Soil + Container (g)"}</td>
+                    {computedPoints.map(pt => (
+                      <td key={pt.id} className={inCls}>
+                        <Input type="number" value={pt.wetSoilContainer} onChange={e => updatePoint(pt.id, "wetSoilContainer", e.target.value)} className={inputCls} placeholder="—" />
+                      </td>
+                    ))}
+                  </tr>
+                  {/* Mass of Dry Soil + Container (input) */}
+                  <tr>
+                    <td className={labelCls}>{lang === "ar" ? "كتلة التربة الجافة + الوعاء (g)" : "Mass of Dry Soil + Container (g)"}</td>
+                    {computedPoints.map(pt => (
+                      <td key={pt.id} className={inCls}>
+                        <Input type="number" value={pt.drySoilContainer} onChange={e => updatePoint(pt.id, "drySoilContainer", e.target.value)} className={inputCls} placeholder="—" />
+                      </td>
+                    ))}
+                  </tr>
+                  {/* Mass of Container (input) */}
+                  <tr>
+                    <td className={labelCls}>{lang === "ar" ? "كتلة الوعاء (g)" : "Mass of Container (g)"}</td>
+                    {computedPoints.map(pt => (
+                      <td key={pt.id} className={inCls}>
+                        <Input type="number" value={pt.container} onChange={e => updatePoint(pt.id, "container", e.target.value)} className={inputCls} placeholder="—" />
+                      </td>
+                    ))}
+                  </tr>
+                  {/* Mass of Moisture (calc) */}
+                  <tr className="bg-blue-50/40">
+                    <td className={labelCls}>{lang === "ar" ? "كتلة الرطوبة (g)" : "Mass of Moisture (g)"}</td>
+                    {computedPoints.map(pt => (
+                      <td key={pt.id} className={calcCls}>{fmtN(pt.moistureMass, 1)}</td>
+                    ))}
+                  </tr>
+                  {/* Mass of Dry Soil (calc) */}
+                  <tr className="bg-blue-50/40">
+                    <td className={labelCls}>{lang === "ar" ? "كتلة التربة الجافة (g)" : "Mass of Dry Soil (g)"}</td>
+                    {computedPoints.map(pt => (
+                      <td key={pt.id} className={calcCls}>{fmtN(pt.drySoilMass, 1)}</td>
+                    ))}
+                  </tr>
+                  {/* Moisture Content % (calc) */}
+                  <tr className="bg-blue-50/40">
+                    <td className={labelCls}>{lang === "ar" ? "المحتوى الرطوبي %" : "Moisture Content %"}</td>
+                    {computedPoints.map(pt => (
+                      <td key={pt.id} className={`${calcCls} font-semibold text-amber-700`}>{fmtN(pt.waterContent, 2)}</td>
+                    ))}
+                  </tr>
+                  {/* Dry Density (calc) */}
+                  <tr className="bg-emerald-50/60">
+                    <td className={labelCls}>{lang === "ar" ? "الكثافة الجافة (Mg/m³)" : "Dry Density (Mg/m³)"}</td>
+                    {computedPoints.map(pt => (
+                      <td key={pt.id} className={`${calcCls} font-bold text-emerald-800`}>{fmtN(pt.dryDensity, 3)}</td>
+                    ))}
+                  </tr>
                 </tbody>
               </table>
-</div>
+            </div>
 
-              {/* Formula note */}
-              {wcMode === "auto" && (
-                <div className="mt-3 bg-amber-50 border border-amber-200 rounded-lg p-2 text-xs text-amber-700">
-                  <Info size={11} className="inline mr-1" />
-                  {lang === "ar"
-                    ? "نسبة الرطوبة = ((كتلة رطبة − كتلة جافة) ÷ كتلة جافة) × 100"
-                    : "W.C. = ((Wet Mass − Dry Mass) ÷ Dry Mass) × 100"}
-                </div>
-              )}
+            {/* Equation reference */}
+            <div className="mt-3 bg-slate-50 border border-slate-200 rounded-lg p-3 text-[11px] text-slate-600 space-y-0.5 leading-relaxed">
+              <p>• {lang === "ar" ? "كتلة العينة المدموكة = (القالب+القاعدة+العينة) − (القالب+القاعدة)" : "Compacted Specimen = (Mould+Base+Specimen) − (Mould+Base)"}</p>
+              <p>• {lang === "ar" ? "الكثافة الرطبة = كتلة العينة المدموكة ÷ حجم القالب" : "Bulk Density = Compacted Specimen ÷ Mould Volume"}</p>
+              <p>• {lang === "ar" ? "المحتوى الرطوبي % = (كتلة الرطوبة ÷ كتلة التربة الجافة) × 100" : "Moisture Content % = (Mass of Moisture ÷ Mass of Dry Soil) × 100"}</p>
+              <p>• {lang === "ar" ? "الكثافة الجافة = 100 × الكثافة الرطبة ÷ (100 + المحتوى الرطوبي %)" : "Dry Density = 100 × Bulk Density ÷ (100 + Moisture Content %)"}</p>
+            </div>
 
               {/* MDD / OMC Summary */}
               {fitResult && (
