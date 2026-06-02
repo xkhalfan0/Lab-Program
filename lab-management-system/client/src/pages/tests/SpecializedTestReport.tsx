@@ -1213,6 +1213,198 @@ function renderSoilFieldDensity(fd: any, isAr: boolean) {
   );
 }
 
+function CBRReportLoadChart({
+  data,
+  isAr,
+}: {
+  data: Array<{ depth: number; top: number | null; bottom: number | null }>;
+  isAr: boolean;
+}) {
+  if (data.length < 2) return null;
+  const kTop = isAr ? "العلوي" : "Top / العلوي";
+  const kBot = isAr ? "السفلي" : "Bottom / السفلي";
+  return (
+    <div className="sieve-report-chart border border-slate-300 rounded-md bg-white p-1 print:p-0" style={{ height: 280 }}>
+      <ResponsiveContainer width="100%" height="100%">
+        <LineChart data={data} margin={{ top: 10, right: 16, left: 0, bottom: 26 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+          <XAxis
+            type="number"
+            dataKey="depth"
+            domain={["auto", "auto"]}
+            tick={{ fontSize: 9 }}
+            label={{
+              value: isAr ? "الاختراق (مم)" : "Penetration (mm) / الاختراق",
+              position: "insideBottom",
+              offset: -16,
+              style: { fontSize: 10 },
+            }}
+          />
+          <YAxis
+            width={42}
+            tick={{ fontSize: 9 }}
+            label={{
+              value: isAr ? "الحمل (kN)" : "Load (kN) / الحمل",
+              angle: -90,
+              position: "insideLeft",
+              style: { fontSize: 10 },
+            }}
+          />
+          <Tooltip
+            formatter={(value: unknown) => {
+              const n = typeof value === "number" ? value : Number(value);
+              return Number.isFinite(n) ? `${n.toFixed(2)} kN` : "—";
+            }}
+            contentStyle={{ fontSize: 10 }}
+          />
+          <Legend wrapperStyle={{ fontSize: 9 }} iconSize={8} />
+          <ReferenceLine x={2.5} stroke="#3b82f6" strokeDasharray="4 4" label={{ value: "2.5mm", position: "top", fontSize: 8, fill: "#3b82f6" }} />
+          <ReferenceLine x={5.0} stroke="#8b5cf6" strokeDasharray="4 4" label={{ value: "5.0mm", position: "top", fontSize: 8, fill: "#8b5cf6" }} />
+          <Line type="monotone" dataKey="top" stroke="#2563eb" strokeWidth={2} dot={{ r: 2 }} name={kTop} connectNulls />
+          <Line type="monotone" dataKey="bottom" stroke="#e11d48" strokeWidth={2} dot={{ r: 2 }} name={kBot} connectNulls />
+        </LineChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
+function renderSoilCBR(fd: any, isAr: boolean) {
+  const L = (en: string, ars: string) => (isAr ? ars : en);
+  const faces: any[] = Array.isArray(fd.faces) ? fd.faces : [];
+  const topFace = faces.find(f => f.faceLabel === "Top") ?? faces[0];
+  const bottomFace = faces.find(f => f.faceLabel === "Bottom") ?? faces[1];
+  const finalCBR = fd.finalCBR;
+  const cbrMin = fd.cbrMin;
+  const overall = fd.overallResult ?? (finalCBR != null && cbrMin != null ? (Number(finalCBR) >= Number(cbrMin) ? "pass" : "fail") : "pending");
+  const retained20 = fd.retained20mm;
+  const passing19 = fd.passing19_5;
+  const idd = fd.initialDensity ?? {};
+
+  // Reconstruct penetration depths (0.25 mm steps for new data, 0.5 mm for legacy 30-row data)
+  const maxLen = Math.max(topFace?.readings?.length ?? 0, bottomFace?.readings?.length ?? 0);
+  const step = maxLen >= 31 ? 0.25 : 0.5;
+  const fmtDepth = (d: number) => (Number.isInteger(d) ? d.toFixed(1) : String(d));
+  const toNum = (v: any) => {
+    const n = parseFloat(v);
+    return Number.isFinite(n) ? n : null;
+  };
+
+  const chartData = Array.from({ length: maxLen }, (_, i) => {
+    const depth = parseFloat((i * step).toFixed(2));
+    return {
+      depth,
+      top: toNum(topFace?.readings?.[i]),
+      bottom: toNum(bottomFace?.readings?.[i]),
+    };
+  }).filter(d => d.top != null || d.bottom != null || d.depth === 0);
+
+  // Readings table rows (only rows where at least one face has a value)
+  const tableRows = Array.from({ length: maxLen }, (_, i) => {
+    const depth = parseFloat((i * step).toFixed(2));
+    return {
+      _depth: fmtDepth(depth),
+      _key: depth,
+      top: toNum(topFace?.readings?.[i]),
+      bottom: toNum(bottomFace?.readings?.[i]),
+    };
+  }).filter(r => r.top != null || r.bottom != null);
+
+  const readingCols: Column[] = [
+    { header: L("Pen. (mm)", "الاختراق (مم)"), field: "_depth", align: "center", render: (_v, row) => <span className="font-mono font-semibold">{String((row as any)._depth)}</span> },
+    { header: L("Top Load (kN)", "الحمل العلوي (kN)"), field: "top", align: "right", render: v => (v != null ? fmt(v, 2) : "—") },
+    { header: L("Bottom Load (kN)", "الحمل السفلي (kN)"), field: "bottom", align: "right", render: v => (v != null ? fmt(v, 2) : "—") },
+  ];
+
+  const hasInitialDensity =
+    idd.bulkDensity != null || idd.dryDensity != null || idd.moistureContent != null;
+
+  return (
+    <div className="space-y-4">
+      {/* Main results */}
+      <div className="grid grid-cols-3 gap-3 text-xs">
+        {topFace?.cbrValue != null && (
+          <div className="bg-blue-50 border border-blue-200 rounded p-3 text-center">
+            <p className="text-blue-600 font-semibold">{L("Top Face CBR", "CBR الوجه العلوي")}</p>
+            <p className="text-xl font-bold text-blue-800">{fmt(topFace.cbrValue, 1)}%</p>
+          </div>
+        )}
+        {bottomFace?.cbrValue != null && (
+          <div className="bg-rose-50 border border-rose-200 rounded p-3 text-center">
+            <p className="text-rose-600 font-semibold">{L("Bottom Face CBR", "CBR الوجه السفلي")}</p>
+            <p className="text-xl font-bold text-rose-800">{fmt(bottomFace.cbrValue, 1)}%</p>
+          </div>
+        )}
+        <div className={`border rounded p-3 text-center ${overall === "pass" ? "bg-emerald-50 border-emerald-200" : overall === "fail" ? "bg-red-50 border-red-200" : "bg-gray-50 border-gray-200"}`}>
+          <p className={`font-semibold ${overall === "pass" ? "text-emerald-700" : overall === "fail" ? "text-red-700" : "text-gray-600"}`}>{L("Final CBR (avg)", "CBR النهائي (المتوسط)")}</p>
+          <p className={`text-xl font-bold ${overall === "pass" ? "text-emerald-800" : overall === "fail" ? "text-red-800" : "text-gray-800"}`}>{finalCBR != null ? `${fmt(finalCBR, 1)}%` : "—"}</p>
+          {cbrMin != null && <p className="text-[10px] text-slate-500">{L("Min. required", "الحد الأدنى")}: {cbrMin}%</p>}
+        </div>
+      </div>
+
+      {/* Test parameters + Retained 20% */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+        <div className="border rounded p-2">
+          <div className="text-slate-500">{L("Standard", "المعيار")}</div>
+          <div className="font-semibold">{fd.summaryValues?.standard ?? fd.standard ?? "—"}</div>
+        </div>
+        <div className="border rounded p-2">
+          <div className="text-slate-500">{L("Soaking Period", "فترة النقع")}</div>
+          <div className="font-semibold">{fd.soakingPeriod != null ? `${fd.soakingPeriod} ${L("hrs", "ساعة")}` : "—"}</div>
+        </div>
+        <div className="border rounded p-2">
+          <div className="text-slate-500">{L("Passing 19.5 mm", "المار من 19.5 مم")}</div>
+          <div className="font-semibold">{passing19 != null ? `${fmt(passing19, 1)}%` : "—"}</div>
+        </div>
+        <div className="border border-amber-200 bg-amber-50 rounded p-2">
+          <div className="text-amber-700">{L("Retained % on 20 mm", "المحتجز على 20 مم")}</div>
+          <div className="font-bold text-amber-900">{retained20 != null ? `${fmt(retained20, 1)}%` : "—"}</div>
+        </div>
+      </div>
+
+      {/* Readings table + combined curve */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div>
+          <p className="text-xs font-semibold text-slate-700 mb-1">{L("Penetration vs. Load (Top & Bottom)", "الاختراق مقابل الحمل (الوجهان)")}</p>
+          {tableRows.length > 0 ? (
+            <FlexibleResultsTable columns={readingCols} rows={tableRows} />
+          ) : (
+            <p className="text-[11px] text-slate-400">{L("No readings recorded.", "لا توجد قراءات.")}</p>
+          )}
+        </div>
+        <div>
+          <p className="text-xs font-semibold text-slate-700 mb-1">{L("Penetration vs. Load Curve", "منحنى الاختراق مقابل الحمل")}</p>
+          <CBRReportLoadChart data={chartData} isAr={isAr} />
+        </div>
+      </div>
+
+      {/* Initial density / moisture content small table */}
+      {hasInitialDensity && (
+        <div>
+          <p className="text-xs font-semibold text-slate-700 mb-1">{L("Initial Density / Moisture Content", "الكثافة الأولية / المحتوى الرطوبي")}</p>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+            <div className="border rounded p-2 text-center">
+              <div className="text-slate-500">{L("Initial Density", "الكثافة الأولية")}</div>
+              <div className="font-bold">{idd.bulkDensity != null ? fmt(idd.bulkDensity, 3) : "—"}<span className="text-[10px] font-normal text-slate-400"> Mg/m³</span></div>
+            </div>
+            <div className="border rounded p-2 text-center">
+              <div className="text-slate-500">{L("Moisture Content", "المحتوى الرطوبي")}</div>
+              <div className="font-bold">{idd.moistureContent != null ? fmt(idd.moistureContent, 1) : "—"}<span className="text-[10px] font-normal text-slate-400"> %</span></div>
+            </div>
+            <div className="border border-emerald-200 bg-emerald-50 rounded p-2 text-center">
+              <div className="text-emerald-700">{L("Dry Density", "الكثافة الجافة")}</div>
+              <div className="font-bold text-emerald-800">{idd.dryDensity != null ? fmt(idd.dryDensity, 3) : "—"}<span className="text-[10px] font-normal text-slate-400"> Mg/m³</span></div>
+            </div>
+            <div className="border rounded p-2 text-center">
+              <div className="text-slate-500">{L("Volume of Mould", "حجم القالب")}</div>
+              <div className="font-bold">{idd.volumeMould != null ? fmt(idd.volumeMould, 0) : "—"}<span className="text-[10px] font-normal text-slate-400"> cm³</span></div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function renderAsphaltBitumenExtraction(fd: any, isAr: boolean) {
   const L = (en: string, ars: string) => (isAr ? ars : en);
   const sample = fd.sample ?? (Array.isArray(fd.samples) ? fd.samples[0] : null);
@@ -2644,6 +2836,7 @@ export function renderFormData(formTemplate: string, formData: any, isAr: boolea
     case "steel_anchor_bolt": return renderSteelAnchorBolt(formData, isAr);
     case "sieve_analysis": return renderSieveAnalysis(formData, isAr, extras);
     case "soil_proctor": return renderSoilProctor(formData, isAr);
+    case "soil_cbr": return renderSoilCBR(formData, isAr);
     case "soil_field_density": return renderSoilFieldDensity(formData, isAr);
     case "asphalt_bitumen_extraction":
       return renderAsphaltBitumenExtraction(formData, isAr);
