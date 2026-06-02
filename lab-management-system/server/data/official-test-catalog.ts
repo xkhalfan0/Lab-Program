@@ -87,7 +87,7 @@ export const OFFICIAL_TEST_CATALOG: OfficialTest[] = [
   { category: "soil", nameEn: "Sieve Analysis", nameAr: "تحليل المناخل", code: "SOIL_SIEVE", unitPrice: "100", unit: "%", standardRef: "BS 1377 / BS EN 933-1", formTemplate: "sieve_analysis", sortOrder: 100 },
   { category: "soil", nameEn: "Atterberg Limits (Plasticity Index)", nameAr: "حدود أتربرج", code: "SOIL_ATTERBERG", unitPrice: "150", unit: "%", standardRef: "BS 1377-2", formTemplate: "soil_atterberg", sortOrder: 110 },
   { category: "soil", nameEn: "MDD/OMC (Proctor) Test", nameAr: "اختبار بروكتور", code: "SOIL_PROCTOR", unitPrice: "300", unit: "kN/m³", standardRef: "BS 1377-4", formTemplate: "soil_proctor", sortOrder: 120 },
-  { category: "soil", nameEn: "California Bearing Ratio (CBR)", nameAr: "نسبة تحمل كاليفورنيا", code: "SOIL_CBR", unitPrice: "250", unit: "%", standardRef: "BS 1377-9", formTemplate: "soil_cbr", sortOrder: 130 },
+  { category: "soil", nameEn: "California Bearing Ratio (CBR)", nameAr: "نسبة تحمل كاليفورنيا", code: "SOIL_CBR", unitPrice: "250", unit: "%", standardRef: "BS 1377-9", formTemplate: "soil_cbr", sortOrder: 130, requiredTests: ["SOIL_PROCTOR"] },
   { category: "soil", nameEn: "Field Density (Compaction Test)", nameAr: "كثافة حقلية", code: "SOIL_FIELD_DENSITY", unitPrice: "100", unit: "Mg/m³", standardRef: "BS 1377-9", formTemplate: "soil_field_density", sortOrder: 140 },
   {
     category: "asphalt",

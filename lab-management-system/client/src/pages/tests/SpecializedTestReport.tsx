@@ -21,6 +21,7 @@ import {
   CartesianGrid,
   Tooltip,
   Legend,
+  ReferenceLine,
   ResponsiveContainer,
 } from "recharts";
 
@@ -941,6 +942,85 @@ function renderSieveAnalysis(fd: any, isAr: boolean, extras?: FormReportExtras) 
   );
 }
 
+/** Compaction curve (dry density vs. water content) for the Proctor PDF / print. */
+function ProctorReportCompactionChart({
+  points,
+  mdd,
+  omc,
+  isAr,
+}: {
+  points: Array<Record<string, unknown>>;
+  mdd: number | null;
+  omc: number | null;
+  isAr: boolean;
+}) {
+  const chartData = points
+    .map(p => ({ wc: Number(p.waterContent), dd: Number(p.dryDensity) }))
+    .filter(p => Number.isFinite(p.wc) && Number.isFinite(p.dd))
+    .sort((a, b) => a.wc - b.wc);
+
+  if (chartData.length < 2) return null;
+
+  return (
+    <div className="sieve-report-chart border border-slate-300 rounded-md bg-white p-1 print:p-0" style={{ height: 280 }}>
+      <ResponsiveContainer width="100%" height="100%">
+        <LineChart data={chartData} margin={{ top: 26, right: 24, left: 4, bottom: 26 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+          <XAxis
+            type="number"
+            dataKey="wc"
+            domain={["auto", "auto"]}
+            tick={{ fontSize: 9 }}
+            label={{
+              value: isAr ? "نسبة الرطوبة (%)" : "Water Content (%)",
+              position: "insideBottom",
+              offset: -16,
+              style: { fontSize: 10 },
+            }}
+          />
+          <YAxis
+            dataKey="dd"
+            type="number"
+            domain={["auto", "auto"]}
+            width={46}
+            tick={{ fontSize: 9 }}
+            tickFormatter={(v: number) => v.toFixed(2)}
+            label={{
+              value: isAr ? "الكثافة الجافة (Mg/m³)" : "Dry Density (Mg/m³)",
+              angle: -90,
+              position: "insideLeft",
+              style: { fontSize: 10 },
+            }}
+          />
+          <Tooltip formatter={(value: unknown) => {
+            const n = typeof value === "number" ? value : Number(value);
+            return Number.isFinite(n) ? n.toFixed(3) : "—";
+          }} contentStyle={{ fontSize: 10 }} />
+          {mdd != null && Number.isFinite(mdd) && (
+            <ReferenceLine
+              y={mdd}
+              stroke="#059669"
+              strokeDasharray="5 4"
+              strokeWidth={1.5}
+              label={{ value: `MDD = ${mdd.toFixed(2)} Mg/m³`, position: "insideTopRight", fontSize: 10, fontWeight: 700, fill: "#047857" }}
+            />
+          )}
+          {omc != null && Number.isFinite(omc) && (
+            <ReferenceLine
+              x={omc}
+              stroke="#059669"
+              strokeDasharray="5 4"
+              strokeWidth={1.5}
+              label={{ value: `OMC = ${omc}%`, position: "top", fontSize: 10, fontWeight: 700, fill: "#047857" }}
+            />
+          )}
+          <Line type="monotone" dataKey="dd" stroke="#2563eb" strokeWidth={2.5} dot={{ r: 3, fill: "#2563eb" }} name={isAr ? "الكثافة الجافة" : "Dry Density"} />
+        </LineChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
 function renderSoilProctor(fd: any, isAr: boolean) {
   const points = fd.points ?? [];
   const headers = isAr
@@ -971,6 +1051,17 @@ function renderSoilProctor(fd: any, isAr: boolean) {
           <p className="text-gray-600 font-semibold">{isAr ? "حجم القالب" : "Mould Volume"}</p>
           <p className="text-xl font-bold text-gray-800">{fmt(fd.mouldVolume)} {isAr ? "سم³" : "cm³"}</p>
         </div>
+      </div>
+      <div className="mt-1">
+        <p className="text-xs font-semibold text-slate-700 mb-1">
+          {isAr ? "منحنى الدمك (الكثافة الجافة مقابل نسبة الرطوبة)" : "Compaction Curve (Dry Density vs. Water Content)"}
+        </p>
+        <ProctorReportCompactionChart
+          points={points}
+          mdd={fd.mdd != null && fd.mdd !== "" ? Number(fd.mdd) : null}
+          omc={fd.omc != null && fd.omc !== "" ? Number(fd.omc) : null}
+          isAr={isAr}
+        />
       </div>
     </>
   );
