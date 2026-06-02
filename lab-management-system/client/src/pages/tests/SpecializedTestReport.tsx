@@ -608,6 +608,84 @@ function SieveBlendReportGradingChart({
   );
 }
 
+/** Grading curve for the standard (by-weight) sieve analysis PDF / print. */
+function SieveWeightReportGradingChart({
+  rows,
+  isAr,
+}: {
+  rows: Array<Record<string, unknown>>;
+  isAr: boolean;
+}) {
+  const chartData = rows
+    .map(r => {
+      const mm = Number(r.sieveMm ?? r.sieve ?? r.size ?? NaN);
+      const passing =
+        r.cumPassing != null ? Number(r.cumPassing) : r.percentPassing != null ? Number(r.percentPassing) : null;
+      const lower = r.lower != null ? Number(r.lower) : r.lowerLimit != null ? Number(r.lowerLimit) : null;
+      const upper = r.upper != null ? Number(r.upper) : r.upperLimit != null ? Number(r.upperLimit) : null;
+      return {
+        sieveLog: Number.isFinite(mm) && mm > 0 ? mm : 0.01,
+        passing: passing != null && Number.isFinite(passing) ? Number(passing.toFixed(1)) : null,
+        lower: lower != null && Number.isFinite(lower) ? lower : null,
+        upper: upper != null && Number.isFinite(upper) ? upper : null,
+      };
+    })
+    .filter(d => d.sieveLog > 0)
+    .sort((a, b) => a.sieveLog - b.sieveLog);
+
+  if (chartData.length < 2) return null;
+
+  const kPass = isAr ? "النسبة المارة %" : "% Passing / النسبة المارة";
+  const kUp = isAr ? "الحد الأعلى" : "Upper Limit / الحد الأعلى";
+  const kLo = isAr ? "الحد الأدنى" : "Lower Limit / الحد الأدنى";
+
+  return (
+    <div className="sieve-report-chart border border-slate-300 rounded-md bg-white p-1 print:p-0" style={{ height: 300 }}>
+      <ResponsiveContainer width="100%" height="100%">
+        <LineChart data={chartData} margin={{ top: 8, right: 14, left: 0, bottom: 28 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+          <XAxis
+            type="number"
+            dataKey="sieveLog"
+            scale="log"
+            domain={[0.05, 100]}
+            tick={{ fontSize: 9 }}
+            tickFormatter={(v: number) => formatDisplaySieveMm(Number(v))}
+            label={{
+              value: isAr ? "مقاس المنخل (مم)" : "Sieve Size (mm) / مقاس المنخل",
+              position: "insideBottom",
+              offset: -18,
+              style: { fontSize: 10 },
+            }}
+          />
+          <YAxis
+            domain={[0, 100]}
+            width={40}
+            tick={{ fontSize: 9 }}
+            label={{
+              value: isAr ? "النسبة المارة %" : "% Passing / النسبة المارة",
+              angle: -90,
+              position: "insideLeft",
+              style: { fontSize: 10 },
+            }}
+          />
+          <Tooltip
+            formatter={(value: unknown) => {
+              const n = typeof value === "number" ? value : Number(value);
+              return Number.isFinite(n) ? `${n.toFixed(1)}%` : "—";
+            }}
+            contentStyle={{ fontSize: 10 }}
+          />
+          <Legend wrapperStyle={{ fontSize: 9 }} iconSize={8} />
+          <Line type="monotone" dataKey="upper" stroke="#ef4444" strokeDasharray="5 5" strokeWidth={1.5} dot={false} name={kUp} connectNulls />
+          <Line type="monotone" dataKey="lower" stroke="#ef4444" strokeDasharray="5 5" strokeWidth={1.5} dot={false} name={kLo} connectNulls />
+          <Line type="monotone" dataKey="passing" stroke="#16a34a" strokeWidth={2.5} dot={{ r: 3, fill: "#16a34a" }} name={kPass} connectNulls />
+        </LineChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
 function renderSieveAnalysis(fd: any, isAr: boolean, extras?: FormReportExtras) {
   if (_isSandBlendSieveFormData(fd)) {
     const stdKey = fd.standard === "BS_1199_A" || fd.blendStandard === "BS_1199_A" ? "BS_1199_A" : "ASTM_C144";
@@ -931,6 +1009,12 @@ function renderSieveAnalysis(fd: any, isAr: boolean, extras?: FormReportExtras) 
         ]}
         rows={rows}
       />
+      <div>
+        <p className="text-xs font-semibold text-slate-700 mb-1">
+          {isAr ? "منحنى التدرج (النسبة المارة مقابل مقاس المنخل)" : "Grading Curve (% Passing vs. Sieve Size)"}
+        </p>
+        <SieveWeightReportGradingChart rows={rows} isAr={isAr} />
+      </div>
       {fd.finesModulus !== undefined && (
         <div className="text-xs bg-blue-50 border border-blue-100 rounded px-3 py-1.5">
           <span className="font-semibold text-blue-700">{isAr ? "معامل النعومة (FM):" : "Fineness Modulus (FM):"}</span>

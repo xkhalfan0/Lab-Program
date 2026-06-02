@@ -15,7 +15,7 @@ import { toast } from "sonner";
 import { Send, FlaskConical, Info, UserCheck , Printer } from "lucide-react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import {
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine,
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, Legend,
 } from "recharts";
 import { useLanguage } from "@/contexts/LanguageContext";
 
@@ -109,6 +109,8 @@ export default function SoilCBR() {
   const [layerType, setLayerType] = useState("SUBGRADE");
   const [soilDescription, setSoilDescription] = useState("");
   const [soakingPeriod, setSoakingPeriod] = useState("96"); // hours
+  // % passing the 19.5 mm sieve (from the sieve analysis of the same sample).
+  const [passing19_5, setPassing19_5] = useState("");
   const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
   const [submitted, setSubmitted] = useState(false);
@@ -118,6 +120,17 @@ export default function SoilCBR() {
   const stdLoads = STANDARD_LOADS[standard];
   const layerSpec = LAYER_TYPES.find(l => l.value === layerType) ?? LAYER_TYPES[0];
   const computedFaces = faces.map(f => computeFace(f, stdLoads));
+
+  const topFace = faces.find(f => f.faceLabel === "Top") ?? faces[0];
+  const bottomFace = faces.find(f => f.faceLabel === "Bottom") ?? faces[1];
+  const topComputed = computedFaces.find(f => f.faceLabel === "Top");
+  const bottomComputed = computedFaces.find(f => f.faceLabel === "Bottom");
+
+  // Retained % on the 20 mm sieve = 100 − (% passing 19.5 mm)
+  const passing19Num = parseFloat(passing19_5);
+  const retained20mm = Number.isFinite(passing19Num)
+    ? parseFloat((100 - passing19Num).toFixed(1))
+    : undefined;
 
   // Final CBR = average of top and bottom face CBR values
   const validFaces = computedFaces.filter(f => f.cbrValue !== undefined);
@@ -172,6 +185,8 @@ export default function SoilCBR() {
           layerType,
           soilDescription,
           soakingPeriod,
+          passing19_5: Number.isFinite(passing19Num) ? passing19Num : null,
+          retained20mm: retained20mm ?? null,
           faces: computedFaces,
           finalCBR,
           cbrMin: layerSpec.cbrMin,
@@ -183,6 +198,7 @@ export default function SoilCBR() {
           cbrMin: layerSpec.cbrMin,
           layerType: layerSpec.label,
           standard: stdLoads.label,
+          retained20mm: retained20mm ?? null,
         },
         notes,
         status,
@@ -192,12 +208,13 @@ export default function SoilCBR() {
     }
   };
 
-  // Chart data for penetration curve
-  const getChartData = (face: CBRFace) =>
-    PENETRATION_DEPTHS.map((depth, i) => ({
-      depth,
-      load: parseFloat(face.readings[i] || "0") || 0,
-    })).filter(d => d.load > 0 || d.depth === 0);
+  // Combined penetration curve data (top + bottom on one chart, like the Excel).
+  const mergedChartData = PENETRATION_DEPTHS.map((depth, i) => ({
+    depth,
+    top: parseFloat(topFace?.readings[i] || "0") || 0,
+    bottom: parseFloat(bottomFace?.readings[i] || "0") || 0,
+  })).filter(d => d.top > 0 || d.bottom > 0 || d.depth === 0);
+  const hasCurveData = mergedChartData.some(d => d.top > 0 || d.bottom > 0);
 
   if (!distId || distId === 0) {
     return (
@@ -326,120 +343,146 @@ export default function SoilCBR() {
                 </div>
               </div>
             </div>
+
+            {/* Retained % on 20mm sieve = 100 − passing(19.5mm), from the sieve analysis */}
+            <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <Label className="text-xs text-slate-500 mb-1 block">
+                  {ar ? "النسبة المارة من منخل 19.5 مم %" : "Passing % on 19.5 mm sieve"}
+                </Label>
+                <Input
+                  type="number"
+                  value={passing19_5}
+                  onChange={e => setPassing19_5(e.target.value)}
+                  className="font-mono"
+                  placeholder={ar ? "من تحليل المناخل، مثال: 92.8" : "from sieve analysis, e.g. 92.8"}
+                  disabled={submitted}
+                />
+              </div>
+              <div className="flex items-end">
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm text-amber-900 w-full flex items-center justify-between">
+                  <span className="font-semibold">
+                    {ar ? "النسبة المحتجزة على منخل 20 مم" : "Retained % on 20 mm sieve"}
+                    <span className="block text-[10px] font-normal text-amber-700">
+                      = 100 − {ar ? "النسبة المارة من 19.5 مم" : "passing 19.5 mm"}
+                    </span>
+                  </span>
+                  <span className="font-mono font-bold text-lg">
+                    {retained20mm !== undefined ? `${retained20mm}%` : "—"}
+                  </span>
+                </div>
+              </div>
+            </div>
           </CardContent>
         </Card>
 
-        {/* Readings Tables - Top and Bottom Face */}
-        {computedFaces.map((face) => (
-          <Card key={face.id}>
-            <CardHeader className="pb-3">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-base">
-                  {ar ? (face.faceLabel === "Top" ? "الوجه العلوي" : "الوجه السفلي") : face.faceLabel + " Face"} — {ar ? "الاختراق مقابل الحمل" : "Penetration vs. Load Readings"}
-                </CardTitle>
-                {face.cbrValue !== undefined && (
-                  <div className="flex flex-wrap gap-3 text-xs font-mono items-center">
-                    <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded">
-                      CBR @ 2.5mm: {face.cbr_2_5 ?? "—"}%
-                    </span>
-                    <span className="bg-purple-100 text-purple-800 px-2 py-1 rounded">
-                      CBR @ 5.0mm: {face.cbr_5_0 ?? "—"}%
-                    </span>
-                    <span className="bg-emerald-100 text-emerald-800 px-2 py-1 rounded font-bold">
-                      CBR Value: {face.cbrValue}%
-                    </span>
-                    {face.cbrAnomaly && (
-                      <span className="bg-amber-100 text-amber-800 border border-amber-300 px-2 py-1 rounded font-sans font-semibold">
-                        ⚠ {ar ? "CBR عند 5mm > CBR عند 2.5mm — يلزم إعادة الاختبار (BS 1377-4)" : "CBR at 5.0mm > CBR at 2.5mm — repeat test required (BS 1377-4)"}
-                      </span>
-                    )}
+        {/* Penetration vs. Load — Top & Bottom in one table + one combined chart */}
+        <Card>
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <CardTitle className="text-base">
+                {ar ? "الاختراق مقابل الحمل (الوجهان)" : "Penetration vs. Load Readings (Top & Bottom)"}
+              </CardTitle>
+              <div className="flex flex-wrap gap-2 text-xs font-mono items-center">
+                {topComputed?.cbrValue !== undefined && (
+                  <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded">
+                    {ar ? "CBR العلوي:" : "Top CBR:"} {topComputed.cbrValue}%
+                  </span>
+                )}
+                {bottomComputed?.cbrValue !== undefined && (
+                  <span className="bg-rose-100 text-rose-800 px-2 py-1 rounded">
+                    {ar ? "CBR السفلي:" : "Bottom CBR:"} {bottomComputed.cbrValue}%
+                  </span>
+                )}
+                {(topComputed?.cbrAnomaly || bottomComputed?.cbrAnomaly) && (
+                  <span className="bg-amber-100 text-amber-800 border border-amber-300 px-2 py-1 rounded font-sans font-semibold">
+                    ⚠ {ar ? "CBR عند 5mm > CBR عند 2.5mm — يلزم إعادة الاختبار" : "CBR at 5.0mm > 2.5mm — repeat test required"}
+                  </span>
+                )}
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Combined readings table */}
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm border-collapse">
+                  <thead>
+                    <tr className="bg-slate-50">
+                      <th className="border border-slate-200 px-2 py-2 text-xs font-semibold text-slate-600">{ar ? "الاختراق (mm)" : "Pen. (mm)"}</th>
+                      <th className="border border-slate-200 px-2 py-2 text-xs font-semibold text-blue-700">{ar ? "العلوي (kN)" : "Top (kN)"}</th>
+                      <th className="border border-slate-200 px-2 py-2 text-xs font-semibold text-rose-700">{ar ? "السفلي (kN)" : "Bottom (kN)"}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {PENETRATION_DEPTHS.map((depth, i) => (
+                      <tr key={i} className={i % 2 === 0 ? "bg-white" : "bg-slate-50/50"}>
+                        <td className={`border border-slate-200 px-2 py-1 text-center font-mono text-xs font-semibold
+                          ${depth === 2.5 ? "bg-blue-50 text-blue-700" : depth === 5.0 ? "bg-purple-50 text-purple-700" : "text-slate-600"}`}>
+                          {depth.toFixed(1)}
+                        </td>
+                        <td className="border border-slate-200 px-1 py-1">
+                          <Input
+                            value={topFace?.readings[i] ?? ""}
+                            onChange={e => topFace && updateReading(topFace.id, i, e.target.value)}
+                            disabled={submitted}
+                            className={`h-7 text-xs w-full text-center font-mono
+                              ${depth === 2.5 ? "border-blue-300 bg-blue-50" : depth === 5.0 ? "border-purple-300 bg-purple-50" : ""}`}
+                            placeholder="—"
+                          />
+                        </td>
+                        <td className="border border-slate-200 px-1 py-1">
+                          <Input
+                            value={bottomFace?.readings[i] ?? ""}
+                            onChange={e => bottomFace && updateReading(bottomFace.id, i, e.target.value)}
+                            disabled={submitted}
+                            className={`h-7 text-xs w-full text-center font-mono
+                              ${depth === 2.5 ? "border-blue-300 bg-blue-50" : depth === 5.0 ? "border-purple-300 bg-purple-50" : ""}`}
+                            placeholder="—"
+                          />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <p className="text-xs text-blue-600 mt-1">{ar ? "أزرق = 2.5mm، بنفسجي = 5.0mm (أعماق CBR الرئيسية)" : "Blue = 2.5mm, Purple = 5.0mm (key CBR depths)"}</p>
+              </div>
+
+              {/* Combined penetration curve */}
+              <div>
+                <p className="text-xs font-semibold text-slate-600 mb-2">{ar ? "منحنى الاختراق مقابل الحمل (العلوي والسفلي)" : "Penetration vs. Load Curve (Top & Bottom)"}</p>
+                {hasCurveData ? (
+                  <ResponsiveContainer width="100%" height={300}>
+                    <LineChart data={mergedChartData} margin={{ top: 5, right: 10, left: 0, bottom: 20 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                      <XAxis
+                        dataKey="depth"
+                        type="number"
+                        domain={["auto", "auto"]}
+                        tick={{ fontSize: 10 }}
+                        label={{ value: ar ? "الاختراق (mm)" : "Penetration (mm)", position: "insideBottom", offset: -10, fontSize: 10 }}
+                      />
+                      <YAxis
+                        tick={{ fontSize: 10 }}
+                        label={{ value: ar ? "الحمل (kN)" : "Load (kN)", angle: -90, position: "insideLeft", fontSize: 10 }}
+                      />
+                      <Tooltip formatter={(v: number) => v.toFixed(2)} />
+                      <Legend wrapperStyle={{ fontSize: 10 }} iconSize={10} />
+                      <ReferenceLine x={2.5} stroke="#3b82f6" strokeDasharray="4 4" label={{ value: "2.5mm", position: "top", fontSize: 9, fill: "#3b82f6" }} />
+                      <ReferenceLine x={5.0} stroke="#8b5cf6" strokeDasharray="4 4" label={{ value: "5.0mm", position: "top", fontSize: 9, fill: "#8b5cf6" }} />
+                      <Line type="monotone" dataKey="top" name={ar ? "العلوي" : "Top"} stroke="#2563eb" strokeWidth={2} dot={{ r: 2 }} connectNulls />
+                      <Line type="monotone" dataKey="bottom" name={ar ? "السفلي" : "Bottom"} stroke="#e11d48" strokeWidth={2} dot={{ r: 2 }} connectNulls />
+                    </LineChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="h-64 flex items-center justify-center text-slate-400 text-sm border rounded-lg">
+                    {ar ? "أدخل القراءات لعرض المنحنى" : "Enter readings to display curve"}
                   </div>
                 )}
               </div>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {/* Readings Table */}
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm border-collapse">
-                    <thead>
-                      <tr className="bg-slate-50">
-                        <th className="border border-slate-200 px-2 py-2 text-xs font-semibold text-slate-600">{ar ? "الاختراق (mm)" : "Penetration (mm)"}</th>
-                        <th className="border border-slate-200 px-2 py-2 text-xs font-semibold text-slate-600">{ar ? "الحمل (kN)" : "Load (kN)"}</th>
-                        <th className="border border-slate-200 px-2 py-2 text-xs font-semibold text-slate-600">{ar ? "الاختراق (mm)" : "Penetration (mm)"}</th>
-                        <th className="border border-slate-200 px-2 py-2 text-xs font-semibold text-slate-600">{ar ? "الحمل (kN)" : "Load (kN)"}</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {Array.from({ length: 15 }, (_, i) => (
-                        <tr key={i} className={i % 2 === 0 ? "bg-white" : "bg-slate-50/50"}>
-                          {/* Left column: readings 0-14 */}
-                          <td className={`border border-slate-200 px-2 py-1 text-center font-mono text-xs font-semibold
-                            ${PENETRATION_DEPTHS[i] === 2.5 ? "bg-blue-50 text-blue-700" :
-                              PENETRATION_DEPTHS[i] === 5.0 ? "bg-purple-50 text-purple-700" : "text-slate-600"}`}>
-                            {PENETRATION_DEPTHS[i].toFixed(1)}
-                          </td>
-                          <td className="border border-slate-200 px-1 py-1">
-                            <Input
-                              value={face.readings[i]}
-                              onChange={e => updateReading(face.id, i, e.target.value)}
-                              className={`h-7 text-xs w-20 text-center font-mono
-                                ${PENETRATION_DEPTHS[i] === 2.5 ? "border-blue-300 bg-blue-50" :
-                                  PENETRATION_DEPTHS[i] === 5.0 ? "border-purple-300 bg-purple-50" : ""}`}
-                              placeholder="—"
-                            />
-                          </td>
-                          {/* Right column: readings 15-29 */}
-                          <td className={`border border-slate-200 px-2 py-1 text-center font-mono text-xs font-semibold text-slate-600`}>
-                            {PENETRATION_DEPTHS[i + 15].toFixed(1)}
-                          </td>
-                          <td className="border border-slate-200 px-1 py-1">
-                            <Input
-                              value={face.readings[i + 15]}
-                              onChange={e => updateReading(face.id, i + 15, e.target.value)}
-                              className="h-7 text-xs w-20 text-center font-mono"
-                              placeholder="—"
-                            />
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                  <p className="text-xs text-blue-600 mt-1">{ar ? "أزرق = 2.5mm، بنفسجي = 5.0mm (أعماق CBR الرئيسية)" : "Blue = 2.5mm, Purple = 5.0mm (key CBR depths)"}</p>
-                </div>
-
-                {/* Penetration Curve */}
-                <div>
-                  <p className="text-xs font-semibold text-slate-600 mb-2">{ar ? "منحنى الاختراق مقابل الحمل" : "Penetration vs. Load Curve"}</p>
-                  {getChartData(face).length >= 2 ? (
-                    <ResponsiveContainer width="100%" height={280}>
-                      <LineChart data={getChartData(face)} margin={{ top: 5, right: 10, left: 0, bottom: 20 }}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                        <XAxis
-                          dataKey="depth"
-                          tick={{ fontSize: 10 }}
-                          label={{ value: "Penetration (mm)", position: "insideBottom", offset: -10, fontSize: 10 }}
-                        />
-                        <YAxis
-                          tick={{ fontSize: 10 }}
-                          label={{ value: "Load (kN)", angle: -90, position: "insideLeft", fontSize: 10 }}
-                        />
-                        <Tooltip formatter={(v: number) => v.toFixed(2)} />
-                        <ReferenceLine x={2.5} stroke="#3b82f6" strokeDasharray="4 4" label={{ value: "2.5mm", position: "top", fontSize: 9, fill: "#3b82f6" }} />
-                        <ReferenceLine x={5.0} stroke="#8b5cf6" strokeDasharray="4 4" label={{ value: "5.0mm", position: "top", fontSize: 9, fill: "#8b5cf6" }} />
-                        <Line type="monotone" dataKey="load" stroke="#2563eb" strokeWidth={2} dot={{ r: 3 }} />
-                      </LineChart>
-                    </ResponsiveContainer>
-                  ) : (
-                    <div className="h-64 flex items-center justify-center text-slate-400 text-sm border rounded-lg">
-                      {ar ? "أدخل القراءات لعرض المنحنى" : "Enter readings to display curve"}
-                    </div>
-                  )}
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
+            </div>
+          </CardContent>
+        </Card>
 
         {/* Summary */}
         {finalCBR !== undefined && (
