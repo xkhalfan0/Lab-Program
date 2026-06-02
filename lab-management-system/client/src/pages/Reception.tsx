@@ -482,7 +482,7 @@ export default function Reception() {
         form.sampleType === "asphalt" && isMixTest && asphaltMixCourse
           ? asphaltMixCourse
           : undefined,
-      quantity: 1,
+      quantity: 0,
       unitPrice: parseFloat(tt.unitPrice ?? "0"),
     };
   };
@@ -633,7 +633,7 @@ export default function Reception() {
         delete updated[subtypeValue];
         return { ...prev, [testTypeId]: updated };
       } else {
-        return { ...prev, [testTypeId]: { ...current, [subtypeValue]: 1 } };
+        return { ...prev, [testTypeId]: { ...current, [subtypeValue]: 0 } };
       }
     });
   };
@@ -641,7 +641,7 @@ export default function Reception() {
   const setBlockSubtypeQty = (testTypeId: number, subtypeValue: string, qty: number) => {
     setMultiSubtypes(prev => ({
       ...prev,
-      [testTypeId]: { ...(prev[testTypeId] ?? {}), [subtypeValue]: Math.max(1, qty) },
+      [testTypeId]: { ...(prev[testTypeId] ?? {}), [subtypeValue]: Math.max(0, qty) },
     }));
   };
 
@@ -672,6 +672,17 @@ export default function Reception() {
   const hasMultipleGroups = selectedGroups.size > 1;
   const hasMixTests = selectedTests.some(t => ASPHALT_MIX_TEST_CODES.includes(t.testTypeCode));
 
+  /** True when any selected test still has an unset (0) quantity — multi-subtype tests must
+   *  have at least one subtype with quantity > 0; all other tests must have quantity >= 1. */
+  const hasZeroQtyTests = selectedTests.some(t => {
+    if (MULTI_SUBTYPE_TESTS.includes(t.testTypeCode) && t.testSubType === "__multi__") {
+      const map = multiSubtypes[t.testTypeId] ?? {};
+      const vals = Object.values(map);
+      return vals.length === 0 || vals.some(q => !q);
+    }
+    return !t.quantity;
+  });
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.contractId) {
@@ -688,6 +699,10 @@ export default function Reception() {
     }
     if (selectedTests.length === 0) {
       toast.error(lang === "ar" ? "يرجى اختيار اختبار واحد على الأقل" : "Please select at least one test");
+      return;
+    }
+    if (hasZeroQtyTests) {
+      toast.error(lang === "ar" ? "يجب أن تكون كمية كل اختبار محدد 1 على الأقل" : "Each selected test must have a quantity of at least 1");
       return;
     }
     if (hasMultipleGroups) {
@@ -850,14 +865,44 @@ export default function Reception() {
                 {lang === "ar" ? "إنشاء أوردر جديد" : "New Order"}
               </Button>
             </DialogTrigger>
-            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-              <DialogHeader>
-                <DialogTitle className="flex items-center gap-2">
-                  <Package className="w-5 h-5" />
-                  {lang === "ar" ? "أوردر اختبار جديد" : "New Test Order"}
-                </DialogTitle>
+            <DialogContent className="w-[70vw] max-w-[70vw] h-[88vh] max-h-[88vh] p-0 overflow-hidden">
+              <DialogHeader className="sr-only">
+                <DialogTitle>{lang === "ar" ? "أوردر اختبار جديد" : "New Test Order"}</DialogTitle>
               </DialogHeader>
-              <form onSubmit={handleSubmit} className="space-y-4 mt-2">
+              <form onSubmit={handleSubmit} className="flex flex-col h-full overflow-hidden">
+
+                {/* ── HEADER ── */}
+                <div className="flex items-center justify-between px-6 py-4 border-b border-border flex-shrink-0">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-blue-50 rounded-xl flex items-center justify-center">
+                      <FlaskConical className="w-5 h-5 text-blue-600" />
+                    </div>
+                    <div>
+                      <h2 className="text-lg font-semibold text-foreground">
+                        {lang === "ar" ? "أوردر اختبار جديد" : "New Test Order"}
+                      </h2>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {lang === "ar"
+                          ? "أدخل بيانات الطلب يساراً ثم اختر الاختبارات والكميات يميناً"
+                          : "Fill in order details on the left, then select tests and quantities on the right"}
+                      </p>
+                    </div>
+                  </div>
+                  <Button type="button" variant="outline" size="icon" className="h-8 w-8" onClick={() => setOpen(false)}>
+                    <X className="w-4 h-4" />
+                  </Button>
+                </div>
+
+                {/* ── BODY ── */}
+                <div className="flex flex-1 overflow-hidden min-h-0">
+
+                  {/* LEFT COLUMN — Order info (35%) */}
+                  <div className="w-[35%] border-r border-border bg-muted/30 flex flex-col overflow-y-auto px-5 py-5 gap-4">
+
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
+                      <FileText className="w-3.5 h-3.5" />
+                      {lang === "ar" ? "معلومات الطلب" : "Order information"}
+                    </p>
 
                 {/* Contract */}
                 <div className="space-y-1.5">
@@ -925,6 +970,57 @@ export default function Reception() {
                     </SelectContent>
                   </Select>
                 </div>
+
+                {/* Condition + Priority */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label>{t("reception.condition")}</Label>
+                    <Select value={form.condition} onValueChange={(v) => setForm({ ...form, condition: v as any })}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="good">{t("reception.good")}</SelectItem>
+                        <SelectItem value="damaged">{t("reception.damaged")}</SelectItem>
+                        <SelectItem value="partial">{t("reception.acceptable")}</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>{lang === "ar" ? "الأولوية" : "Priority"}</Label>
+                    <Select value={form.priority} onValueChange={(v) => setForm({ ...form, priority: v as any })}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="low">{lang === "ar" ? "منخفضة" : "Low"}</SelectItem>
+                        <SelectItem value="normal">{lang === "ar" ? "عادية" : "Normal"}</SelectItem>
+                        <SelectItem value="high">{lang === "ar" ? "عالية" : "High"}</SelectItem>
+                        <SelectItem value="urgent">{lang === "ar" ? "عاجلة" : "Urgent"}</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                {/* Location */}
+                <div className="space-y-1.5">
+                  <Label>{lang === "ar" ? "موقع العينة" : "Sample Location"}</Label>
+                  <Input
+                    placeholder={lang === "ar" ? "مثال: الطابق 3، عمود C2" : "e.g. Floor 3, Column C2"}
+                    value={form.location}
+                    onChange={(e) => setForm({ ...form, location: e.target.value })}
+                  />
+                </div>
+
+                {/* Notes */}
+                <div className="space-y-1.5">
+                  <Label>{t("common.notes")}</Label>
+                  <Textarea placeholder={lang === "ar" ? "ملاحظات إضافية..." : "Additional notes..."} rows={2} value={form.notes}
+                    onChange={(e) => setForm({ ...form, notes: e.target.value })} />
+                </div>
+
+                  </div>
+                  {/* /LEFT COLUMN */}
+
+                  {/* RIGHT COLUMN — Test selection (65%) */}
+                  <div className="w-[65%] flex flex-col overflow-hidden">
+                    <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
 
                 {/* Test Category */}
                 <div className="space-y-1.5">
@@ -1132,7 +1228,7 @@ export default function Reception() {
                                 </p>
                                 {(SUBTYPES_BY_CODE[tt.code] ?? []).map(st => {
                                   const isSubSelected = (multiSubtypes[tt.id] ?? {})[st.value] !== undefined;
-                                  const qty = (multiSubtypes[tt.id] ?? {})[st.value] ?? 1;
+                                  const qty = (multiSubtypes[tt.id] ?? {})[st.value] ?? 0;
                                   return (
                                     <div key={st.value} className={`flex items-center gap-2 p-2 rounded-md border transition-colors ${isSubSelected ? "bg-primary/5 border-primary/30" : "border-border"}`}>
                                       <Checkbox
@@ -1147,10 +1243,10 @@ export default function Reception() {
                                         <div className="flex items-center gap-1">
                                           <span className="text-xs text-muted-foreground">{lang === "ar" ? "عدد:" : "Qty:"}</span>
                                           <Input
-                                            type="number" min={1} max={999}
+                                            type="number" min={0} max={999}
                                             value={qty}
-                                            onChange={e => setBlockSubtypeQty(tt.id, st.value, parseInt(e.target.value) || 1)}
-                                            className="h-6 w-16 text-center text-xs"
+                                            onChange={e => setBlockSubtypeQty(tt.id, st.value, parseInt(e.target.value) || 0)}
+                                            className={`h-6 w-16 text-center text-xs ${qty === 0 ? "border-amber-400 text-amber-700" : ""}`}
                                           />
                                         </div>
                                       )}
@@ -1196,10 +1292,10 @@ export default function Reception() {
                                     : (lang === "ar" ? "العدد:" : "Qty:")}
                                 </Label>
                                 <Input
-                                  type="number" min={1} max={999}
-                                  value={selectedItem?.quantity ?? 1}
-                                  onChange={e => setTestQuantity(tt.id, parseInt(e.target.value) || 1)}
-                                  className="h-7 w-20 text-center text-xs"
+                                  type="number" min={0} max={999}
+                                  value={selectedItem?.quantity ?? 0}
+                                  onChange={e => setTestQuantity(tt.id, parseInt(e.target.value) || 0)}
+                                  className={`h-7 w-20 text-center text-xs ${(selectedItem?.quantity ?? 0) === 0 ? "border-amber-400 text-amber-700" : ""}`}
                                 />
                               </div>
                             )}
@@ -1214,7 +1310,7 @@ export default function Reception() {
                                   </p>
                                   {addonTests.map((at: any) => {
                                     const isAddonSelected = !!hotBinAddons[at.code];
-                                    const addonQty = selectedTests.find(s => s.testTypeId === at.id)?.quantity ?? 1;
+                                    const addonQty = selectedTests.find(s => s.testTypeId === at.id)?.quantity ?? 0;
                                     return (
                                       <div key={at.id} className={`flex items-center gap-2 p-2 rounded-md border transition-colors ${isAddonSelected ? "bg-blue-50 border-blue-200" : "border-border"}`}>
                                         <Checkbox
@@ -1230,7 +1326,7 @@ export default function Reception() {
                                                 testTypeName: lang === "ar" && at.nameAr ? at.nameAr : at.nameEn,
                                                 formTemplate: at.formTemplate ?? undefined,
                                                 testSubType: undefined,
-                                                quantity: 1,
+                                                quantity: 0,
                                                 unitPrice: parseFloat(at.unitPrice ?? "0"),
                                               };
                                               setSelectedTests(prev => [...prev.filter(s => s.testTypeId !== at.id), addonTest]);
@@ -1249,11 +1345,11 @@ export default function Reception() {
                                               type="button"
                                               className="w-6 h-6 rounded border border-border flex items-center justify-center text-sm hover:bg-muted"
                                               onClick={() => {
-                                                const newQty = Math.max(1, addonQty - 1);
+                                                const newQty = Math.max(0, addonQty - 1);
                                                 setSelectedTests(prev => prev.map(s => s.testTypeId === at.id ? { ...s, quantity: newQty } : s));
                                               }}
                                             >−</button>
-                                            <span className="w-6 text-center text-xs font-mono">{addonQty}</span>
+                                            <span className={`w-6 text-center text-xs font-mono ${addonQty === 0 ? "text-amber-600 font-bold" : ""}`}>{addonQty}</span>
                                             <button
                                               type="button"
                                               className="w-6 h-6 rounded border border-border flex items-center justify-center text-sm hover:bg-muted"
@@ -1354,132 +1450,118 @@ export default function Reception() {
                   </div>
                 )}
 
-                {/* Condition + Priority */}
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1.5">
-                    <Label>{t("reception.condition")}</Label>
-                    <Select value={form.condition} onValueChange={(v) => setForm({ ...form, condition: v as any })}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="good">{t("reception.good")}</SelectItem>
-                        <SelectItem value="damaged">{t("reception.damaged")}</SelectItem>
-                        <SelectItem value="partial">{t("reception.acceptable")}</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label>{lang === "ar" ? "الأولوية" : "Priority"}</Label>
-                    <Select value={form.priority} onValueChange={(v) => setForm({ ...form, priority: v as any })}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="low">{lang === "ar" ? "منخفضة" : "Low"}</SelectItem>
-                        <SelectItem value="normal">{lang === "ar" ? "عادية" : "Normal"}</SelectItem>
-                        <SelectItem value="high">{lang === "ar" ? "عالية" : "High"}</SelectItem>
-                        <SelectItem value="urgent">{lang === "ar" ? "عاجلة" : "Urgent"}</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-
-                {/* Location */}
-                <div className="space-y-1.5">
-                  <Label>{lang === "ar" ? "موقع العينة" : "Sample Location"}</Label>
-                  <Input
-                    placeholder={lang === "ar" ? "مثال: الطابق 3، عمود C2" : "e.g. Floor 3, Column C2"}
-                    value={form.location}
-                    onChange={(e) => setForm({ ...form, location: e.target.value })}
-                  />
-                </div>
-
-                {/* Notes */}
-                <div className="space-y-1.5">
-                  <Label>{t("common.notes")}</Label>
-                  <Textarea placeholder={lang === "ar" ? "ملاحظات إضافية..." : "Additional notes..."} rows={2} value={form.notes}
-                    onChange={(e) => setForm({ ...form, notes: e.target.value })} />
-                </div>
-
-                {/* Order Summary */}
-                {selectedTests.length > 0 && (
-                  <div className="p-3 bg-green-50 border border-green-200 rounded-lg space-y-1">
-                    <p className="text-xs font-semibold text-green-800">
-                      {lang === "ar" ? "ملخص الأوردر:" : "Order Summary:"}
-                    </p>
-                    {selectedTests.map(t => {
-                      const isMulti = MULTI_SUBTYPE_TESTS.includes(t.testTypeCode) && t.testSubType === "__multi__";
-                      if (isMulti) {
-                        const subtypeMap = multiSubtypes[t.testTypeId] ?? {};
-                        const entries = Object.entries(subtypeMap).filter(([, qty]) => qty > 0);
-                        if (entries.length === 0) {
-                          return (
-                            <div key={t.testTypeId} className="flex items-center justify-between text-xs text-amber-600">
-                              <span>• {t.testTypeName} — {lang === "ar" ? "لم يُحدد نوع" : "no type selected"}</span>
-                              <span>0 {lang === "ar" ? "درهم" : "AED"}</span>
-                            </div>
-                          );
-                        }
-                        return entries.map(([subtypeValue, qty]) => {
-                          const subLabel = SUBTYPES_BY_CODE[t.testTypeCode]?.find(s => s.value === subtypeValue);
-                          const label = subLabel ? (lang === "ar" ? subLabel.labelAr : subLabel.labelEn) : subtypeValue;
-                          return (
-                            <div key={`${t.testTypeId}-${subtypeValue}`} className="flex items-center justify-between text-xs text-green-700">
-                              <span>• {t.testTypeName} ({label}) × {qty}</span>
-                              <span>{(t.unitPrice * qty).toFixed(0)} {lang === "ar" ? "درهم" : "AED"}</span>
-                            </div>
-                          );
-                        });
-                      }
-                      return (
-                        <div key={t.testTypeId} className="flex items-center justify-between text-xs text-green-700">
-                          <span>
-                            • {t.testTypeName} {t.testSubType ? `(${t.testSubType})` : ""}
-                            {t.testTypeCode === "CONC_FOAM" && foamConcreteAge.trim()
-                              ? lang === "ar"
-                                ? ` — عمر ${foamConcreteAge.trim()} يوم`
-                                : ` — age ${foamConcreteAge.trim()} d`
-                              : ""}{" "}
-                            × {t.quantity}
-                          </span>
-                          <span>{(t.unitPrice * t.quantity).toFixed(0)} {lang === "ar" ? "درهم" : "AED"}</span>
-                        </div>
-                      );
-                    })}
-                    <div className="border-t border-green-300 pt-1 flex justify-between text-xs font-bold text-green-900">
-                      <span>{lang === "ar" ? "الإجمالي:" : "Total:"}</span>
-                      <span>{totalPrice.toFixed(2)} {lang === "ar" ? "درهم" : "AED"}</span>
                     </div>
-                  </div>
-                )}
+                    {/* /right scroll area */}
 
-                <div className="flex gap-2 pt-1">
-                  <Button type="submit" className="flex-1" disabled={createOrder.isPending || selectedTests.length === 0}>
-                    {createOrder.isPending
-                      ? (lang === "ar" ? "جاري الإنشاء..." : "Creating...")
-                      : selectedTests.length > 0
-                        ? selectedTests.length > 1
-                          ? (lang === "ar"
-                              ? `إنشاء أمر (دفعة واحدة مع ${selectedTests.length} اختبارات)`
-                              : `Create Order (1 batch with ${selectedTests.length} tests)`)
-                          : (lang === "ar" ? "إنشاء أمر (اختبار واحد)" : "Create Order (1 test)")
-                        : (lang === "ar" ? "اختر اختباراً أولاً" : "Select a test first")}
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => {
-                      setOpen(false);
-                      setForm(emptyForm());
-                      setSelectedTests([]);
-                      setSubtypeFor(null);
-                      setAsphaltKind("");
-                      setHotBinAddons({});
-                      setAsphaltMixCourse("");
-                      setAsphaltMixSelectionMode("batch");
-                      setNominalCubeSize("150mm");
-                      setFoamConcreteAge("");
-                    }}
-                  >
-                    {t("common.cancel")}
-                  </Button>
+                    {/* ── ORDER SUMMARY — sticky bottom of right column ── */}
+                    {selectedTests.length > 0 && (
+                      <div className="border-t border-border bg-green-50/60 px-6 py-3 flex-shrink-0">
+                        <p className="text-xs font-semibold text-green-800 mb-1.5">
+                          {lang === "ar" ? "ملخص الأوردر:" : "Order Summary:"}
+                        </p>
+                        <div className="space-y-1 max-h-28 overflow-y-auto pr-1">
+                          {selectedTests.map(t => {
+                            const isMulti = MULTI_SUBTYPE_TESTS.includes(t.testTypeCode) && t.testSubType === "__multi__";
+                            if (isMulti) {
+                              const subtypeMap = multiSubtypes[t.testTypeId] ?? {};
+                              const entries = Object.entries(subtypeMap).filter(([, qty]) => qty > 0);
+                              if (entries.length === 0) {
+                                return (
+                                  <div key={t.testTypeId} className="flex items-center justify-between text-xs text-amber-600">
+                                    <span>• {t.testTypeName} — {lang === "ar" ? "لم يُحدد نوع" : "no type selected"}</span>
+                                    <span>0 {lang === "ar" ? "درهم" : "AED"}</span>
+                                  </div>
+                                );
+                              }
+                              return entries.map(([subtypeValue, qty]) => {
+                                const subLabel = SUBTYPES_BY_CODE[t.testTypeCode]?.find(s => s.value === subtypeValue);
+                                const label = subLabel ? (lang === "ar" ? subLabel.labelAr : subLabel.labelEn) : subtypeValue;
+                                return (
+                                  <div key={`${t.testTypeId}-${subtypeValue}`} className="flex items-center justify-between text-xs text-green-700">
+                                    <span>• {t.testTypeName} ({label}) × {qty}</span>
+                                    <span>{(t.unitPrice * qty).toFixed(0)} {lang === "ar" ? "درهم" : "AED"}</span>
+                                  </div>
+                                );
+                              });
+                            }
+                            return (
+                              <div key={t.testTypeId} className="flex items-center justify-between text-xs text-green-700">
+                                <span>
+                                  • {t.testTypeName} {t.testSubType ? `(${t.testSubType})` : ""}
+                                  {t.testTypeCode === "CONC_FOAM" && foamConcreteAge.trim()
+                                    ? lang === "ar"
+                                      ? ` — عمر ${foamConcreteAge.trim()} يوم`
+                                      : ` — age ${foamConcreteAge.trim()} d`
+                                    : ""}{" "}
+                                  × {t.quantity}
+                                </span>
+                                {t.quantity > 0
+                                  ? <span>{(t.unitPrice * t.quantity).toFixed(0)} {lang === "ar" ? "درهم" : "AED"}</span>
+                                  : <span className="text-amber-600">{lang === "ar" ? "الكمية مطلوبة" : "Qty required"}</span>}
+                              </div>
+                            );
+                          })}
+                        </div>
+                        <div className="border-t border-green-300 pt-1.5 mt-1.5 flex justify-between text-sm font-bold text-green-900">
+                          <span>{lang === "ar" ? "الإجمالي:" : "Total:"}</span>
+                          <span>{totalPrice.toFixed(2)} {lang === "ar" ? "درهم" : "AED"}</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  {/* /RIGHT COLUMN */}
+                </div>
+                {/* /BODY */}
+
+                {/* ── FOOTER ── */}
+                <div className="flex items-center justify-between gap-3 px-6 py-4 border-t border-border bg-background flex-shrink-0">
+                  <p className="text-xs text-muted-foreground flex items-center gap-2 flex-1 min-w-0">
+                    <AlertTriangle className="w-4 h-4 text-amber-500 flex-shrink-0" />
+                    <span className="truncate">
+                      {lang === "ar"
+                        ? "يجب أن تكون جميع الاختبارات المحددة بكمية 1 على الأقل قبل الإرسال"
+                        : "All selected tests must have a quantity ≥ 1 before submitting"}
+                    </span>
+                  </p>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="px-6"
+                      onClick={() => {
+                        setOpen(false);
+                        setForm(emptyForm());
+                        setSelectedTests([]);
+                        setSubtypeFor(null);
+                        setAsphaltKind("");
+                        setHotBinAddons({});
+                        setAsphaltMixCourse("");
+                        setAsphaltMixSelectionMode("batch");
+                        setNominalCubeSize("150mm");
+                        setFoamConcreteAge("");
+                      }}
+                    >
+                      {t("common.cancel")}
+                    </Button>
+                    <Button
+                      type="submit"
+                      className="px-6 gap-2"
+                      disabled={createOrder.isPending || selectedTests.length === 0 || hasZeroQtyTests}
+                    >
+                      <FlaskConical className="w-4 h-4" />
+                      {createOrder.isPending
+                        ? (lang === "ar" ? "جاري الإنشاء..." : "Creating...")
+                        : selectedTests.length === 0
+                          ? (lang === "ar" ? "اختر اختباراً أولاً" : "Select a test first")
+                          : hasZeroQtyTests
+                            ? (lang === "ar" ? "أصلح الكميات للمتابعة" : "Fix quantities to continue")
+                            : selectedTests.length > 1
+                              ? (lang === "ar"
+                                  ? `إنشاء أمر (${selectedTests.length} اختبارات)`
+                                  : `Create Order (${selectedTests.length} tests)`)
+                              : (lang === "ar" ? "إنشاء أمر (اختبار واحد)" : "Create Order (1 test)")}
+                    </Button>
+                  </div>
                 </div>
               </form>
             </DialogContent>
