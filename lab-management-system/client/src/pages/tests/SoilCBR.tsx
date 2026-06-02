@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { useParams, useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { redirectAfterTestSave } from "@/lib/batchHelpers";
@@ -38,15 +38,16 @@ const STANDARD_LOADS = {
 
 type StandardKey = keyof typeof STANDARD_LOADS;
 
-// Penetration depths (mm) for CBR readings
-const PENETRATION_DEPTHS = [0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0,
-  5.5, 6.0, 6.5, 7.0, 7.5, 8.0, 8.5, 9.0, 9.5, 10.0,
-  10.5, 11.0, 11.5, 12.0, 12.5, 13.0, 13.5, 14.0, 14.5];
+// Penetration depths (mm) for CBR readings — 0.25 mm steps from 0 to 7.5 mm (31 points)
+const PENETRATION_DEPTHS = Array.from({ length: 31 }, (_, i) => parseFloat((i * 0.25).toFixed(2)));
+const IDX_2_5 = PENETRATION_DEPTHS.findIndex(d => Math.abs(d - 2.5) < 1e-6);
+const IDX_5_0 = PENETRATION_DEPTHS.findIndex(d => Math.abs(d - 5.0) < 1e-6);
+const fmtDepth = (d: number) => (Number.isInteger(d) ? d.toFixed(1) : String(d));
 
 interface CBRFace {
   id: string;
   faceLabel: string; // "Top" or "Bottom"
-  readings: string[]; // 30 load readings in kN (at each penetration depth)
+  readings: string[]; // load readings in kN (one per penetration depth)
   // computed
   cbr_2_5?: number;
   cbr_5_0?: number;
@@ -58,16 +59,15 @@ function newFace(label: string): CBRFace {
   return {
     id: `face_${Date.now()}_${label}`,
     faceLabel: label,
-    readings: Array(30).fill(""),
+    readings: Array(PENETRATION_DEPTHS.length).fill(""),
   };
 }
 
 function computeFace(face: CBRFace, stdLoads: typeof STANDARD_LOADS[StandardKey]): CBRFace {
   const loads = face.readings.map(r => parseFloat(r) || 0);
-  // Index 5 = 2.5mm (0, 0.5, 1.0, 1.5, 2.0, 2.5)
-  // Index 10 = 5.0mm
-  const load_2_5 = loads[5] || 0;
-  const load_5_0 = loads[10] || 0;
+  // Load at the standard 2.5 mm and 5.0 mm penetration depths
+  const load_2_5 = loads[IDX_2_5] || 0;
+  const load_5_0 = loads[IDX_5_0] || 0;
 
   if (!load_2_5 && !load_5_0) return face;
 
@@ -111,11 +111,45 @@ export default function SoilCBR() {
   const [soakingPeriod, setSoakingPeriod] = useState("96"); // hours
   // % passing the 19.5 mm sieve (from the sieve analysis of the same sample).
   const [passing19_5, setPassing19_5] = useState("");
+  const passing19Touched = useRef(false);
   const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
   const [submitted, setSubmitted] = useState(false);
 
   const [faces, setFaces] = useState<CBRFace[]>([newFace("Top"), newFace("Bottom")]);
+
+  // Initial density / moisture content (as-moulded sample, before soaking)
+  const [massWetSoilCont, setMassWetSoilCont] = useState("");   // mass of wet soil + container, g
+  const [massDrySoilCont, setMassDrySoilCont] = useState("");   // mass of dry soil + container, g
+  const [massContainer, setMassContainer] = useState("");       // mass of container, g
+  const [mouldBase, setMouldBase] = useState("");               // mould + base, g
+  const [mouldBaseSoil, setMouldBaseSoil] = useState("");       // mould + base + soil, g
+  const [volumeMould, setVolumeMould] = useState("");           // volume of mould, cc
+
+  // Pull a sieve analysis from the same sample (if CBR is run in a batch with it).
+  // This only auto-fills the value; the two tests are NOT linked/required for each other.
+  const { data: sampleTests } = trpc.specializedTests.getBySample.useQuery(
+    { sampleId: dist?.sampleId ?? 0 },
+    { enabled: !!dist?.sampleId },
+  );
+  const sievePassing19_5 = useMemo(() => {
+    if (!Array.isArray(sampleTests)) return undefined;
+    for (const t of sampleTests as any[]) {
+      const fd = t?.formData;
+      if (t?.formTemplate !== "sieve_analysis" || !fd || !Array.isArray(fd.rows)) continue;
+      const row = fd.rows.find((r: any) => Math.abs(Number(r.sieveMm) - 19.5) < 0.05);
+      const val = row?.cumPassing;
+      if (val != null && Number.isFinite(Number(val))) return Number(val);
+    }
+    return undefined;
+  }, [sampleTests]);
+
+  // Auto-fill once from the linked sieve analysis (only if the tech hasn't typed a value).
+  useEffect(() => {
+    if (sievePassing19_5 !== undefined && !passing19Touched.current && passing19_5 === "") {
+      setPassing19_5(String(sievePassing19_5));
+    }
+  }, [sievePassing19_5, passing19_5]);
 
   const stdLoads = STANDARD_LOADS[standard];
   const layerSpec = LAYER_TYPES.find(l => l.value === layerType) ?? LAYER_TYPES[0];
@@ -131,6 +165,31 @@ export default function SoilCBR() {
   const retained20mm = Number.isFinite(passing19Num)
     ? parseFloat((100 - passing19Num).toFixed(1))
     : undefined;
+
+  // Initial density / moisture content calculation (Excel: Moisture Content + Initial Density)
+  const initialDensity = useMemo(() => {
+    const wetC = parseFloat(massWetSoilCont);
+    const dryC = parseFloat(massDrySoilCont);
+    const cont = parseFloat(massContainer);
+    const mb = parseFloat(mouldBase);
+    const mbs = parseFloat(mouldBaseSoil);
+    const vol = parseFloat(volumeMould);
+
+    // Moisture content % = (wet+cont − dry+cont) / (dry+cont − cont) × 100
+    const drySoil = dryC - cont;
+    const moisture = Number.isFinite(wetC) && Number.isFinite(dryC) && Number.isFinite(cont) && drySoil > 0
+      ? ((wetC - dryC) / drySoil) * 100
+      : undefined;
+    // Initial (bulk) sample density Mg/m³ = (mould+base+soil − mould+base) / volume
+    const bulkDensity = Number.isFinite(mb) && Number.isFinite(mbs) && Number.isFinite(vol) && vol > 0
+      ? (mbs - mb) / vol
+      : undefined;
+    // Dry density Mg/m³ = bulk density / (100 + moisture) × 100
+    const dryDensity = bulkDensity !== undefined && moisture !== undefined
+      ? bulkDensity / (100 + moisture) * 100
+      : undefined;
+    return { moisture, bulkDensity, dryDensity, volume: Number.isFinite(vol) ? vol : undefined };
+  }, [massWetSoilCont, massDrySoilCont, massContainer, mouldBase, mouldBaseSoil, volumeMould]);
 
   // Final CBR = average of top and bottom face CBR values
   const validFaces = computedFaces.filter(f => f.cbrValue !== undefined);
@@ -191,6 +250,17 @@ export default function SoilCBR() {
           finalCBR,
           cbrMin: layerSpec.cbrMin,
           overallResult,
+          initialDensity: {
+            massWetSoilCont: parseFloat(massWetSoilCont) || null,
+            massDrySoilCont: parseFloat(massDrySoilCont) || null,
+            massContainer: parseFloat(massContainer) || null,
+            mouldBase: parseFloat(mouldBase) || null,
+            mouldBaseSoil: parseFloat(mouldBaseSoil) || null,
+            volumeMould: initialDensity.volume ?? null,
+            moistureContent: initialDensity.moisture != null ? Number(initialDensity.moisture.toFixed(1)) : null,
+            bulkDensity: initialDensity.bulkDensity != null ? Number(initialDensity.bulkDensity.toFixed(3)) : null,
+            dryDensity: initialDensity.dryDensity != null ? Number(initialDensity.dryDensity.toFixed(3)) : null,
+          },
         },
         overallResult,
         summaryValues: {
@@ -279,11 +349,11 @@ export default function SoilCBR() {
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-xs text-blue-800">
           <Info size={12} className="inline mr-1" />
           {ar ? (
-            <><strong>إجراء CBR:</strong> 30 قراءة لكل وجه (علوي + سفلي) بفواصل 0.5mm من 0 إلى 14.5mm.
+            <><strong>إجراء CBR:</strong> {PENETRATION_DEPTHS.length} قراءة لكل وجه (علوي + سفلي) بفواصل 0.25mm من 0 إلى 7.5mm.
             CBR = (الحمل عند الاختراق / الحمل المعياري) x 100. CBR النهائي = متوسط الوجهين.
             الأحمال المعيارية: 2.5mm = {stdLoads.load_2_5} kN، 5.0mm = {stdLoads.load_5_0} kN.</>
           ) : (
-            <><strong>CBR Procedure:</strong> 30 readings per face (Top + Bottom) at 0.5mm intervals from 0 to 14.5mm.
+            <><strong>CBR Procedure:</strong> {PENETRATION_DEPTHS.length} readings per face (Top + Bottom) at 0.25mm intervals from 0 to 7.5mm.
             CBR = (Load at penetration / Standard Load) x 100. Final CBR = average of top and bottom faces.
             Standard loads: 2.5mm = {stdLoads.load_2_5} kN, 5.0mm = {stdLoads.load_5_0} kN.</>
           )}
@@ -353,11 +423,16 @@ export default function SoilCBR() {
                 <Input
                   type="number"
                   value={passing19_5}
-                  onChange={e => setPassing19_5(e.target.value)}
+                  onChange={e => { passing19Touched.current = true; setPassing19_5(e.target.value); }}
                   className="font-mono"
                   placeholder={ar ? "من تحليل المناخل، مثال: 92.8" : "from sieve analysis, e.g. 92.8"}
                   disabled={submitted}
                 />
+                {sievePassing19_5 !== undefined && (
+                  <p className="text-[10px] text-emerald-600 mt-1">
+                    {ar ? "تم جلبه من تحليل المناخل لنفس العينة" : "Auto-filled from sieve analysis of the same sample"}
+                  </p>
+                )}
               </div>
               <div className="flex items-end">
                 <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm text-amber-900 w-full flex items-center justify-between">
@@ -419,7 +494,7 @@ export default function SoilCBR() {
                       <tr key={i} className={i % 2 === 0 ? "bg-white" : "bg-slate-50/50"}>
                         <td className={`border border-slate-200 px-2 py-1 text-center font-mono text-xs font-semibold
                           ${depth === 2.5 ? "bg-blue-50 text-blue-700" : depth === 5.0 ? "bg-purple-50 text-purple-700" : "text-slate-600"}`}>
-                          {depth.toFixed(1)}
+                          {fmtDepth(depth)}
                         </td>
                         <td className="border border-slate-200 px-1 py-1">
                           <Input
@@ -479,6 +554,124 @@ export default function SoilCBR() {
                     {ar ? "أدخل القراءات لعرض المنحنى" : "Enter readings to display curve"}
                   </div>
                 )}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Initial Density / Moisture Content (as-moulded sample, before soaking) */}
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">
+              {ar ? "الكثافة الأولية / المحتوى الرطوبي" : "Initial Density / Moisture Content"}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Moisture Content Details */}
+              <div>
+                <p className="text-xs font-semibold text-slate-600 mb-2 uppercase tracking-wide">
+                  {ar ? "تفاصيل المحتوى الرطوبي" : "Moisture Content Details"}
+                </p>
+                <table className="w-full text-sm border-collapse">
+                  <tbody>
+                    <tr>
+                      <td className="border border-slate-200 px-3 py-2 text-xs text-slate-600">
+                        {ar ? "وزن التربة الرطبة + الوعاء (g)" : "Mass of wet soil + container, g"}
+                      </td>
+                      <td className="border border-slate-200 px-1 py-1 w-32">
+                        <Input value={massWetSoilCont} onChange={e => setMassWetSoilCont(e.target.value)} disabled={submitted} className="h-8 text-xs font-mono text-center" placeholder="—" />
+                      </td>
+                    </tr>
+                    <tr>
+                      <td className="border border-slate-200 px-3 py-2 text-xs text-slate-600">
+                        {ar ? "وزن التربة الجافة + الوعاء (g)" : "Mass of dry soil + container, g"}
+                      </td>
+                      <td className="border border-slate-200 px-1 py-1">
+                        <Input value={massDrySoilCont} onChange={e => setMassDrySoilCont(e.target.value)} disabled={submitted} className="h-8 text-xs font-mono text-center" placeholder="—" />
+                      </td>
+                    </tr>
+                    <tr>
+                      <td className="border border-slate-200 px-3 py-2 text-xs text-slate-600">
+                        {ar ? "وزن الوعاء (g)" : "Mass of container, g"}
+                      </td>
+                      <td className="border border-slate-200 px-1 py-1">
+                        <Input value={massContainer} onChange={e => setMassContainer(e.target.value)} disabled={submitted} className="h-8 text-xs font-mono text-center" placeholder="—" />
+                      </td>
+                    </tr>
+                    <tr className="bg-blue-50/60">
+                      <td className="border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700">
+                        {ar ? "المحتوى الرطوبي %" : "Moisture Content, %"}
+                      </td>
+                      <td className="border border-slate-200 px-3 py-2 text-center font-mono font-bold text-blue-700">
+                        {initialDensity.moisture !== undefined ? initialDensity.moisture.toFixed(1) : "—"}
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Initial Density Calculation */}
+              <div>
+                <p className="text-xs font-semibold text-slate-600 mb-2 uppercase tracking-wide">
+                  {ar ? "حساب الكثافة الأولية" : "Initial Density Calculation"}
+                </p>
+                <table className="w-full text-sm border-collapse">
+                  <tbody>
+                    <tr>
+                      <td className="border border-slate-200 px-3 py-2 text-xs text-slate-600">
+                        {ar ? "القالب + القاعدة (g)" : "Mould + Base, g"}
+                      </td>
+                      <td className="border border-slate-200 px-1 py-1 w-32">
+                        <Input value={mouldBase} onChange={e => setMouldBase(e.target.value)} disabled={submitted} className="h-8 text-xs font-mono text-center" placeholder="—" />
+                      </td>
+                    </tr>
+                    <tr>
+                      <td className="border border-slate-200 px-3 py-2 text-xs text-slate-600">
+                        {ar ? "القالب + القاعدة + التربة (g)" : "Mould + Base + Soil, g"}
+                      </td>
+                      <td className="border border-slate-200 px-1 py-1">
+                        <Input value={mouldBaseSoil} onChange={e => setMouldBaseSoil(e.target.value)} disabled={submitted} className="h-8 text-xs font-mono text-center" placeholder="—" />
+                      </td>
+                    </tr>
+                    <tr>
+                      <td className="border border-slate-200 px-3 py-2 text-xs text-slate-600">
+                        {ar ? "حجم القالب (cc)" : "Volume of Mould, cc"}
+                      </td>
+                      <td className="border border-slate-200 px-1 py-1">
+                        <Input value={volumeMould} onChange={e => setVolumeMould(e.target.value)} disabled={submitted} className="h-8 text-xs font-mono text-center" placeholder="—" />
+                      </td>
+                    </tr>
+                    <tr className="bg-emerald-50/60">
+                      <td className="border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700">
+                        {ar ? "الكثافة الأولية (Mg/m³)" : "Initial Sample Density, Mg/m³"}
+                      </td>
+                      <td className="border border-slate-200 px-3 py-2 text-center font-mono font-bold text-emerald-700">
+                        {initialDensity.bulkDensity !== undefined ? initialDensity.bulkDensity.toFixed(3) : "—"}
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Result summary (Excel reference block) */}
+            <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-3">
+              <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 text-center">
+                <p className="text-[11px] text-slate-500 mb-0.5">{ar ? "الكثافة الأولية" : "Initial Density"}</p>
+                <p className="font-mono font-bold text-slate-800">{initialDensity.bulkDensity !== undefined ? initialDensity.bulkDensity.toFixed(3) : "—"}<span className="text-[10px] font-normal text-slate-400"> Mg/m³</span></p>
+              </div>
+              <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 text-center">
+                <p className="text-[11px] text-slate-500 mb-0.5">{ar ? "المحتوى الرطوبي" : "Moisture Content"}</p>
+                <p className="font-mono font-bold text-slate-800">{initialDensity.moisture !== undefined ? initialDensity.moisture.toFixed(1) : "—"}<span className="text-[10px] font-normal text-slate-400"> %</span></p>
+              </div>
+              <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3 text-center">
+                <p className="text-[11px] text-slate-500 mb-0.5">{ar ? "الكثافة الجافة" : "Dry Density"}</p>
+                <p className="font-mono font-bold text-emerald-800">{initialDensity.dryDensity !== undefined ? initialDensity.dryDensity.toFixed(3) : "—"}<span className="text-[10px] font-normal text-slate-400"> Mg/m³</span></p>
+              </div>
+              <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 text-center">
+                <p className="text-[11px] text-slate-500 mb-0.5">{ar ? "حجم القالب" : "Volume of Mould"}</p>
+                <p className="font-mono font-bold text-slate-800">{initialDensity.volume !== undefined ? initialDensity.volume : "—"}<span className="text-[10px] font-normal text-slate-400"> cm³</span></p>
               </div>
             </div>
           </CardContent>
