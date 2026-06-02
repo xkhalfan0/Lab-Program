@@ -865,23 +865,26 @@ export default function Reception() {
                 {lang === "ar" ? "إنشاء أوردر جديد" : "New Order"}
               </Button>
             </DialogTrigger>
-            <DialogContent className="w-[70vw] max-w-[70vw] h-[88vh] max-h-[88vh] p-0 overflow-hidden">
+            <DialogContent
+              showCloseButton={false}
+              className="w-[70vw] max-w-[70vw] sm:max-w-[70vw] h-[88vh] max-h-[88vh] p-0 gap-0 overflow-hidden flex flex-col"
+            >
               <DialogHeader className="sr-only">
                 <DialogTitle>{lang === "ar" ? "أوردر اختبار جديد" : "New Test Order"}</DialogTitle>
               </DialogHeader>
-              <form onSubmit={handleSubmit} className="flex flex-col h-full overflow-hidden">
+              <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0 overflow-hidden">
 
                 {/* ── HEADER ── */}
-                <div className="flex items-center justify-between px-6 py-4 border-b border-border flex-shrink-0">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-blue-50 rounded-xl flex items-center justify-center">
-                      <FlaskConical className="w-5 h-5 text-blue-600" />
+                <div className="flex items-center justify-between px-7 py-5 border-b border-border flex-shrink-0">
+                  <div className="flex items-center gap-3.5">
+                    <div className="w-11 h-11 bg-blue-50 rounded-xl flex items-center justify-center">
+                      <FlaskConical className="w-6 h-6 text-blue-600" />
                     </div>
                     <div>
-                      <h2 className="text-lg font-semibold text-foreground">
+                      <h2 className="text-xl font-semibold text-foreground">
                         {lang === "ar" ? "أوردر اختبار جديد" : "New Test Order"}
                       </h2>
-                      <p className="text-xs text-muted-foreground mt-0.5">
+                      <p className="text-sm text-muted-foreground mt-0.5">
                         {lang === "ar"
                           ? "أدخل بيانات الطلب يساراً ثم اختر الاختبارات والكميات يميناً"
                           : "Fill in order details on the left, then select tests and quantities on the right"}
@@ -897,7 +900,7 @@ export default function Reception() {
                 <div className="flex flex-1 overflow-hidden min-h-0">
 
                   {/* LEFT COLUMN — Order info (35%) */}
-                  <div className="w-[35%] border-r border-border bg-muted/30 flex flex-col overflow-y-auto px-5 py-5 gap-4">
+                  <div className="w-[35%] border-r border-border bg-muted/30 flex flex-col overflow-y-auto px-6 py-6 gap-5">
 
                     <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
                       <FileText className="w-3.5 h-3.5" />
@@ -1020,7 +1023,7 @@ export default function Reception() {
 
                   {/* RIGHT COLUMN — Test selection (65%) */}
                   <div className="w-[65%] flex flex-col overflow-hidden">
-                    <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
+                    <div className="flex-1 overflow-y-auto px-7 py-6 space-y-5">
 
                 {/* Test Category */}
                 <div className="space-y-1.5">
@@ -1171,7 +1174,7 @@ export default function Reception() {
                         <Badge variant="secondary" className="ms-1 text-xs">{selectedTests.length} {lang === "ar" ? "محدد" : "selected"}</Badge>
                       )}
                     </Label>
-                    <div className="border rounded-lg divide-y max-h-52 overflow-y-auto">
+                    <div className="border rounded-lg divide-y">
                       {filteredTests.length === 0 ? (
                         <div className="p-4 text-sm text-muted-foreground text-center space-y-1">
                           <p>
@@ -1455,7 +1458,7 @@ export default function Reception() {
 
                     {/* ── ORDER SUMMARY — sticky bottom of right column ── */}
                     {selectedTests.length > 0 && (
-                      <div className="border-t border-border bg-green-50/60 px-6 py-3 flex-shrink-0">
+                      <div className="border-t border-border bg-green-50/60 px-7 py-3.5 flex-shrink-0">
                         <p className="text-xs font-semibold text-green-800 mb-1.5">
                           {lang === "ar" ? "ملخص الأوردر:" : "Order Summary:"}
                         </p>
@@ -1514,7 +1517,7 @@ export default function Reception() {
                 {/* /BODY */}
 
                 {/* ── FOOTER ── */}
-                <div className="flex items-center justify-between gap-3 px-6 py-4 border-t border-border bg-background flex-shrink-0">
+                <div className="flex items-center justify-between gap-3 px-7 py-4 border-t border-border bg-background flex-shrink-0">
                   <p className="text-xs text-muted-foreground flex items-center gap-2 flex-1 min-w-0">
                     <AlertTriangle className="w-4 h-4 text-amber-500 flex-shrink-0" />
                     <span className="truncate">
