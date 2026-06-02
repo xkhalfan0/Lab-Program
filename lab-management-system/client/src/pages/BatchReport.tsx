@@ -12,6 +12,7 @@ import { PassFailBadge, ResultBanner } from "@/components/PassFailBadge";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { formatCalendarDate } from "@/lib/dateFormat";
 import { getOfficialTestDisplayName } from "@/lib/officialTestCatalog";
+import { renderFormData } from "@/pages/tests/SpecializedTestReport";
 import {
   Loader2,
   Printer,
@@ -36,7 +37,10 @@ type BatchSibling = {
     overallResult?: string | null;
     summaryValues?: Record<string, unknown> | null;
     formTemplate?: string | null;
+    formData?: unknown;
     testedBy?: string | null;
+    testDate?: string | Date | null;
+    createdAt?: string | Date | null;
   }>;
   testResults?: Array<{
     complianceStatus?: string | null;
@@ -298,6 +302,7 @@ export default function BatchReport() {
           testName: catalogName ?? (isAr ? tt?.nameAr ?? tt?.nameEn ?? sibling.testName : tt?.nameEn ?? tt?.nameAr ?? sibling.testName),
           standard: tt?.standardRef ?? EM_DASH,
           formTemplate: sibling.specializedTestResults?.[0]?.formTemplate ?? null,
+          formData: sibling.specializedTestResults?.[0]?.formData ?? null,
           testedBy: sibling.specializedTestResults?.[0]?.testedBy ?? undefined,
         };
       }),
@@ -475,10 +480,15 @@ export default function BatchReport() {
                 {isAr ? "\u0646\u062a\u0627\u0626\u062c \u0627\u0644\u0627\u062e\u062a\u0628\u0627\u0631\u0627\u062a" : "Test Results"}
               </h3>
 
-              {sections.map(({ sibling, overallResult, summaryValues, testName, standard, formTemplate }, index) => {
+              {sections.map(({ sibling, overallResult, summaryValues, testName, standard, formTemplate, formData }, index) => {
                 const summaryEntries = Object.entries(summaryValues).filter(
                   ([k, v]) => !SUMMARY_SKIP_KEYS.has(k) && v != null && v !== "" && typeof v !== "object",
                 );
+                const hasDetailedForm =
+                  sibling.status === "completed" &&
+                  !!formTemplate &&
+                  formData != null &&
+                  typeof formData === "object";
                 const isMarshallDensity =
                   formTemplate === "asphalt_marshall_density" ||
                   sibling.testType === "ASPH_MARSHALL_DENSITY" ||
@@ -558,6 +568,17 @@ export default function BatchReport() {
                               ? "\u0627\u0644\u0627\u062e\u062a\u0628\u0627\u0631 \u0644\u0645 \u064a\u0643\u062a\u0645\u0644 \u0628\u0639\u062f."
                               : "Test not yet completed."}
                         </p>
+                      )}
+
+                      {hasDetailedForm && (
+                        <div className="pt-1 border-t border-gray-200">
+                          <p className="text-[10px] font-semibold text-gray-600 mb-1.5 uppercase">
+                            {isAr ? "\u0627\u0644\u0646\u062a\u0627\u0626\u062c \u0627\u0644\u062a\u0641\u0635\u064a\u0644\u064a\u0629" : "Detailed results"}
+                          </p>
+                          {renderFormData(formTemplate as string, formData, isAr, {
+                            sieveReportTestedBy: sibling.specializedTestResults?.[0]?.testedBy ?? null,
+                          })}
+                        </div>
                       )}
 
                       {hasReport && (
