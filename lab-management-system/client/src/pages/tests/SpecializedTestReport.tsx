@@ -944,16 +944,16 @@ function renderSieveAnalysis(fd: any, isAr: boolean, extras?: FormReportExtras) 
 function renderSoilProctor(fd: any, isAr: boolean) {
   const points = fd.points ?? [];
   const headers = isAr
-    ? ["النقطة", "قالب+تربة (غ)", "القالب (غ)", "التربة (غ)", "الكثافة الرطبة (غ/سم³)", "نسبة الرطوبة (%)", "الكثافة الجافة (غ/سم³)"]
-    : ["Point", "Mould+Soil (g)", "Mould (g)", "Soil (g)", "Wet Density (g/cm³)", "Water Content (%)", "Dry Density (g/cm³)"];
+    ? ["النقطة", "قالب+تربة (غ)", "القالب (غ)", "التربة (غ)", "الكثافة الرطبة (Mg/m³)", "نسبة الرطوبة (%)", "الكثافة الجافة (Mg/m³)"]
+    : ["Point", "Mould+Soil (g)", "Mould (g)", "Soil (g)", "Wet Density (Mg/m³)", "Water Content (%)", "Dry Density (Mg/m³)"];
   const proctorCols: Column[] = [
     { header: headers[0], field: "_pt", align: "center", render: (_v, row) => String((row as any)._pt) },
-    { header: headers[1], field: "mouldSoil", type: "number", decimals: 2, align: "right" },
-    { header: headers[2], field: "mouldWeight", type: "number", decimals: 2, align: "right" },
-    { header: headers[3], field: "soilWeight", type: "number", decimals: 2, align: "right" },
-    { header: headers[4], field: "wetDensity", type: "number", decimals: 2, align: "right" },
-    { header: headers[5], field: "waterContent", type: "number", decimals: 2, align: "right" },
-    { header: headers[6], field: "dryDensity", type: "number", decimals: 2, align: "right", render: (v) => <span className="font-semibold">{fmt(v)}</span> },
+    { header: headers[1], field: "mouldSoil", type: "number", decimals: 1, align: "right" },
+    { header: headers[2], field: "mouldWeight", type: "number", decimals: 1, align: "right" },
+    { header: headers[3], field: "soilWeight", type: "number", decimals: 1, align: "right" },
+    { header: headers[4], field: "wetDensity", type: "number", decimals: 3, align: "right" },
+    { header: headers[5], field: "waterContent", type: "number", decimals: 1, align: "right" },
+    { header: headers[6], field: "dryDensity", type: "number", decimals: 3, align: "right", render: (v) => <span className="font-semibold">{fmt(v, 3)}</span> },
   ];
   return (
     <>
@@ -961,7 +961,7 @@ function renderSoilProctor(fd: any, isAr: boolean) {
       <div className="grid grid-cols-3 gap-4 text-xs">
         <div className="bg-blue-50 border border-blue-200 rounded p-3 text-center">
           <p className="text-blue-600 font-semibold">{isAr ? "أقصى كثافة جافة (MDD)" : "Max Dry Density (MDD)"}</p>
-          <p className="text-xl font-bold text-blue-800">{fmt(fd.mdd)} {isAr ? "غ/سم³" : "g/cm³"}</p>
+          <p className="text-xl font-bold text-blue-800">{fmt(fd.mdd, 2)} {isAr ? "Mg/m³" : "Mg/m³"}</p>
         </div>
         <div className="bg-green-50 border border-green-200 rounded p-3 text-center">
           <p className="text-green-600 font-semibold">{isAr ? "نسبة الرطوبة المثلى (OMC)" : "Optimum Moisture Content (OMC)"}</p>

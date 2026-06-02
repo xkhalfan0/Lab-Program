@@ -132,7 +132,8 @@ function computePoint(pt: ProctorPoint, mouldVolumeCm3: number, mouldBaseMass: n
     out.drySoilMass = parseFloat((dsc - cont).toFixed(2));
   }
   if (out.moistureMass != null && out.drySoilMass != null && out.drySoilMass > 0) {
-    out.waterContent = parseFloat(((out.moistureMass / out.drySoilMass) * 100).toFixed(2));
+    // Keep full precision; displays round to 1 decimal (matches the Excel green values).
+    out.waterContent = (out.moistureMass / out.drySoilMass) * 100;
   }
 
   // ── Bulk (wet) density ──
@@ -633,7 +634,7 @@ export default function SoilProctor() {
                   <tr className="bg-blue-50/40">
                     <td className={labelCls}>{lang === "ar" ? "المحتوى الرطوبي %" : "Moisture Content %"}</td>
                     {computedPoints.map(pt => (
-                      <td key={pt.id} className={`${calcCls} font-semibold text-amber-700`}>{fmtN(pt.waterContent, 2)}</td>
+                      <td key={pt.id} className={`${calcCls} font-semibold text-amber-700`}>{fmtN(pt.waterContent, 1)}</td>
                     ))}
                   </tr>
                   {/* Dry Density (calc) */}
@@ -662,8 +663,8 @@ export default function SoilProctor() {
                     <p className="text-xs text-emerald-600 font-semibold mb-1">
                       {lang === "ar" ? "أقصى كثافة جافة (MDD)" : "Maximum Dry Density (MDD)"}
                     </p>
-                    <p className="text-3xl font-bold text-emerald-800">{fitResult.mdd}</p>
-                    <p className="text-xs text-emerald-500">g/cm³</p>
+                    <p className="text-3xl font-bold text-emerald-800">{fitResult.mdd.toFixed(2)}</p>
+                    <p className="text-xs text-emerald-500">Mg/m³</p>
                   </div>
                   <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-center">
                     <p className="text-xs text-blue-600 font-semibold mb-1">
@@ -686,22 +687,22 @@ export default function SoilProctor() {
             </CardHeader>
             <CardContent>
               {chartData.length >= 2 ? (
-                <ResponsiveContainer width="100%" height={320}>
-                  <ComposedChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 20 }}>
+                <ResponsiveContainer width="100%" height={340}>
+                  <ComposedChart data={chartData} margin={{ top: 34, right: 24, left: 4, bottom: 24 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
                     <XAxis
                       dataKey="wc"
                       type="number"
                       domain={["auto", "auto"]}
                       tick={{ fontSize: 10 }}
-                      label={{ value: lang === "ar" ? "نسبة الرطوبة (%)" : "Water Content (%)", position: "insideBottom", offset: -10, fontSize: 10 }}
+                      label={{ value: lang === "ar" ? "نسبة الرطوبة (%)" : "Water Content (%)", position: "insideBottom", offset: -12, fontSize: 10 }}
                     />
                     <YAxis
                       dataKey="dd"
                       type="number"
                       domain={["auto", "auto"]}
                       tick={{ fontSize: 10 }}
-                      label={{ value: lang === "ar" ? "الكثافة الجافة (g/cm³)" : "Dry Density (g/cm³)", angle: -90, position: "insideLeft", fontSize: 10 }}
+                      label={{ value: lang === "ar" ? "الكثافة الجافة (Mg/m³)" : "Dry Density (Mg/m³)", angle: -90, position: "insideLeft", fontSize: 10 }}
                     />
                     <Tooltip formatter={(v: number) => v.toFixed(3)} />
                     <Scatter
@@ -712,12 +713,34 @@ export default function SoilProctor() {
                       line={{ stroke: "#2563eb", strokeWidth: 2 }}
                     />
                     {fitResult && (
-                      <ReferenceLine
-                        x={fitResult.omc}
-                        stroke="#10b981"
-                        strokeDasharray="4 4"
-                        label={{ value: `OMC=${fitResult.omc}%`, position: "top", fontSize: 10, fill: "#10b981" }}
-                      />
+                      <>
+                        <ReferenceLine
+                          y={fitResult.mdd}
+                          stroke="#059669"
+                          strokeDasharray="5 4"
+                          strokeWidth={1.5}
+                          label={{
+                            value: `MDD = ${fitResult.mdd.toFixed(2)} Mg/m³`,
+                            position: "insideTopRight",
+                            fontSize: 12,
+                            fontWeight: 700,
+                            fill: "#047857",
+                          }}
+                        />
+                        <ReferenceLine
+                          x={fitResult.omc}
+                          stroke="#059669"
+                          strokeDasharray="5 4"
+                          strokeWidth={1.5}
+                          label={{
+                            value: `OMC = ${fitResult.omc}%`,
+                            position: "top",
+                            fontSize: 12,
+                            fontWeight: 700,
+                            fill: "#047857",
+                          }}
+                        />
+                      </>
                     )}
                   </ComposedChart>
                 </ResponsiveContainer>
