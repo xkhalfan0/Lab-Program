@@ -16,6 +16,8 @@ import { EXTRACTED_SIEVE_SIZES } from "@/lib/extractedSieveLimits";
 import {
   LineChart,
   Line,
+  ScatterChart,
+  Scatter,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -1459,6 +1461,133 @@ function renderSoilCBR(fd: any, isAr: boolean) {
   );
 }
 
+function AtterbergFlowCurveChart({
+  points,
+  ll,
+  isAr,
+}: {
+  points: Array<{ blows: number; wc: number }>;
+  ll: number | null;
+  isAr: boolean;
+}) {
+  const data = [...points].filter(p => Number.isFinite(p.blows) && Number.isFinite(p.wc) && p.blows > 0).sort((a, b) => a.blows - b.blows);
+  if (data.length < 2) return null;
+  return (
+    <div className="sieve-report-chart border border-slate-300 rounded-md bg-white p-1 print:p-0" style={{ height: 260 }}>
+      <ResponsiveContainer width="100%" height="100%">
+        <ScatterChart margin={{ top: 10, right: 20, left: 0, bottom: 24 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+          <XAxis
+            dataKey="blows"
+            type="number"
+            scale="log"
+            domain={[10, 50]}
+            ticks={[10, 15, 20, 25, 30, 40, 50]}
+            tick={{ fontSize: 9 }}
+            label={{ value: isAr ? "عدد الضربات (N)" : "Number of Blows (N)", position: "insideBottom", offset: -14, style: { fontSize: 10 } }}
+          />
+          <YAxis
+            dataKey="wc"
+            type="number"
+            domain={["auto", "auto"]}
+            width={42}
+            tick={{ fontSize: 9 }}
+            label={{ value: isAr ? "المحتوى الرطوبي (%)" : "Water Content (%)", angle: -90, position: "insideLeft", style: { fontSize: 10 } }}
+          />
+          <Tooltip formatter={(v: unknown) => { const n = Number(v); return Number.isFinite(n) ? `${n.toFixed(2)}%` : "—"; }} contentStyle={{ fontSize: 10 }} />
+          <Scatter name="Test Points" data={data} dataKey="wc" fill="#2563eb" line={{ stroke: "#2563eb", strokeWidth: 2 }} />
+          <ReferenceLine x={25} stroke="#10b981" strokeDasharray="4 4" label={{ value: "25 blows", position: "top", fontSize: 9, fill: "#10b981" }} />
+          {ll != null && Number.isFinite(ll) && (
+            <ReferenceLine y={ll} stroke="#10b981" strokeDasharray="4 4" label={{ value: `LL = ${Math.round(ll)}%`, position: "insideTopRight", fontSize: 9, fontWeight: 700, fill: "#059669" }} />
+          )}
+        </ScatterChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
+function renderSoilAtterberg(fd: any, isAr: boolean) {
+  const L = (en: string, ars: string) => (isAr ? ars : en);
+  const llPoints: any[] = Array.isArray(fd.llPoints) ? fd.llPoints : [];
+  const plRows: any[] = Array.isArray(fd.plRows) ? fd.plRows : [];
+  const ll = fd.liquidLimit ?? (fd.ll != null ? Math.round(Number(fd.ll)) : null);
+  const pl = fd.plasticLimit ?? (fd.pl != null ? Math.round(Number(fd.pl)) : null);
+  const pi = fd.plasticityIndex ?? (fd.pi != null ? Number(fd.pi) : null);
+  const passing0425 = fd.passing0425;
+
+  const llChartPoints = llPoints
+    .map(p => ({ blows: Number(p.blows), wc: Number(p.waterContent) }))
+    .filter(p => Number.isFinite(p.blows) && Number.isFinite(p.wc) && p.blows > 0);
+
+  const llCols: Column[] = [
+    { header: L("Container No.", "رقم الوعاء"), field: "containerNo", align: "center", render: (_v, r) => String((r as any).containerNo ?? "—") },
+    { header: L("Range", "المدى"), field: "range", align: "center", render: (_v, r) => String((r as any).range || "—") },
+    { header: L("Blows", "الضربات"), field: "blows", align: "center", render: v => fmt(v, 0) },
+    { header: L("Cont.+wet (g)", "وعاء+رطبة"), field: "wetMass", align: "right", render: v => fmt(v, 2) },
+    { header: L("Cont.+dry (g)", "وعاء+جافة"), field: "dryMass", align: "right", render: v => fmt(v, 2) },
+    { header: L("Container (g)", "الوعاء"), field: "tinMass", align: "right", render: v => fmt(v, 2) },
+    { header: L("Wt. moisture (g)", "وزن الرطوبة"), field: "wtMoisture", align: "right", render: v => fmt(v, 2) },
+    { header: L("Wt. dry (g)", "وزن الجاف"), field: "wtDry", align: "right", render: v => fmt(v, 2) },
+    { header: L("Moisture %", "الرطوبة %"), field: "waterContent", align: "center", render: v => <span className="font-semibold">{fmt(v, 2)}</span> },
+  ];
+  const plCols: Column[] = [
+    { header: L("Container No.", "رقم الوعاء"), field: "containerNo", align: "center", render: (_v, r) => String((r as any).containerNo ?? "—") },
+    { header: L("Cont.+wet (g)", "وعاء+رطبة"), field: "wetMass", align: "right", render: v => fmt(v, 2) },
+    { header: L("Cont.+dry (g)", "وعاء+جافة"), field: "dryMass", align: "right", render: v => fmt(v, 2) },
+    { header: L("Container (g)", "الوعاء"), field: "tinMass", align: "right", render: v => fmt(v, 2) },
+    { header: L("Wt. moisture (g)", "وزن الرطوبة"), field: "wtMoisture", align: "right", render: v => fmt(v, 2) },
+    { header: L("Wt. dry (g)", "وزن الجاف"), field: "wtDry", align: "right", render: v => fmt(v, 2) },
+    { header: L("Moisture %", "الرطوبة %"), field: "waterContent", align: "center", render: v => <span className="font-semibold">{fmt(v, 2)}</span> },
+  ];
+
+  return (
+    <div className="space-y-4">
+      {/* Results summary */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+        <div className="bg-slate-50 border border-slate-200 rounded p-2 text-center">
+          <p className="text-slate-500">{L("% Passing 0.425 mm", "المار 0.425 مم")}</p>
+          <p className="font-bold text-slate-800 text-base">{passing0425 != null ? `${fmt(passing0425, 0)}%` : "—"}</p>
+        </div>
+        <div className="bg-amber-50 border border-amber-200 rounded p-2 text-center">
+          <p className="text-amber-700">{L("Plastic Limit (PL)", "حد اللدونة")}</p>
+          <p className="font-bold text-amber-800 text-base">{pl != null ? `${pl}` : "—"}</p>
+        </div>
+        <div className="bg-blue-50 border border-blue-200 rounded p-2 text-center">
+          <p className="text-blue-600">{L("Liquid Limit (LL)", "حد السيولة")}</p>
+          <p className="font-bold text-blue-800 text-base">{ll != null ? `${ll}` : "—"}</p>
+        </div>
+        <div className="bg-purple-50 border border-purple-200 rounded p-2 text-center">
+          <p className="text-purple-600">{L("Plasticity Index (PI)", "مؤشر اللدونة")}</p>
+          <p className="font-bold text-purple-800 text-base">{pi != null ? `${pi}` : "—"}</p>
+        </div>
+      </div>
+      {fd.classification && (
+        <p className="text-[11px] text-slate-600">{L("Classification", "التصنيف")}: <span className="font-semibold">{fd.classification}</span></p>
+      )}
+
+      {/* Liquid Limit + flow curve */}
+      {llPoints.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-xs font-semibold text-slate-700">{L("Liquid Limit (Casagrande)", "حد السيولة (كاساغراندي)")}</p>
+          <FlexibleResultsTable columns={llCols} rows={llPoints} />
+          <AtterbergFlowCurveChart points={llChartPoints} ll={fd.ll != null ? Number(fd.ll) : (ll != null ? Number(ll) : null)} isAr={isAr} />
+        </div>
+      )}
+
+      {/* Plastic Limit */}
+      {plRows.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-xs font-semibold text-slate-700">{L("Plastic Limit (Thread Rolling)", "حد اللدونة (فتل الخيط)")}</p>
+          <FlexibleResultsTable columns={plCols} rows={plRows} />
+        </div>
+      )}
+      <p className="text-[10px] text-slate-500">
+        {L("PI = LL − PL. Limits reported to the nearest whole number (ASTM D4318).", "PI = LL − PL. تُقرّب الحدود لأقرب رقم صحيح (ASTM D4318).")}
+      </p>
+    </div>
+  );
+}
+
 function renderAsphaltBitumenExtraction(fd: any, isAr: boolean) {
   const L = (en: string, ars: string) => (isAr ? ars : en);
   const sample = fd.sample ?? (Array.isArray(fd.samples) ? fd.samples[0] : null);
@@ -2891,6 +3020,7 @@ export function renderFormData(formTemplate: string, formData: any, isAr: boolea
     case "sieve_analysis": return renderSieveAnalysis(formData, isAr, extras);
     case "soil_proctor": return renderSoilProctor(formData, isAr);
     case "soil_cbr": return renderSoilCBR(formData, isAr);
+    case "soil_atterberg": return renderSoilAtterberg(formData, isAr);
     case "soil_field_density": return renderSoilFieldDensity(formData, isAr);
     case "asphalt_bitumen_extraction":
       return renderAsphaltBitumenExtraction(formData, isAr);
