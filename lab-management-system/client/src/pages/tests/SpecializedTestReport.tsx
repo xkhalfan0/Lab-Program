@@ -1283,7 +1283,6 @@ function renderSoilCBR(fd: any, isAr: boolean) {
   // Reconstruct penetration depths (0.25 mm steps for new data, 0.5 mm for legacy 30-row data)
   const maxLen = Math.max(topFace?.readings?.length ?? 0, bottomFace?.readings?.length ?? 0);
   const step = maxLen >= 31 ? 0.25 : 0.5;
-  const fmtDepth = (d: number) => (Number.isInteger(d) ? d.toFixed(1) : String(d));
   const toNum = (v: any) => {
     const n = parseFloat(v);
     return Number.isFinite(n) ? n : null;
@@ -1298,22 +1297,20 @@ function renderSoilCBR(fd: any, isAr: boolean) {
     };
   }).filter(d => d.top != null || d.bottom != null || d.depth === 0);
 
-  // Readings table rows (only rows where at least one face has a value)
-  const tableRows = Array.from({ length: maxLen }, (_, i) => {
-    const depth = parseFloat((i * step).toFixed(2));
-    return {
-      _depth: fmtDepth(depth),
-      _key: depth,
-      top: toNum(topFace?.readings?.[i]),
-      bottom: toNum(bottomFace?.readings?.[i]),
-    };
-  }).filter(r => r.top != null || r.bottom != null);
+  // Standard loads (kN) by standard — needed for the 2.5/5.0 mm summary table
+  const STD_LOADS: Record<string, { l25: number; l50: number }> = {
+    BS1377: { l25: 13.24, l50: 19.96 },
+    ASTM_D1883: { l25: 13.44, l50: 20.0 },
+  };
+  const sl = STD_LOADS[String(fd.standard)] ?? STD_LOADS.BS1377;
+  const loadAt = (face: any, depth: number) => toNum(face?.readings?.[Math.round(depth / step)]);
 
-  const readingCols: Column[] = [
-    { header: L("Pen. (mm)", "الاختراق (مم)"), field: "_depth", align: "center", render: (_v, row) => <span className="font-mono font-semibold">{String((row as any)._depth)}</span> },
-    { header: L("Top Load (kN)", "الحمل العلوي (kN)"), field: "top", align: "right", render: v => (v != null ? fmt(v, 2) : "—") },
-    { header: L("Bottom Load (kN)", "الحمل السفلي (kN)"), field: "bottom", align: "right", render: v => (v != null ? fmt(v, 2) : "—") },
+  // Summary penetration table — only the key 2.5 mm and 5.0 mm depths (per Excel)
+  const summaryRows = [
+    { pen: 2.5, std: sl.l25, topLoad: loadAt(topFace, 2.5), botLoad: loadAt(bottomFace, 2.5), topCbr: topFace?.cbr_2_5 ?? null, botCbr: bottomFace?.cbr_2_5 ?? null },
+    { pen: 5.0, std: sl.l50, topLoad: loadAt(topFace, 5.0), botLoad: loadAt(bottomFace, 5.0), topCbr: topFace?.cbr_5_0 ?? null, botCbr: bottomFace?.cbr_5_0 ?? null },
   ];
+  const hasSummaryReadings = summaryRows.some(r => r.topLoad != null || r.botLoad != null);
 
   const hasInitialDensity =
     idd.bulkDensity != null || idd.dryDensity != null || idd.moistureContent != null;
@@ -1361,15 +1358,43 @@ function renderSoilCBR(fd: any, isAr: boolean) {
         </div>
       </div>
 
-      {/* Readings table + combined curve */}
+      {/* Key-depth summary table (2.5 & 5.0 mm) + combined curve */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <div>
-          <p className="text-xs font-semibold text-slate-700 mb-1">{L("Penetration vs. Load (Top & Bottom)", "الاختراق مقابل الحمل (الوجهان)")}</p>
-          {tableRows.length > 0 ? (
-            <FlexibleResultsTable columns={readingCols} rows={tableRows} />
+          <p className="text-xs font-semibold text-slate-700 mb-1">{L("CBR at Key Penetrations (2.5 & 5.0 mm)", "نسبة CBR عند الاختراقات الرئيسية (2.5 و 5.0 مم)")}</p>
+          {hasSummaryReadings ? (
+            <table className="w-full text-xs border-collapse">
+              <thead>
+                <tr className="bg-slate-50">
+                  <th rowSpan={2} className="border border-slate-300 px-2 py-1 text-center font-semibold text-slate-600">{L("Penetration (mm)", "الاختراق (مم)")}</th>
+                  <th colSpan={2} className="border border-slate-300 px-2 py-1 text-center font-semibold text-slate-600">{L("Load (kN)", "الحمل (kN)")}</th>
+                  <th rowSpan={2} className="border border-slate-300 px-2 py-1 text-center font-semibold text-slate-600">{L("Standard Load (kN)", "الحمل المعياري (kN)")}</th>
+                  <th colSpan={2} className="border border-slate-300 px-2 py-1 text-center font-semibold text-slate-600">{L("CBR %", "نسبة CBR %")}</th>
+                </tr>
+                <tr className="bg-slate-50">
+                  <th className="border border-slate-300 px-2 py-1 text-center font-semibold text-blue-700">{L("Top", "علوي")}</th>
+                  <th className="border border-slate-300 px-2 py-1 text-center font-semibold text-rose-700">{L("Bottom", "سفلي")}</th>
+                  <th className="border border-slate-300 px-2 py-1 text-center font-semibold text-blue-700">{L("Top", "علوي")}</th>
+                  <th className="border border-slate-300 px-2 py-1 text-center font-semibold text-rose-700">{L("Bottom", "سفلي")}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {summaryRows.map((r, i) => (
+                  <tr key={i} className={i % 2 === 0 ? "bg-white" : "bg-slate-50/50"}>
+                    <td className="border border-slate-300 px-2 py-1 text-center font-mono font-semibold">{r.pen.toFixed(1)}</td>
+                    <td className="border border-slate-300 px-2 py-1 text-right font-mono">{r.topLoad != null ? fmt(r.topLoad, 2) : "—"}</td>
+                    <td className="border border-slate-300 px-2 py-1 text-right font-mono">{r.botLoad != null ? fmt(r.botLoad, 2) : "—"}</td>
+                    <td className="border border-slate-300 px-2 py-1 text-center font-mono">{fmt(r.std, 2)}</td>
+                    <td className="border border-slate-300 px-2 py-1 text-center font-mono font-semibold text-blue-800">{r.topCbr != null ? `${fmt(r.topCbr, 1)}` : "—"}</td>
+                    <td className="border border-slate-300 px-2 py-1 text-center font-mono font-semibold text-rose-800">{r.botCbr != null ? `${fmt(r.botCbr, 1)}` : "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           ) : (
             <p className="text-[11px] text-slate-400">{L("No readings recorded.", "لا توجد قراءات.")}</p>
           )}
+          <p className="text-[10px] text-slate-500 mt-1">{L("CBR % = Load ÷ Standard Load × 100. Final CBR = max of the two depths, averaged across faces.", "نسبة CBR = الحمل ÷ الحمل المعياري × 100. القيمة النهائية = أكبر القيمتين، ومتوسط الوجهين.")}</p>
         </div>
         <div>
           <p className="text-xs font-semibold text-slate-700 mb-1">{L("Penetration vs. Load Curve", "منحنى الاختراق مقابل الحمل")}</p>
