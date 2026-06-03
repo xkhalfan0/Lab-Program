@@ -374,7 +374,7 @@ export default function SoilProctor() {
               <div>
                 <Label className="text-xs text-slate-500 mb-1 block">{lang === "ar" ? "طريقة الاختبار" : "Test Method"}</Label>
                 <Select value={testMethod} onValueChange={setTestMethod}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectTrigger className="w-full *:data-[slot=select-value]:min-w-0"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="MODIFIED_PROCTOR">{lang === "ar" ? "بروكتور المعدّل (ASTM D1557)" : "Modified Proctor (ASTM D1557)"}</SelectItem>
                     <SelectItem value="STANDARD_PROCTOR">{lang === "ar" ? "بروكتور القياسي (ASTM D698)" : "Standard Proctor (ASTM D698)"}</SelectItem>
@@ -393,7 +393,7 @@ export default function SoilProctor() {
                     setMouldVolumeStr(String(MOLD_VOLUMES[key].volume));
                   }}
                 >
-                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectTrigger className="w-full *:data-[slot=select-value]:min-w-0"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     {Object.entries(MOLD_VOLUMES).map(([k, v]) => (
                       <SelectItem key={k} value={k}>{v.label}</SelectItem>
