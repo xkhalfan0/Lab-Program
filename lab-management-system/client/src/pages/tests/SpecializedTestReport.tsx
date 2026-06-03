@@ -1358,8 +1358,8 @@ function renderSoilCBR(fd: any, isAr: boolean) {
         </div>
       </div>
 
-      {/* Key-depth summary table (2.5 & 5.0 mm) + combined curve */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      {/* Key-depth summary table (2.5 & 5.0 mm) — full width above the curve */}
+      <div className="space-y-4">
         <div>
           <p className="text-xs font-semibold text-slate-700 mb-1">{L("CBR at Key Penetrations (2.5 & 5.0 mm)", "نسبة CBR عند الاختراقات الرئيسية (2.5 و 5.0 مم)")}</p>
           {hasSummaryReadings ? (
