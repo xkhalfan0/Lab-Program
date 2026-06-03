@@ -191,15 +191,24 @@ export default function SoilCBR() {
     return { moisture, bulkDensity, dryDensity, volume: Number.isFinite(vol) ? vol : undefined };
   }, [massWetSoilCont, massDrySoilCont, massContainer, mouldBase, mouldBaseSoil, volumeMould]);
 
-  // Final CBR = average of top and bottom face CBR values
+  // Each face CBR is the higher of its 2.5 / 5.0 mm values (computeFace → cbrValue).
   const validFaces = computedFaces.filter(f => f.cbrValue !== undefined);
-  const finalCBR = validFaces.length > 0
+  const topCBR = topComputed?.cbrValue;
+  const bottomCBR = bottomComputed?.cbrValue;
+  const bothFaces = topCBR != null && bottomCBR != null;
+  const cbrDiff = bothFaces ? Math.abs((topCBR as number) - (bottomCBR as number)) : null;
+  // The average is only reported when the two faces agree within 10 (else repeat the test).
+  const avgApplicable = bothFaces ? (cbrDiff as number) <= 10 : validFaces.length > 0;
+  const cbrAverage = validFaces.length > 0
     ? parseFloat((validFaces.reduce((s, f) => s + (f.cbrValue ?? 0), 0) / validFaces.length).toFixed(1))
     : undefined;
+  // Final reported CBR = average when applicable; otherwise undefined (show top & bottom only).
+  const finalCBR = avgApplicable ? cbrAverage : undefined;
 
   const overallResult: "pass" | "fail" | "pending" =
-    finalCBR === undefined ? "pending"
-    : finalCBR >= layerSpec.cbrMin ? "pass" : "fail";
+    validFaces.length === 0 ? "pending"
+    : !avgApplicable ? "pending"
+    : finalCBR != null && finalCBR >= layerSpec.cbrMin ? "pass" : "fail";
 
   const saveResult = trpc.specializedTests.save.useMutation({
     onSuccess: (_, vars) => {
@@ -228,7 +237,7 @@ export default function SoilCBR() {
       toast.error(lang === "ar" ? "معرف العينة مفقود" : "Sample ID missing");
       return;
     }
-    if (status === "submitted" && finalCBR === undefined) {
+    if (status === "submitted" && validFaces.length === 0) {
       toast.error(ar ? "الرجاء إدخال قراءات الحمل عند 2.5mm و 5.0mm على الأقل" : "Please enter at least 2.5mm and 5.0mm load readings");
       return;
     }
@@ -248,6 +257,9 @@ export default function SoilCBR() {
           retained20mm: retained20mm ?? null,
           faces: computedFaces,
           finalCBR,
+          cbrAverage: cbrAverage ?? null,
+          cbrDiff: cbrDiff ?? null,
+          avgApplicable,
           cbrMin: layerSpec.cbrMin,
           overallResult,
           initialDensity: {
@@ -264,7 +276,9 @@ export default function SoilCBR() {
         },
         overallResult,
         summaryValues: {
-          finalCBR,
+          topCBR: topCBR ?? null,
+          bottomCBR: bottomCBR ?? null,
+          finalCBR: finalCBR ?? null,
           cbrMin: layerSpec.cbrMin,
           layerType: layerSpec.label,
           standard: stdLoads.label,
@@ -408,6 +422,11 @@ export default function SoilCBR() {
                   {finalCBR !== undefined && (
                     <div className={`font-bold ${overallResult === "pass" ? "text-emerald-700" : "text-red-700"}`}>
                       {ar ? "CBR النهائي:" : "Final CBR:"} {finalCBR}%
+                    </div>
+                  )}
+                  {bothFaces && !avgApplicable && (
+                    <div className="font-bold text-amber-700">
+                      {ar ? `الفرق ${cbrDiff}% > 10 — أعد الاختبار` : `Δ ${cbrDiff}% > 10 — repeat test`}
                     </div>
                   )}
                 </div>
@@ -678,7 +697,7 @@ export default function SoilCBR() {
         </Card>
 
         {/* Summary */}
-        {finalCBR !== undefined && (
+        {validFaces.length > 0 && (
           <Card>
             <CardContent className="pt-4">
               <div className="grid grid-cols-3 gap-4 mb-4">
@@ -688,11 +707,21 @@ export default function SoilCBR() {
                     <p className="text-3xl font-bold text-slate-800">{f.cbrValue}%</p>
                   </div>
                 ))}
-                <div className={`rounded-xl p-4 text-center border ${overallResult === "pass" ? "bg-emerald-50 border-emerald-200" : "bg-red-50 border-red-200"}`}>
-                  <p className="text-xs text-slate-500 mb-1">{ar ? "CBR النهائي (المتوسط)" : "Final CBR (Average)"}</p>
-                  <p className={`text-3xl font-bold ${overallResult === "pass" ? "text-emerald-800" : "text-red-800"}`}>{finalCBR}%</p>
-                  <p className="text-xs text-slate-400">{ar ? "الحد الأدنى المطلوب:" : "Min. required:"} {layerSpec.cbrMin}%</p>
-                </div>
+                {avgApplicable && finalCBR !== undefined ? (
+                  <div className={`rounded-xl p-4 text-center border ${overallResult === "pass" ? "bg-emerald-50 border-emerald-200" : "bg-red-50 border-red-200"}`}>
+                    <p className="text-xs text-slate-500 mb-1">{ar ? "CBR النهائي (المتوسط)" : "Final CBR (Average)"}</p>
+                    <p className={`text-3xl font-bold ${overallResult === "pass" ? "text-emerald-800" : "text-red-800"}`}>{finalCBR}%</p>
+                    <p className="text-xs text-slate-400">{ar ? "الحد الأدنى المطلوب:" : "Min. required:"} {layerSpec.cbrMin}%</p>
+                  </div>
+                ) : (
+                  <div className="rounded-xl p-4 text-center border bg-amber-50 border-amber-200">
+                    <p className="text-xs text-slate-500 mb-1">{ar ? "CBR النهائي (المتوسط)" : "Final CBR (Average)"}</p>
+                    <p className="text-base font-bold text-amber-800">{ar ? "لا يُحتسب المتوسط" : "Average not reported"}</p>
+                    <p className="text-[11px] text-amber-700 mt-1">
+                      {ar ? `الفرق بين الوجهين ${cbrDiff}% > 10 — أعد الاختبار` : `Faces differ by ${cbrDiff}% > 10 — repeat test`}
+                    </p>
+                  </div>
+                )}
               </div>
               <ResultBanner
                 result={overallResult}

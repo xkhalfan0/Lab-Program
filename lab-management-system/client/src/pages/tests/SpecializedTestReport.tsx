@@ -1285,6 +1285,14 @@ function renderSoilCBR(fd: any, isAr: boolean) {
   const finalCBR = fd.finalCBR;
   const cbrMin = fd.cbrMin;
   const overall = fd.overallResult ?? (finalCBR != null && cbrMin != null ? (Number(finalCBR) >= Number(cbrMin) ? "pass" : "fail") : "pending");
+  // Average is only reported when the two faces agree within 10 (else repeat the test).
+  const topCbrVal = topFace?.cbrValue;
+  const botCbrVal = bottomFace?.cbrValue;
+  const bothFacesR = topCbrVal != null && botCbrVal != null;
+  const cbrDiffR = fd.cbrDiff != null ? Number(fd.cbrDiff) : (bothFacesR ? Math.abs(Number(topCbrVal) - Number(botCbrVal)) : null);
+  const avgApplicableR = fd.avgApplicable != null
+    ? !!fd.avgApplicable
+    : (bothFacesR ? (cbrDiffR as number) <= 10 : finalCBR != null);
   const retained20 = fd.retained20mm;
   const passing19 = fd.passing19_5;
   const idd = fd.initialDensity ?? {};
@@ -1340,11 +1348,23 @@ function renderSoilCBR(fd: any, isAr: boolean) {
             <p className="text-xl font-bold text-rose-800">{fmt(bottomFace.cbrValue, 1)}%</p>
           </div>
         )}
-        <div className={`border rounded p-3 text-center ${overall === "pass" ? "bg-emerald-50 border-emerald-200" : overall === "fail" ? "bg-red-50 border-red-200" : "bg-gray-50 border-gray-200"}`}>
-          <p className={`font-semibold ${overall === "pass" ? "text-emerald-700" : overall === "fail" ? "text-red-700" : "text-gray-600"}`}>{L("Final CBR (avg)", "CBR النهائي (المتوسط)")}</p>
-          <p className={`text-xl font-bold ${overall === "pass" ? "text-emerald-800" : overall === "fail" ? "text-red-800" : "text-gray-800"}`}>{finalCBR != null ? `${fmt(finalCBR, 1)}%` : "—"}</p>
-          {cbrMin != null && <p className="text-[10px] text-slate-500">{L("Min. required", "الحد الأدنى")}: {cbrMin}%</p>}
-        </div>
+        {avgApplicableR && finalCBR != null ? (
+          <div className={`border rounded p-3 text-center ${overall === "pass" ? "bg-emerald-50 border-emerald-200" : overall === "fail" ? "bg-red-50 border-red-200" : "bg-gray-50 border-gray-200"}`}>
+            <p className={`font-semibold ${overall === "pass" ? "text-emerald-700" : overall === "fail" ? "text-red-700" : "text-gray-600"}`}>{L("Final CBR (avg)", "CBR النهائي (المتوسط)")}</p>
+            <p className={`text-xl font-bold ${overall === "pass" ? "text-emerald-800" : overall === "fail" ? "text-red-800" : "text-gray-800"}`}>{`${fmt(finalCBR, 1)}%`}</p>
+            {cbrMin != null && <p className="text-[10px] text-slate-500">{L("Min. required", "الحد الأدنى")}: {cbrMin}%</p>}
+          </div>
+        ) : (
+          <div className="border rounded p-3 text-center bg-amber-50 border-amber-200">
+            <p className="font-semibold text-amber-700">{L("Final CBR (avg)", "CBR النهائي (المتوسط)")}</p>
+            <p className="text-sm font-bold text-amber-800">{L("Average not reported", "لا يُحتسب المتوسط")}</p>
+            <p className="text-[10px] text-amber-700 mt-0.5">
+              {cbrDiffR != null
+                ? L(`Faces differ by ${fmt(cbrDiffR, 1)}% > 10 — repeat test`, `فرق الوجهين ${fmt(cbrDiffR, 1)}% > 10 — أعد الاختبار`)
+                : L("Insufficient data", "بيانات غير كافية")}
+            </p>
+          </div>
+        )}
       </div>
 
       {/* Test parameters + Retained 20% */}
