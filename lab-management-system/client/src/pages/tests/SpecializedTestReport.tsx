@@ -31,6 +31,15 @@ function fmt(v: any, dec = 2) {
   const n = Number(v);
   return isNaN(n) ? String(v) : n.toFixed(dec);
 }
+// Round half away from zero (so .5 always rounds up), then fix decimals.
+function fmtHalfUp(v: any, dec = 2) {
+  if (v === null || v === undefined || v === "") return "—";
+  const n = Number(v);
+  if (!Number.isFinite(n)) return String(v);
+  const factor = 10 ** dec;
+  const rounded = Math.round((n + Number.EPSILON) * factor) / factor;
+  return rounded.toFixed(dec);
+}
 function fmtDate(d?: string | Date | null) {
   return formatCalendarDate(d);
 }
@@ -1163,10 +1172,10 @@ function renderSoilFieldDensity(fd: any, isAr: boolean) {
     { header: L("Point", "النقطة"), field: "pointNumber", align: "center", render: (_v, row) => <span className="font-semibold">{String((row as any).pointNumber ?? "")}</span> },
     { header: L("Location", "الموقع"), field: "location", align: "center", render: (_v, row) => String((row as any).location || "—") },
     { header: L("Depth (m)", "العمق (م)"), field: "depth", align: "center", render: v => fmt(v, 2) },
-    { header: L("Bulk Density (g/cc)", "الكثافة الكلية (g/cc)"), field: "bulkDensity", align: "right", render: v => fmt(v, 3) },
-    { header: L("Moisture %", "الرطوبة %"), field: "moistureContent", align: "right", render: v => (v != null ? `${fmt(v, 2)}%` : "—") },
-    { header: L("Dry Density (g/cc)", "الكثافة الجافة (g/cc)"), field: "dryDensity", align: "right", render: v => <span className="font-semibold">{fmt(v, 3)}</span> },
-    { header: L("RC %", "نسبة الدمك %"), field: "compaction", align: "center", render: v => (v != null && v !== "" ? <span className="font-bold">{Math.round(Number(v))}%</span> : "—") },
+    { header: L("In-situ Wet Density of Soil (Mg/m³)", "الكثافة الرطبة الموقعية للتربة (Mg/m³)"), field: "bulkDensity", align: "right", render: v => fmtHalfUp(v, 2) },
+    { header: L("Moisture %", "الرطوبة %"), field: "moistureContent", align: "right", render: v => (v != null ? `${fmtHalfUp(v, 1)}%` : "—") },
+    { header: L("Dry Density (Mg/m³)", "الكثافة الجافة (Mg/m³)"), field: "dryDensity", align: "right", render: v => <span className="font-semibold">{fmtHalfUp(v, 2)}</span> },
+    { header: L("Degree of Compaction", "درجة الدمك"), field: "compaction", align: "center", render: v => (v != null && v !== "" ? <span className="font-bold">{Math.round(Number(v))}%</span> : "—") },
     {
       header: L("Result", "النتيجة"),
       field: "result",
@@ -1187,7 +1196,7 @@ function renderSoilFieldDensity(fd: any, isAr: boolean) {
       <div className="grid grid-cols-4 gap-2 text-xs mb-3">
         <div className="bg-blue-50 border border-blue-200 rounded p-2 text-center">
           <p className="text-blue-600 font-semibold">{L("Max Dry Density (MDD)", "أقصى كثافة جافة")}</p>
-          <p className="font-bold text-blue-800 text-base">{fmt(fd.mdd, 2)} {L("g/cc", "g/cc")}</p>
+          <p className="font-bold text-blue-800 text-base">{fmtHalfUp(fd.mdd, 2)} {L("Mg/m³", "Mg/m³")}</p>
         </div>
         <div className="bg-amber-50 border border-amber-200 rounded p-2 text-center">
           <p className="text-amber-700 font-semibold">{L("Required Compaction", "نسبة الدمك المطلوبة")}</p>
@@ -1205,8 +1214,8 @@ function renderSoilFieldDensity(fd: any, isAr: boolean) {
       <FlexibleResultsTable columns={cols} rows={points} />
       <p className="text-[10px] text-slate-500 mt-1">
         {L(
-          `Relative Compaction (RC) is rounded to the nearest whole %. Pass = RC ≥ ${required}%.`,
-          `نسبة الدمك تُقرّب لأقرب رقم صحيح. النجاح = نسبة الدمك ≥ ${required}%.`,
+          `Degree of Compaction is rounded to the nearest whole %. Pass = ≥ ${required}%.`,
+          `درجة الدمك تُقرّب لأقرب رقم صحيح. النجاح = ≥ ${required}%.`,
         )}
       </p>
     </>

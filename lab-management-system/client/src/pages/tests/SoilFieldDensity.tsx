@@ -58,6 +58,13 @@ interface ComputedPoint extends TestPoint {
   result: "pass" | "fail" | null;
 }
 
+// Round half away from zero (so .5 rounds up) and format to fixed decimals.
+function fmtHalfUp(v: number, dec: number): string {
+  if (!Number.isFinite(v)) return "—";
+  const factor = 10 ** dec;
+  return (Math.round((v + Number.EPSILON) * factor) / factor).toFixed(dec);
+}
+
 function createEmptyTestPoint(pointNumber: number): TestPoint {
   return {
     id: `pt_${Date.now()}_${pointNumber}`,
@@ -433,7 +440,7 @@ export default function SoilFieldDensity() {
                     <th rowSpan={2} className={thCls}>{ar ? "العمق (م)" : "Depth (m)"}</th>
                     <th colSpan={3} className={thCls}>{ar ? "استبدال الرمل" : "Sand Replacement"}</th>
                     <th rowSpan={2} className={`${thCls} bg-blue-50`}>
-                      {ar ? "الكثافة الظاهرية" : "Bulk Density"}<br />(g/cc)
+                      {ar ? "الكثافة الرطبة الموقعية للتربة" : "In-situ Wet Density of Soil"}<br />(Mg/m³)
                     </th>
                     <th colSpan={4} className={thCls}>{ar ? "تحليل الرطوبة" : "Moisture Analysis"}</th>
                     <th colSpan={3} className={`${thCls} bg-green-50`}>{ar ? "النتائج" : "Results"}</th>
@@ -449,8 +456,8 @@ export default function SoilFieldDensity() {
                     <th className={subThCls}>{ar ? "تربة جافة + علبة (g)" : "Dry soil + container (g)"}</th>
                     <th className={subThCls}>{ar ? "وزن العلبة (g)" : "Wt. container (g)"}</th>
                     <th className={`${subThCls} bg-green-50`}>{ar ? "محتوى الرطوبة %" : "W.C. (%)"}</th>
-                    <th className={`${subThCls} bg-green-50`}>{ar ? "الكثافة الجافة (g/cc)" : "Dry Density (g/cc)"}</th>
-                    <th className={`${subThCls} bg-green-50`}>{ar ? "نسبة الدمك (%)" : "RC (%)"}</th>
+                    <th className={`${subThCls} bg-green-50`}>{ar ? "الكثافة الجافة (Mg/m³)" : "Dry Density (Mg/m³)"}</th>
+                    <th className={`${subThCls} bg-green-50`}>{ar ? "درجة الدمك (%)" : "Degree of Compaction (%)"}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -484,9 +491,9 @@ export default function SoilFieldDensity() {
                           onChange={(e) => updatePoint(idx, "wtSandInCylinderAfter", e.target.value)}
                           className={inputCls} placeholder="1288" />
                       </td>
-                      {/* Bulk Density — calculated (blue) */}
+                      {/* In-situ Wet Density of Soil — calculated (blue) */}
                       <td className="border border-slate-200 px-2 py-1 text-center font-mono text-xs font-bold bg-blue-50 text-blue-800">
-                        {point.bulkDensity > 0 ? point.bulkDensity.toFixed(3) : "—"}
+                        {point.bulkDensity > 0 ? fmtHalfUp(point.bulkDensity, 2) : "—"}
                       </td>
                       <td className={inputTdCls}>
                         <Input type="text" value={point.containerNo}
@@ -510,11 +517,11 @@ export default function SoilFieldDensity() {
                       </td>
                       {/* Moisture Content — calculated (blue) */}
                       <td className="border border-slate-200 px-2 py-1 text-center font-mono text-xs font-semibold bg-blue-50 text-blue-800">
-                        {point.moistureContent > 0 ? `${point.moistureContent.toFixed(2)}%` : "—"}
+                        {point.moistureContent > 0 ? `${fmtHalfUp(point.moistureContent, 1)}%` : "—"}
                       </td>
                       {/* Dry Density — final (green) */}
                       <td className="border border-slate-200 px-2 py-1 text-center font-mono text-xs font-bold bg-green-50 text-green-800">
-                        {point.dryDensity > 0 ? point.dryDensity.toFixed(3) : "—"}
+                        {point.dryDensity > 0 ? fmtHalfUp(point.dryDensity, 2) : "—"}
                       </td>
                       {/* RC % — final (green, pass/fail tint) */}
                       <td

@@ -19,6 +19,7 @@ import {
   Package,
   Loader2,
   ArrowLeft,
+  Lock,
 } from "lucide-react";
 
 type BatchSibling = {
@@ -79,6 +80,24 @@ export default function BatchOverview() {
   );
 
   const sorted = useMemo(() => sortBatchSiblings(siblings as BatchSibling[]), [siblings]);
+
+  // Enforce test prerequisites (e.g. CBR requires Proctor) regardless of batch size.
+  const depQueries = trpc.useQueries((t) =>
+    sorted.map((dist) =>
+      t.testDependencies.check(
+        { sampleId, testCode: dist.testType ?? "" },
+        { enabled: sampleId > 0 && !!dist.testType && !isCompleted(dist.status) },
+      ),
+    ),
+  );
+  const depByDistId = useMemo(() => {
+    const m = new Map<number, { isAllowed: boolean; missingTests: Array<{ code: string; nameEn: string; nameAr: string }> }>();
+    sorted.forEach((dist, i) => {
+      const data = depQueries[i]?.data;
+      if (data) m.set(dist.id, { isAllowed: data.isAllowed, missingTests: (data.missingTests ?? []) as Array<{ code: string; nameEn: string; nameAr: string }> });
+    });
+    return m;
+  }, [sorted, depQueries]);
 
   // Single-test orders are not a "batch": skip this overview and go straight to
   // the one report (when complete) or its test form (when still pending).
@@ -211,6 +230,9 @@ export default function BatchOverview() {
               <div className="grid gap-3 sm:grid-cols-1">
                 {sorted.map((dist, index) => {
                   const done = isCompleted(dist.status);
+                  const dep = depByDistId.get(dist.id);
+                  const locked = !done && dep?.isAllowed === false;
+                  const missingNames = (dep?.missingTests ?? []).map(t => (isAr ? t.nameAr : t.nameEn));
                   return (
                     <Card
                       key={dist.id}
@@ -247,6 +269,14 @@ export default function BatchOverview() {
                             {dist.testSubType ? (
                               <p className="text-xs text-slate-500 mt-0.5">{dist.testSubType}</p>
                             ) : null}
+                            {locked && (
+                              <p className="text-xs text-amber-700 mt-1 flex items-center gap-1">
+                                <Lock className="w-3 h-3 shrink-0" />
+                                {isAr
+                                  ? `أكمل أولاً: ${missingNames.join("، ")}`
+                                  : `Complete first: ${missingNames.join(", ")}`}
+                              </p>
+                            )}
                           </div>
                         </div>
                         <div className="flex gap-2 shrink-0 sm:flex-col sm:w-auto w-full">
@@ -259,6 +289,16 @@ export default function BatchOverview() {
                             >
                               <FileText className="w-3.5 h-3.5" />
                               {isAr ? "\u0627\u0644\u062a\u0642\u0631\u064a\u0631" : "Report"}
+                            </Button>
+                          ) : locked ? (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              disabled
+                              className="gap-1.5 flex-1 sm:flex-none text-slate-400 border-slate-200 cursor-not-allowed"
+                            >
+                              <Lock className="w-3.5 h-3.5" />
+                              {isAr ? "\u0645\u0642\u0641\u0644" : "Locked"}
                             </Button>
                           ) : (
                             <Button
