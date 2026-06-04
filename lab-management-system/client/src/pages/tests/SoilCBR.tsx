@@ -89,11 +89,12 @@ function computeFace(face: CBRFace, stdLoads: typeof STANDARD_LOADS[StandardKey]
   };
 }
 
+// CBR acceptance limit applies to BOTH the top and bottom faces.
 const LAYER_TYPES = [
+  { value: "SUBBASE", label: "Sub-base (طبقة الأساس)", cbrMin: 30 },
   { value: "SUBGRADE", label: "Sub-grade (طبقة الأساس الطبيعي)", cbrMin: 15 },
-  { value: "SUBBASE", label: "Sub-base (طبقة الأساس)", cbrMin: 25 },
-  { value: "FILL", label: "Fill Material (مواد الردم)", cbrMin: 5 },
-  { value: "EMBANKMENT", label: "Embankment (جسم الطريق)", cbrMin: 8 },
+  { value: "FILL", label: "Structural Fill (ردم إنشائي)", cbrMin: 30 },
+  { value: "EMBANKMENT", label: "Embankment (جسم الطريق)", cbrMin: 80 },
 ];
 
 export default function SoilCBR() {
@@ -125,6 +126,10 @@ export default function SoilCBR() {
   const [mouldBase, setMouldBase] = useState("");               // mould + base, g
   const [mouldBaseSoil, setMouldBaseSoil] = useState("");       // mould + base + soil, g
   const [volumeMould, setVolumeMould] = useState("");           // volume of mould, cc
+  // Max dry density (MDD) from the Proctor test of the same sample. Used for
+  // Degree of Compaction = (initial dry density / MDD) × 100.
+  const [mddStr, setMddStr] = useState("");
+  const mddTouched = useRef(false);
 
   // Pull a sieve analysis from the same sample (if CBR is run in a batch with it).
   // This only auto-fills the value; the two tests are NOT linked/required for each other.
@@ -150,6 +155,24 @@ export default function SoilCBR() {
       setPassing19_5(String(sievePassing19_5));
     }
   }, [sievePassing19_5, passing19_5]);
+
+  // Max dry density (MDD) from the Proctor test of the same sample (Proctor is a
+  // prerequisite for CBR). Used to compute the Degree of Compaction.
+  const proctorMdd = useMemo(() => {
+    if (!Array.isArray(sampleTests)) return undefined;
+    for (const t of sampleTests as any[]) {
+      if (t?.formTemplate !== "soil_proctor") continue;
+      const m = t?.formData?.mdd ?? t?.summaryValues?.mdd;
+      if (m != null && Number.isFinite(Number(m))) return Number(m);
+    }
+    return undefined;
+  }, [sampleTests]);
+
+  useEffect(() => {
+    if (proctorMdd !== undefined && !mddTouched.current && mddStr === "") {
+      setMddStr(String(proctorMdd));
+    }
+  }, [proctorMdd, mddStr]);
 
   const stdLoads = STANDARD_LOADS[standard];
   const layerSpec = LAYER_TYPES.find(l => l.value === layerType) ?? LAYER_TYPES[0];
@@ -191,6 +214,12 @@ export default function SoilCBR() {
     return { moisture, bulkDensity, dryDensity, volume: Number.isFinite(vol) ? vol : undefined };
   }, [massWetSoilCont, massDrySoilCont, massContainer, mouldBase, mouldBaseSoil, volumeMould]);
 
+  // Degree of Compaction % = (initial dry density / MDD) × 100, MDD from Proctor.
+  const mddNum = parseFloat(mddStr);
+  const dryDensityPct = (initialDensity.dryDensity !== undefined && Number.isFinite(mddNum) && mddNum > 0)
+    ? parseFloat(((initialDensity.dryDensity / mddNum) * 100).toFixed(1))
+    : undefined;
+
   // Each face CBR is the higher of its 2.5 / 5.0 mm values (computeFace → cbrValue).
   const validFaces = computedFaces.filter(f => f.cbrValue !== undefined);
   const topCBR = topComputed?.cbrValue;
@@ -205,10 +234,12 @@ export default function SoilCBR() {
   // Final reported CBR = average when applicable; otherwise undefined (show top & bottom only).
   const finalCBR = avgApplicable ? cbrAverage : undefined;
 
+  // The acceptance limit applies to BOTH faces — each face must be ≥ the layer minimum.
+  const facesMeetMin = validFaces.length > 0 && validFaces.every(f => (f.cbrValue ?? 0) >= layerSpec.cbrMin);
   const overallResult: "pass" | "fail" | "pending" =
     validFaces.length === 0 ? "pending"
     : !avgApplicable ? "pending"
-    : finalCBR != null && finalCBR >= layerSpec.cbrMin ? "pass" : "fail";
+    : facesMeetMin ? "pass" : "fail";
 
   const saveResult = trpc.specializedTests.save.useMutation({
     onSuccess: (_, vars) => {
@@ -262,6 +293,8 @@ export default function SoilCBR() {
           avgApplicable,
           cbrMin: layerSpec.cbrMin,
           overallResult,
+          mdd: Number.isFinite(mddNum) ? mddNum : null,
+          dryDensityPct: dryDensityPct ?? null,
           initialDensity: {
             massWetSoilCont: parseFloat(massWetSoilCont) || null,
             massDrySoilCont: parseFloat(massDrySoilCont) || null,
@@ -272,6 +305,8 @@ export default function SoilCBR() {
             moistureContent: initialDensity.moisture != null ? Number(initialDensity.moisture.toFixed(1)) : null,
             bulkDensity: initialDensity.bulkDensity != null ? Number(initialDensity.bulkDensity.toFixed(3)) : null,
             dryDensity: initialDensity.dryDensity != null ? Number(initialDensity.dryDensity.toFixed(3)) : null,
+            mdd: Number.isFinite(mddNum) ? mddNum : null,
+            dryDensityPct: dryDensityPct ?? null,
           },
         },
         overallResult,
@@ -283,6 +318,7 @@ export default function SoilCBR() {
           layerType: layerSpec.label,
           standard: stdLoads.label,
           retained20mm: retained20mm ?? null,
+          dryDensityPct: dryDensityPct ?? null,
         },
         notes,
         status,
@@ -293,12 +329,19 @@ export default function SoilCBR() {
   };
 
   // Combined penetration curve data (top + bottom on one chart, like the Excel).
+  // Empty cells are left as null (not 0) so the curve simply skips unfilled points
+  // instead of dropping to zero. `connectNulls` bridges any gaps.
+  const readingToNum = (raw: string | undefined): number | null => {
+    if (raw == null || raw.trim() === "") return null;
+    const n = parseFloat(raw);
+    return Number.isFinite(n) ? n : null;
+  };
   const mergedChartData = PENETRATION_DEPTHS.map((depth, i) => ({
     depth,
-    top: parseFloat(topFace?.readings[i] || "0") || 0,
-    bottom: parseFloat(bottomFace?.readings[i] || "0") || 0,
-  })).filter(d => d.top > 0 || d.bottom > 0 || d.depth === 0);
-  const hasCurveData = mergedChartData.some(d => d.top > 0 || d.bottom > 0);
+    top: readingToNum(topFace?.readings[i]),
+    bottom: readingToNum(bottomFace?.readings[i]),
+  })).filter(d => d.top != null || d.bottom != null);
+  const hasCurveData = mergedChartData.some(d => (d.top ?? 0) > 0 || (d.bottom ?? 0) > 0);
 
   if (!distId || distId === 0) {
     return (
@@ -669,13 +712,42 @@ export default function SoilCBR() {
                         {initialDensity.bulkDensity !== undefined ? initialDensity.bulkDensity.toFixed(3) : "—"}
                       </td>
                     </tr>
+                    <tr>
+                      <td className="border border-slate-200 px-3 py-2 text-xs text-slate-600">
+                        {ar ? "أقصى كثافة جافة MDD (Mg/m³)" : "Max. Dry Density MDD, Mg/m³"}
+                        <span className="block text-[10px] font-normal text-slate-400">{ar ? "من اختبار بروكتور" : "from Proctor test"}</span>
+                      </td>
+                      <td className="border border-slate-200 px-1 py-1">
+                        <Input
+                          value={mddStr}
+                          onChange={e => { mddTouched.current = true; setMddStr(e.target.value); }}
+                          disabled={submitted}
+                          className="h-8 text-xs font-mono text-center"
+                          placeholder="—"
+                        />
+                      </td>
+                    </tr>
+                    <tr className="bg-emerald-50/60">
+                      <td className="border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700">
+                        {ar ? "درجة الدمك %" : "Degree of Compaction, %"}
+                        <span className="block text-[10px] font-normal text-slate-400">= {ar ? "الكثافة الجافة ÷ MDD × 100" : "Dry Density ÷ MDD × 100"}</span>
+                      </td>
+                      <td className="border border-slate-200 px-3 py-2 text-center font-mono font-bold text-emerald-700">
+                        {dryDensityPct !== undefined ? `${dryDensityPct}%` : "—"}
+                      </td>
+                    </tr>
                   </tbody>
                 </table>
+                {proctorMdd !== undefined && (
+                  <p className="text-[10px] text-emerald-600 mt-1">
+                    {ar ? "تم جلب MDD من اختبار بروكتور لنفس العينة" : "MDD auto-filled from the Proctor test of the same sample"}
+                  </p>
+                )}
               </div>
             </div>
 
             {/* Result summary (Excel reference block) */}
-            <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="mt-4 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
               <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 text-center">
                 <p className="text-[11px] text-slate-500 mb-0.5">{ar ? "الكثافة الأولية" : "Initial Density"}</p>
                 <p className="font-mono font-bold text-slate-800">{initialDensity.bulkDensity !== undefined ? initialDensity.bulkDensity.toFixed(3) : "—"}<span className="text-[10px] font-normal text-slate-400"> Mg/m³</span></p>
@@ -687,6 +759,10 @@ export default function SoilCBR() {
               <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3 text-center">
                 <p className="text-[11px] text-slate-500 mb-0.5">{ar ? "الكثافة الجافة" : "Dry Density"}</p>
                 <p className="font-mono font-bold text-emerald-800">{initialDensity.dryDensity !== undefined ? initialDensity.dryDensity.toFixed(3) : "—"}<span className="text-[10px] font-normal text-slate-400"> Mg/m³</span></p>
+              </div>
+              <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3 text-center">
+                <p className="text-[11px] text-slate-500 mb-0.5">{ar ? "درجة الدمك" : "Degree of Compaction"}</p>
+                <p className="font-mono font-bold text-emerald-800">{dryDensityPct !== undefined ? dryDensityPct : "—"}<span className="text-[10px] font-normal text-slate-400"> %</span></p>
               </div>
               <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 text-center">
                 <p className="text-[11px] text-slate-500 mb-0.5">{ar ? "حجم القالب" : "Volume of Mould"}</p>
@@ -701,12 +777,17 @@ export default function SoilCBR() {
           <Card>
             <CardContent className="pt-4">
               <div className="grid grid-cols-3 gap-4 mb-4">
-                {computedFaces.map(f => f.cbrValue !== undefined && (
-                  <div key={f.id} className="bg-slate-50 rounded-xl p-4 text-center border">
-                    <p className="text-xs text-slate-500 mb-1">{ar ? (f.faceLabel === "Top" ? "CBR الوجه العلوي" : "CBR الوجه السفلي") : f.faceLabel + " Face CBR"}</p>
-                    <p className="text-3xl font-bold text-slate-800">{f.cbrValue}%</p>
-                  </div>
-                ))}
+                {computedFaces.map(f => {
+                  if (f.cbrValue === undefined) return null;
+                  const facePass = (f.cbrValue ?? 0) >= layerSpec.cbrMin;
+                  return (
+                    <div key={f.id} className={`rounded-xl p-4 text-center border ${facePass ? "bg-emerald-50 border-emerald-200" : "bg-red-50 border-red-200"}`}>
+                      <p className="text-xs text-slate-500 mb-1">{ar ? (f.faceLabel === "Top" ? "CBR الوجه العلوي" : "CBR الوجه السفلي") : f.faceLabel + " Face CBR"}</p>
+                      <p className={`text-3xl font-bold ${facePass ? "text-emerald-800" : "text-red-800"}`}>{f.cbrValue}%</p>
+                      <p className="text-[11px] text-slate-400">{ar ? "الحد الأدنى:" : "Min:"} ≥ {layerSpec.cbrMin}% · {facePass ? (ar ? "مقبول" : "Pass") : (ar ? "مرفوض" : "Fail")}</p>
+                    </div>
+                  );
+                })}
                 {avgApplicable && finalCBR !== undefined ? (
                   <div className={`rounded-xl p-4 text-center border ${overallResult === "pass" ? "bg-emerald-50 border-emerald-200" : "bg-red-50 border-red-200"}`}>
                     <p className="text-xs text-slate-500 mb-1">{ar ? "CBR النهائي (المتوسط)" : "Final CBR (Average)"}</p>

@@ -1298,6 +1298,11 @@ function renderSoilCBR(fd: any, isAr: boolean) {
   const retained20 = fd.retained20mm;
   const passing19 = fd.passing19_5;
   const idd = fd.initialDensity ?? {};
+  const layerLabel = fd.summaryValues?.layerType ?? fd.layerType;
+  const dryDensityPct = fd.dryDensityPct ?? idd.dryDensityPct ?? fd.summaryValues?.dryDensityPct;
+  const mddVal = fd.mdd ?? idd.mdd;
+  const topPass = topCbrVal != null && cbrMin != null ? Number(topCbrVal) >= Number(cbrMin) : null;
+  const botPass = botCbrVal != null && cbrMin != null ? Number(botCbrVal) >= Number(cbrMin) : null;
 
   // Reconstruct penetration depths (0.25 mm steps for new data, 0.5 mm for legacy 30-row data)
   const maxLen = Math.max(topFace?.readings?.length ?? 0, bottomFace?.readings?.length ?? 0);
@@ -1332,22 +1337,24 @@ function renderSoilCBR(fd: any, isAr: boolean) {
   const hasSummaryReadings = summaryRows.some(r => r.topLoad != null || r.botLoad != null);
 
   const hasInitialDensity =
-    idd.bulkDensity != null || idd.dryDensity != null || idd.moistureContent != null;
+    idd.bulkDensity != null || idd.dryDensity != null || idd.moistureContent != null || dryDensityPct != null;
 
   return (
     <div className="space-y-4">
       {/* Main results */}
       <div className="grid grid-cols-3 gap-3 text-xs">
         {topFace?.cbrValue != null && (
-          <div className="bg-blue-50 border border-blue-200 rounded p-3 text-center">
-            <p className="text-blue-600 font-semibold">{L("Top Face CBR", "CBR الوجه العلوي")}</p>
-            <p className="text-xl font-bold text-blue-800">{fmt(topFace.cbrValue, 1)}%</p>
+          <div className={`border rounded p-3 text-center ${topPass == null ? "bg-blue-50 border-blue-200" : topPass ? "bg-emerald-50 border-emerald-200" : "bg-red-50 border-red-200"}`}>
+            <p className={`font-semibold ${topPass == null ? "text-blue-600" : topPass ? "text-emerald-700" : "text-red-700"}`}>{L("Top Face CBR", "CBR الوجه العلوي")}</p>
+            <p className={`text-xl font-bold ${topPass == null ? "text-blue-800" : topPass ? "text-emerald-800" : "text-red-800"}`}>{fmt(topFace.cbrValue, 1)}%</p>
+            {cbrMin != null && <p className="text-[10px] text-slate-500">≥ {cbrMin}% · {topPass ? L("Pass", "مقبول") : L("Fail", "مرفوض")}</p>}
           </div>
         )}
         {bottomFace?.cbrValue != null && (
-          <div className="bg-rose-50 border border-rose-200 rounded p-3 text-center">
-            <p className="text-rose-600 font-semibold">{L("Bottom Face CBR", "CBR الوجه السفلي")}</p>
-            <p className="text-xl font-bold text-rose-800">{fmt(bottomFace.cbrValue, 1)}%</p>
+          <div className={`border rounded p-3 text-center ${botPass == null ? "bg-rose-50 border-rose-200" : botPass ? "bg-emerald-50 border-emerald-200" : "bg-red-50 border-red-200"}`}>
+            <p className={`font-semibold ${botPass == null ? "text-rose-600" : botPass ? "text-emerald-700" : "text-red-700"}`}>{L("Bottom Face CBR", "CBR الوجه السفلي")}</p>
+            <p className={`text-xl font-bold ${botPass == null ? "text-rose-800" : botPass ? "text-emerald-800" : "text-red-800"}`}>{fmt(bottomFace.cbrValue, 1)}%</p>
+            {cbrMin != null && <p className="text-[10px] text-slate-500">≥ {cbrMin}% · {botPass ? L("Pass", "مقبول") : L("Fail", "مرفوض")}</p>}
           </div>
         )}
         {avgApplicableR && finalCBR != null ? (
@@ -1370,7 +1377,11 @@ function renderSoilCBR(fd: any, isAr: boolean) {
       </div>
 
       {/* Test parameters + Retained 20% */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 text-xs">
+        <div className="border rounded p-2">
+          <div className="text-slate-500">{L("Layer Type", "نوع الطبقة")}</div>
+          <div className="font-semibold">{layerLabel ?? "—"}{cbrMin != null ? ` (≥ ${cbrMin}%)` : ""}</div>
+        </div>
         <div className="border rounded p-2">
           <div className="text-slate-500">{L("Standard", "المعيار")}</div>
           <div className="font-semibold">{fd.summaryValues?.standard ?? fd.standard ?? "—"}</div>
@@ -1437,7 +1448,7 @@ function renderSoilCBR(fd: any, isAr: boolean) {
       {hasInitialDensity && (
         <div>
           <p className="text-xs font-semibold text-slate-700 mb-1">{L("Initial Density / Moisture Content", "الكثافة الأولية / المحتوى الرطوبي")}</p>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 text-xs">
             <div className="border rounded p-2 text-center">
               <div className="text-slate-500">{L("Initial Density", "الكثافة الأولية")}</div>
               <div className="font-bold">{idd.bulkDensity != null ? fmt(idd.bulkDensity, 3) : "—"}<span className="text-[10px] font-normal text-slate-400"> Mg/m³</span></div>
@@ -1449,6 +1460,11 @@ function renderSoilCBR(fd: any, isAr: boolean) {
             <div className="border border-emerald-200 bg-emerald-50 rounded p-2 text-center">
               <div className="text-emerald-700">{L("Dry Density", "الكثافة الجافة")}</div>
               <div className="font-bold text-emerald-800">{idd.dryDensity != null ? fmt(idd.dryDensity, 3) : "—"}<span className="text-[10px] font-normal text-slate-400"> Mg/m³</span></div>
+            </div>
+            <div className="border border-emerald-200 bg-emerald-50 rounded p-2 text-center">
+              <div className="text-emerald-700">{L("Degree of Compaction", "درجة الدمك")}</div>
+              <div className="font-bold text-emerald-800">{dryDensityPct != null ? fmt(dryDensityPct, 1) : "—"}<span className="text-[10px] font-normal text-slate-400"> %</span></div>
+              {mddVal != null && <div className="text-[9px] text-slate-400">MDD {fmt(mddVal, 3)}</div>}
             </div>
             <div className="border rounded p-2 text-center">
               <div className="text-slate-500">{L("Volume of Mould", "حجم القالب")}</div>
