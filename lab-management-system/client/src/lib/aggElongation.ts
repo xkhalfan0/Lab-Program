@@ -1,7 +1,7 @@
 /**
  * Elongation Index of Coarse Aggregate — BS 812 Section 105.2:1990
- * 10 mm aggregate: direct M3/M2 method (Excel "10mm Agg" sheet).
- * 20 mm aggregate: reduction-factor method (Excel "20mm Agg" sheet).
+ * Both 10 mm and 20 mm use subdivision + reduction factor (lab Excel worksheets).
+ * Factor shown as retained÷reduced (10 mm sheet) or reduced÷retained (20 mm sheet); same elongated (original) mass.
  */
 
 export const ELONGATION_STANDARD = "BS 812 Section 105.2:1990";
@@ -24,9 +24,9 @@ export type ElongFractionId = (typeof ELONGATION_FRACTIONS)[number]["id"];
 export interface ElongFractionInput {
   id: ElongFractionId;
   actualSampleG: string;
-  /** 20 mm only — reduced weight of test fraction */
+  /** Reduced weight of test fraction (M) — defaults to full fraction mass if empty */
   reducedWtG: string;
-  /** 10 mm: mass of elongated particles; 20 mm: elongated from reduced portion */
+  /** Elongated particles from the reduced portion (g) */
   elongatedG: string;
 }
 
@@ -37,9 +37,10 @@ export interface ElongFractionComputed {
   actualSampleG: number | null;
   retainedPct: number | null;
   discarded: boolean;
-  /** Retained wt used in M1 (20 mm) or M2 denominator (10 mm) */
+  /** Mass retained at fraction (denominator mass — M1 on 20 mm sheet, M2 on 10 mm) */
   retainedWt: number | null;
   reducedWtG: number | null;
+  /** Displayed factor: retained÷reduced (10 mm) or reduced÷retained (20 mm), 2 dp */
   reductionFactor: number | null;
   elongatedReducedG: number | null;
   elongatedOriginalG: number | null;
@@ -98,26 +99,28 @@ export function computeElongationWorksheet(
       actual != null && totalActual > 0 ? (actual / totalActual) * 100 : null;
     const discarded = retainedPct != null && retainedPct < DISCARD_PCT;
 
+    const retainedWt = !discarded && actual != null ? actual : null;
     const reducedIn = parseG(row.reducedWtG);
     const reducedWtG =
-      aggSize === "20mm" && !discarded && actual != null
-        ? reducedIn ?? actual
-        : reducedIn;
+      !discarded && retainedWt != null ? reducedIn ?? retainedWt : null;
+
+    const factorRetainedOverReduced =
+      retainedWt != null && reducedWtG != null && reducedWtG > 0
+        ? retainedWt / reducedWtG
+        : null;
 
     const reductionFactor =
-      aggSize === "20mm" && !discarded && actual != null && actual > 0 && reducedWtG != null
-        ? reducedWtG / actual
+      factorRetainedOverReduced != null
+        ? aggSize === "20mm"
+          ? Number((reducedWtG! / retainedWt!).toFixed(2))
+          : Number(factorRetainedOverReduced.toFixed(2))
         : null;
 
     const elongatedReducedG = !discarded ? parseG(row.elongatedG) : null;
     const elongatedOriginalG =
-      aggSize === "20mm" && !discarded && elongatedReducedG != null
-        ? reductionFactor != null && reductionFactor > 0
-          ? elongatedReducedG / reductionFactor
-          : elongatedReducedG
+      !discarded && elongatedReducedG != null && factorRetainedOverReduced != null
+        ? elongatedReducedG * factorRetainedOverReduced
         : elongatedReducedG;
-
-    const retainedWt = !discarded && actual != null ? actual : null;
 
     return {
       id: row.id,
@@ -127,9 +130,8 @@ export function computeElongationWorksheet(
       retainedPct: retainedPct != null ? Number(retainedPct.toFixed(2)) : null,
       discarded,
       retainedWt,
-      reducedWtG: aggSize === "20mm" && !discarded ? reducedWtG : null,
-      reductionFactor:
-        reductionFactor != null ? Number(reductionFactor.toFixed(4)) : null,
+      reducedWtG: !discarded ? reducedWtG : null,
+      reductionFactor,
       elongatedReducedG,
       elongatedOriginalG,
       notes: discarded ? "Discard" : "",

@@ -326,8 +326,8 @@ export default function AggShapeIndex() {
                   <Select value={elongAggSize} disabled={submitted} onValueChange={v => setElongAggSize(v as ElongAggSize)}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="20mm">{ar ? "20 مم (معامل التخفيض)" : "20mm (reduction factor)"}</SelectItem>
-                      <SelectItem value="10mm">{ar ? "10 مم (مباشر)" : "10mm (direct)"}</SelectItem>
+                      <SelectItem value="20mm">{ar ? "20 مم" : "20mm Agg."}</SelectItem>
+                      <SelectItem value="10mm">{ar ? "10 مم" : "10mm Agg."}</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -415,20 +415,25 @@ export default function AggShapeIndex() {
                         <th className={`border border-slate-300 px-2 py-2 ${CELL_CALC}`}>{ar ? "محتجز %" : "Retained %"}</th>
                         <th className={`border border-slate-300 px-2 py-2 ${CELL_CALC}`}>
                           {elongAggSize === "20mm"
-                            ? ar ? "محتجز M1 (جم)" : "Retained wt M1 (g)"
-                            : ar ? "محتجز M2 (جم)" : "Retained wt M2 (g)"}
+                            ? ar ? "محتجز M1 (جم)" : "Mass retained M1 (g)"
+                            : ar ? "محتجز M2 (جم)" : "Mass retained M2 (g)"}
                         </th>
-                        {elongAggSize === "20mm" && (
-                          <>
-                            <th className={`border border-slate-300 px-2 py-2 ${CELL_IN}`}>{ar ? "الوزن المخفّض (جم)" : "Reduced wt (g)"}</th>
-                            <th className={`border border-slate-300 px-2 py-2 ${CELL_CALC}`}>{ar ? "معامل التخفيض" : "Reduction Factor"}</th>
-                            <th className={`border border-slate-300 px-2 py-2 ${CELL_IN}`}>{ar ? "مستطيل من الجزء المخفّض (جم)" : "Elongated (reduced) (g)"}</th>
-                            <th className={`border border-slate-300 px-2 py-2 ${CELL_CALC}`}>{ar ? "مستطيل من الأصلي (جم)" : "Elongated (original) (g)"}</th>
-                          </>
-                        )}
-                        {elongAggSize === "10mm" && (
-                          <th className={`border border-slate-300 px-2 py-2 ${CELL_IN}`}>{ar ? "كتلة المستطيلات M3 (جم)" : "Elongated particles M3 (g)"}</th>
-                        )}
+                        <th className={`border border-slate-300 px-2 py-2 ${CELL_IN}`}>
+                          {ar ? "الوزن المخفّض M (جم)" : "Reduced wt M (g)"}
+                        </th>
+                        <th className={`border border-slate-300 px-2 py-2 ${CELL_CALC}`}>
+                          {elongAggSize === "20mm"
+                            ? ar ? "معامل B/A" : "Factor B/A"
+                            : ar ? "معامل D/E" : "Factor D/E"}
+                        </th>
+                        <th className={`border border-slate-300 px-2 py-2 ${CELL_IN}`}>
+                          {ar ? "مستطيل (جزء مخفّض) (جم)" : "Elongated (reduced) (g)"}
+                        </th>
+                        <th className={`border border-slate-300 px-2 py-2 ${CELL_CALC}`}>
+                          {elongAggSize === "20mm"
+                            ? ar ? "مستطيل × B/A (جم)" : "Elong. × B/A (g)"
+                            : ar ? "مستطيل × D/E (جم)" : "Elong. × D/E (g)"}
+                        </th>
                         <th className="border border-slate-300 px-2 py-2">{ar ? "ملاحظات" : "Notes"}</th>
                       </tr>
                     </thead>
@@ -455,48 +460,34 @@ export default function AggShapeIndex() {
                           <td className={`border border-slate-300 px-2 py-1 text-center font-mono ${CELL_CALC}`}>
                             {row.discarded ? "—" : row.retainedWt != null ? row.retainedWt : "—"}
                           </td>
-                          {elongAggSize === "20mm" && (
-                            <>
-                              <td className={`border border-slate-300 px-1 py-1 ${CELL_IN}`}>
-                                <Input
-                                  type="number"
-                                  disabled={submitted || row.discarded}
-                                  value={elongInputs.find(i => i.id === row.id)?.reducedWtG ?? ""}
-                                  onChange={e => updateElong(row.id, "reducedWtG", e.target.value)}
-                                  className={`${LAB_NUMERIC_INPUT_SM} w-20 mx-auto bg-yellow-50`}
-                                  placeholder="—"
-                                />
-                              </td>
-                              <td className={`border border-slate-300 px-2 py-1 text-center font-mono ${CELL_CALC}`}>
-                                {row.reductionFactor != null ? row.reductionFactor.toFixed(3) : "—"}
-                              </td>
-                              <td className={`border border-slate-300 px-1 py-1 ${CELL_IN}`}>
-                                <Input
-                                  type="number"
-                                  disabled={submitted || row.discarded}
-                                  value={elongInputs.find(i => i.id === row.id)?.elongatedG ?? ""}
-                                  onChange={e => updateElong(row.id, "elongatedG", e.target.value)}
-                                  className={`${LAB_NUMERIC_INPUT_SM} w-20 mx-auto bg-yellow-50`}
-                                  placeholder="—"
-                                />
-                              </td>
-                              <td className={`border border-slate-300 px-2 py-1 text-center font-mono ${CELL_CALC}`}>
-                                {row.elongatedOriginalG != null ? row.elongatedOriginalG.toFixed(1) : "—"}
-                              </td>
-                            </>
-                          )}
-                          {elongAggSize === "10mm" && (
-                            <td className={`border border-slate-300 px-1 py-1 ${CELL_IN}`}>
-                              <Input
-                                type="number"
-                                disabled={submitted || row.discarded}
-                                value={elongInputs.find(i => i.id === row.id)?.elongatedG ?? ""}
-                                onChange={e => updateElong(row.id, "elongatedG", e.target.value)}
-                                className={`${LAB_NUMERIC_INPUT_SM} w-20 mx-auto bg-yellow-50`}
-                                placeholder="—"
-                              />
-                            </td>
-                          )}
+                          <td className={`border border-slate-300 px-1 py-1 ${CELL_IN}`}>
+                            <Input
+                              type="number"
+                              disabled={submitted || row.discarded}
+                              value={elongInputs.find(i => i.id === row.id)?.reducedWtG ?? ""}
+                              onChange={e => updateElong(row.id, "reducedWtG", e.target.value)}
+                              onFocus={e => e.currentTarget.select()}
+                              className={`${LAB_NUMERIC_INPUT_SM} w-20 mx-auto bg-yellow-50`}
+                              placeholder={row.discarded ? "—" : row.retainedWt != null ? String(row.retainedWt) : "—"}
+                            />
+                          </td>
+                          <td className={`border border-slate-300 px-2 py-1 text-center font-mono ${CELL_CALC}`}>
+                            {row.reductionFactor != null ? row.reductionFactor.toFixed(2) : "—"}
+                          </td>
+                          <td className={`border border-slate-300 px-1 py-1 ${CELL_IN}`}>
+                            <Input
+                              type="number"
+                              disabled={submitted || row.discarded}
+                              value={elongInputs.find(i => i.id === row.id)?.elongatedG ?? ""}
+                              onChange={e => updateElong(row.id, "elongatedG", e.target.value)}
+                              onFocus={e => e.currentTarget.select()}
+                              className={`${LAB_NUMERIC_INPUT_SM} w-20 mx-auto bg-yellow-50`}
+                              placeholder="—"
+                            />
+                          </td>
+                          <td className={`border border-slate-300 px-2 py-1 text-center font-mono ${CELL_CALC}`}>
+                            {row.elongatedOriginalG != null ? row.elongatedOriginalG.toFixed(1) : "—"}
+                          </td>
                           <td className="border border-slate-300 px-2 py-1 text-center text-xs text-amber-700 font-medium">
                             {row.discarded ? (ar ? "تجاهل" : "Discard") : ""}
                           </td>
@@ -511,28 +502,16 @@ export default function AggShapeIndex() {
                             {elongAggSize === "20mm" ? "M1" : "M2"}
                           </span>
                         </td>
-                        {elongAggSize === "20mm" ? (
-                          <>
-                            <td className="border border-slate-300" colSpan={3} />
-                            <td className={`border border-slate-300 px-2 py-2 text-center font-mono ${CELL_CALC}`}>
-                              {(elongWorksheet.totalElongatedMass ?? (elongWorksheet.elongationIndex === 0 ? 0 : null)) != null
-                                ? String(elongWorksheet.totalElongatedMass ?? 0)
-                                : "—"}
-                              <span className="block text-[9px] font-normal text-slate-500">M2</span>
-                            </td>
-                            <td className="border border-slate-300" />
-                          </>
-                        ) : (
-                          <>
-                            <td className={`border border-slate-300 px-2 py-2 text-center font-mono ${CELL_CALC}`}>
-                              {(elongWorksheet.totalElongatedMass ?? (elongWorksheet.elongationIndex === 0 ? 0 : null)) != null
-                                ? String(elongWorksheet.totalElongatedMass ?? 0)
-                                : "—"}
-                              <span className="block text-[9px] font-normal text-slate-500">M3</span>
-                            </td>
-                            <td className="border border-slate-300" />
-                          </>
-                        )}
+                        <td className="border border-slate-300" colSpan={3} />
+                        <td className={`border border-slate-300 px-2 py-2 text-center font-mono ${CELL_CALC}`}>
+                          {(elongWorksheet.totalElongatedMass ?? (elongWorksheet.elongationIndex === 0 ? 0 : null)) != null
+                            ? String(Math.round(elongWorksheet.totalElongatedMass ?? 0))
+                            : "—"}
+                          <span className="block text-[9px] font-normal text-slate-500">
+                            {elongAggSize === "20mm" ? "M2" : "M3"}
+                          </span>
+                        </td>
+                        <td className="border border-slate-300" />
                       </tr>
                       <tr>
                         <td colSpan={elongAggSize === "20mm" ? 9 : 6} className="border border-slate-300 p-3">
@@ -544,8 +523,13 @@ export default function AggShapeIndex() {
                               </p>
                               <p className="text-[10px]">
                                 {elongAggSize === "20mm"
-                                  ? "M2 × 100 / M1"
-                                  : "M3 × 100 / M2"}
+                                  ? ar ? "M2 × 100 ÷ M1" : "M2 × 100 / M1"
+                                  : ar ? "M3 × 100 ÷ M2" : "M3 × 100 / M2"}
+                              </p>
+                              <p className="text-[9px] text-slate-500 mt-0.5">
+                                {ar
+                                  ? "معامل التخفيض عند التقسيم: أدخل الوزن المخفّض M (مثال 500 جم من 1585)"
+                                  : "Use reduced wt M when sample is subdivided (e.g. 500 g from 1585 g)"}
                               </p>
                             </div>
                             <div className="text-center">
