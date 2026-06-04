@@ -1258,7 +1258,7 @@ export default function Reception() {
                                           <Input
                                             type="number" min={0} max={999}
                                             value={qty ? qty : ""}
-                                            placeholder="1"
+                                            placeholder="—"
                                             onFocus={e => e.currentTarget.select()}
                                             onChange={e => setBlockSubtypeQty(tt.id, st.value, parseInt(e.target.value) || 0)}
                                             className={`h-6 w-16 text-center text-xs ${qty === 0 ? "border-amber-400 text-amber-700" : ""}`}
@@ -1318,7 +1318,7 @@ export default function Reception() {
                                   <Input
                                     type="number" min={0} max={999}
                                     value={selectedItem?.quantity ? selectedItem.quantity : ""}
-                                    placeholder="1"
+                                    placeholder="—"
                                     onFocus={e => e.currentTarget.select()}
                                     onChange={e => setTestQuantity(tt.id, parseInt(e.target.value) || 0)}
                                     className={`h-8 w-20 text-center text-sm ${(selectedItem?.quantity ?? 0) === 0 ? "border-amber-400 text-amber-700" : ""}`}
