@@ -3254,25 +3254,52 @@ function renderAggShapeIndex(fd: any, isAr: boolean) {
       </div>
     );
   }
-  const rows: any[] = Array.isArray(fd?.rows) ? fd.rows : [];
-  const idx = fd?.overallIndex;
+  const aggSize = fd.aggSize === "10mm" ? "10mm" : "20mm";
+  const rows: any[] = Array.isArray(fd.rows) ? fd.rows : [];
+  const idx = fd.flakinessIndex ?? fd.overallIndex;
+  const maxLimit = fd.maxLimit ?? 25;
+  const pass = fd.overallResult === "pass";
   return (
-    <div className="space-y-2 text-[11px]">
-      <h3 className="font-semibold">{L("Flakiness Index", "معامل التقشر")}</h3>
-      <FlexibleResultsTable
-        columns={[
-          { header: L("Sieve", "المنخل"), field: "sieveRange", align: "left" },
-          { header: L("Total (g)", "الكلي"), field: "totalMass", align: "right" },
-          { header: L("Flat (g)", "مسطح"), field: "flatOrElongMass", align: "right" },
-          { header: L("%", "%"), field: "percentage", align: "right", render: v => (v != null ? `${v}%` : "—") },
-        ]}
-        rows={rows}
-      />
-      {idx != null && (
-        <p className="font-bold text-center">
-          {L("Flakiness Index", "معامل التقشر")}: {idx}%
+    <div className="space-y-3 text-[11px]">
+      <div className="text-center border-b border-slate-300 pb-2">
+        <h3 className="font-semibold text-slate-800">
+          {L("Flakiness Index of Coarse Aggregate", "معامل التقشر للركام الخشن")}
+        </h3>
+        <p className="text-[10px] text-slate-500">{fd.standard ?? "BS 812 Section 105.1:1989"} | {aggSize}</p>
+      </div>
+      <table className="w-full border-collapse text-[10px]">
+        <thead>
+          <tr className="bg-slate-100">
+            <th className="border border-slate-300 px-1 py-1">{L("Fraction (mm)", "الكسر (مم)")}</th>
+            <th className="border border-slate-300 px-1 py-1">{L("Actual (g)", "الفعلي (جم)")}</th>
+            <th className="border border-slate-300 px-1 py-1">{L("Ret. %", "محتجز %")}</th>
+            <th className="border border-slate-300 px-1 py-1">{L("Flaky (g)", "متقشر (جم)")}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r: any, i: number) => (
+            <tr key={i}>
+              <td className="border border-slate-300 px-1 py-0.5 text-center font-mono">{r.labelEn ?? r.id}</td>
+              <td className="border border-slate-300 px-1 py-0.5 text-center">{r.actualSampleG ?? "—"}</td>
+              <td className="border border-slate-300 px-1 py-0.5 text-center">{r.retainedPct != null ? fmt(r.retainedPct, 1) : "—"}</td>
+              <td className="border border-slate-300 px-1 py-0.5 text-center">{r.flakyOriginalG ?? r.flakyReducedG ?? "—"}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <div className="flex justify-center gap-6 items-center">
+        <div className="bg-red-50 border border-red-200 rounded px-4 py-2 text-center">
+          <p className="text-[10px] text-red-700">{L("Flakiness Index", "معامل التقشر")}</p>
+          <p className="text-xl font-bold text-red-900">{idx != null ? `${idx}%` : "—"}</p>
+        </div>
+        <div className="text-center">
+          <p className="text-[10px] text-slate-500">{L("Limit Max", "الحد الأقصى")}</p>
+          <p className="font-bold">{maxLimit}%</p>
+        </div>
+        <p className={`font-bold text-sm ${pass ? "text-emerald-600" : "text-red-600"}`}>
+          {pass ? L("PASS", "ناجح") : L("FAIL", "راسب")}
         </p>
-      )}
+      </div>
     </div>
   );
 }
