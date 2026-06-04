@@ -760,8 +760,8 @@ function renderAggBlendSieve(fd: any, isAr: boolean) {
                 <th className="border border-slate-300 px-1 py-1">{L("Upper", "أعلى")}</th>
                 {sizes.map((s, i) => (
                   <ReportFragment key={i}>
-                    <th className="border border-slate-300 px-1 py-1 bg-green-50">{L("Orig.", "أصلي")}</th>
-                    <th className="border border-slate-300 px-1 py-1 bg-yellow-50">{L("Req.", "مطلوب")}</th>
+                    <th className="border border-slate-300 px-1 py-1 bg-yellow-50">{L("Orig.", "أصلي")}</th>
+                    <th className="border border-slate-300 px-1 py-1 bg-emerald-50">{L("Req.", "مطلوب")}</th>
                   </ReportFragment>
                 ))}
               </tr>
@@ -774,19 +774,19 @@ function renderAggBlendSieve(fd: any, isAr: boolean) {
                     <td className="border border-slate-300 px-2 py-1 text-center font-mono font-bold">
                       {r.sieveMm != null ? formatDisplaySieveMm(Number(r.sieveMm)) : String(r.sieve ?? "—")}
                     </td>
-                    <td className="border border-slate-300 px-2 py-1 text-center">{r.lower != null ? String(r.lower) : "—"}</td>
-                    <td className="border border-slate-300 px-2 py-1 text-center">{r.upper != null ? String(r.upper) : "—"}</td>
+                    <td className="border border-slate-300 px-2 py-1 text-center bg-red-50 text-red-900">{r.lower != null ? String(r.lower) : "—"}</td>
+                    <td className="border border-slate-300 px-2 py-1 text-center bg-red-50 text-red-900">{r.upper != null ? String(r.upper) : "—"}</td>
                     {sizes.map((s, i) => {
                       const og = r.origGrad?.[s.key];
                       const req = r.required?.[s.key];
                       return (
                         <ReportFragment key={i}>
                           <td className="border border-slate-300 px-2 py-1 text-center">{og != null ? fmt(og, 1) : "—"}</td>
-                          <td className="border border-slate-300 px-2 py-1 text-center bg-yellow-50/60">{req != null ? fmt(req, 2) : "—"}</td>
+                          <td className="border border-slate-300 px-2 py-1 text-center bg-emerald-50/60">{req != null ? fmt(req, 2) : "—"}</td>
                         </ReportFragment>
                       );
                     })}
-                    <td className="border border-slate-300 px-2 py-1 text-center font-bold bg-yellow-50">{r.blend != null ? fmt(r.blend, 1) : "—"}</td>
+                    <td className="border border-slate-300 px-2 py-1 text-center font-bold bg-emerald-50">{r.blend != null ? fmt(r.blend, 1) : "—"}</td>
                     <td className="border border-slate-300 px-2 py-1 text-center">
                       {within === true ? (
                         <span className="text-emerald-600 font-bold">{L("✓", "✓")}</span>

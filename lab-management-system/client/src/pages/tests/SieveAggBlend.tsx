@@ -91,17 +91,6 @@ function parseNum(v: unknown): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-function initLimits(spec: AggSpecKey): Record<string, { lower: string; upper: string }> {
-  const out: Record<string, { lower: string; upper: string }> = {};
-  for (const r of AGG_BLEND_SPECS[spec].rows) {
-    out[sieveKey(r.mm)] = {
-      lower: r.lower != null ? String(r.lower) : "",
-      upper: r.upper != null ? String(r.upper) : "",
-    };
-  }
-  return out;
-}
-
 export default function SieveAggBlend() {
   const { user } = useAuth();
   const { lang } = useLanguage();
@@ -123,7 +112,6 @@ export default function SieveAggBlend() {
   const [specType, setSpecType] = useState<AggSpecKey>("MSRC");
   const [mixQty, setMixQty] = useState<Record<string, string>>({});
   const [origGrad, setOrigGrad] = useState<Record<string, Record<string, string>>>({});
-  const [limits, setLimits] = useState<Record<string, { lower: string; upper: string }>>(() => initLimits("MSRC"));
   const [source, setSource] = useState("");
   const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
@@ -150,16 +138,11 @@ export default function SieveAggBlend() {
 
   const specRows = AGG_BLEND_SPECS[specType].rows;
 
-  const changeSpec = (v: AggSpecKey) => {
-    setSpecType(v);
-    setLimits(initLimits(v));
-  };
+  const changeSpec = (v: AggSpecKey) => setSpecType(v);
 
   const setQty = (key: string, raw: string) => setMixQty(prev => ({ ...prev, [key]: raw }));
   const setOrig = (key: string, sk: string, raw: string) =>
     setOrigGrad(prev => ({ ...prev, [key]: { ...(prev[key] ?? {}), [sk]: raw } }));
-  const setLimit = (sk: string, which: "lower" | "upper", raw: string) =>
-    setLimits(prev => ({ ...prev, [sk]: { lower: prev[sk]?.lower ?? "", upper: prev[sk]?.upper ?? "", [which]: raw } }));
 
   // ── Calculations ──
   const totalQty = sizeKeys.reduce((sum, k) => sum + (parseNum(mixQty[k]) ?? 0), 0);
@@ -171,8 +154,8 @@ export default function SieveAggBlend() {
 
   const computedRows = specRows.map(spec => {
     const sk = sieveKey(spec.mm);
-    const lower = parseNum(limits[sk]?.lower);
-    const upper = parseNum(limits[sk]?.upper);
+    const lower = spec.lower; // fixed spec limit
+    const upper = spec.upper; // fixed spec limit
     const required: Record<string, number | null> = {};
     let blendSum = 0;
     let complete = sizeKeys.length > 0;
@@ -224,17 +207,12 @@ export default function SieveAggBlend() {
     if (fd.specType === "MSRC" || fd.specType === "OPC") setSpecType(fd.specType);
     const qtyInit: Record<string, string> = {};
     const origInit: Record<string, Record<string, string>> = {};
-    const limitsInit: Record<string, { lower: string; upper: string }> = {};
     if (Array.isArray(fd.sizes)) {
       for (const s of fd.sizes) if (s?.key != null && s.mixQty != null) qtyInit[String(s.key)] = String(s.mixQty);
     }
     if (Array.isArray(fd.rows)) {
       for (const r of fd.rows) {
         const sk = sieveKey(Number(r.sieveMm));
-        limitsInit[sk] = {
-          lower: r.lower != null ? String(r.lower) : "",
-          upper: r.upper != null ? String(r.upper) : "",
-        };
         if (r.origGrad) {
           for (const [k, v] of Object.entries(r.origGrad)) {
             if (v != null) (origInit[k] ??= {})[sk] = String(v);
@@ -244,7 +222,6 @@ export default function SieveAggBlend() {
     }
     setMixQty(qtyInit);
     setOrigGrad(origInit);
-    if (Object.keys(limitsInit).length) setLimits(prev => ({ ...prev, ...limitsInit }));
     if (typeof fd.source === "string") setSource(fd.source);
     if (typeof existing.notes === "string" && existing.notes) setNotes(existing.notes);
     if (existing.status === "submitted") setSubmitted(true);
@@ -466,8 +443,8 @@ export default function SieveAggBlend() {
 
             {/* Mix design quantities → %ge used */}
             <div>
-              <p className="text-xs font-semibold text-slate-600 mb-2 uppercase tracking-wide">
-                {ar ? "كميات التصميم → النسبة المستخدمة %" : "Mix Design Quantities → %ge Used"}
+              <p className="text-xs font-semibold text-white mb-2 uppercase tracking-wide bg-emerald-700 rounded px-2 py-1 inline-block">
+                {ar ? "تصميم الخلطة" : "Mix Design"}
               </p>
               <div className="overflow-x-auto">
                 <table className="w-full text-xs border-collapse border border-slate-300 min-w-[520px]">
@@ -482,38 +459,40 @@ export default function SieveAggBlend() {
                   </thead>
                   <tbody>
                     <tr>
-                      <td className="border border-slate-300 px-2 py-1 font-medium bg-green-50">{ar ? "كمية التصميم" : "Mix Design Qty"}</td>
+                      <td className="border border-slate-300 px-2 py-1 font-medium">{ar ? "كمية التصميم" : "Mix Design Qty"}</td>
                       {aggSizes.map(s => (
-                        <td key={s.key} className="border border-slate-300 px-1 py-1 bg-green-50/60">
+                        <td key={s.key} className="border border-slate-300 px-1 py-1 bg-yellow-100/70">
                           <Input
                             type="number"
                             value={mixQty[s.key] ?? ""}
                             onChange={e => setQty(s.key, e.target.value)}
                             onFocus={e => e.currentTarget.select()}
                             disabled={submitted}
-                            className={`${LAB_NUMERIC_INPUT_SM} w-24 mx-auto font-mono text-center`}
+                            className={`${LAB_NUMERIC_INPUT_SM} w-24 mx-auto font-mono text-center bg-yellow-50`}
                             placeholder="—"
                           />
                         </td>
                       ))}
-                      <td className="border border-slate-300 px-2 py-1 text-center font-mono font-bold bg-slate-100">
+                      <td className="border border-slate-300 px-2 py-1 text-center font-mono font-bold bg-green-100 text-green-800">
                         {totalQty > 0 ? totalQty.toFixed(0) : "—"}
                       </td>
                     </tr>
-                    <tr className="bg-yellow-50/70">
+                    <tr>
                       <td className="border border-slate-300 px-2 py-1 font-medium">{ar ? "النسبة المستخدمة %" : "%ge Used"}</td>
                       {aggSizes.map(s => (
-                        <td key={s.key} className="border border-slate-300 px-2 py-1 text-center font-mono font-bold text-amber-800">
+                        <td key={s.key} className="border border-slate-300 px-2 py-1 text-center font-mono font-bold bg-green-100 text-green-800">
                           {usedPct[s.key] != null ? `${(usedPct[s.key] as number).toFixed(2)}%` : "—"}
                         </td>
                       ))}
-                      <td className="border border-slate-300 px-2 py-1 text-center font-mono font-bold bg-slate-100">100%</td>
+                      <td className="border border-slate-300 px-2 py-1 text-center font-mono font-bold bg-green-100 text-green-800">
+                        {totalQty > 0 ? "100%" : "—"}
+                      </td>
                     </tr>
                   </tbody>
                 </table>
               </div>
               <p className="text-[11px] text-slate-500 mt-1">
-                {ar ? "النسبة المستخدمة = كمية المقاس ÷ المجموع × 100" : "%ge Used = size quantity ÷ total × 100"}
+                {ar ? "النسبة المستخدمة (أخضر) = كمية المقاس (أصفر) ÷ المجموع × 100" : "%ge Used (green) = size quantity (yellow) ÷ total × 100"}
               </p>
             </div>
           </CardContent>
@@ -529,74 +508,69 @@ export default function SieveAggBlend() {
               <table className="w-full border-collapse border border-slate-300 text-xs">
                 <thead>
                   <tr className="bg-slate-100">
-                    <th rowSpan={2} className="border border-slate-300 px-2 py-2 align-middle">{ar ? "المنخل (مم)" : "Sieve (mm)"}</th>
-                    <th colSpan={2} className="border border-slate-300 px-2 py-1 text-center bg-slate-50">{ar ? "حدود المواصفة" : "Spec Limits"}</th>
+                    <th rowSpan={2} className="border border-slate-300 px-2 py-2 align-middle">{ar ? "المنخل (مم)" : "Sieve No."}</th>
                     {aggSizes.map(s => (
-                      <th key={s.key} colSpan={2} className="border border-slate-300 px-2 py-1 text-center bg-blue-50">
+                      <th key={s.key} colSpan={2} className="border border-slate-300 px-2 py-1 text-center">
                         {s.label}
-                        <span className="block text-[10px] font-normal text-blue-700">
-                          {usedPct[s.key] != null ? `${(usedPct[s.key] as number).toFixed(1)}%` : "—"}
-                        </span>
                       </th>
                     ))}
-                    <th rowSpan={2} className="border border-slate-300 px-2 py-2 align-middle bg-yellow-100">{ar ? "الخليط %" : "Blend %"}</th>
+                    <th rowSpan={2} className="border border-slate-300 px-2 py-2 align-middle bg-emerald-100 text-emerald-800">{ar ? "الخليط %" : "BLEND"}</th>
+                    <th colSpan={2} className="border border-slate-300 px-2 py-1 text-center bg-red-200 text-red-900 font-bold">{ar ? "حدود المواصفة (ثابتة)" : "ALL IN SPECIFICATION"}</th>
                     <th rowSpan={2} className="border border-slate-300 px-2 py-2 align-middle">{ar ? "النتيجة" : "Result"}</th>
                   </tr>
                   <tr className="bg-slate-50 text-[10px]">
-                    <th className="border border-slate-300 px-1 py-1">{ar ? "أدنى" : "Lower"}</th>
-                    <th className="border border-slate-300 px-1 py-1">{ar ? "أعلى" : "Upper"}</th>
                     {aggSizes.map(s => (
                       <Fragment key={s.key}>
-                        <th className="border border-slate-300 px-1 py-1 bg-green-100">{ar ? "التدرج الأصلي" : "Orig. Grad"}</th>
-                        <th className="border border-slate-300 px-1 py-1 bg-yellow-50">{ar ? "المطلوب" : "Required"}</th>
+                        <th className="border border-slate-300 px-1 py-1 bg-yellow-100 text-yellow-900">{ar ? "التدرج الأصلي" : "Orig. Grad"}</th>
+                        <th className="border border-slate-300 px-1 py-1 bg-emerald-100 text-emerald-800">{ar ? "المطلوب" : "Required"}</th>
                       </Fragment>
                     ))}
+                    <th className="border border-slate-300 px-1 py-1 bg-red-100 text-red-900">{ar ? "أدنى" : "Lower"}</th>
+                    <th className="border border-slate-300 px-1 py-1 bg-red-100 text-red-900">{ar ? "أعلى" : "Upper"}</th>
                   </tr>
                 </thead>
                 <tbody>
+                  {/* %ge Used row (calculated, green) */}
+                  <tr className="bg-emerald-50">
+                    <td className="border border-slate-300 px-2 py-1 font-semibold text-emerald-800">{ar ? "النسبة المستخدمة %" : "%ge Used"}</td>
+                    {aggSizes.map(s => (
+                      <td key={s.key} colSpan={2} className="border border-slate-300 px-2 py-1 text-center font-mono font-bold text-emerald-800">
+                        {usedPct[s.key] != null ? `${(usedPct[s.key] as number).toFixed(2)}%` : "—"}
+                      </td>
+                    ))}
+                    <td className="border border-slate-300 bg-slate-50" />
+                    <td className="border border-slate-300 bg-slate-50" colSpan={2} />
+                    <td className="border border-slate-300 bg-slate-50" />
+                  </tr>
                   {computedRows.map((r, idx) => (
                     <tr key={r.sieveKey} className={idx % 2 === 0 ? "bg-white" : "bg-slate-50/60"}>
                       <td className="border border-slate-300 px-2 py-1 text-center font-mono font-bold">{formatDisplaySieveMm(r.sieveMm)}</td>
-                      <td className="border border-slate-300 px-1 py-1">
-                        <Input
-                          type="number"
-                          value={limits[r.sieveKey]?.lower ?? ""}
-                          onChange={e => setLimit(r.sieveKey, "lower", e.target.value)}
-                          disabled={submitted}
-                          className={`${LAB_NUMERIC_INPUT_SM} w-14 mx-auto font-mono text-center`}
-                          placeholder="—"
-                        />
-                      </td>
-                      <td className="border border-slate-300 px-1 py-1">
-                        <Input
-                          type="number"
-                          value={limits[r.sieveKey]?.upper ?? ""}
-                          onChange={e => setLimit(r.sieveKey, "upper", e.target.value)}
-                          disabled={submitted}
-                          className={`${LAB_NUMERIC_INPUT_SM} w-14 mx-auto font-mono text-center`}
-                          placeholder="—"
-                        />
-                      </td>
                       {aggSizes.map(s => (
                         <Fragment key={s.key}>
-                          <td className="border border-slate-300 px-1 py-1 bg-green-50/50">
+                          <td className="border border-slate-300 px-1 py-1 bg-yellow-50">
                             <Input
                               type="number"
                               value={origGrad[s.key]?.[r.sieveKey] ?? ""}
                               onChange={e => setOrig(s.key, r.sieveKey, e.target.value)}
                               onFocus={e => e.currentTarget.select()}
                               disabled={submitted}
-                              className={`${LAB_NUMERIC_INPUT_SM} w-16 mx-auto font-mono text-center`}
+                              className={`${LAB_NUMERIC_INPUT_SM} w-16 mx-auto font-mono text-center bg-yellow-50`}
                               placeholder="—"
                             />
                           </td>
-                          <td className="border border-slate-300 px-2 py-1 text-center font-mono bg-yellow-50/50">
+                          <td className="border border-slate-300 px-2 py-1 text-center font-mono bg-emerald-50 text-emerald-800">
                             {r.required[s.key] != null ? (r.required[s.key] as number).toFixed(2) : "—"}
                           </td>
                         </Fragment>
                       ))}
-                      <td className="border border-slate-300 px-2 py-1 text-center font-mono font-bold bg-yellow-50 text-sm">
+                      <td className="border border-slate-300 px-2 py-1 text-center font-mono font-bold bg-emerald-50 text-emerald-800 text-sm">
                         {r.blend != null ? r.blend.toFixed(1) : "—"}
+                      </td>
+                      <td className="border border-slate-300 px-2 py-1 text-center font-mono font-semibold bg-red-50 text-red-900">
+                        {r.lower != null ? r.lower : "—"}
+                      </td>
+                      <td className="border border-slate-300 px-2 py-1 text-center font-mono font-semibold bg-red-50 text-red-900">
+                        {r.upper != null ? r.upper : "—"}
                       </td>
                       <td className="border border-slate-300 px-2 py-1 text-center">
                         {r.withinLimits === true ? (
@@ -612,10 +586,14 @@ export default function SieveAggBlend() {
                 </tbody>
               </table>
             </div>
-            <div className="text-xs text-slate-600 mt-2 p-2 bg-blue-50 rounded-md border border-blue-100 space-y-0.5">
+            <div className="flex flex-wrap items-center gap-4 mt-2 text-[11px] text-slate-600">
+              <span className="inline-flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-yellow-100 border border-yellow-300" /> {ar ? "إدخال الفني" : "Yellow = input"}</span>
+              <span className="inline-flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-emerald-100 border border-emerald-300" /> {ar ? "حساب تلقائي" : "Green = calculated"}</span>
+              <span className="inline-flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-red-100 border border-red-300" /> {ar ? "حدود ثابتة" : "Red = fixed limits"}</span>
+            </div>
+            <div className="text-xs text-slate-600 mt-2 p-2 bg-slate-50 rounded-md border border-slate-200 space-y-0.5">
               <p><strong>{ar ? "المطلوب" : "Required"}</strong> = {ar ? "النسبة المستخدمة × التدرج الأصلي ÷ 100" : "%ge Used × Original Grad ÷ 100"}</p>
               <p><strong>{ar ? "الخليط" : "Blend"}</strong> = {ar ? "مجموع المطلوب لكل المقاسات" : "sum of Required across all sizes"}</p>
-              <p className="text-slate-500">{ar ? "الخلايا الخضراء = إدخال الفني، الصفراء = حساب تلقائي." : "Green cells = technician input, yellow = auto-calculated."}</p>
             </div>
           </CardContent>
         </Card>
