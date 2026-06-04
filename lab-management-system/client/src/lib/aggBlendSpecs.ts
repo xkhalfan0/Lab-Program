@@ -60,3 +60,12 @@ export function resolveAggBlendLimits(
 export function formatSpecLimit(v: number | null | undefined): string {
   return typeof v === "number" && Number.isFinite(v) ? String(v) : "—";
 }
+
+/** Blend % — nearest whole number, half-up (2.3→2, 2.5→3, 2.7→3). */
+export function roundBlendPct(value: number): number {
+  return Math.round(value + Number.EPSILON);
+}
+
+export function formatBlendPct(v: number | null | undefined): string {
+  return typeof v === "number" && Number.isFinite(v) ? String(roundBlendPct(v)) : "—";
+}

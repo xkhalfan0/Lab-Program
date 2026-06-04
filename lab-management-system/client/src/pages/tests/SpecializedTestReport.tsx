@@ -12,7 +12,13 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { FlexibleResultsTable, type Column, formDataToKeyValueRows, keyValueColumns } from "@/components/reports/FlexibleResultsTable";
 import { formatCalendarDate } from "@/lib/dateFormat";
 import { calculateFinalBlend, formatDisplaySieveMm } from "@/pages/tests/SieveAnalysis";
-import { formatSpecLimit, normalizeAggSpecType, resolveAggBlendLimits } from "@/lib/aggBlendSpecs";
+import {
+  formatBlendPct,
+  formatSpecLimit,
+  normalizeAggSpecType,
+  resolveAggBlendLimits,
+  roundBlendPct,
+} from "@/lib/aggBlendSpecs";
 import { EXTRACTED_SIEVE_SIZES } from "@/lib/extractedSieveLimits";
 import {
   LineChart,
@@ -713,10 +719,11 @@ function renderAggBlendSieve(fd: any, isAr: boolean) {
       typeof r.lower === "number" && Number.isFinite(r.lower) ? r.lower : catalog.lower;
     const upper =
       typeof r.upper === "number" && Number.isFinite(r.upper) ? r.upper : catalog.upper;
+    const blendRaw = r.blend != null ? Number(r.blend) : null;
     return {
       sieveMm: r.sieveMm != null ? formatDisplaySieveMm(sieveMm) : String(r.sieve ?? ""),
       sieveLog: Math.max(sieveMm || 0.01, 0.01),
-      blend: r.blend != null ? Number(r.blend) : null,
+      blend: blendRaw != null && Number.isFinite(blendRaw) ? roundBlendPct(blendRaw) : null,
       lower,
       upper,
     };
@@ -784,7 +791,9 @@ function renderAggBlendSieve(fd: any, isAr: boolean) {
                   typeof r.lower === "number" && Number.isFinite(r.lower) ? r.lower : catalog.lower;
                 const upper =
                   typeof r.upper === "number" && Number.isFinite(r.upper) ? r.upper : catalog.upper;
-                const blend = r.blend != null ? Number(r.blend) : null;
+                const blendRaw = r.blend != null ? Number(r.blend) : null;
+                const blend =
+                  blendRaw != null && Number.isFinite(blendRaw) ? roundBlendPct(blendRaw) : null;
                 const within =
                   r.withinLimits === true || r.withinLimits === false
                     ? r.withinLimits
@@ -808,7 +817,7 @@ function renderAggBlendSieve(fd: any, isAr: boolean) {
                         </ReportFragment>
                       );
                     })}
-                    <td className="border border-slate-300 px-2 py-1 text-center font-bold bg-emerald-50">{r.blend != null ? fmt(r.blend, 1) : "—"}</td>
+                    <td className="border border-slate-300 px-2 py-1 text-center font-bold bg-emerald-50">{formatBlendPct(blend)}</td>
                     <td className="border border-slate-300 px-2 py-1 text-center">
                       {within === true ? (
                         <span className="text-emerald-600 font-bold">{L("✓", "✓")}</span>
@@ -3193,6 +3202,81 @@ function renderConcreteCubes(fd: any, isAr: boolean) {
   );
 }
 
+function renderAggShapeIndex(fd: any, isAr: boolean) {
+  const L = (en: string, ars: string) => (isAr ? ars : en);
+  if (fd?.shapeType === "ELONGATION" || fd?.elongationIndex != null) {
+    const aggSize = fd.aggSize === "10mm" ? "10mm" : "20mm";
+    const rows: any[] = Array.isArray(fd.rows) ? fd.rows : [];
+    const idx = fd.elongationIndex ?? fd.overallIndex;
+    const maxLimit = fd.maxLimit ?? 30;
+    const pass = fd.overallResult === "pass";
+    return (
+      <div className="space-y-3 text-[11px]">
+        <div className="text-center border-b border-slate-300 pb-2">
+          <h3 className="font-semibold text-slate-800">
+            {L("Elongation Index of Coarse Aggregate", "معامل الاستطالة للركام الخشن")}
+          </h3>
+          <p className="text-[10px] text-slate-500">{fd.standard ?? "BS 812 Section 105.2:1990"} | {aggSize}</p>
+        </div>
+        <table className="w-full border-collapse text-[10px]">
+          <thead>
+            <tr className="bg-slate-100">
+              <th className="border border-slate-300 px-1 py-1">{L("Fraction (mm)", "الكسر (مم)")}</th>
+              <th className="border border-slate-300 px-1 py-1">{L("Actual (g)", "الفعلي (جم)")}</th>
+              <th className="border border-slate-300 px-1 py-1">{L("Ret. %", "محتجز %")}</th>
+              <th className="border border-slate-300 px-1 py-1">{L("Elong. (g)", "مستطيل (جم)")}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r: any, i: number) => (
+              <tr key={i}>
+                <td className="border border-slate-300 px-1 py-0.5 text-center font-mono">{r.labelEn ?? r.id}</td>
+                <td className="border border-slate-300 px-1 py-0.5 text-center">{r.actualSampleG ?? "—"}</td>
+                <td className="border border-slate-300 px-1 py-0.5 text-center">{r.retainedPct != null ? fmt(r.retainedPct, 1) : "—"}</td>
+                <td className="border border-slate-300 px-1 py-0.5 text-center">{r.elongatedOriginalG ?? r.elongatedReducedG ?? "—"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <div className="flex justify-center gap-6 items-center">
+          <div className="bg-red-50 border border-red-200 rounded px-4 py-2 text-center">
+            <p className="text-[10px] text-red-700">{L("Elongation Index", "معامل الاستطالة")}</p>
+            <p className="text-xl font-bold text-red-900">{idx != null ? `${idx}%` : "—"}</p>
+          </div>
+          <div className="text-center">
+            <p className="text-[10px] text-slate-500">{L("Limit Max", "الحد الأقصى")}</p>
+            <p className="font-bold">{maxLimit}%</p>
+          </div>
+          <p className={`font-bold text-sm ${pass ? "text-emerald-600" : "text-red-600"}`}>
+            {pass ? L("PASS", "ناجح") : L("FAIL", "راسب")}
+          </p>
+        </div>
+      </div>
+    );
+  }
+  const rows: any[] = Array.isArray(fd?.rows) ? fd.rows : [];
+  const idx = fd?.overallIndex;
+  return (
+    <div className="space-y-2 text-[11px]">
+      <h3 className="font-semibold">{L("Flakiness Index", "معامل التقشر")}</h3>
+      <FlexibleResultsTable
+        columns={[
+          { header: L("Sieve", "المنخل"), field: "sieveRange", align: "left" },
+          { header: L("Total (g)", "الكلي"), field: "totalMass", align: "right" },
+          { header: L("Flat (g)", "مسطح"), field: "flatOrElongMass", align: "right" },
+          { header: L("%", "%"), field: "percentage", align: "right", render: v => (v != null ? `${v}%` : "—") },
+        ]}
+        rows={rows}
+      />
+      {idx != null && (
+        <p className="font-bold text-center">
+          {L("Flakiness Index", "معامل التقشر")}: {idx}%
+        </p>
+      )}
+    </div>
+  );
+}
+
 export function renderFormData(formTemplate: string, formData: any, isAr: boolean, extras?: FormReportExtras) {
   const castingDateMs = extras?.castingDateMs;
   switch (formTemplate) {
@@ -3228,6 +3312,7 @@ export function renderFormData(formTemplate: string, formData: any, isAr: boolea
     case "cement_setting_time": return renderCementSettingTime(formData, isAr);
     case "concrete_foam": return renderConcreteFoam(formData, isAr, extras);
     case "interlock": return renderInterlock(formData, isAr);
+    case "agg_shape_index": return renderAggShapeIndex(formData, isAr);
     default: return renderGeneric(formData, isAr);
   }
 }

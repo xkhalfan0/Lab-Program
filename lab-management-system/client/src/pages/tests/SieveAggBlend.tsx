@@ -36,9 +36,11 @@ import { LAB_NUMERIC_INPUT_SM } from "@/lib/labInputStyles";
 import {
   AGG_BLEND_SPECS,
   type AggSpecKey,
+  formatBlendPct,
   formatSpecLimit,
   normalizeAggSpecType,
   resolveAggBlendLimits,
+  roundBlendPct,
   sieveKey,
 } from "@/lib/aggBlendSpecs";
 
@@ -138,7 +140,7 @@ export default function SieveAggBlend() {
         complete = false;
       }
     }
-    const blend = complete ? blendSum : null;
+    const blend = complete ? roundBlendPct(blendSum) : null;
     const withinLimits =
       blend != null && Number.isFinite(lower) && Number.isFinite(upper)
         ? blend >= (lower as number) - LIMIT_EPS && blend <= (upper as number) + LIMIT_EPS
@@ -228,7 +230,7 @@ export default function SieveAggBlend() {
       upper: r.upper,
       origGrad: Object.fromEntries(sizeKeys.map(k => [k, parseNum(origGrad[k]?.[r.sieveKey])])),
       required: Object.fromEntries(sizeKeys.map(k => [k, r.required[k] != null ? Number((r.required[k] as number).toFixed(2)) : null])),
-      blend: r.blend != null ? Number(r.blend.toFixed(1)) : null,
+      blend: r.blend,
       withinLimits: r.withinLimits,
     }));
     const overall = passesSpec ? "pass" : status === "submitted" ? "fail" : "pending";
@@ -291,7 +293,7 @@ export default function SieveAggBlend() {
   const chartData = computedRows.map(r => ({
     sieveMm: formatDisplaySieveMm(r.sieveMm),
     sieveLog: Math.max(r.sieveMm, 0.01),
-    [chartKeys.kBlend]: r.blend != null ? Number(r.blend.toFixed(1)) : null,
+    [chartKeys.kBlend]: r.blend,
     [chartKeys.kUp]: r.upper,
     [chartKeys.kLo]: r.lower,
   }));
@@ -533,7 +535,7 @@ export default function SieveAggBlend() {
                         </Fragment>
                       ))}
                       <td className="border border-slate-300 px-2 py-1 text-center font-mono font-bold bg-emerald-50 text-emerald-800 text-sm">
-                        {r.blend != null ? r.blend.toFixed(1) : "—"}
+                        {formatBlendPct(r.blend)}
                       </td>
                       <td className="border border-slate-300 px-2 py-1 text-center font-mono font-semibold bg-red-50 text-red-900">
                         {formatSpecLimit(r.lower)}
