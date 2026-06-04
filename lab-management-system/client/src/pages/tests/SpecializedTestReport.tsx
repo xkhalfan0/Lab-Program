@@ -719,7 +719,7 @@ function renderAggBlendSieve(fd: any, isAr: boolean) {
         <h3 className="text-base font-semibold text-slate-800">
           {L("Sieve Analysis of Concrete Aggregates — Blend (Mix Design)", "تحليل المناخل لركام الخرسانة — الخلطة (تصميم الخلطة)")}
         </h3>
-        <p className="text-[10px] text-slate-500 mt-1">{L("Specification", "المواصفة")}: {specLabel}</p>
+        <p className="text-[10px] text-slate-500 mt-1">{L("Mix Design Type", "نوع تصميم الخلطة")}: {specLabel}</p>
       </div>
 
       {/* Mix design composition */}

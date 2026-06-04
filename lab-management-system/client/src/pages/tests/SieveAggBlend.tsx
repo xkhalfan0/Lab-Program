@@ -39,9 +39,9 @@ const LIMIT_EPS = 0.05;
 type AggSpecRow = { mm: number; lower: number | null; upper: number | null };
 
 /**
- * Concrete-aggregate blend specifications.
- * MSRC limits are from the lab's "ALL IN SPECIFICATION" table. OPC uses a
- * different sieve series; its limits are entered manually until provided.
+ * Concrete-aggregate blend specifications (mix design type).
+ * MSRC — lab "ALL IN SPECIFICATION" table (37.5, 20, 5, 600µm, 150µm, 75µm).
+ * OPC — sieve series 10, 5, 2.36, 1.18, 0.6, 0.3, 0.15, 0.075 mm with fixed limits.
  */
 export const AGG_BLEND_SPECS: Record<string, { label: string; rows: AggSpecRow[] }> = {
   MSRC: {
@@ -58,14 +58,14 @@ export const AGG_BLEND_SPECS: Record<string, { label: string; rows: AggSpecRow[]
   OPC: {
     label: "OPC",
     rows: [
-      { mm: 10, lower: null, upper: null },
-      { mm: 5, lower: null, upper: null },
-      { mm: 2.36, lower: null, upper: null },
-      { mm: 1.18, lower: null, upper: null },
-      { mm: 0.6, lower: null, upper: null },
-      { mm: 0.3, lower: null, upper: null },
-      { mm: 0.15, lower: null, upper: null },
-      { mm: 0.075, lower: null, upper: null },
+      { mm: 10, lower: 95, upper: 100 },
+      { mm: 5, lower: 30, upper: 65 },
+      { mm: 2.36, lower: 20, upper: 50 },
+      { mm: 1.18, lower: 15, upper: 40 },
+      { mm: 0.6, lower: 10, upper: 30 },
+      { mm: 0.3, lower: 5, upper: 15 },
+      { mm: 0.15, lower: 0, upper: 10 },
+      { mm: 0.075, lower: 0, upper: 3 },
     ],
   },
 };
@@ -418,7 +418,7 @@ export default function SieveAggBlend() {
           <CardContent className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
-                <Label className="text-xs text-slate-500 mb-1 block">{ar ? "نوع المواصفة" : "Specification Type"}</Label>
+                <Label className="text-xs text-slate-500 mb-1 block">{ar ? "نوع تصميم الخلطة" : "Mix Design Type"}</Label>
                 <Select value={specType} disabled={submitted} onValueChange={v => changeSpec(v as AggSpecKey)}>
                   <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
                   <SelectContent>
