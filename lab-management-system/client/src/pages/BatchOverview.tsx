@@ -31,6 +31,13 @@ type BatchSibling = {
   testSubType?: string | null;
 };
 
+type DisplayRow = {
+  key: string;
+  kind: "single" | "aggBlend";
+  primary: BatchSibling;
+  members: BatchSibling[];
+};
+
 const BATCH_SORT_CODES = [
   "ASPH_BITUMEN_EXTRACT",
   "ASPH_EXTRACTED_SIEVE",
@@ -113,8 +120,28 @@ export default function BatchOverview() {
     }
   }, [siblingsLoading, sorted, sampleId, orderId, navigate]);
 
-  const total = sorted.length;
-  const completedCount = sorted.filter(s => isCompleted(s.status)).length;
+  // Concrete-aggregate sieve sizes (20mm, 10mm, 0-5mm, Dune Sand, …) are one shared
+  // blend worksheet, so collapse them into a single row here (each size still bills
+  // as its own sample). All sizes complete together from one submit.
+  const displayRows = useMemo<DisplayRow[]>(() => {
+    const agg = sorted.filter(s => s.testType === "AGG_SIEVE");
+    const out: DisplayRow[] = [];
+    let aggAdded = false;
+    for (const s of sorted) {
+      if (s.testType === "AGG_SIEVE") {
+        if (!aggAdded) {
+          out.push({ key: "agg-blend", kind: "aggBlend", primary: agg[0] ?? s, members: agg });
+          aggAdded = true;
+        }
+      } else {
+        out.push({ key: `s-${s.id}`, kind: "single", primary: s, members: [s] });
+      }
+    }
+    return out;
+  }, [sorted]);
+
+  const total = displayRows.length;
+  const completedCount = displayRows.filter(row => row.members.length > 0 && row.members.every(m => isCompleted(m.status))).length;
   const allComplete = total > 0 && completedCount === total;
   const progressPct = total > 0 ? Math.round((completedCount / total) * 100) : 0;
   const testLabel = (dist: BatchSibling) => {
@@ -228,14 +255,17 @@ export default function BatchOverview() {
                 {isAr ? "\u0627\u0644\u0627\u062e\u062a\u0628\u0627\u0631\u0627\u062a" : "Tests"} ({total})
               </h2>
               <div className="grid gap-3 sm:grid-cols-1">
-                {sorted.map((dist, index) => {
-                  const done = isCompleted(dist.status);
-                  const dep = depByDistId.get(dist.id);
+                {displayRows.map((row, index) => {
+                  const dist = row.primary;
+                  const isAgg = row.kind === "aggBlend";
+                  const done = row.members.length > 0 && row.members.every(m => isCompleted(m.status));
+                  const dep = isAgg ? undefined : depByDistId.get(dist.id);
                   const locked = !done && dep?.isAllowed === false;
                   const missingNames = (dep?.missingTests ?? []).map(t => (isAr ? t.nameAr : t.nameEn));
+                  const sizeNames = row.members.map(m => m.testSubType).filter(Boolean).join(isAr ? "، " : ", ");
                   return (
                     <Card
-                      key={dist.id}
+                      key={row.key}
                       className={`transition-shadow hover:shadow-md ${done ? "border-emerald-200 bg-emerald-50/30" : "border-slate-200"}`}
                     >
                       <CardContent className="p-4 flex flex-col sm:flex-row sm:items-center gap-4">
@@ -251,7 +281,9 @@ export default function BatchOverview() {
                             <div className="flex flex-wrap items-center gap-2 mb-0.5">
                               <span className="text-xs font-bold text-slate-400">#{index + 1}</span>
                               <Badge variant="outline" className="text-[10px] font-mono">
-                                {dist.distributionCode ?? `DIST-${dist.id}`}
+                                {isAgg
+                                  ? (isAr ? `${row.members.length} مقاسات` : `${row.members.length} sizes`)
+                                  : dist.distributionCode ?? `DIST-${dist.id}`}
                               </Badge>
                               <Badge
                                 className={
@@ -262,11 +294,19 @@ export default function BatchOverview() {
                                       : "bg-amber-100 text-amber-800 border-amber-200"
                                 }
                               >
-                                {statusLabel(dist.status)}
+                                {statusLabel(done ? "completed" : dist.status)}
                               </Badge>
                             </div>
-                            <p className="font-semibold text-slate-900 leading-snug">{testLabel(dist)}</p>
-                            {dist.testSubType ? (
+                            <p className="font-semibold text-slate-900 leading-snug">
+                              {testLabel(dist)}{isAgg ? (isAr ? " — الخلطة" : " — Blend") : ""}
+                            </p>
+                            {isAgg ? (
+                              <p className="text-xs text-slate-500 mt-0.5">
+                                {isAr
+                                  ? `ورقة واحدة لكل المقاسات: ${sizeNames}`
+                                  : `One worksheet for all sizes: ${sizeNames}`}
+                              </p>
+                            ) : dist.testSubType ? (
                               <p className="text-xs text-slate-500 mt-0.5">{dist.testSubType}</p>
                             ) : null}
                             {locked && (
@@ -307,7 +347,9 @@ export default function BatchOverview() {
                               onClick={() => navigate(testFormPath(dist))}
                             >
                               <Play className="w-3.5 h-3.5" />
-                              {isAr ? "\u0628\u062f\u0621 \u0627\u0644\u0627\u062e\u062a\u0628\u0627\u0631" : "Start Test"}
+                              {isAgg
+                                ? (isAr ? "بدء الاختبار المجمّع" : "Start Combined Test")
+                                : (isAr ? "\u0628\u062f\u0621 \u0627\u0644\u0627\u062e\u062a\u0628\u0627\u0631" : "Start Test")}
                             </Button>
                           )}
                         </div>

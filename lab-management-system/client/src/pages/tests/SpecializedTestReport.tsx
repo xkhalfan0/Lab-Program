@@ -4,7 +4,7 @@
  * Supports Arabic / English toggle
  */
 import { useParams } from "wouter";
-import { useRef, useState, useEffect } from "react";
+import { Fragment as ReportFragment, useRef, useState, useEffect } from "react";
 import { trpc } from "@/lib/trpc";
 import { Loader2, Printer, X, CheckCircle, XCircle, Globe, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -697,7 +697,164 @@ function SieveWeightReportGradingChart({
   );
 }
 
+function renderAggBlendSieve(fd: any, isAr: boolean) {
+  const L = (en: string, ars: string) => (isAr ? ars : en);
+  const sizes: any[] = Array.isArray(fd.sizes) ? fd.sizes : [];
+  const rows: any[] = Array.isArray(fd.rows) ? fd.rows : [];
+  const passesSpec = fd.passesSpec === true;
+  const specLabel = fd.specType ?? "—";
+
+  const chartData = rows.map((r: any) => ({
+    sieveMm: r.sieveMm != null ? formatDisplaySieveMm(Number(r.sieveMm)) : String(r.sieve ?? ""),
+    sieveLog: Math.max(Number(r.sieveMm) || 0.01, 0.01),
+    blend: r.blend != null ? Number(r.blend) : null,
+    lower: r.lower != null ? Number(r.lower) : null,
+    upper: r.upper != null ? Number(r.upper) : null,
+  }));
+  const hasChart = chartData.length >= 2 && chartData.some(d => d.blend != null);
+
+  return (
+    <div className="space-y-4 text-[11px]">
+      <div className="text-center border-b-2 border-slate-300 pb-3">
+        <h3 className="text-base font-semibold text-slate-800">
+          {L("Sieve Analysis of Concrete Aggregates — Blend (Mix Design)", "تحليل المناخل لركام الخرسانة — الخلطة (تصميم الخلطة)")}
+        </h3>
+        <p className="text-[10px] text-slate-500 mt-1">{L("Specification", "المواصفة")}: {specLabel}</p>
+      </div>
+
+      {/* Mix design composition */}
+      <div className="bg-blue-50 border border-blue-200 rounded-md p-3">
+        <h4 className="font-semibold text-slate-900 mb-2 text-xs">{L("Mix Design Composition", "تركيب تصميم الخلطة")}</h4>
+        <div className="flex flex-wrap gap-x-6 gap-y-1">
+          {sizes.map((s, i) => (
+            <span key={i} className="text-slate-800">
+              <strong>{s.label}:</strong> {s.usedPct != null ? `${Number(s.usedPct).toFixed(2)}%` : "—"}
+              {s.mixQty != null ? ` (${L("qty", "كمية")} ${Number(s.mixQty).toFixed(0)})` : ""}
+            </span>
+          ))}
+        </div>
+      </div>
+
+      {/* Blend worksheet */}
+      <div>
+        <h4 className="font-semibold mb-2 text-xs text-slate-900 border-b border-slate-200 pb-1">
+          {L("Blend Worksheet", "ورقة حساب الخلطة")}
+        </h4>
+        <div className="overflow-x-auto">
+          <table className="w-full border-collapse text-[10px]">
+            <thead>
+              <tr className="bg-slate-100">
+                <th rowSpan={2} className="border border-slate-300 px-2 py-1 align-middle">{L("Sieve (mm)", "المنخل (مم)")}</th>
+                <th colSpan={2} className="border border-slate-300 px-2 py-1 text-center bg-slate-50">{L("Spec Limits", "حدود المواصفة")}</th>
+                {sizes.map((s, i) => (
+                  <th key={i} colSpan={2} className="border border-slate-300 px-2 py-1 text-center bg-blue-50">
+                    {s.label}
+                    <span className="block text-[9px] font-normal text-blue-700">{s.usedPct != null ? `${Number(s.usedPct).toFixed(1)}%` : "—"}</span>
+                  </th>
+                ))}
+                <th rowSpan={2} className="border border-slate-300 px-2 py-1 align-middle bg-yellow-100">{L("Blend %", "الخليط %")}</th>
+                <th rowSpan={2} className="border border-slate-300 px-2 py-1 align-middle">{L("Result", "النتيجة")}</th>
+              </tr>
+              <tr className="bg-slate-50">
+                <th className="border border-slate-300 px-1 py-1">{L("Lower", "أدنى")}</th>
+                <th className="border border-slate-300 px-1 py-1">{L("Upper", "أعلى")}</th>
+                {sizes.map((s, i) => (
+                  <ReportFragment key={i}>
+                    <th className="border border-slate-300 px-1 py-1 bg-green-50">{L("Orig.", "أصلي")}</th>
+                    <th className="border border-slate-300 px-1 py-1 bg-yellow-50">{L("Req.", "مطلوب")}</th>
+                  </ReportFragment>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r: any, idx: number) => {
+                const within = r.withinLimits;
+                return (
+                  <tr key={idx} className={idx % 2 === 0 ? "bg-white" : "bg-slate-50/80"}>
+                    <td className="border border-slate-300 px-2 py-1 text-center font-mono font-bold">
+                      {r.sieveMm != null ? formatDisplaySieveMm(Number(r.sieveMm)) : String(r.sieve ?? "—")}
+                    </td>
+                    <td className="border border-slate-300 px-2 py-1 text-center">{r.lower != null ? String(r.lower) : "—"}</td>
+                    <td className="border border-slate-300 px-2 py-1 text-center">{r.upper != null ? String(r.upper) : "—"}</td>
+                    {sizes.map((s, i) => {
+                      const og = r.origGrad?.[s.key];
+                      const req = r.required?.[s.key];
+                      return (
+                        <ReportFragment key={i}>
+                          <td className="border border-slate-300 px-2 py-1 text-center">{og != null ? fmt(og, 1) : "—"}</td>
+                          <td className="border border-slate-300 px-2 py-1 text-center bg-yellow-50/60">{req != null ? fmt(req, 2) : "—"}</td>
+                        </ReportFragment>
+                      );
+                    })}
+                    <td className="border border-slate-300 px-2 py-1 text-center font-bold bg-yellow-50">{r.blend != null ? fmt(r.blend, 1) : "—"}</td>
+                    <td className="border border-slate-300 px-2 py-1 text-center">
+                      {within === true ? (
+                        <span className="text-emerald-600 font-bold">{L("✓", "✓")}</span>
+                      ) : within === false ? (
+                        <span className="text-red-600 font-bold">{L("✗", "✗")}</span>
+                      ) : (
+                        "—"
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+        <p className="text-[9px] text-slate-500 mt-1">
+          {L("Required = %ge Used × Original Grad ÷ 100.  Blend = Σ Required across sizes.", "المطلوب = النسبة المستخدمة × التدرج الأصلي ÷ 100. الخليط = مجموع المطلوب لكل المقاسات.")}
+        </p>
+      </div>
+
+      {/* Accept / Reject banner */}
+      <div
+        className="p-3 border-2 rounded-lg"
+        style={{ borderColor: passesSpec ? "#10b981" : "#ef4444", backgroundColor: passesSpec ? "#f0fdf4" : "#fef2f2" }}
+      >
+        <h4 className="text-sm font-bold" style={{ color: passesSpec ? "#10b981" : "#ef4444" }}>
+          {passesSpec ? L("ACCEPTED / مقبول", "مقبول / ACCEPTED") : L("REJECTED / مرفوض", "مرفوض / REJECTED")}
+        </h4>
+        <p className="text-[10px] text-slate-700 mt-0.5">
+          {passesSpec
+            ? L("The aggregate blend meets all specification limits.", "الخلطة تطابق جميع حدود المواصفة.")
+            : L("The aggregate blend is outside the specified limits at one or more sieves.", "الخلطة خارج الحدود المحددة في منخل واحد أو أكثر.")}
+        </p>
+      </div>
+
+      {hasChart && (
+        <div>
+          <h4 className="font-semibold mb-2 text-xs text-slate-900">{L("Grading Curve", "منحنى التدرج")}</h4>
+          <div className="border border-slate-300 rounded-md bg-white p-1" style={{ height: 260 }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={chartData} margin={{ top: 10, right: 16, left: 0, bottom: 24 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                <XAxis
+                  type="number"
+                  dataKey="sieveLog"
+                  scale="log"
+                  domain={["auto", "auto"]}
+                  tick={{ fontSize: 9 }}
+                  tickFormatter={(v: number) => formatDisplaySieveMm(Number(v))}
+                  label={{ value: isAr ? "مقاس المنخل (مم)" : "Sieve size (mm)", position: "insideBottom", offset: -14, style: { fontSize: 10 } }}
+                />
+                <YAxis width={40} domain={[0, 100]} tick={{ fontSize: 9 }} label={{ value: isAr ? "% المار" : "% Passing", angle: -90, position: "insideLeft", style: { fontSize: 10 } }} />
+                <Tooltip formatter={(v: unknown) => { const n = Number(v); return Number.isFinite(n) ? `${n.toFixed(1)}%` : "—"; }} contentStyle={{ fontSize: 10 }} />
+                <Legend wrapperStyle={{ fontSize: 9 }} iconSize={8} />
+                <Line type="monotone" dataKey="blend" name={isAr ? "الخليط" : "Blend"} stroke="#2563eb" strokeWidth={2} dot={{ r: 2 }} connectNulls />
+                <Line type="monotone" dataKey="upper" name={isAr ? "الحد الأعلى" : "Upper"} stroke="#ef4444" strokeWidth={1.5} strokeDasharray="5 5" dot={false} connectNulls />
+                <Line type="monotone" dataKey="lower" name={isAr ? "الحد الأدنى" : "Lower"} stroke="#ef4444" strokeWidth={1.5} strokeDasharray="5 5" dot={false} connectNulls />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function renderSieveAnalysis(fd: any, isAr: boolean, extras?: FormReportExtras) {
+  if (fd?.testMode === "agg_blend") return renderAggBlendSieve(fd, isAr);
   if (_isSandBlendSieveFormData(fd)) {
     const stdKey = fd.standard === "BS_1199_A" || fd.blendStandard === "BS_1199_A" ? "BS_1199_A" : "ASTM_C144";
     const standardName =

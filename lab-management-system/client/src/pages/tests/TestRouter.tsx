@@ -19,6 +19,7 @@ import Interlock from "./Interlock";
 import SteelRebar from "./SteelRebar";
 import SteelBendRebend from "./SteelBendRebend";
 import SieveAnalysis from "./SieveAnalysis";
+import SieveAggBlend from "./SieveAggBlend";
 import SoilProctor from "./SoilProctor";
 import SoilAtterberg from "./SoilAtterberg";
 import SoilFieldDensity from "./SoilFieldDensity";
@@ -161,7 +162,7 @@ const CODE_TO_COMPONENT: Record<string, React.ComponentType> = {
   "ASPH_SPRAY_MC250":       AsphaltSprayRate,
   "ASPH_SPRAY_CUSTOM":      AsphaltSprayRate,
   // Aggregate (6)
-  "AGG_SIEVE":              SieveAnalysis,
+  "AGG_SIEVE":              SieveAggBlend,
   "AGG_SG":                 AggSpecificGravity,
   "AGG_FLAKINESS_ELONGATION": AggShapeIndex,
   "AGG_CRUSHING":           AggCrushingImpact,
