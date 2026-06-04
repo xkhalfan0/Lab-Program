@@ -12,6 +12,7 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { FlexibleResultsTable, type Column, formDataToKeyValueRows, keyValueColumns } from "@/components/reports/FlexibleResultsTable";
 import { formatCalendarDate } from "@/lib/dateFormat";
 import { calculateFinalBlend, formatDisplaySieveMm } from "@/pages/tests/SieveAnalysis";
+import { formatSpecLimit, normalizeAggSpecType, resolveAggBlendLimits } from "@/lib/aggBlendSpecs";
 import { EXTRACTED_SIEVE_SIZES } from "@/lib/extractedSieveLimits";
 import {
   LineChart,
@@ -702,15 +703,24 @@ function renderAggBlendSieve(fd: any, isAr: boolean) {
   const sizes: any[] = Array.isArray(fd.sizes) ? fd.sizes : [];
   const rows: any[] = Array.isArray(fd.rows) ? fd.rows : [];
   const passesSpec = fd.passesSpec === true;
-  const specLabel = fd.specType ?? "—";
+  const specLabel = normalizeAggSpecType(fd.specType);
+  const LIMIT_EPS = 0.05;
 
-  const chartData = rows.map((r: any) => ({
-    sieveMm: r.sieveMm != null ? formatDisplaySieveMm(Number(r.sieveMm)) : String(r.sieve ?? ""),
-    sieveLog: Math.max(Number(r.sieveMm) || 0.01, 0.01),
-    blend: r.blend != null ? Number(r.blend) : null,
-    lower: r.lower != null ? Number(r.lower) : null,
-    upper: r.upper != null ? Number(r.upper) : null,
-  }));
+  const chartData = rows.map((r: any) => {
+    const sieveMm = Number(r.sieveMm);
+    const catalog = resolveAggBlendLimits(specLabel, sieveMm);
+    const lower =
+      typeof r.lower === "number" && Number.isFinite(r.lower) ? r.lower : catalog.lower;
+    const upper =
+      typeof r.upper === "number" && Number.isFinite(r.upper) ? r.upper : catalog.upper;
+    return {
+      sieveMm: r.sieveMm != null ? formatDisplaySieveMm(sieveMm) : String(r.sieve ?? ""),
+      sieveLog: Math.max(sieveMm || 0.01, 0.01),
+      blend: r.blend != null ? Number(r.blend) : null,
+      lower,
+      upper,
+    };
+  });
   const hasChart = chartData.length >= 2 && chartData.some(d => d.blend != null);
 
   return (
@@ -768,14 +778,26 @@ function renderAggBlendSieve(fd: any, isAr: boolean) {
             </thead>
             <tbody>
               {rows.map((r: any, idx: number) => {
-                const within = r.withinLimits;
+                const sieveMm = Number(r.sieveMm);
+                const catalog = resolveAggBlendLimits(specLabel, sieveMm);
+                const lower =
+                  typeof r.lower === "number" && Number.isFinite(r.lower) ? r.lower : catalog.lower;
+                const upper =
+                  typeof r.upper === "number" && Number.isFinite(r.upper) ? r.upper : catalog.upper;
+                const blend = r.blend != null ? Number(r.blend) : null;
+                const within =
+                  r.withinLimits === true || r.withinLimits === false
+                    ? r.withinLimits
+                    : blend != null && Number.isFinite(lower) && Number.isFinite(upper)
+                      ? blend >= (lower as number) - LIMIT_EPS && blend <= (upper as number) + LIMIT_EPS
+                      : null;
                 return (
                   <tr key={idx} className={idx % 2 === 0 ? "bg-white" : "bg-slate-50/80"}>
                     <td className="border border-slate-300 px-2 py-1 text-center font-mono font-bold">
                       {r.sieveMm != null ? formatDisplaySieveMm(Number(r.sieveMm)) : String(r.sieve ?? "—")}
                     </td>
-                    <td className="border border-slate-300 px-2 py-1 text-center bg-red-50 text-red-900">{r.lower != null ? String(r.lower) : "—"}</td>
-                    <td className="border border-slate-300 px-2 py-1 text-center bg-red-50 text-red-900">{r.upper != null ? String(r.upper) : "—"}</td>
+                    <td className="border border-slate-300 px-2 py-1 text-center bg-red-50 text-red-900">{formatSpecLimit(lower)}</td>
+                    <td className="border border-slate-300 px-2 py-1 text-center bg-red-50 text-red-900">{formatSpecLimit(upper)}</td>
                     {sizes.map((s, i) => {
                       const og = r.origGrad?.[s.key];
                       const req = r.required?.[s.key];

@@ -33,44 +33,16 @@ import { GradationCurveChart } from "@/components/GradationCurveChart";
 import { extractedSieveLegendItems } from "@/components/GradationChartLegend";
 import { formatDisplaySieveMm } from "./SieveAnalysis";
 import { LAB_NUMERIC_INPUT_SM } from "@/lib/labInputStyles";
+import {
+  AGG_BLEND_SPECS,
+  type AggSpecKey,
+  formatSpecLimit,
+  normalizeAggSpecType,
+  resolveAggBlendLimits,
+  sieveKey,
+} from "@/lib/aggBlendSpecs";
 
 const LIMIT_EPS = 0.05;
-
-type AggSpecRow = { mm: number; lower: number | null; upper: number | null };
-
-/**
- * Concrete-aggregate blend specifications (mix design type).
- * MSRC — lab "ALL IN SPECIFICATION" table (37.5, 20, 5, 600µm, 150µm, 75µm).
- * OPC — sieve series 10, 5, 2.36, 1.18, 0.6, 0.3, 0.15, 0.075 mm with fixed limits.
- */
-export const AGG_BLEND_SPECS: Record<string, { label: string; rows: AggSpecRow[] }> = {
-  MSRC: {
-    label: "MSRC",
-    rows: [
-      { mm: 37.5, lower: 100, upper: 100 },
-      { mm: 20, lower: 95, upper: 100 },
-      { mm: 5, lower: 35, upper: 55 },
-      { mm: 0.6, lower: 10, upper: 35 },
-      { mm: 0.15, lower: 0, upper: 10 },
-      { mm: 0.075, lower: 0, upper: 3 },
-    ],
-  },
-  OPC: {
-    label: "OPC",
-    rows: [
-      { mm: 10, lower: 95, upper: 100 },
-      { mm: 5, lower: 30, upper: 65 },
-      { mm: 2.36, lower: 20, upper: 50 },
-      { mm: 1.18, lower: 15, upper: 40 },
-      { mm: 0.6, lower: 10, upper: 30 },
-      { mm: 0.3, lower: 5, upper: 15 },
-      { mm: 0.15, lower: 0, upper: 10 },
-      { mm: 0.075, lower: 0, upper: 3 },
-    ],
-  },
-};
-
-type AggSpecKey = keyof typeof AGG_BLEND_SPECS;
 
 const AGG_SUBTYPE_LABELS: Record<string, { en: string; ar: string }> = {
   agg_32mm: { en: "32mm Aggregate", ar: "ركام 32مم" },
@@ -80,10 +52,6 @@ const AGG_SUBTYPE_LABELS: Record<string, { en: string; ar: string }> = {
   dune_sand: { en: "Dune Sand", ar: "رمل كثبان" },
   others: { en: "Other", ar: "أخرى" },
 };
-
-function sieveKey(mm: number): string {
-  return String(Math.round(mm * 1000) / 1000);
-}
 
 function parseNum(v: unknown): number | null {
   if (v == null || v === "") return null;
@@ -154,8 +122,7 @@ export default function SieveAggBlend() {
 
   const computedRows = specRows.map(spec => {
     const sk = sieveKey(spec.mm);
-    const lower = spec.lower; // fixed spec limit
-    const upper = spec.upper; // fixed spec limit
+    const { lower, upper } = resolveAggBlendLimits(specType, spec.mm);
     const required: Record<string, number | null> = {};
     let blendSum = 0;
     let complete = sizeKeys.length > 0;
@@ -173,15 +140,17 @@ export default function SieveAggBlend() {
     }
     const blend = complete ? blendSum : null;
     const withinLimits =
-      blend != null && lower != null && upper != null
-        ? blend >= lower - LIMIT_EPS && blend <= upper + LIMIT_EPS
+      blend != null && Number.isFinite(lower) && Number.isFinite(upper)
+        ? blend >= (lower as number) - LIMIT_EPS && blend <= (upper as number) + LIMIT_EPS
         : null;
     return { sieveMm: spec.mm, sieveKey: sk, lower, upper, required, blend, withinLimits };
   });
 
   const allQtySet = sizeKeys.length > 0 && sizeKeys.every(k => (parseNum(mixQty[k]) ?? 0) > 0);
   const allOrigSet = computedRows.every(r => sizeKeys.every(k => r.required[k] != null));
-  const specRowsWithLimits = computedRows.filter(r => r.lower != null && r.upper != null);
+  const specRowsWithLimits = computedRows.filter(
+    r => Number.isFinite(r.lower) && Number.isFinite(r.upper),
+  );
   const withinSpec = specRowsWithLimits.length > 0 && specRowsWithLimits.every(r => r.withinLimits === true);
   const anyData =
     sizeKeys.some(k => (mixQty[k] ?? "").trim() !== "") ||
@@ -204,7 +173,7 @@ export default function SieveAggBlend() {
       setHydrated(true);
       return;
     }
-    if (fd.specType === "MSRC" || fd.specType === "OPC") setSpecType(fd.specType);
+    setSpecType(normalizeAggSpecType(fd.specType));
     const qtyInit: Record<string, string> = {};
     const origInit: Record<string, Record<string, string>> = {};
     if (Array.isArray(fd.sizes)) {
@@ -567,10 +536,10 @@ export default function SieveAggBlend() {
                         {r.blend != null ? r.blend.toFixed(1) : "—"}
                       </td>
                       <td className="border border-slate-300 px-2 py-1 text-center font-mono font-semibold bg-red-50 text-red-900">
-                        {r.lower != null ? r.lower : "—"}
+                        {formatSpecLimit(r.lower)}
                       </td>
                       <td className="border border-slate-300 px-2 py-1 text-center font-mono font-semibold bg-red-50 text-red-900">
-                        {r.upper != null ? r.upper : "—"}
+                        {formatSpecLimit(r.upper)}
                       </td>
                       <td className="border border-slate-300 px-2 py-1 text-center">
                         {r.withinLimits === true ? (
