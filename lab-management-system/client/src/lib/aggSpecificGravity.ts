@@ -55,6 +55,28 @@ function parseG(raw: string): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+/** Relative density values — 2 decimal places (e.g. 2.758 → 2.76, 2.754 → 2.75). */
+export function roundSgValue(value: number): number {
+  return parseFloat(value.toFixed(2));
+}
+
+/** Water absorption % — 1 decimal place (e.g. 0.58 → 0.6, 0.52 → 0.5). */
+export function roundAbsorptionPct(value: number): number {
+  return parseFloat(value.toFixed(1));
+}
+
+export function formatSgDisplay(value: unknown): string {
+  if (value == null || value === "") return "—";
+  const n = Number(value);
+  return Number.isFinite(n) ? roundSgValue(n).toFixed(2) : String(value);
+}
+
+export function formatAbsorptionDisplay(value: unknown): string {
+  if (value == null || value === "") return "—";
+  const n = Number(value);
+  return Number.isFinite(n) ? `${roundAbsorptionPct(n).toFixed(1)}%` : String(value);
+}
+
 export function evaluateSgResults(
   values: { bulkSgOD: number; bulkSgSSD: number; apparentSg: number; absorption: number },
   spec: (typeof AGG_SG_SPECS)[AggSgType],
@@ -86,10 +108,10 @@ export function computeCoarseSg(
 
   return evaluateSgResults(
     {
-      bulkSgOD: parseFloat((a / (b - c)).toFixed(3)),
-      bulkSgSSD: parseFloat((b / (b - c)).toFixed(3)),
-      apparentSg: parseFloat((a / (a - c)).toFixed(3)),
-      absorption: parseFloat((((b - a) / a) * 100).toFixed(2)),
+      bulkSgOD: roundSgValue(a / (b - c)),
+      bulkSgSSD: roundSgValue(b / (b - c)),
+      apparentSg: roundSgValue(a / (a - c)),
+      absorption: roundAbsorptionPct(((b - a) / a) * 100),
     },
     spec,
   );
@@ -115,10 +137,10 @@ export function computeFineSg(
 
   return evaluateSgResults(
     {
-      bulkSgOD: parseFloat((od / denomBulk).toFixed(3)),
-      bulkSgSSD: parseFloat((ssd / denomBulk).toFixed(3)),
-      apparentSg: parseFloat((od / denomApparent).toFixed(3)),
-      absorption: parseFloat((((ssd - od) / od) * 100).toFixed(2)),
+      bulkSgOD: roundSgValue(od / denomBulk),
+      bulkSgSSD: roundSgValue(ssd / denomBulk),
+      apparentSg: roundSgValue(od / denomApparent),
+      absorption: roundAbsorptionPct(((ssd - od) / od) * 100),
     },
     spec,
   );

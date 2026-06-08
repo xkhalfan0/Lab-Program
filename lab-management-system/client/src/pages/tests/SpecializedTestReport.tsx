@@ -26,6 +26,10 @@ import {
   type AggSgType,
   computeCoarseSg,
   computeFineSg,
+  formatAbsorptionDisplay,
+  formatSgDisplay,
+  roundAbsorptionPct,
+  roundSgValue,
 } from "@/lib/aggSpecificGravity";
 import {
   LineChart,
@@ -3231,8 +3235,8 @@ function formatSummaryValue(key: string, value: unknown, isAr: boolean): string 
     if (v === "fail") return isAr ? "غير مطابق" : "FAIL";
     if (v === "pending") return isAr ? "قيد الانتظار" : "Pending";
   }
-  if (key === "avgAbsorption" && typeof value === "number") return `${value}%`;
-  if (key === "avgAbsorption" && typeof value === "string" && !value.endsWith("%")) return `${value}%`;
+  if (key === "avgApparentSg" || key === "avgSg") return formatSgDisplay(value);
+  if (key === "avgAbsorption") return formatAbsorptionDisplay(value);
   return String(value);
 }
 
@@ -3334,16 +3338,16 @@ function renderAggSpecificGravity(fd: any, isAr: boolean) {
           <tbody>
             <tr>
               <td className="border border-slate-300 px-1 py-1 text-center font-mono">
-                {computed?.bulkSgOD ?? "—"}
+                {formatSgDisplay(computed?.bulkSgOD)}
               </td>
               <td className="border border-slate-300 px-1 py-1 text-center font-mono">
-                {computed?.bulkSgSSD ?? "—"}
+                {formatSgDisplay(computed?.bulkSgSSD)}
               </td>
               <td className="border border-slate-300 px-1 py-1 text-center font-mono font-bold">
-                {computed?.apparentSg ?? "—"}
+                {formatSgDisplay(computed?.apparentSg)}
               </td>
               <td className="border border-slate-300 px-1 py-1 text-center font-mono font-bold">
-                {computed?.absorption != null ? `${computed.absorption}%` : "—"}
+                {formatAbsorptionDisplay(computed?.absorption)}
               </td>
               <td className="border border-slate-300 px-1 py-1 text-center font-semibold">
                 {sgPassFailLabel(computed?.overallResult ?? fd?.overallResult, isAr)}
@@ -3362,12 +3366,12 @@ function renderAggSpecificGravity(fd: any, isAr: boolean) {
         <div className="flex justify-center gap-6 items-center pt-1">
           <div className="text-center">
             <p className="text-[10px] text-slate-500">{L("Average Apparent SG", "متوسط الكثافة الظاهرية")}</p>
-            <p className="font-bold font-mono">{avgApparent ?? computed?.apparentSg ?? "—"}</p>
+            <p className="font-bold font-mono">{formatSgDisplay(avgApparent ?? computed?.apparentSg)}</p>
           </div>
           <div className="text-center">
             <p className="text-[10px] text-slate-500">{L("Average Absorption", "متوسط الامتصاص")}</p>
             <p className="font-bold font-mono">
-              {avgAbsorption != null ? `${avgAbsorption}%` : computed?.absorption != null ? `${computed.absorption}%` : "—"}
+              {formatAbsorptionDisplay(avgAbsorption ?? computed?.absorption)}
             </p>
           </div>
           <p className={`font-bold text-sm ${pass ? "text-emerald-600" : "text-red-600"}`}>
@@ -3386,10 +3390,17 @@ function renderAggSpecificGravity(fd: any, isAr: boolean) {
       inWater: r.massInWater ?? "",
     };
     const computed =
-      r.apparentSg != null
-        ? r
-        : computeCoarseSg(masses.ovenDry, masses.ssd, masses.inWater, spec) ?? r;
-    return { ...r, ...computed, sampleNo: r.sampleNo ?? "—" };
+      computeCoarseSg(masses.ovenDry, masses.ssd, masses.inWater, spec) ??
+      (r.apparentSg != null
+        ? {
+            bulkSgOD: roundSgValue(Number(r.bulkSgOD)),
+            bulkSgSSD: roundSgValue(Number(r.bulkSgSSD)),
+            apparentSg: roundSgValue(Number(r.apparentSg)),
+            absorption: roundAbsorptionPct(Number(r.absorption)),
+            overallResult: r.overallResult,
+          }
+        : null);
+    return { ...r, ...(computed ?? {}), sampleNo: r.sampleNo ?? "—" };
   });
 
   return (
@@ -3426,11 +3437,11 @@ function renderAggSpecificGravity(fd: any, isAr: boolean) {
               <td className="border border-slate-300 px-1 py-0.5 text-center">{r.massOvenDry ?? r.massDryAir ?? "—"}</td>
               <td className="border border-slate-300 px-1 py-0.5 text-center">{r.massSSD ?? "—"}</td>
               <td className="border border-slate-300 px-1 py-0.5 text-center">{r.massInWater ?? "—"}</td>
-              <td className="border border-slate-300 px-1 py-0.5 text-center font-mono">{r.bulkSgOD ?? "—"}</td>
-              <td className="border border-slate-300 px-1 py-0.5 text-center font-mono">{r.bulkSgSSD ?? "—"}</td>
-              <td className="border border-slate-300 px-1 py-0.5 text-center font-mono font-bold">{r.apparentSg ?? "—"}</td>
+              <td className="border border-slate-300 px-1 py-0.5 text-center font-mono">{formatSgDisplay(r.bulkSgOD)}</td>
+              <td className="border border-slate-300 px-1 py-0.5 text-center font-mono">{formatSgDisplay(r.bulkSgSSD)}</td>
+              <td className="border border-slate-300 px-1 py-0.5 text-center font-mono font-bold">{formatSgDisplay(r.apparentSg)}</td>
               <td className="border border-slate-300 px-1 py-0.5 text-center font-mono font-bold">
-                {r.absorption != null ? `${r.absorption}%` : "—"}
+                {formatAbsorptionDisplay(r.absorption)}
               </td>
               <td className="border border-slate-300 px-1 py-0.5 text-center font-semibold">
                 {sgPassFailLabel(r.overallResult, isAr)}
@@ -3442,9 +3453,9 @@ function renderAggSpecificGravity(fd: any, isAr: boolean) {
               <td colSpan={6} className="border border-slate-300 px-2 py-1 text-end">
                 {L("Average", "المتوسط")}
               </td>
-              <td className="border border-slate-300 px-1 py-1 text-center font-mono">{avgApparent ?? "—"}</td>
+              <td className="border border-slate-300 px-1 py-1 text-center font-mono">{formatSgDisplay(avgApparent)}</td>
               <td className="border border-slate-300 px-1 py-1 text-center font-mono">
-                {avgAbsorption != null ? `${avgAbsorption}%` : "—"}
+                {formatAbsorptionDisplay(avgAbsorption)}
               </td>
               <td className="border border-slate-300 px-1 py-1 text-center">
                 {sgPassFailLabel(fd?.overallResult, isAr)}

@@ -23,6 +23,8 @@ import {
   type SgComputedValues,
   computeCoarseSg,
   computeFineSg,
+  roundAbsorptionPct,
+  roundSgValue,
 } from "@/lib/aggSpecificGravity";
 
 const CELL_IN = "bg-yellow-50";
@@ -113,18 +115,14 @@ export default function AggSpecificGravity() {
 
   const avgApparentSg =
     validResults.length > 0
-      ? parseFloat(
-          (
-            validResults.reduce((s, r) => s + r.apparentSg, 0) / validResults.length
-          ).toFixed(3),
+      ? roundSgValue(
+          validResults.reduce((s, r) => s + r.apparentSg, 0) / validResults.length,
         )
       : undefined;
   const avgAbsorption =
     validResults.length > 0
-      ? parseFloat(
-          (
-            validResults.reduce((s, r) => s + r.absorption, 0) / validResults.length
-          ).toFixed(2),
+      ? roundAbsorptionPct(
+          validResults.reduce((s, r) => s + r.absorption, 0) / validResults.length,
         )
       : undefined;
 

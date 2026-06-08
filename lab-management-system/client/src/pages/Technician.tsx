@@ -13,7 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { trpc } from "@/lib/trpc";
-import { getOfficialTestDisplayName } from "@/lib/officialTestCatalog";
+import { resolveOfficialTestLabel } from "@/lib/officialTestCatalog";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useDeletionStatus } from "@/hooks/useDeletionStatus";
 import {
@@ -306,9 +306,10 @@ function TechnicianAssignmentCard({
   const combinedPending = pendingDeletion || hasPendingDeletion;
   const startDisabled = combinedPending || prerequisitesLocked;
 
-  const testTitle =
-    getOfficialTestDisplayName(dist.testType, lang === "ar" ? "ar" : "en") ??
-    (lang === "ar" ? dist.testNameAr || dist.testName : dist.testNameEn || dist.testName);
+  const testTitle = resolveOfficialTestLabel(dist.testType, lang === "ar" ? "ar" : "en", {
+    nameEn: dist.testNameEn || dist.testName,
+    nameAr: dist.testNameAr,
+  });
   const subLabel = getSubTypeLabel(dist.sampleSubType, lang);
   const contractor = sample?.contractorName ?? "—";
   const contractNo = sample?.contractNumber ?? "—";
@@ -887,10 +888,10 @@ export default function Technician() {
                 <div>
                   <span className="text-muted-foreground">{tx("testType", lang)}:</span>{" "}
                   <span className="font-medium">
-                    {getOfficialTestDisplayName(selectedDist.testType, lang === "ar" ? "ar" : "en") ??
-                      (lang === "ar"
-                        ? selectedDist.testNameAr || selectedDist.testName
-                        : selectedDist.testNameEn || selectedDist.testName)}
+                    {resolveOfficialTestLabel(selectedDist.testType, lang === "ar" ? "ar" : "en", {
+                      nameEn: selectedDist.testNameEn || selectedDist.testName,
+                      nameAr: selectedDist.testNameAr,
+                    })}
                   </span>
                 </div>
                 <div>

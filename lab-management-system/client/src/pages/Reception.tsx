@@ -31,6 +31,7 @@ import {
   getOfficialTestByCode,
   getSteelDeferredSubtypeOrderHint,
 } from "../../../server/data/official-test-catalog";
+import { resolveOfficialTestLabel } from "@/lib/officialTestCatalog";
 
 // ─── Sub-type options per test CODE ─────────────────────────────────────────
 const SUBTYPES_BY_CODE: Record<string, { value: string; labelAr: string; labelEn: string }[]> = {
@@ -460,13 +461,22 @@ export default function Reception() {
     });
   };
 
+  const catalogLang = lang === "ar" ? "ar" : "en";
+  const testDisplayName = (
+    code: string | null | undefined,
+    nameEn?: string | null,
+    nameAr?: string | null,
+  ) => resolveOfficialTestLabel(code, catalogLang, { nameEn, nameAr });
+
   const getRequiredTestDisplayNames = (codes: readonly string[]) =>
     codes
       .map((code) => {
         const reqTest = findTestTypeByCode(code) ?? getOfficialTestByCode(code);
-        return lang === "ar"
-          ? (reqTest as { nameAr?: string })?.nameAr ?? (reqTest as { nameEn?: string })?.nameEn ?? code
-          : (reqTest as { nameEn?: string })?.nameEn ?? code;
+        return testDisplayName(
+          code,
+          (reqTest as { nameEn?: string })?.nameEn,
+          (reqTest as { nameAr?: string })?.nameAr,
+        );
       })
       .join(", ");
 
@@ -476,7 +486,7 @@ export default function Reception() {
     return {
       testTypeId: tt.id,
       testTypeCode,
-      testTypeName: lang === "ar" && tt.nameAr ? tt.nameAr : tt.nameEn,
+      testTypeName: testDisplayName(tt.code, tt.nameEn, tt.nameAr),
       formTemplate: tt.formTemplate ?? undefined,
       testSubType:
         form.sampleType === "asphalt" && isMixTest && asphaltMixCourse
@@ -542,7 +552,7 @@ export default function Reception() {
         const placeholder: SelectedTest = {
           testTypeId: tt.id,
           testTypeCode: tt.code,
-          testTypeName: lang === "ar" && tt.nameAr ? tt.nameAr : tt.nameEn,
+          testTypeName: testDisplayName(tt.code, tt.nameEn, tt.nameAr),
           formTemplate: tt.formTemplate ?? undefined,
           testSubType: "__multi__",
           quantity: 0,
@@ -1088,7 +1098,7 @@ export default function Reception() {
                                 />
                                 <span className="text-sm flex-1">
                                   <span className="block">
-                                    {lang === "ar" && test.nameAr ? test.nameAr : test.nameEn}
+                                    {testDisplayName(test.code, test.nameEn, test.nameAr)}
                                   </span>
                                   {renderTestDependencyHint(test.code)}
                                 </span>
@@ -1212,7 +1222,7 @@ export default function Reception() {
                                 <div className="flex items-start justify-between gap-3">
                                   <div className="min-w-0">
                                     <span className="block text-[15px] font-semibold text-foreground">
-                                      {lang === "ar" && tt.nameAr ? tt.nameAr : tt.nameEn}
+                                      {testDisplayName(tt.code, tt.nameEn, tt.nameAr)}
                                     </span>
                                     {tt.code && (
                                       <span className="mt-0.5 block text-xs text-muted-foreground font-mono">{tt.code}</span>
@@ -1350,7 +1360,7 @@ export default function Reception() {
                                               const addonTest: SelectedTest = {
                                                 testTypeId: at.id,
                                                 testTypeCode: at.code,
-                                                testTypeName: lang === "ar" && at.nameAr ? at.nameAr : at.nameEn,
+                                                testTypeName: testDisplayName(at.code, at.nameEn, at.nameAr),
                                                 formTemplate: at.formTemplate ?? undefined,
                                                 testSubType: undefined,
                                                 quantity: 0,
@@ -1363,7 +1373,7 @@ export default function Reception() {
                                           }}
                                         />
                                         <label htmlFor={`addon-${at.id}`} className="flex-1 text-xs cursor-pointer">
-                                          <span className="font-medium">{lang === "ar" && at.nameAr ? at.nameAr : at.nameEn}</span>
+                                          <span className="font-medium">{testDisplayName(at.code, at.nameEn, at.nameAr)}</span>
                                           <span className="text-muted-foreground font-mono ms-1">({at.code})</span>
                                         </label>
                                         {isAddonSelected && (

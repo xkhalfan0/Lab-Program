@@ -1,6 +1,6 @@
 /**
  * Seeds lab test catalog rows into `test_types` (codes + form templates for Reception & TestRouter).
- * Idempotent: inserts missing codes only; never overwrites existing edited rows.
+ * Idempotent: inserts missing codes; syncs catalog labels/standards on existing rows (unitPrice is not changed).
  *
  * Run: pnpm run db:seed:test-types   (loads `test_types` so Reception can filter by category = sampleType)
  * Requires DATABASE_URL in .env
@@ -21,7 +21,7 @@ async function main() {
   }
 
   let inserted = 0;
-  let skipped = 0;
+  let updated = 0;
   for (const row of ROWS) {
     const existing = await db
       .select({ id: testTypes.id })
@@ -30,7 +30,19 @@ async function main() {
       .limit(1);
 
     if (existing[0]) {
-      skipped++;
+      await db
+        .update(testTypes)
+        .set({
+          category: row.category,
+          nameEn: row.nameEn,
+          nameAr: row.nameAr,
+          unit: row.unit,
+          standardRef: row.standardRef,
+          formTemplate: row.formTemplate,
+          sortOrder: row.sortOrder,
+        })
+        .where(eq(testTypes.id, existing[0].id));
+      updated++;
       continue;
     }
 
@@ -51,7 +63,7 @@ async function main() {
     inserted++;
   }
 
-  console.log(`Seed test types: inserted ${inserted}, skipped existing ${skipped}.`);
+  console.log(`Seed test types: inserted ${inserted}, updated ${updated}.`);
 }
 
 function isConnRefused(e: unknown): boolean {

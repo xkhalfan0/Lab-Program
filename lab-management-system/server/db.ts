@@ -785,7 +785,7 @@ export async function createDistribution(data: typeof distributions.$inferInsert
 export async function getDistributionsBySample(sampleId: number) {
   const db = await getDb();
   if (!db) return [];
-  return db
+  const rows = await db
     .select({
       id: distributions.id,
       distributionCode: distributions.distributionCode,
@@ -815,6 +815,7 @@ export async function getDistributionsBySample(sampleId: number) {
     .from(distributions)
     .leftJoin(testTypes, eq(distributions.testType, testTypes.code))
     .where(and(eq(distributions.sampleId, sampleId), isNull(distributions.deletedAt)));
+  return rows.map(overlayDistributionTestNames);
 }
 
 /**
@@ -945,7 +946,7 @@ export async function getDistributionsByTechnician(technicianId: number) {
       )
     )
     .orderBy(desc(distributions.createdAt));
-  return rows;
+  return rows.map(overlayDistributionTestNames);
 }
 
 export async function getDistributionById(id: number) {
@@ -996,7 +997,8 @@ export async function getDistributionById(id: number) {
     .leftJoin(testTypes, eq(distributions.testType, testTypes.code))
     .where(and(eq(distributions.id, id), isNull(distributions.deletedAt)))
     .limit(1);
-  return result[0];
+  const row = result[0];
+  return row ? overlayDistributionTestNames(row) : undefined;
 }
 
 export async function getDistributionsByBatch(batchDistributionId: string) {
@@ -1545,25 +1547,52 @@ export async function markAllSectorNotificationsRead(sectorId: number) {
 
 // ─── Test Types ────────────────────────────────────────────────────────────────
 /** Full catalog (including inactive). Use for admin UI, pricing lookups, and reports. Reception uses getTestTypesByCategory or filters isActive client-side. */
+function overlayOfficialCatalogTestType<T extends typeof testTypes.$inferSelect>(row: T): T {
+  const def = getOfficialTestByCode(row.code);
+  if (!def) return row;
+  return {
+    ...row,
+    nameEn: def.nameEn,
+    nameAr: def.nameAr,
+    standardRef: def.standardRef,
+    formTemplate: def.formTemplate,
+    category: def.category,
+    sortOrder: def.sortOrder,
+  };
+}
+
+function overlayDistributionTestNames<
+  T extends { testType?: string | null; testNameEn?: string | null; testNameAr?: string | null },
+>(row: T): T {
+  const def = getOfficialTestByCode(row.testType);
+  if (!def) return row;
+  return { ...row, testNameEn: def.nameEn, testNameAr: def.nameAr };
+}
+
 export async function getAllTestTypes() {
   const db = await getDb();
   if (!db) return [];
-  return db.select().from(testTypes).orderBy(testTypes.sortOrder);
+  const rows = await db.select().from(testTypes).orderBy(testTypes.sortOrder);
+  return rows.map(overlayOfficialCatalogTestType);
 }
 
 export async function getTestTypesByCategory(category: typeof testTypes.$inferSelect.category) {
   const db = await getDb();
   if (!db) return [];
-  return db.select().from(testTypes)
+  const rows = await db
+    .select()
+    .from(testTypes)
     .where(and(eq(testTypes.category, category), eq(testTypes.isActive, true)))
     .orderBy(testTypes.sortOrder);
+  return rows.map(overlayOfficialCatalogTestType);
 }
 
 export async function getTestTypeById(id: number) {
   const db = await getDb();
   if (!db) return undefined;
   const result = await db.select().from(testTypes).where(eq(testTypes.id, id)).limit(1);
-  return result[0];
+  const row = result[0];
+  return row ? overlayOfficialCatalogTestType(row) : undefined;
 }
 
 export async function createTestType(data: typeof testTypes.$inferInsert) {
