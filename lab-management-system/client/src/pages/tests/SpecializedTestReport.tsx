@@ -21,6 +21,13 @@ import {
 } from "@/lib/aggBlendSpecs";
 import { EXTRACTED_SIEVE_SIZES } from "@/lib/extractedSieveLimits";
 import {
+  AGG_SG_SPECS,
+  SG_TITLES,
+  type AggSgType,
+  computeCoarseSg,
+  computeFineSg,
+} from "@/lib/aggSpecificGravity";
+import {
   LineChart,
   Line,
   ScatterChart,
@@ -3202,6 +3209,267 @@ function renderConcreteCubes(fd: any, isAr: boolean) {
   );
 }
 
+function formatSummaryLabel(key: string, formTemplate: string, isAr: boolean): string {
+  const L = (en: string, ar: string) => (isAr ? ar : en);
+  const maps: Record<string, Record<string, string>> = {
+    agg_specific_gravity: {
+      aggType: L("Aggregate Type", "نوع الركام"),
+      avgApparentSg: L("Average Apparent SG", "متوسط الكثافة الظاهرية"),
+      avgSg: L("Average Apparent SG", "متوسط الكثافة الظاهرية"),
+      avgAbsorption: L("Average Water Absorption (%)", "متوسط امتصاص الماء (%)"),
+      overallResult: L("Overall Result", "النتيجة الإجمالية"),
+    },
+  };
+  return maps[formTemplate]?.[key] ?? key.replace(/_/g, " ");
+}
+
+function formatSummaryValue(key: string, value: unknown, isAr: boolean): string {
+  if (value == null || value === "") return "—";
+  if (key === "overallResult") {
+    const v = String(value).toLowerCase();
+    if (v === "pass") return isAr ? "مطابق" : "PASS";
+    if (v === "fail") return isAr ? "غير مطابق" : "FAIL";
+    if (v === "pending") return isAr ? "قيد الانتظار" : "Pending";
+  }
+  if (key === "avgAbsorption" && typeof value === "number") return `${value}%`;
+  if (key === "avgAbsorption" && typeof value === "string" && !value.endsWith("%")) return `${value}%`;
+  return String(value);
+}
+
+function sgPassFailLabel(result: string | undefined, isAr: boolean): string {
+  if (result === "pass") return isAr ? "مطابق" : "PASS";
+  if (result === "fail") return isAr ? "غير مطابق" : "FAIL";
+  return "—";
+}
+
+function renderAggSpecificGravity(fd: any, isAr: boolean) {
+  const L = (en: string, ar: string) => (isAr ? ar : en);
+  const aggType: AggSgType = fd?.aggType === "FINE" ? "FINE" : "COARSE";
+  const spec = fd?.spec ?? AGG_SG_SPECS[aggType];
+  const title = SG_TITLES[aggType];
+  const pass = fd?.overallResult === "pass";
+  const avgApparent = fd?.avgApparentSg ?? fd?.avgSg;
+  const avgAbsorption = fd?.avgAbsorption;
+
+  if (aggType === "FINE") {
+    const fi = fd?.fineInput ?? {};
+    const computed =
+      fd?.result ??
+      computeFineSg(
+        fi.pycnometerH2O ?? "",
+        fi.massSSD ?? "",
+        fi.ssdPycH2O ?? "",
+        fi.massOvenDry ?? "",
+        spec,
+      );
+    return (
+      <div className="space-y-3 text-[11px]">
+        <div className="text-center border-b border-slate-300 pb-2">
+          <h3 className="font-semibold text-slate-800">{isAr ? title.ar : title.en}</h3>
+          <p className="text-[10px] text-slate-500">{spec.standard}</p>
+          {fd?.source ? (
+            <p className="text-[10px] text-slate-500">
+              {L("Source:", "المصدر:")} {fd.source}
+            </p>
+          ) : null}
+        </div>
+        <table className="w-full border-collapse text-[10px]">
+          <thead>
+            <tr className="bg-slate-100">
+              <th className="border border-slate-300 px-2 py-1 text-start" colSpan={2}>
+                {L("Test Measurements", "قياسات الاختبار")}
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td className="border border-slate-300 px-2 py-1 text-gray-600 w-1/2">
+                {L("Pycnometer + water (g)", "كثّاف + ماء (جم)")}
+              </td>
+              <td className="border border-slate-300 px-2 py-1 text-center font-mono font-semibold">
+                {fi.pycnometerH2O ?? "—"}
+              </td>
+            </tr>
+            <tr>
+              <td className="border border-slate-300 px-2 py-1 text-gray-600">
+                {L("Saturated and Surface dried (g)", "مشبع وجاف السطح (جم)")}
+              </td>
+              <td className="border border-slate-300 px-2 py-1 text-center font-mono font-semibold">
+                {fi.massSSD ?? "—"}
+              </td>
+            </tr>
+            <tr>
+              <td className="border border-slate-300 px-2 py-1 text-gray-600">
+                {L("SSD + pycnometer + water (g)", "مشبع + كثّاف + ماء (جم)")}
+              </td>
+              <td className="border border-slate-300 px-2 py-1 text-center font-mono font-semibold">
+                {fi.ssdPycH2O ?? "—"}
+              </td>
+            </tr>
+            <tr>
+              <td className="border border-slate-300 px-2 py-1 text-gray-600">
+                {L("Oven Dry (g)", "جاف بالفرن (جم)")}
+              </td>
+              <td className="border border-slate-300 px-2 py-1 text-center font-mono font-semibold">
+                {fi.massOvenDry ?? "—"}
+              </td>
+            </tr>
+          </tbody>
+        </table>
+        <table className="w-full border-collapse text-[10px]">
+          <thead>
+            <tr className="bg-slate-100">
+              <th className="border border-slate-300 px-2 py-1" colSpan={5}>
+                {L("Particle Density, Mg/m³", "الكثافة الجسيمية Mg/m³")}
+              </th>
+            </tr>
+            <tr className="bg-slate-50">
+              <th className="border border-slate-300 px-1 py-1">OD</th>
+              <th className="border border-slate-300 px-1 py-1">SSD</th>
+              <th className="border border-slate-300 px-1 py-1">{L("Apparent", "ظاهرية")}</th>
+              <th className="border border-slate-300 px-1 py-1">{L("Absorption %", "امتصاص %")}</th>
+              <th className="border border-slate-300 px-1 py-1">{L("Result", "النتيجة")}</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td className="border border-slate-300 px-1 py-1 text-center font-mono">
+                {computed?.bulkSgOD ?? "—"}
+              </td>
+              <td className="border border-slate-300 px-1 py-1 text-center font-mono">
+                {computed?.bulkSgSSD ?? "—"}
+              </td>
+              <td className="border border-slate-300 px-1 py-1 text-center font-mono font-bold">
+                {computed?.apparentSg ?? "—"}
+              </td>
+              <td className="border border-slate-300 px-1 py-1 text-center font-mono font-bold">
+                {computed?.absorption != null ? `${computed.absorption}%` : "—"}
+              </td>
+              <td className="border border-slate-300 px-1 py-1 text-center font-semibold">
+                {sgPassFailLabel(computed?.overallResult ?? fd?.overallResult, isAr)}
+              </td>
+            </tr>
+            <tr className="bg-slate-50 text-[9px]">
+              <td colSpan={2} className="border border-slate-300 px-2 py-1 font-semibold">
+                {L("CMW Gen. Spec. Requirement", "متطلبات المواصفة")}
+              </td>
+              <td className="border border-slate-300 px-1 py-1 text-center">≥ {spec.apparentSgMin}</td>
+              <td className="border border-slate-300 px-1 py-1 text-center">≤ {spec.absorptionMax}%</td>
+              <td className="border border-slate-300" />
+            </tr>
+          </tbody>
+        </table>
+        <div className="flex justify-center gap-6 items-center pt-1">
+          <div className="text-center">
+            <p className="text-[10px] text-slate-500">{L("Average Apparent SG", "متوسط الكثافة الظاهرية")}</p>
+            <p className="font-bold font-mono">{avgApparent ?? computed?.apparentSg ?? "—"}</p>
+          </div>
+          <div className="text-center">
+            <p className="text-[10px] text-slate-500">{L("Average Absorption", "متوسط الامتصاص")}</p>
+            <p className="font-bold font-mono">
+              {avgAbsorption != null ? `${avgAbsorption}%` : computed?.absorption != null ? `${computed.absorption}%` : "—"}
+            </p>
+          </div>
+          <p className={`font-bold text-sm ${pass ? "text-emerald-600" : "text-red-600"}`}>
+            {pass ? L("PASS", "مطابق") : L("FAIL", "غير مطابق")}
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  const rows: any[] = Array.isArray(fd?.rows) ? fd.rows : [];
+  const resolvedRows = rows.map((r: any) => {
+    const masses = {
+      ovenDry: r.massOvenDry ?? r.massDryAir ?? "",
+      ssd: r.massSSD ?? "",
+      inWater: r.massInWater ?? "",
+    };
+    const computed =
+      r.apparentSg != null
+        ? r
+        : computeCoarseSg(masses.ovenDry, masses.ssd, masses.inWater, spec) ?? r;
+    return { ...r, ...computed, sampleNo: r.sampleNo ?? "—" };
+  });
+
+  return (
+    <div className="space-y-3 text-[11px]">
+      <div className="text-center border-b border-slate-300 pb-2">
+        <h3 className="font-semibold text-slate-800">{isAr ? title.ar : title.en}</h3>
+        <p className="text-[10px] text-slate-500">{spec.standard}</p>
+        {fd?.source ? (
+          <p className="text-[10px] text-slate-500">
+            {L("Source:", "المصدر:")} {fd.source}
+          </p>
+        ) : null}
+      </div>
+      <table className="w-full border-collapse text-[10px]">
+        <thead>
+          <tr className="bg-slate-100">
+            <th className="border border-slate-300 px-1 py-1">{L("Sample", "العينة")}</th>
+            <th className="border border-slate-300 px-1 py-1">{L("Oven Dry (g)", "جاف بالفرن (جم)")}</th>
+            <th className="border border-slate-300 px-1 py-1">
+              {L("Saturated & Surface dried (g)", "مشبع وجاف السطح (جم)")}
+            </th>
+            <th className="border border-slate-300 px-1 py-1">{L("In Water (g)", "في الماء (جم)")}</th>
+            <th className="border border-slate-300 px-1 py-1">{L("Bulk SG (OD)", "الكثافة الظاهرية (جاف)")}</th>
+            <th className="border border-slate-300 px-1 py-1">{L("Bulk SG (SSD)", "الكثافة الظاهرية (مشبع)")}</th>
+            <th className="border border-slate-300 px-1 py-1">{L("Apparent SG", "الكثافة الظاهرية")}</th>
+            <th className="border border-slate-300 px-1 py-1">{L("Absorption (%)", "الامتصاص (%)")}</th>
+            <th className="border border-slate-300 px-1 py-1">{L("Result", "النتيجة")}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {resolvedRows.map((r: any, i: number) => (
+            <tr key={i}>
+              <td className="border border-slate-300 px-1 py-0.5 text-center font-mono">{r.sampleNo}</td>
+              <td className="border border-slate-300 px-1 py-0.5 text-center">{r.massOvenDry ?? r.massDryAir ?? "—"}</td>
+              <td className="border border-slate-300 px-1 py-0.5 text-center">{r.massSSD ?? "—"}</td>
+              <td className="border border-slate-300 px-1 py-0.5 text-center">{r.massInWater ?? "—"}</td>
+              <td className="border border-slate-300 px-1 py-0.5 text-center font-mono">{r.bulkSgOD ?? "—"}</td>
+              <td className="border border-slate-300 px-1 py-0.5 text-center font-mono">{r.bulkSgSSD ?? "—"}</td>
+              <td className="border border-slate-300 px-1 py-0.5 text-center font-mono font-bold">{r.apparentSg ?? "—"}</td>
+              <td className="border border-slate-300 px-1 py-0.5 text-center font-mono font-bold">
+                {r.absorption != null ? `${r.absorption}%` : "—"}
+              </td>
+              <td className="border border-slate-300 px-1 py-0.5 text-center font-semibold">
+                {sgPassFailLabel(r.overallResult, isAr)}
+              </td>
+            </tr>
+          ))}
+          {resolvedRows.length > 0 && (
+            <tr className="bg-slate-100 font-bold">
+              <td colSpan={6} className="border border-slate-300 px-2 py-1 text-end">
+                {L("Average", "المتوسط")}
+              </td>
+              <td className="border border-slate-300 px-1 py-1 text-center font-mono">{avgApparent ?? "—"}</td>
+              <td className="border border-slate-300 px-1 py-1 text-center font-mono">
+                {avgAbsorption != null ? `${avgAbsorption}%` : "—"}
+              </td>
+              <td className="border border-slate-300 px-1 py-1 text-center">
+                {sgPassFailLabel(fd?.overallResult, isAr)}
+              </td>
+            </tr>
+          )}
+          <tr className="bg-slate-50 text-[9px]">
+            <td colSpan={6} className="border border-slate-300 px-2 py-1 font-semibold">
+              {L("CMW Gen. Spec. Requirement", "متطلبات المواصفة")}
+            </td>
+            <td className="border border-slate-300 px-1 py-1 text-center">≥ {spec.apparentSgMin}</td>
+            <td className="border border-slate-300 px-1 py-1 text-center">≤ {spec.absorptionMax}%</td>
+            <td className="border border-slate-300" />
+          </tr>
+        </tbody>
+      </table>
+      <div className="flex justify-center">
+        <p className={`font-bold text-sm ${pass ? "text-emerald-600" : "text-red-600"}`}>
+          {pass ? L("PASS — Meets specification", "مطابق — يستوفي متطلبات المواصفة") : L("FAIL — Does not meet specification", "غير مطابق — لا يستوفي متطلبات المواصفة")}
+        </p>
+      </div>
+    </div>
+  );
+}
+
 function renderAggShapeIndex(fd: any, isAr: boolean) {
   const L = (en: string, ars: string) => (isAr ? ars : en);
   if (fd?.shapeType === "ELONGATION" || fd?.elongationIndex != null) {
@@ -3340,6 +3608,7 @@ export function renderFormData(formTemplate: string, formData: any, isAr: boolea
     case "concrete_foam": return renderConcreteFoam(formData, isAr, extras);
     case "interlock": return renderInterlock(formData, isAr);
     case "agg_shape_index": return renderAggShapeIndex(formData, isAr);
+    case "agg_specific_gravity": return renderAggSpecificGravity(formData, isAr);
     default: return renderGeneric(formData, isAr);
   }
 }
@@ -3748,12 +4017,12 @@ export default function SpecializedTestReport() {
                       const [a, b] = [pair[0], pair[1]];
                       return (
                         <tr key={ri}>
-                          <td className="border border-gray-200 px-2 py-1 text-gray-500 capitalize w-[22%]">{a[0].replace(/_/g, " ")}</td>
-                          <td className="border border-gray-200 px-2 py-1 font-bold text-gray-900 w-[28%]">{String(a[1])}</td>
+                          <td className="border border-gray-200 px-2 py-1 text-gray-500 w-[22%]">{formatSummaryLabel(a[0], result.formTemplate, isAr)}</td>
+                          <td className="border border-gray-200 px-2 py-1 font-bold text-gray-900 w-[28%]">{formatSummaryValue(a[0], a[1], isAr)}</td>
                           {b ? (
                             <>
-                              <td className="border border-gray-200 px-2 py-1 text-gray-500 capitalize w-[22%]">{b[0].replace(/_/g, " ")}</td>
-                              <td className="border border-gray-200 px-2 py-1 font-bold text-gray-900 w-[28%]">{String(b[1])}</td>
+                              <td className="border border-gray-200 px-2 py-1 text-gray-500 w-[22%]">{formatSummaryLabel(b[0], result.formTemplate, isAr)}</td>
+                              <td className="border border-gray-200 px-2 py-1 font-bold text-gray-900 w-[28%]">{formatSummaryValue(b[0], b[1], isAr)}</td>
                             </>
                           ) : (
                             <td className="border border-gray-200 px-2 py-1" colSpan={2} />
