@@ -1332,19 +1332,37 @@ function renderSoilProctor(fd: any, isAr: boolean) {
   return (
     <>
       <FlexibleResultsTable columns={proctorCols} rows={points.map((p: any, i: number) => ({ ...p, _pt: i + 1 }))} />
-      <div className="grid grid-cols-3 gap-4 text-xs">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">
         <div className="bg-blue-50 border border-blue-200 rounded p-3 text-center">
           <p className="text-blue-600 font-semibold">{isAr ? "أقصى كثافة جافة (MDD)" : "Max Dry Density (MDD)"}</p>
-          <p className="text-xl font-bold text-blue-800">{fmt(fd.mdd, 2)} {isAr ? "Mg/m³" : "Mg/m³"}</p>
+          <p className="text-xl font-bold text-blue-800">{fmt(fd.mddValue ?? fd.mdd, 2)} {isAr ? "Mg/m³" : "Mg/m³"}</p>
         </div>
         <div className="bg-green-50 border border-green-200 rounded p-3 text-center">
           <p className="text-green-600 font-semibold">{isAr ? "نسبة الرطوبة المثلى (OMC)" : "Optimum Moisture Content (OMC)"}</p>
-          <p className="text-xl font-bold text-green-800">{fmt(fd.omc)} %</p>
+          <p className="text-xl font-bold text-green-800">{fmt(fd.omcValue ?? fd.omc)} %</p>
         </div>
+        {fd.correctedMDD != null && (
+          <div className="bg-emerald-50 border border-emerald-200 rounded p-3 text-center">
+            <p className="text-emerald-600 font-semibold">{isAr ? "MDD المصححة" : "Corrected MDD"}</p>
+            <p className="text-xl font-bold text-emerald-800">{fmt(fd.correctedMDD, 3)} Mg/m³</p>
+          </div>
+        )}
+        {fd.correctedOMC != null && (
+          <div className="bg-sky-50 border border-sky-200 rounded p-3 text-center">
+            <p className="text-sky-600 font-semibold">{isAr ? "OMC المصححة" : "Corrected OMC"}</p>
+            <p className="text-xl font-bold text-sky-800">{fmt(fd.correctedOMC, 1)} %</p>
+          </div>
+        )}
         <div className="bg-gray-50 border border-gray-200 rounded p-3 text-center">
           <p className="text-gray-600 font-semibold">{isAr ? "حجم القالب" : "Mould Volume"}</p>
           <p className="text-xl font-bold text-gray-800">{fmt(fd.mouldVolume)} {isAr ? "سم³" : "cm³"}</p>
         </div>
+        {fd.cbrStandard && (
+          <div className="bg-indigo-50 border border-indigo-200 rounded p-3 text-center">
+            <p className="text-indigo-600 font-semibold">{isAr ? "معيار CBR المرتبط" : "Linked CBR Standard"}</p>
+            <p className="text-lg font-bold text-indigo-800">{String(fd.cbrStandard)}</p>
+          </div>
+        )}
       </div>
       <div className="mt-1">
         <p className="text-xs font-semibold text-slate-700 mb-1">

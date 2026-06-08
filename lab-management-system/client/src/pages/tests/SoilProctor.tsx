@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useParams, useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { redirectAfterTestSave } from "@/lib/batchHelpers";
@@ -11,86 +11,25 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Send, FlaskConical, Info, UserCheck , Printer } from "lucide-react";
-import { useAuth } from "@/_core/hooks/useAuth";
+import { Send, FlaskConical, Info, Printer } from "lucide-react";
 import { useLanguage } from "@/contexts/LanguageContext";
 import {
-  ScatterChart, Scatter, XAxis, YAxis, CartesianGrid, Tooltip,
+  Scatter, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, ReferenceLine, ComposedChart,
 } from "recharts";
+import {
+  PROCTOR_METHOD_SPECS,
+  PROCTOR_MOLD_VOLUMES,
+  computeCorrectedProctor,
+  computeProctorPoint,
+  type ProctorMethodKey,
+  type ProctorMoldKey,
+  type ProctorPointInput,
+} from "@/lib/soilProctor";
 
 // ─── Proctor Test (BS 1377 / ASTM D1557) ─────────────────────────────────────
 
-const METHOD_SPECS: Record<string, {
-  standard: string;
-  layers: number;
-  blowsPerLayer: number;
-  energy: string;
-  hammer: string;
-  recommendedMolds: string[];
-  color: string;
-}> = {
-  MODIFIED_PROCTOR: {
-    standard: "ASTM D1557",
-    layers: 5,
-    blowsPerLayer: 25,
-    energy: "2700 kN·m/m³",
-    hammer: "4.54 kg / 457 mm",
-    recommendedMolds: ["CBR_MOLD", "STANDARD_MOLD"],
-    color: "blue",
-  },
-  STANDARD_PROCTOR: {
-    standard: "ASTM D698",
-    layers: 3,
-    blowsPerLayer: 25,
-    energy: "600 kN·m/m³",
-    hammer: "2.49 kg / 305 mm",
-    recommendedMolds: ["STANDARD_MOLD", "LARGE_MOLD"],
-    color: "green",
-  },
-  BS_HEAVY: {
-    standard: "BS 1377-4",
-    layers: 5,
-    blowsPerLayer: 27,
-    energy: "2674 kN·m/m³",
-    hammer: "4.5 kg / 450 mm",
-    recommendedMolds: ["CBR_MOLD", "STANDARD_MOLD"],
-    color: "purple",
-  },
-  BS_LIGHT: {
-    standard: "BS 1377-4",
-    layers: 3,
-    blowsPerLayer: 27,
-    energy: "596 kN·m/m³",
-    hammer: "2.5 kg / 300 mm",
-    recommendedMolds: ["STANDARD_MOLD", "LARGE_MOLD"],
-    color: "orange",
-  },
-};
-
-const MOLD_VOLUMES = {
-  "CBR_MOLD": { label: "CBR Mold (2305 cm³)", volume: 2305 },
-  "STANDARD_MOLD": { label: "Standard Mold (944 cm³)", volume: 944 },
-  "LARGE_MOLD": { label: "Large Mold (2124 cm³)", volume: 2124 },
-};
-
-interface ProctorPoint {
-  id: string;
-  // ── Technician inputs ──
-  waterAdded: string;          // Water added % (target / nominal label, reference only)
-  mouldBaseSpecimen: string;   // Mass of Mould + Base + Compacted Specimen (g)
-  containerNo: string;         // Moisture container number/label
-  wetSoilContainer: string;    // Mass of Wet Soil + Container (g)
-  drySoilContainer: string;    // Mass of Dry Soil + Container (g)
-  container: string;           // Mass of Container (g)
-  // ── Computed ──
-  compactedSpecimen?: number;  // (Mould+Base+Specimen) − (Mould+Base)
-  bulkDensity?: number;        // Compacted Specimen / Mould Volume
-  moistureMass?: number;       // (Wet+Container) − (Dry+Container)
-  drySoilMass?: number;        // (Dry+Container) − Container
-  waterContent?: number;       // moistureMass / drySoilMass × 100
-  dryDensity?: number;         // 100 × bulkDensity / (100 + waterContent)
-}
+type ProctorPoint = ProctorPointInput;
 
 function newPoint(index: number): ProctorPoint {
   return {
@@ -108,49 +47,6 @@ const num = (v: string) => {
   const n = parseFloat(v);
   return Number.isFinite(n) ? n : NaN;
 };
-
-/**
- * Compute a Proctor point following the lab Excel sheet exactly.
- *  - Mass of Compacted Specimen = (Mould+Base+Specimen) − (Mould+Base)
- *  - Bulk Density               = Compacted Specimen / Mould Volume
- *  - Mass of Moisture           = (Wet Soil+Container) − (Dry Soil+Container)
- *  - Mass of Dry Soil           = (Dry Soil+Container) − Container
- *  - Moisture Content %         = Mass of Moisture / Mass of Dry Soil × 100
- *  - Dry Density                = 100 × Bulk Density / (100 + Moisture Content %)
- */
-function computePoint(pt: ProctorPoint, mouldVolumeCm3: number, mouldBaseMass: number): ProctorPoint {
-  const out: ProctorPoint = { ...pt };
-
-  // ── Moisture content (container method) ──
-  const wsc = num(pt.wetSoilContainer);
-  const dsc = num(pt.drySoilContainer);
-  const cont = num(pt.container);
-  if (Number.isFinite(wsc) && Number.isFinite(dsc)) {
-    out.moistureMass = parseFloat((wsc - dsc).toFixed(2));
-  }
-  if (Number.isFinite(dsc) && Number.isFinite(cont)) {
-    out.drySoilMass = parseFloat((dsc - cont).toFixed(2));
-  }
-  if (out.moistureMass != null && out.drySoilMass != null && out.drySoilMass > 0) {
-    // Keep full precision; displays round to 1 decimal (matches the Excel green values).
-    out.waterContent = (out.moistureMass / out.drySoilMass) * 100;
-  }
-
-  // ── Bulk (wet) density ──
-  const mbs = num(pt.mouldBaseSpecimen);
-  if (Number.isFinite(mbs) && Number.isFinite(mouldBaseMass) && mouldVolumeCm3 > 0) {
-    const specimen = mbs - mouldBaseMass;
-    out.compactedSpecimen = parseFloat(specimen.toFixed(1));
-    if (specimen > 0) out.bulkDensity = parseFloat((specimen / mouldVolumeCm3).toFixed(3));
-  }
-
-  // ── Dry density ──
-  if (out.bulkDensity != null && out.waterContent != null) {
-    out.dryDensity = parseFloat(((100 * out.bulkDensity) / (100 + out.waterContent)).toFixed(3));
-  }
-
-  return out;
-}
 
 // Simple polynomial fit to find MDD and OMC
 function fitParabola(points: { x: number; y: number }[]): { mdd: number; omc: number } | null {
@@ -184,32 +80,73 @@ function fitParabola(points: { x: number; y: number }[]): { mdd: number; omc: nu
 }
 
 export default function SoilProctor() {
-  const { user } = useAuth();
-  const { lang, t, dir } = useLanguage();
+  const { lang, dir } = useLanguage();
+  const ar = lang === "ar";
   const { distributionId } = useParams<{ distributionId: string }>();
   const [, setLocation] = useLocation();
   const distId = parseInt(distributionId ?? "0");
   const { data: dist } = trpc.distributions.get.useQuery({ id: distId }, { enabled: !!distId });
+  const { data: existing } = trpc.specializedTests.getByDistribution.useQuery(
+    { distributionId: distId },
+    { enabled: !!distId },
+  );
 
-  const [testMethod, setTestMethod] = useState("MODIFIED_PROCTOR");
-  const [moldType, setMoldType] = useState<keyof typeof MOLD_VOLUMES>("CBR_MOLD");
-  // Editable mould volume (cm³) — defaults to the selected mould preset but can be
-  // overridden to the lab's actual calibrated volume (e.g. 2303).
-  const [mouldVolumeStr, setMouldVolumeStr] = useState(String(MOLD_VOLUMES.CBR_MOLD.volume));
+  const [testMethod, setTestMethod] = useState<ProctorMethodKey>("MODIFIED_PROCTOR");
+  const [moldType, setMoldType] = useState<ProctorMoldKey>("CBR_MOLD");
+  const [mouldVolumeStr, setMouldVolumeStr] = useState(String(PROCTOR_MOLD_VOLUMES.CBR_MOLD.volume));
   const [soilDescription, setSoilDescription] = useState("");
   const [mouldBaseMass, setMouldBaseMass] = useState("");
+  const [bulkSpGr, setBulkSpGr] = useState("2.65");
+  const [oversizePct, setOversizePct] = useState("0");
+  const [mddFinerUnit, setMddFinerUnit] = useState("");
   const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [hydrated, setHydrated] = useState(false);
   const [points, setPoints] = useState<ProctorPoint[]>(
     Array.from({ length: 4 }, (_, i) => newPoint(i))
   );
 
+  const currentSpecs = PROCTOR_METHOD_SPECS[testMethod];
+
+  useEffect(() => {
+    if (hydrated || !existing?.formData) return;
+    const fd = existing.formData as Record<string, unknown>;
+    if (typeof fd.testMethod === "string" && fd.testMethod in PROCTOR_METHOD_SPECS) {
+      setTestMethod(fd.testMethod as ProctorMethodKey);
+    }
+    if (typeof fd.moldType === "string" && fd.moldType in PROCTOR_MOLD_VOLUMES) {
+      setMoldType(fd.moldType as ProctorMoldKey);
+    }
+    if (fd.mouldVolume != null || fd.moldVolume != null) {
+      setMouldVolumeStr(String(fd.mouldVolume ?? fd.moldVolume));
+    }
+    if (typeof fd.soilDescription === "string") setSoilDescription(fd.soilDescription);
+    if (fd.mouldBaseMass != null) setMouldBaseMass(String(fd.mouldBaseMass));
+    if (fd.bulkSpGr != null) setBulkSpGr(String(fd.bulkSpGr));
+    if (fd.oversizePct != null) setOversizePct(String(fd.oversizePct));
+    if (fd.mddFinerUnit != null) setMddFinerUnit(String(fd.mddFinerUnit));
+    if (typeof existing.notes === "string") setNotes(existing.notes);
+    if (existing.status === "submitted") setSubmitted(true);
+    if (Array.isArray(fd.points) && fd.points.length > 0) {
+      setPoints(fd.points.map((p: Record<string, unknown>, i: number) => ({
+        id: `pt_${i}_${Date.now()}`,
+        waterAdded: String(p.waterAdded ?? ""),
+        mouldBaseSpecimen: String(p.mouldSoil ?? p.mouldBaseSpecimen ?? ""),
+        containerNo: String(p.containerNo ?? ""),
+        wetSoilContainer: String(p.wetSoilContainer ?? ""),
+        drySoilContainer: String(p.drySoilContainer ?? ""),
+        container: String(p.container ?? ""),
+      })));
+    }
+    setHydrated(true);
+  }, [existing, hydrated]);
+
   const moldVolume = Number.isFinite(num(mouldVolumeStr)) && num(mouldVolumeStr) > 0
     ? num(mouldVolumeStr)
-    : MOLD_VOLUMES[moldType].volume;
+    : PROCTOR_MOLD_VOLUMES[moldType].volume;
   const mouldBaseMassNum = num(mouldBaseMass);
-  const computedPoints = points.map(p => computePoint(p, moldVolume, mouldBaseMassNum));
+  const computedPoints = points.map(p => computeProctorPoint(p, moldVolume, mouldBaseMassNum));
   const validPoints = computedPoints.filter(p => p.dryDensity != null && p.waterContent != null);
 
   const chartData = validPoints
@@ -217,6 +154,27 @@ export default function SoilProctor() {
     .sort((a, b) => a.wc - b.wc);
 
   const fitResult = fitParabola(chartData.map(d => ({ x: d.wc, y: d.dd ?? 0 })));
+
+  const mddFinerNum = parseFloat(mddFinerUnit) || (fitResult?.mdd ?? 0);
+  const omcFinerNum = fitResult?.omc ?? 0;
+  const oversizeNum = parseFloat(oversizePct) || 0;
+  const bulkSpGrNum = parseFloat(bulkSpGr) || 2.65;
+  const { correctedMDD, correctedOMC, pctFiner } = computeCorrectedProctor(
+    oversizeNum,
+    bulkSpGrNum,
+    mddFinerNum,
+    omcFinerNum,
+  );
+  const reportMdd = correctedMDD > 0 && oversizeNum > 0 ? correctedMDD : fitResult?.mdd;
+  const reportOmc = correctedOMC > 0 && oversizeNum > 0 ? correctedOMC : fitResult?.omc;
+
+  const handleMethodChange = (val: ProctorMethodKey) => {
+    setTestMethod(val);
+    const spec = PROCTOR_METHOD_SPECS[val];
+    setMouldVolumeStr(String(spec.mouldVolume));
+    const rec = spec.recommendedMolds[0] as ProctorMoldKey;
+    if (rec in PROCTOR_MOLD_VOLUMES) setMoldType(rec);
+  };
 
   const saveResult = trpc.specializedTests.save.useMutation({
     onSuccess: (_, vars) => {
@@ -254,8 +212,13 @@ export default function SoilProctor() {
           mouldVolume: moldVolume,
           mouldBaseMass: Number.isFinite(mouldBaseMassNum) ? mouldBaseMassNum : null,
           soilDescription,
-          // Persist raw inputs + computed values, and mirror the field names the
-          // report renderer expects (mouldSoil / mouldWeight / soilWeight / wetDensity / waterContent / dryDensity).
+          cbrStandard: currentSpecs.cbrStandard,
+          bulkSpGr: bulkSpGrNum,
+          oversizePct: oversizeNum,
+          mddFinerUnit: mddFinerNum > 0 ? mddFinerNum : null,
+          pctFiner,
+          correctedMDD: correctedMDD > 0 ? correctedMDD : null,
+          correctedOMC: correctedOMC > 0 ? correctedOMC : null,
           points: computedPoints.map(p => ({
             waterAdded: p.waterAdded,
             containerNo: p.containerNo,
@@ -273,12 +236,15 @@ export default function SoilProctor() {
           })),
           mdd: fitResult?.mdd,
           omc: fitResult?.omc,
+          mddValue: reportMdd ?? null,
+          omcValue: reportOmc ?? null,
         },
         overallResult: "pending",
         summaryValues: {
-          mdd: fitResult?.mdd,
-          omc: fitResult?.omc,
+          mdd: reportMdd ?? fitResult?.mdd,
+          omc: reportOmc ?? fitResult?.omc,
           testMethod,
+          cbrStandard: currentSpecs.cbrStandard,
         },
         notes,
         status,
@@ -372,30 +338,29 @@ export default function SoilProctor() {
           <CardContent>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <div>
-                <Label className="text-xs text-slate-500 mb-1 block">{lang === "ar" ? "طريقة الاختبار" : "Test Method"}</Label>
-                <Select value={testMethod} onValueChange={setTestMethod}>
+                <Label className="text-xs text-slate-500 mb-1 block">{ar ? "طريقة الاختبار" : "Test Method"}</Label>
+                <Select value={testMethod} onValueChange={v => handleMethodChange(v as ProctorMethodKey)}>
                   <SelectTrigger className="w-full *:data-[slot=select-value]:min-w-0"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="MODIFIED_PROCTOR">{lang === "ar" ? "بروكتور المعدّل (ASTM D1557)" : "Modified Proctor (ASTM D1557)"}</SelectItem>
-                    <SelectItem value="STANDARD_PROCTOR">{lang === "ar" ? "بروكتور القياسي (ASTM D698)" : "Standard Proctor (ASTM D698)"}</SelectItem>
-                    <SelectItem value="BS_HEAVY">{lang === "ar" ? "BS 1377 دمك ثقيل" : "BS 1377 Heavy Compaction"}</SelectItem>
-                    <SelectItem value="BS_LIGHT">{lang === "ar" ? "BS 1377 دمك خفيف" : "BS 1377 Light Compaction"}</SelectItem>
+                    {(Object.entries(PROCTOR_METHOD_SPECS) as [ProctorMethodKey, typeof currentSpecs][]).map(([key, spec]) => (
+                      <SelectItem key={key} value={key}>{ar ? spec.labelAr : spec.label}</SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
               <div>
-                <Label className="text-xs text-slate-500 mb-1 block">{lang === "ar" ? "نوع القالب" : "Mold Type"}</Label>
+                <Label className="text-xs text-slate-500 mb-1 block">{ar ? "نوع القالب" : "Mold Type"}</Label>
                 <Select
                   value={moldType}
                   onValueChange={v => {
-                    const key = v as keyof typeof MOLD_VOLUMES;
+                    const key = v as ProctorMoldKey;
                     setMoldType(key);
-                    setMouldVolumeStr(String(MOLD_VOLUMES[key].volume));
+                    setMouldVolumeStr(String(PROCTOR_MOLD_VOLUMES[key].volume));
                   }}
                 >
                   <SelectTrigger className="w-full *:data-[slot=select-value]:min-w-0"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    {Object.entries(MOLD_VOLUMES).map(([k, v]) => (
+                    {Object.entries(PROCTOR_MOLD_VOLUMES).map(([k, v]) => (
                       <SelectItem key={k} value={k}>{v.label}</SelectItem>
                     ))}
                   </SelectContent>
@@ -426,8 +391,15 @@ export default function SoilProctor() {
                 />
               </div>
               <div>
-                <Label className="text-xs text-slate-500 mb-1 block">{lang === "ar" ? "وصف التربة" : "Soil Description"}</Label>
-                <Input value={soilDescription} onChange={e => setSoilDescription(e.target.value)} placeholder={lang === "ar" ? "مثال: طين رملي، مواد ردم" : "e.g. Sandy clay, Fill material"} />
+                <Label className="text-xs text-slate-500 mb-1 block">{ar ? "معيار CBR المرتبط" : "Linked CBR Standard"}</Label>
+                <div className="h-9 px-3 flex items-center bg-blue-50 border border-blue-200 rounded-md">
+                  <span className="text-sm font-semibold text-blue-700">{currentSpecs.cbrStandard}</span>
+                  <span className="text-xs text-blue-500 ml-2">({ar ? "تلقائي" : "auto"})</span>
+                </div>
+              </div>
+              <div>
+                <Label className="text-xs text-slate-500 mb-1 block">{ar ? "وصف التربة" : "Soil Description"}</Label>
+                <Input value={soilDescription} onChange={e => setSoilDescription(e.target.value)} placeholder={ar ? "مثال: طين رملي، مواد ردم" : "e.g. Sandy clay, Fill material"} />
               </div>
               <div className="md:col-span-4 flex items-end">
                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-xs text-blue-700 w-full">
@@ -441,8 +413,7 @@ export default function SoilProctor() {
 
             {/* ─── Method Reference Specs Card ─── */}
             {(() => {
-              const spec = METHOD_SPECS[testMethod];
-              if (!spec) return null;
+              const spec = currentSpecs;
               const isMoldWarning = !spec.recommendedMolds.includes(moldType);
               const colorMap: Record<string, string> = {
                 blue: "bg-blue-50 border-blue-200 text-blue-800",
@@ -457,39 +428,40 @@ export default function SoilProctor() {
                 orange: "bg-orange-100 text-orange-700",
               };
               return (
-                <div className={`mt-4 border rounded-lg p-4 ${colorMap[spec.color]}`}>
-                  <div className="flex items-center gap-2 mb-3">
-                    <Info size={14} />
-                    <span className="font-semibold text-sm">
-                      {lang === "ar" ? "المواصفات المرجعية — " : "Reference Specifications — "}
-                      <span className={`px-2 py-0.5 rounded text-xs font-bold ${badgeMap[spec.color]}`}>{spec.standard}</span>
-                    </span>
-                  </div>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
-                    <div className="flex flex-col gap-0.5">
-                      <span className="opacity-60 uppercase tracking-wide">{lang === "ar" ? "عدد الطبقات" : "Layers"}</span>
-                      <span className="text-lg font-bold">{spec.layers}</span>
+                <div className={`mt-4 border rounded-xl p-4 ${colorMap[spec.color]}`}>
+                  <p className="text-xs font-bold mb-3">
+                    {ar ? "مواصفات الاختبار — " : "Test Specifications — "}
+                    <span className={`px-2 py-0.5 rounded text-xs font-bold ${badgeMap[spec.color]}`}>{spec.standardRef}</span>
+                  </p>
+                  <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                    <div className="flex flex-col items-center p-2 bg-white rounded-lg border border-blue-100">
+                      <span className="text-[10px] text-blue-600 mb-1">{ar ? "عدد الطبقات" : "Layers"}</span>
+                      <span className="text-xl font-bold text-blue-900">{spec.layers}</span>
                     </div>
-                    <div className="flex flex-col gap-0.5">
-                      <span className="opacity-60 uppercase tracking-wide">{lang === "ar" ? "ضربات/طبقة" : "Blows/Layer"}</span>
-                      <span className="text-lg font-bold">{spec.blowsPerLayer}</span>
+                    <div className="flex flex-col items-center p-2 bg-white rounded-lg border border-blue-100">
+                      <span className="text-[10px] text-blue-600 mb-1">{ar ? "ضربات/طبقة" : "Blows/Layer"}</span>
+                      <span className="text-xl font-bold text-blue-900">{spec.blowsPerLayer}</span>
                     </div>
-                    <div className="flex flex-col gap-0.5">
-                      <span className="opacity-60 uppercase tracking-wide">{lang === "ar" ? "طاقة الدمك" : "Compaction Energy"}</span>
-                      <span className="font-bold">{spec.energy}</span>
+                    <div className="flex flex-col items-center p-2 bg-white rounded-lg border border-blue-100">
+                      <span className="text-[10px] text-blue-600 mb-1">{ar ? "كتلة المطرقة" : "Hammer"}</span>
+                      <span className="text-xl font-bold text-blue-900">{spec.hammerMass} kg</span>
                     </div>
-                    <div className="flex flex-col gap-0.5">
-                      <span className="opacity-60 uppercase tracking-wide">{lang === "ar" ? "المطرقة" : "Hammer"}</span>
-                      <span className="font-bold">{spec.hammer}</span>
+                    <div className="flex flex-col items-center p-2 bg-white rounded-lg border border-blue-100">
+                      <span className="text-[10px] text-blue-600 mb-1">{ar ? "ارتفاع السقوط" : "Drop Height"}</span>
+                      <span className="text-xl font-bold text-blue-900">{spec.dropHeight} mm</span>
+                    </div>
+                    <div className="flex flex-col items-center p-2 bg-white rounded-lg border border-blue-100">
+                      <span className="text-[10px] text-blue-600 mb-1">{ar ? "طاقة الضغط" : "Energy"}</span>
+                      <span className="text-lg font-bold text-blue-900">{spec.energy} kN·m/m³</span>
                     </div>
                   </div>
                   {isMoldWarning && (
                     <div className="mt-3 flex items-center gap-2 bg-yellow-50 border border-yellow-300 text-yellow-800 rounded p-2 text-xs">
                       <span>⚠️</span>
                       <span>
-                        {lang === "ar"
-                          ? `تحذير: القالب المختار غير موصى به لهذه الطريقة. القالبات الموصى بها: ${spec.recommendedMolds.map(m => MOLD_VOLUMES[m as keyof typeof MOLD_VOLUMES]?.label).join(" أو ")}`
-                          : `Warning: Selected mold is not standard for this method. Recommended: ${spec.recommendedMolds.map(m => MOLD_VOLUMES[m as keyof typeof MOLD_VOLUMES]?.label).join(" or ")}`
+                        {ar
+                          ? `تحذير: القالب المختار غير موصى به لهذه الطريقة. القالبات الموصى بها: ${spec.recommendedMolds.map(m => PROCTOR_MOLD_VOLUMES[m as ProctorMoldKey]?.label).join(" أو ")}`
+                          : `Warning: Selected mold is not standard for this method. Recommended: ${spec.recommendedMolds.map(m => PROCTOR_MOLD_VOLUMES[m as ProctorMoldKey]?.label).join(" or ")}`
                         }
                       </span>
                     </div>
@@ -756,11 +728,82 @@ export default function SoilProctor() {
           </Card>
         </div>
 
+        {/* Corrected MDD (oversize correction per ASTM D4718) */}
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm font-semibold">
+              {ar
+                ? "تصحيح الكثافة الجافة القصوى (للمواد الحاوية على حصى خشن)"
+                : "Corrected MDD (For materials with oversize particles)"}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+              <div className="space-y-2">
+                <Label className="text-xs">{ar ? "الثقل النوعي (Gs)" : "Bulk Specific Gravity (Gs)"}</Label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  value={bulkSpGr}
+                  onChange={e => setBulkSpGr(e.target.value)}
+                  className="h-9 bg-white font-mono"
+                  placeholder="2.65"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label className="text-xs">{ar ? "كثافة المواد الناعمة (Mg/m³)" : "MDD of Finer Unit (Mg/m³)"}</Label>
+                <Input
+                  type="number"
+                  step="0.001"
+                  value={mddFinerUnit}
+                  onChange={e => setMddFinerUnit(e.target.value)}
+                  className="h-9 bg-white font-mono"
+                  placeholder={fitResult?.mdd != null ? String(fitResult.mdd) : (ar ? "من المنحنى" : "From curve")}
+                />
+                {fitResult && !mddFinerUnit && (
+                  <p className="text-[10px] text-slate-500">
+                    {ar ? `من المنحنى: ${fitResult.mdd.toFixed(3)} Mg/m³` : `From curve: ${fitResult.mdd.toFixed(3)} Mg/m³`}
+                  </p>
+                )}
+              </div>
+              <div className="space-y-2">
+                <Label className="text-xs">{ar ? "% الحصى الخشن (>19mm)" : "% Oversize (retained >19mm)"}</Label>
+                <Input
+                  type="number"
+                  step="0.1"
+                  value={oversizePct}
+                  onChange={e => setOversizePct(e.target.value)}
+                  className="h-9 bg-white font-mono"
+                  placeholder="0"
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="p-4 bg-green-50 border-2 border-green-400 rounded-xl text-center">
+                <p className="text-xs text-green-700 font-medium mb-1">{ar ? "الكثافة الجافة القصوى المصححة" : "Corrected MDD"}</p>
+                <p className="text-3xl font-bold text-green-800">
+                  {correctedMDD > 0 && mddFinerNum > 0 ? correctedMDD.toFixed(3) : "—"}
+                </p>
+                <p className="text-xs text-green-600 mt-1">Mg/m³</p>
+                <p className="text-[10px] text-green-500 mt-1">100 / (Pover/Gs + Pfiner/MDD_finer)</p>
+              </div>
+              <div className="p-4 bg-blue-50 border-2 border-blue-400 rounded-xl text-center">
+                <p className="text-xs text-blue-700 font-medium mb-1">{ar ? "محتوى الرطوبة الأمثل المصحح" : "Corrected OMC"}</p>
+                <p className="text-3xl font-bold text-blue-800">
+                  {correctedOMC > 0 && omcFinerNum > 0 ? correctedOMC.toFixed(1) : "—"}
+                </p>
+                <p className="text-xs text-blue-600 mt-1">%</p>
+                <p className="text-[10px] text-blue-500 mt-1">OMC × (% Finer / 100)</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
         {/* Notes */}
         <Card>
           <CardContent className="pt-4">
             <Label className="text-xs text-slate-500 mb-1 block">
-              {lang === "ar" ? "ملاحظات / مشاهدات" : "Notes / Observations"}
+              {ar ? "ملاحظات / مشاهدات" : "Notes / Observations"}
             </Label>
             <Textarea value={notes} onChange={e => setNotes(e.target.value)} rows={3} />
           </CardContent>

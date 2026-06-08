@@ -19,75 +19,17 @@ import {
 } from "recharts";
 import { useLanguage } from "@/contexts/LanguageContext";
 
-// CBR Test (BS 1377-4 / ASTM D1883)
-// CBR = (Test Load / Standard Load) x 100
-// Standard loads: 2.5mm -> 13.24 kN, 5.0mm -> 19.96 kN (BS 1377)
+import {
+  CBR_STANDARDS,
+  computeCBRFace,
+  formatPenetrationDepth,
+  newCBRFace,
+  type CBRFaceInput,
+  type CBRStandardKey,
+} from "@/lib/soilCBR";
+import { proctorMethodLinksToAstmCbr } from "@/lib/soilProctor";
 
-const STANDARD_LOADS = {
-  "BS1377": {
-    label: "BS 1377-4",
-    load_2_5: 13.24, // kN
-    load_5_0: 19.96, // kN
-  },
-  "ASTM_D1883": {
-    label: "ASTM D1883",
-    load_2_5: 13.44, // kN (3020 lbf)
-    load_5_0: 20.00, // kN (4500 lbf)
-  },
-};
-
-type StandardKey = keyof typeof STANDARD_LOADS;
-
-// Penetration depths (mm) for CBR readings — 0.25 mm steps from 0 to 7.5 mm (31 points)
-const PENETRATION_DEPTHS = Array.from({ length: 31 }, (_, i) => parseFloat((i * 0.25).toFixed(2)));
-const IDX_2_5 = PENETRATION_DEPTHS.findIndex(d => Math.abs(d - 2.5) < 1e-6);
-const IDX_5_0 = PENETRATION_DEPTHS.findIndex(d => Math.abs(d - 5.0) < 1e-6);
-const fmtDepth = (d: number) => (Number.isInteger(d) ? d.toFixed(1) : String(d));
-
-interface CBRFace {
-  id: string;
-  faceLabel: string; // "Top" or "Bottom"
-  readings: string[]; // load readings in kN (one per penetration depth)
-  // computed
-  cbr_2_5?: number;
-  cbr_5_0?: number;
-  cbrValue?: number; // max of 2.5 and 5.0
-  cbrAnomaly?: boolean; // true when CBR at 5.0mm > CBR at 2.5mm (repeat test required)
-}
-
-function newFace(label: string): CBRFace {
-  return {
-    id: `face_${Date.now()}_${label}`,
-    faceLabel: label,
-    readings: Array(PENETRATION_DEPTHS.length).fill(""),
-  };
-}
-
-function computeFace(face: CBRFace, stdLoads: typeof STANDARD_LOADS[StandardKey]): CBRFace {
-  const loads = face.readings.map(r => parseFloat(r) || 0);
-  // Load at the standard 2.5 mm and 5.0 mm penetration depths
-  const load_2_5 = loads[IDX_2_5] || 0;
-  const load_5_0 = loads[IDX_5_0] || 0;
-
-  if (!load_2_5 && !load_5_0) return face;
-
-  const cbr_2_5 = load_2_5 > 0 ? parseFloat(((load_2_5 / stdLoads.load_2_5) * 100).toFixed(1)) : undefined;
-  const cbr_5_0 = load_5_0 > 0 ? parseFloat(((load_5_0 / stdLoads.load_5_0) * 100).toFixed(1)) : undefined;
-
-  // CBR value = max of 2.5mm and 5.0mm CBR
-  const cbrValue = Math.max(cbr_2_5 ?? 0, cbr_5_0 ?? 0);
-
-  // BS 1377-4 Cl. 7.4: if CBR at 5.0mm > CBR at 2.5mm, repeat test is required
-  const cbrAnomaly = !!(cbr_5_0 && cbr_2_5 && cbr_5_0 > cbr_2_5);
-
-  return {
-    ...face,
-    cbr_2_5,
-    cbr_5_0,
-    cbrValue: cbrValue > 0 ? parseFloat(cbrValue.toFixed(1)) : undefined,
-    cbrAnomaly,
-  };
-}
+type CBRFace = CBRFaceInput;
 
 // CBR acceptance limit applies to BOTH the top and bottom faces.
 const LAYER_TYPES = [
@@ -105,8 +47,14 @@ export default function SoilCBR() {
   const [, setLocation] = useLocation();
   const distId = parseInt(distributionId ?? "0");
   const { data: dist } = trpc.distributions.get.useQuery({ id: distId }, { enabled: !!distId });
+  const { data: existing } = trpc.specializedTests.getByDistribution.useQuery(
+    { distributionId: distId },
+    { enabled: !!distId },
+  );
 
-  const [standard, setStandard] = useState<StandardKey>("BS1377");
+  const [standard, setStandard] = useState<CBRStandardKey>("BS1377");
+  const standardTouched = useRef(false);
+  const [hydrated, setHydrated] = useState(false);
   const [layerType, setLayerType] = useState("SUBGRADE");
   const [soilDescription, setSoilDescription] = useState("");
   const [soakingPeriod, setSoakingPeriod] = useState("96"); // hours
@@ -117,7 +65,11 @@ export default function SoilCBR() {
   const [saving, setSaving] = useState(false);
   const [submitted, setSubmitted] = useState(false);
 
-  const [faces, setFaces] = useState<CBRFace[]>([newFace("Top"), newFace("Bottom")]);
+  const stdSpec = CBR_STANDARDS[standard];
+  const [faces, setFaces] = useState<CBRFace[]>([
+    newCBRFace("Top", CBR_STANDARDS.BS1377.penetrationDepths.length),
+    newCBRFace("Bottom", CBR_STANDARDS.BS1377.penetrationDepths.length),
+  ]);
 
   // Initial density / moisture content (as-moulded sample, before soaking)
   const [massWetSoilCont, setMassWetSoilCont] = useState("");   // mass of wet soil + container, g
@@ -126,10 +78,11 @@ export default function SoilCBR() {
   const [mouldBase, setMouldBase] = useState("");               // mould + base, g
   const [mouldBaseSoil, setMouldBaseSoil] = useState("");       // mould + base + soil, g
   const [volumeMould, setVolumeMould] = useState("");           // volume of mould, cc
-  // Max dry density (MDD) from the Proctor test of the same sample. Used for
-  // Degree of Compaction = (initial dry density / MDD) × 100.
   const [mddStr, setMddStr] = useState("");
+  const [omcStr, setOmcStr] = useState("");
   const mddTouched = useRef(false);
+  const omcTouched = useRef(false);
+  const [linkedProctorMethod, setLinkedProctorMethod] = useState<string | null>(null);
 
   // Pull a sieve analysis from the same sample (if CBR is run in a batch with it).
   // This only auto-fills the value; the two tests are NOT linked/required for each other.
@@ -156,17 +109,77 @@ export default function SoilCBR() {
     }
   }, [sievePassing19_5, passing19_5]);
 
-  // Max dry density (MDD) from the Proctor test of the same sample (Proctor is a
-  // prerequisite for CBR). Used to compute the Degree of Compaction.
-  const proctorMdd = useMemo(() => {
+  const proctorData = useMemo(() => {
     if (!Array.isArray(sampleTests)) return undefined;
     for (const t of sampleTests as any[]) {
       if (t?.formTemplate !== "soil_proctor") continue;
-      const m = t?.formData?.mdd ?? t?.summaryValues?.mdd;
-      if (m != null && Number.isFinite(Number(m))) return Number(m);
+      return t;
     }
     return undefined;
   }, [sampleTests]);
+
+  const proctorMdd = useMemo(() => {
+    const fd = proctorData?.formData;
+    if (!fd) return undefined;
+    const corrected = fd.correctedMDD;
+    if (corrected != null && Number(corrected) > 0) return Number(corrected);
+    const m = fd.mddValue ?? fd.mdd ?? proctorData?.summaryValues?.mdd;
+    if (m != null && Number.isFinite(Number(m))) return Number(m);
+    return undefined;
+  }, [proctorData]);
+
+  const proctorOmc = useMemo(() => {
+    const fd = proctorData?.formData;
+    if (!fd) return undefined;
+    const corrected = fd.correctedOMC;
+    if (corrected != null && Number(corrected) > 0) return Number(corrected);
+    const o = fd.omcValue ?? fd.omc ?? proctorData?.summaryValues?.omc;
+    if (o != null && Number.isFinite(Number(o))) return Number(o);
+    return undefined;
+  }, [proctorData]);
+
+  useEffect(() => {
+    if (hydrated || !existing?.formData) return;
+    const fd = existing.formData as Record<string, unknown>;
+    if (typeof fd.standard === "string" && fd.standard in CBR_STANDARDS) {
+      setStandard(fd.standard as CBRStandardKey);
+      standardTouched.current = true;
+    }
+    if (typeof fd.layerType === "string") setLayerType(fd.layerType);
+    if (typeof fd.soilDescription === "string") setSoilDescription(fd.soilDescription);
+    if (fd.soakingPeriod != null) setSoakingPeriod(String(fd.soakingPeriod));
+    if (fd.passing19_5 != null) setPassing19_5(String(fd.passing19_5));
+    if (fd.mdd != null) setMddStr(String(fd.mdd));
+    if (fd.omc != null) setOmcStr(String(fd.omc));
+    const idd = fd.initialDensity as Record<string, unknown> | undefined;
+    if (idd) {
+      if (idd.massWetSoilCont != null) setMassWetSoilCont(String(idd.massWetSoilCont));
+      if (idd.massDrySoilCont != null) setMassDrySoilCont(String(idd.massDrySoilCont));
+      if (idd.massContainer != null) setMassContainer(String(idd.massContainer));
+      if (idd.mouldBase != null) setMouldBase(String(idd.mouldBase));
+      if (idd.mouldBaseSoil != null) setMouldBaseSoil(String(idd.mouldBaseSoil));
+      if (idd.volumeMould != null) setVolumeMould(String(idd.volumeMould));
+    }
+    if (Array.isArray(fd.faces) && fd.faces.length > 0) {
+      setFaces((fd.faces as CBRFace[]).map(f => ({
+        id: f.id ?? `face_${Date.now()}_${f.faceLabel}`,
+        faceLabel: f.faceLabel,
+        readings: Array.isArray(f.readings) ? f.readings.map(String) : [],
+      })));
+    }
+    if (typeof existing.notes === "string") setNotes(existing.notes);
+    if (existing.status === "submitted") setSubmitted(true);
+    setHydrated(true);
+  }, [existing, hydrated]);
+
+  useEffect(() => {
+    const tm = proctorData?.formData?.testMethod as string | undefined;
+    if (!tm) return;
+    setLinkedProctorMethod(tm);
+    if (!standardTouched.current && proctorMethodLinksToAstmCbr(tm)) {
+      setStandard("ASTM_D1883");
+    }
+  }, [proctorData]);
 
   useEffect(() => {
     if (proctorMdd !== undefined && !mddTouched.current && mddStr === "") {
@@ -174,9 +187,25 @@ export default function SoilCBR() {
     }
   }, [proctorMdd, mddStr]);
 
-  const stdLoads = STANDARD_LOADS[standard];
+  useEffect(() => {
+    if (proctorOmc !== undefined && !omcTouched.current && omcStr === "") {
+      setOmcStr(String(proctorOmc));
+    }
+  }, [proctorOmc, omcStr]);
+
+  const handleStandardChange = (val: CBRStandardKey) => {
+    standardTouched.current = true;
+    setStandard(val);
+    const depthCount = CBR_STANDARDS[val].penetrationDepths.length;
+    setFaces(prev => prev.map(f => ({
+      ...f,
+      readings: Array.from({ length: depthCount }, (_, i) => f.readings[i] ?? ""),
+    })));
+  };
+
   const layerSpec = LAYER_TYPES.find(l => l.value === layerType) ?? LAYER_TYPES[0];
-  const computedFaces = faces.map(f => computeFace(f, stdLoads));
+  const computedFaces = faces.map(f => computeCBRFace(f, stdSpec));
+  const penetrationDepths = stdSpec.penetrationDepths;
 
   const topFace = faces.find(f => f.faceLabel === "Top") ?? faces[0];
   const bottomFace = faces.find(f => f.faceLabel === "Bottom") ?? faces[1];
@@ -269,7 +298,12 @@ export default function SoilCBR() {
       return;
     }
     if (status === "submitted" && validFaces.length === 0) {
-      toast.error(ar ? "الرجاء إدخال قراءات الحمل عند 2.5mm و 5.0mm على الأقل" : "Please enter at least 2.5mm and 5.0mm load readings");
+      const d1 = stdSpec.keyDepthPrimary;
+      const d2 = stdSpec.keyDepthSecondary;
+      const unit = stdSpec.penetrationUnit;
+      toast.error(ar
+        ? `الرجاء إدخال قراءات الحمل عند ${d1}${unit} و ${d2}${unit} على الأقل`
+        : `Please enter load readings at ${d1}" and ${d2}" (${unit})`);
       return;
     }
     setSaving(true);
@@ -281,6 +315,10 @@ export default function SoilCBR() {
         formTemplate: "soil_cbr",
         formData: {
           standard,
+          standardLabel: stdSpec.label,
+          penetrationUnit: stdSpec.penetrationUnit,
+          loadUnit: stdSpec.loadUnit,
+          linkedProctorMethod,
           layerType,
           soilDescription,
           soakingPeriod,
@@ -294,6 +332,7 @@ export default function SoilCBR() {
           cbrMin: layerSpec.cbrMin,
           overallResult,
           mdd: Number.isFinite(mddNum) ? mddNum : null,
+          omc: parseFloat(omcStr) || null,
           dryDensityPct: dryDensityPct ?? null,
           initialDensity: {
             massWetSoilCont: parseFloat(massWetSoilCont) || null,
@@ -316,7 +355,7 @@ export default function SoilCBR() {
           finalCBR: finalCBR ?? null,
           cbrMin: layerSpec.cbrMin,
           layerType: layerSpec.label,
-          standard: stdLoads.label,
+          standard: stdSpec.label,
           retained20mm: retained20mm ?? null,
           dryDensityPct: dryDensityPct ?? null,
         },
@@ -336,7 +375,7 @@ export default function SoilCBR() {
     const n = parseFloat(raw);
     return Number.isFinite(n) ? n : null;
   };
-  const mergedChartData = PENETRATION_DEPTHS.map((depth, i) => ({
+  const mergedChartData = penetrationDepths.map((depth, i) => ({
     depth,
     top: readingToNum(topFace?.readings[i]),
     bottom: readingToNum(bottomFace?.readings[i]),
@@ -405,16 +444,41 @@ export default function SoilCBR() {
         {/* Info Note */}
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-xs text-blue-800">
           <Info size={12} className="inline mr-1" />
-          {ar ? (
-            <><strong>إجراء CBR:</strong> {PENETRATION_DEPTHS.length} قراءة لكل وجه (علوي + سفلي) بفواصل 0.25mm من 0 إلى 7.5mm.
-            CBR = (الحمل عند الاختراق / الحمل المعياري) x 100. CBR النهائي = متوسط الوجهين.
-            الأحمال المعيارية: 2.5mm = {stdLoads.load_2_5} kN، 5.0mm = {stdLoads.load_5_0} kN.</>
+          {standard === "ASTM_D1883" ? (
+            ar ? (
+              <><strong>إجراء ASTM D1883:</strong> {penetrationDepths.length} قراءة لكل وجه (علوي + سفلي) بالبوصة.
+              CBR @ 0.1" = الحمل / 1000 lbf × 100 | CBR @ 0.2" = الحمل / 1500 lbf × 100.
+              CBR المعتمد = الأعلى بين 0.1" و 0.2" | CBR النهائي = متوسط الوجهين.
+              3 عينات: {stdSpec.specimens.join("، ")} ضربة/طبقة ({stdSpec.layers} طبقات).</>
+            ) : (
+              <><strong>ASTM D1883 Procedure:</strong> {penetrationDepths.length} readings per face (Top + Bottom) in inches.
+              CBR @ 0.1" = Load / 1000 lbf × 100 | CBR @ 0.2" = Load / 1500 lbf × 100.
+              Adopted CBR = max(0.1", 0.2") | Final CBR = average of top and bottom faces.
+              3 specimens: {stdSpec.specimens.join(", ")} blows/layer ({stdSpec.layers} layers).</>
+            )
           ) : (
-            <><strong>CBR Procedure:</strong> {PENETRATION_DEPTHS.length} readings per face (Top + Bottom) at 0.25mm intervals from 0 to 7.5mm.
-            CBR = (Load at penetration / Standard Load) x 100. Final CBR = average of top and bottom faces.
-            Standard loads: 2.5mm = {stdLoads.load_2_5} kN, 5.0mm = {stdLoads.load_5_0} kN.</>
+            ar ? (
+              <><strong>إجراء BS 1377-4:</strong> {penetrationDepths.length} قراءة لكل وجه بفواصل 0.25mm من 0 إلى 7.5mm.
+              CBR = (الحمل / الحمل المعياري) × 100. CBR النهائي = متوسط الوجهين.
+              الأحمال المعيارية: 2.5mm = {stdSpec.standardLoadPrimary} kN، 5.0mm = {stdSpec.standardLoadSecondary} kN.</>
+            ) : (
+              <><strong>BS 1377-4 Procedure:</strong> {penetrationDepths.length} readings per face at 0.25mm intervals from 0 to 7.5mm.
+              CBR = (Load / Standard Load) × 100. Final CBR = average of top and bottom faces.
+              Standard loads: 2.5mm = {stdSpec.standardLoadPrimary} kN, 5.0mm = {stdSpec.standardLoadSecondary} kN.</>
+            )
           )}
         </div>
+
+        {linkedProctorMethod && proctorMethodLinksToAstmCbr(linkedProctorMethod) && standard === "ASTM_D1883" && (
+          <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3 text-xs text-emerald-800">
+            {ar
+              ? `تم ربط CBR تلقائياً باختبار بروكتور (${linkedProctorMethod === "MODIFIED_PROCTOR" ? "ASTM D1557" : "ASTM D698"}) → ASTM D1883`
+              : `CBR auto-linked to Proctor (${linkedProctorMethod === "MODIFIED_PROCTOR" ? "ASTM D1557" : "ASTM D698"}) → ASTM D1883`}
+            {proctorMdd != null && (
+              <span className="ml-2 font-semibold">| MDD: {proctorMdd} Mg/m³{proctorOmc != null ? `, OMC: ${proctorOmc}%` : ""}</span>
+            )}
+          </div>
+        )}
 
         {/* Test Info */}
         <Card>
@@ -423,10 +487,10 @@ export default function SoilCBR() {
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <div>
                 <Label className="text-xs text-slate-500 mb-1 block">{ar ? "المعيار" : "Standard"}</Label>
-                <Select value={standard} onValueChange={v => setStandard(v as StandardKey)}>
+                <Select value={standard} onValueChange={v => handleStandardChange(v as CBRStandardKey)}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    {Object.entries(STANDARD_LOADS).map(([k, s]) => (
+                    {Object.entries(CBR_STANDARDS).map(([k, s]) => (
                       <SelectItem key={k} value={k}>{s.label}</SelectItem>
                     ))}
                   </SelectContent>
@@ -533,7 +597,9 @@ export default function SoilCBR() {
                 )}
                 {(topComputed?.cbrAnomaly || bottomComputed?.cbrAnomaly) && (
                   <span className="bg-amber-100 text-amber-800 border border-amber-300 px-2 py-1 rounded font-sans font-semibold">
-                    ⚠ {ar ? "CBR عند 5mm > CBR عند 2.5mm — يلزم إعادة الاختبار" : "CBR at 5.0mm > 2.5mm — repeat test required"}
+                    ⚠ {ar
+                      ? `CBR عند ${stdSpec.keyDepthSecondary}${stdSpec.penetrationUnit} > CBR عند ${stdSpec.keyDepthPrimary}${stdSpec.penetrationUnit} — يلزم إعادة الاختبار`
+                      : `CBR at ${stdSpec.keyDepthSecondary}${stdSpec.penetrationUnit} > ${stdSpec.keyDepthPrimary}${stdSpec.penetrationUnit} — repeat test required`}
                   </span>
                 )}
               </div>
@@ -546,17 +612,26 @@ export default function SoilCBR() {
                 <table className="w-full text-sm border-collapse">
                   <thead>
                     <tr className="bg-slate-50">
-                      <th className="border border-slate-200 px-2 py-2 text-xs font-semibold text-slate-600">{ar ? "الاختراق (mm)" : "Pen. (mm)"}</th>
-                      <th className="border border-slate-200 px-2 py-2 text-xs font-semibold text-blue-700">{ar ? "العلوي (kN)" : "Top (kN)"}</th>
-                      <th className="border border-slate-200 px-2 py-2 text-xs font-semibold text-rose-700">{ar ? "السفلي (kN)" : "Bottom (kN)"}</th>
+                      <th className="border border-slate-200 px-2 py-2 text-xs font-semibold text-slate-600">
+                        {ar ? `الاختراق (${stdSpec.penetrationUnit})` : `Pen. (${stdSpec.penetrationUnit})`}
+                      </th>
+                      <th className="border border-slate-200 px-2 py-2 text-xs font-semibold text-blue-700">
+                        {ar ? `العلوي (${stdSpec.loadUnit})` : `Top (${stdSpec.loadUnit})`}
+                      </th>
+                      <th className="border border-slate-200 px-2 py-2 text-xs font-semibold text-rose-700">
+                        {ar ? `السفلي (${stdSpec.loadUnit})` : `Bottom (${stdSpec.loadUnit})`}
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
-                    {PENETRATION_DEPTHS.map((depth, i) => (
+                    {penetrationDepths.map((depth, i) => {
+                      const isPrimary = Math.abs(depth - stdSpec.keyDepthPrimary) < 0.001;
+                      const isSecondary = Math.abs(depth - stdSpec.keyDepthSecondary) < 0.001;
+                      return (
                       <tr key={i} className={i % 2 === 0 ? "bg-white" : "bg-slate-50/50"}>
                         <td className={`border border-slate-200 px-2 py-1 text-center font-mono text-xs font-semibold
-                          ${depth === 2.5 ? "bg-blue-50 text-blue-700" : depth === 5.0 ? "bg-purple-50 text-purple-700" : "text-slate-600"}`}>
-                          {fmtDepth(depth)}
+                          ${isPrimary ? "bg-blue-50 text-blue-700" : isSecondary ? "bg-purple-50 text-purple-700" : "text-slate-600"}`}>
+                          {formatPenetrationDepth(depth, stdSpec.penetrationUnit)}
                         </td>
                         <td className="border border-slate-200 px-1 py-1">
                           <Input
@@ -564,7 +639,7 @@ export default function SoilCBR() {
                             onChange={e => topFace && updateReading(topFace.id, i, e.target.value)}
                             disabled={submitted}
                             className={`h-7 text-xs w-full text-center font-mono
-                              ${depth === 2.5 ? "border-blue-300 bg-blue-50" : depth === 5.0 ? "border-purple-300 bg-purple-50" : ""}`}
+                              ${isPrimary ? "border-blue-300 bg-blue-50" : isSecondary ? "border-purple-300 bg-purple-50" : ""}`}
                             placeholder="—"
                           />
                         </td>
@@ -574,15 +649,19 @@ export default function SoilCBR() {
                             onChange={e => bottomFace && updateReading(bottomFace.id, i, e.target.value)}
                             disabled={submitted}
                             className={`h-7 text-xs w-full text-center font-mono
-                              ${depth === 2.5 ? "border-blue-300 bg-blue-50" : depth === 5.0 ? "border-purple-300 bg-purple-50" : ""}`}
+                              ${isPrimary ? "border-blue-300 bg-blue-50" : isSecondary ? "border-purple-300 bg-purple-50" : ""}`}
                             placeholder="—"
                           />
                         </td>
                       </tr>
-                    ))}
+                    );})}
                   </tbody>
                 </table>
-                <p className="text-xs text-blue-600 mt-1">{ar ? "أزرق = 2.5mm، بنفسجي = 5.0mm (أعماق CBR الرئيسية)" : "Blue = 2.5mm, Purple = 5.0mm (key CBR depths)"}</p>
+                <p className="text-xs text-blue-600 mt-1">
+                  {ar
+                    ? `أزرق = ${stdSpec.keyDepthPrimary}${stdSpec.penetrationUnit}، بنفسجي = ${stdSpec.keyDepthSecondary}${stdSpec.penetrationUnit}`
+                    : `Blue = ${stdSpec.keyDepthPrimary}${stdSpec.penetrationUnit}, Purple = ${stdSpec.keyDepthSecondary}${stdSpec.penetrationUnit} (key CBR depths)`}
+                </p>
               </div>
 
               {/* Combined penetration curve */}
@@ -597,16 +676,16 @@ export default function SoilCBR() {
                         type="number"
                         domain={["auto", "auto"]}
                         tick={{ fontSize: 10 }}
-                        label={{ value: ar ? "الاختراق (mm)" : "Penetration (mm)", position: "insideBottom", offset: -10, fontSize: 10 }}
+                        label={{ value: ar ? `الاختراق (${stdSpec.penetrationUnit})` : `Penetration (${stdSpec.penetrationUnit})`, position: "insideBottom", offset: -10, fontSize: 10 }}
                       />
                       <YAxis
                         tick={{ fontSize: 10 }}
-                        label={{ value: ar ? "الحمل (kN)" : "Load (kN)", angle: -90, position: "insideLeft", fontSize: 10 }}
+                        label={{ value: ar ? `الحمل (${stdSpec.loadUnit})` : `Load (${stdSpec.loadUnit})`, angle: -90, position: "insideLeft", fontSize: 10 }}
                       />
                       <Tooltip formatter={(v: number) => v.toFixed(2)} />
                       <Legend wrapperStyle={{ fontSize: 10 }} iconSize={10} />
-                      <ReferenceLine x={2.5} stroke="#3b82f6" strokeDasharray="4 4" label={{ value: "2.5mm", position: "top", fontSize: 9, fill: "#3b82f6" }} />
-                      <ReferenceLine x={5.0} stroke="#8b5cf6" strokeDasharray="4 4" label={{ value: "5.0mm", position: "top", fontSize: 9, fill: "#8b5cf6" }} />
+                      <ReferenceLine x={stdSpec.keyDepthPrimary} stroke="#3b82f6" strokeDasharray="4 4" label={{ value: `${stdSpec.keyDepthPrimary}${stdSpec.penetrationUnit}`, position: "top", fontSize: 9, fill: "#3b82f6" }} />
+                      <ReferenceLine x={stdSpec.keyDepthSecondary} stroke="#8b5cf6" strokeDasharray="4 4" label={{ value: `${stdSpec.keyDepthSecondary}${stdSpec.penetrationUnit}`, position: "top", fontSize: 9, fill: "#8b5cf6" }} />
                       <Line type="monotone" dataKey="top" name={ar ? "العلوي" : "Top"} stroke="#2563eb" strokeWidth={2} dot={{ r: 2 }} connectNulls />
                       <Line type="monotone" dataKey="bottom" name={ar ? "السفلي" : "Bottom"} stroke="#e11d48" strokeWidth={2} dot={{ r: 2 }} connectNulls />
                     </LineChart>
@@ -727,6 +806,21 @@ export default function SoilCBR() {
                         />
                       </td>
                     </tr>
+                    <tr>
+                      <td className="border border-slate-200 px-3 py-2 text-xs text-slate-600">
+                        {ar ? "نسبة الرطوبة المثلى OMC (%)" : "Optimum Moisture Content OMC (%)"}
+                        <span className="block text-[10px] font-normal text-slate-400">{ar ? "من اختبار بروكتور" : "from Proctor test"}</span>
+                      </td>
+                      <td className="border border-slate-200 px-1 py-1">
+                        <Input
+                          value={omcStr}
+                          onChange={e => { omcTouched.current = true; setOmcStr(e.target.value); }}
+                          disabled={submitted}
+                          className="h-8 text-xs font-mono text-center"
+                          placeholder="—"
+                        />
+                      </td>
+                    </tr>
                     <tr className="bg-emerald-50/60">
                       <td className="border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700">
                         {ar ? "درجة الدمك %" : "Degree of Compaction, %"}
@@ -807,7 +901,7 @@ export default function SoilCBR() {
               <ResultBanner
                 result={overallResult}
                 testName={`CBR Test — ${layerSpec.label}`}
-                standard={stdLoads.label}
+                standard={stdSpec.label}
               />
             </CardContent>
           </Card>
