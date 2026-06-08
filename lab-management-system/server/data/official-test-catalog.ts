@@ -50,6 +50,9 @@ export const TEST_CODE_ALIASES: Record<string, string> = {
   "DIST-2026-040": "ASPH_MARSHALL",
   "DIST-2026-042": "ASPH_MARSHALL_DENSITY",
   "DIST-2026-083": "ASPH_CORE",
+  "AGG_ACV": "AGG_CRUSHING",
+  "AGG_AIV": "AGG_IMPACT",
+  "AGG_CRUSHING_IMPACT": "AGG_CRUSHING",
 };
 
 export interface OfficialTest {
@@ -189,12 +192,13 @@ export const OFFICIAL_TEST_CATALOG: OfficialTest[] = [
     sortOrder: 410,
   },
   { category: "aggregates", nameEn: "Flakiness & Elongation Index", nameAr: "معامل التقشر والاستطالة", code: "AGG_FLAKINESS_ELONGATION", unitPrice: "100", unit: "%", standardRef: "BS EN 933-3 / BS EN 933-4", formTemplate: "agg_shape_index", sortOrder: 420 },
-  { category: "aggregates", nameEn: "Aggregate Crushing & Impact Value", nameAr: "قيمة التكسير والصدم", code: "AGG_CRUSHING_IMPACT", unitPrice: "100", unit: "%", standardRef: "BS 812-110 / BS 812-112", formTemplate: "agg_crushing_impact", sortOrder: 430 },
+  { category: "aggregates", nameEn: "Aggregate Crushing Value (ACV)", nameAr: "قيمة سحق الركام (ACV)", code: "AGG_CRUSHING", unitPrice: "100", unit: "%", standardRef: "BS 812-110", formTemplate: "acv", sortOrder: 430 },
+  { category: "aggregates", nameEn: "Aggregate Impact Value (AIV)", nameAr: "قيمة تأثير الركام (AIV)", code: "AGG_IMPACT", unitPrice: "100", unit: "%", standardRef: "BS 812-112", formTemplate: "aiv", sortOrder: 435 },
   { category: "aggregates", nameEn: "Los Angeles Abrasion Test", nameAr: "تآكل لوس أنجلوس", code: "AGG_LA", unitPrice: "150", unit: "%", standardRef: "BS EN 1097-2", formTemplate: "agg_la_abrasion", sortOrder: 450 },
 ];
 
-if (OFFICIAL_TEST_CATALOG.length !== 28) {
-  throw new Error(`Official test catalog must contain exactly 28 tests, found ${OFFICIAL_TEST_CATALOG.length}`);
+if (OFFICIAL_TEST_CATALOG.length !== 29) {
+  throw new Error(`Official test catalog must contain exactly 29 tests, found ${OFFICIAL_TEST_CATALOG.length}`);
 }
 
 const catalogByCode = new Map(OFFICIAL_TEST_CATALOG.map((t) => [t.code, t]));

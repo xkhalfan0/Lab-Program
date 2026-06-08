@@ -30,7 +30,8 @@ import AsphaltCoreThickness from "./AsphaltCoreThickness";
 import AsphaltBitumenExtraction from "./AsphaltBitumenExtraction";
 import AggSpecificGravity from "./AggSpecificGravity";
 import AggShapeIndex from "./AggShapeIndex";
-import AggCrushingImpact from "./AggCrushingImpact";
+import AcvTest from "./AcvTest";
+import AivTest from "./AivTest";
 import AggLAAbrasion from "./AggLAAbrasion";
 import SteelStructural from "./SteelStructural";
 import SteelAnchorBolt from "./SteelAnchorBolt";
@@ -77,7 +78,9 @@ const FORM_MAP: Record<string, React.ComponentType> = {
   "BatchReport":              BatchReport,
   // Aggregate
   "AggSieveAnalysis":         SieveAnalysis,
-  "AggCrushingImpact":        AggCrushingImpact,
+  "AggCrushingImpact":        AcvTest,
+  "AcvTest":                  AcvTest,
+  "AivTest":                  AivTest,
   "AggLAAbrasion":            AggLAAbrasion,
   // Legacy snake_case keys (backward compat)
   "concrete_cubes":           ConcreteCubes,
@@ -89,8 +92,11 @@ const FORM_MAP: Record<string, React.ComponentType> = {
   "sieve_analysis":           SieveAnalysis,
   "agg_specific_gravity":     AggSpecificGravity,
   "agg_shape_index":          AggShapeIndex,
-  "agg_crushing":             AggCrushingImpact,
-  "agg_impact":               AggCrushingImpact,
+  "acv":                      AcvTest,
+  "aiv":                      AivTest,
+  "agg_crushing":             AcvTest,
+  "agg_impact":               AivTest,
+  "agg_crushing_impact":      AcvTest,
   "agg_la_abrasion":          AggLAAbrasion,
   "soil_proctor":             SoilProctor,
   "soil_atterberg":           SoilAtterberg,
@@ -165,8 +171,11 @@ const CODE_TO_COMPONENT: Record<string, React.ComponentType> = {
   "AGG_SIEVE":              SieveAggBlend,
   "AGG_SG":                 AggSpecificGravity,
   "AGG_FLAKINESS_ELONGATION": AggShapeIndex,
-  "AGG_CRUSHING":           AggCrushingImpact,
-  "AGG_IMPACT":             AggCrushingImpact,
+  "AGG_CRUSHING":           AcvTest,
+  "AGG_IMPACT":             AivTest,
+  "AGG_ACV":                AcvTest,
+  "AGG_AIV":                AivTest,
+  "AGG_CRUSHING_IMPACT":    AcvTest,
   "AGG_LA":                 AggLAAbrasion,
   // Aliases (saved / legacy codes that must still open the same form)
   "AGG_LA_ABRASION":        AggLAAbrasion,
