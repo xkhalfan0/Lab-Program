@@ -5,6 +5,9 @@
 
 export type CBRStandardKey = "BS1377" | "ASTM_D1883";
 
+/** BS 1377 first (legacy workflow), then ASTM D1883. */
+export const CBR_STANDARD_ORDER: CBRStandardKey[] = ["BS1377", "ASTM_D1883"];
+
 export interface CBRStandardSpec {
   label: string;
   loadUnit: string;

@@ -21,13 +21,14 @@ import { useLanguage } from "@/contexts/LanguageContext";
 
 import {
   CBR_STANDARDS,
+  CBR_STANDARD_ORDER,
   computeCBRFace,
   formatPenetrationDepth,
   newCBRFace,
   type CBRFaceInput,
   type CBRStandardKey,
 } from "@/lib/soilCBR";
-import { proctorMethodLinksToAstmCbr } from "@/lib/soilProctor";
+import { proctorMethodLinksToAstmCbr, proctorMethodLinksToBsCbr } from "@/lib/soilProctor";
 
 type CBRFace = CBRFaceInput;
 
@@ -121,9 +122,12 @@ export default function SoilCBR() {
   const proctorMdd = useMemo(() => {
     const fd = proctorData?.formData;
     if (!fd) return undefined;
-    const corrected = fd.correctedMDD;
-    if (corrected != null && Number(corrected) > 0) return Number(corrected);
-    const m = fd.mddValue ?? fd.mdd ?? proctorData?.summaryValues?.mdd;
+    const tm = fd.testMethod as string | undefined;
+    if (proctorMethodLinksToAstmCbr(tm ?? "")) {
+      const corrected = fd.correctedMDD;
+      if (corrected != null && Number(corrected) > 0) return Number(corrected);
+    }
+    const m = fd.mdd ?? fd.mddValue ?? proctorData?.summaryValues?.mdd;
     if (m != null && Number.isFinite(Number(m))) return Number(m);
     return undefined;
   }, [proctorData]);
@@ -131,9 +135,11 @@ export default function SoilCBR() {
   const proctorOmc = useMemo(() => {
     const fd = proctorData?.formData;
     if (!fd) return undefined;
+    const tm = fd.testMethod as string | undefined;
+    if (!proctorMethodLinksToAstmCbr(tm ?? "")) return undefined;
     const corrected = fd.correctedOMC;
     if (corrected != null && Number(corrected) > 0) return Number(corrected);
-    const o = fd.omcValue ?? fd.omc ?? proctorData?.summaryValues?.omc;
+    const o = fd.omc ?? fd.omcValue ?? proctorData?.summaryValues?.omc;
     if (o != null && Number.isFinite(Number(o))) return Number(o);
     return undefined;
   }, [proctorData]);
@@ -176,8 +182,11 @@ export default function SoilCBR() {
     const tm = proctorData?.formData?.testMethod as string | undefined;
     if (!tm) return;
     setLinkedProctorMethod(tm);
-    if (!standardTouched.current && proctorMethodLinksToAstmCbr(tm)) {
+    if (standardTouched.current) return;
+    if (proctorMethodLinksToAstmCbr(tm)) {
       setStandard("ASTM_D1883");
+    } else if (proctorMethodLinksToBsCbr(tm)) {
+      setStandard("BS1377");
     }
   }, [proctorData]);
 
@@ -332,7 +341,7 @@ export default function SoilCBR() {
           cbrMin: layerSpec.cbrMin,
           overallResult,
           mdd: Number.isFinite(mddNum) ? mddNum : null,
-          omc: parseFloat(omcStr) || null,
+          omc: standard === "ASTM_D1883" && parseFloat(omcStr) ? parseFloat(omcStr) : null,
           dryDensityPct: dryDensityPct ?? null,
           initialDensity: {
             massWetSoilCont: parseFloat(massWetSoilCont) || null,
@@ -479,6 +488,16 @@ export default function SoilCBR() {
             )}
           </div>
         )}
+        {linkedProctorMethod && proctorMethodLinksToBsCbr(linkedProctorMethod) && standard === "BS1377" && (
+          <div className="bg-purple-50 border border-purple-200 rounded-lg p-3 text-xs text-purple-800">
+            {ar
+              ? `تم ربط CBR تلقائياً باختبار بروكتور (${linkedProctorMethod === "BS_HEAVY" ? "BS 1377 دمك ثقيل" : "BS 1377 دمك خفيف"}) → BS 1377-4`
+              : `CBR auto-linked to Proctor (${linkedProctorMethod === "BS_HEAVY" ? "BS 1377 Heavy" : "BS 1377 Light"}) → BS 1377-4`}
+            {proctorMdd != null && (
+              <span className="ml-2 font-semibold">| MDD: {proctorMdd} Mg/m³</span>
+            )}
+          </div>
+        )}
 
         {/* Test Info */}
         <Card>
@@ -490,8 +509,8 @@ export default function SoilCBR() {
                 <Select value={standard} onValueChange={v => handleStandardChange(v as CBRStandardKey)}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    {Object.entries(CBR_STANDARDS).map(([k, s]) => (
-                      <SelectItem key={k} value={k}>{s.label}</SelectItem>
+                    {CBR_STANDARD_ORDER.map(k => (
+                      <SelectItem key={k} value={k}>{CBR_STANDARDS[k].label}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -806,21 +825,23 @@ export default function SoilCBR() {
                         />
                       </td>
                     </tr>
-                    <tr>
-                      <td className="border border-slate-200 px-3 py-2 text-xs text-slate-600">
-                        {ar ? "نسبة الرطوبة المثلى OMC (%)" : "Optimum Moisture Content OMC (%)"}
-                        <span className="block text-[10px] font-normal text-slate-400">{ar ? "من اختبار بروكتور" : "from Proctor test"}</span>
-                      </td>
-                      <td className="border border-slate-200 px-1 py-1">
-                        <Input
-                          value={omcStr}
-                          onChange={e => { omcTouched.current = true; setOmcStr(e.target.value); }}
-                          disabled={submitted}
-                          className="h-8 text-xs font-mono text-center"
-                          placeholder="—"
-                        />
-                      </td>
-                    </tr>
+                    {standard === "ASTM_D1883" && (
+                      <tr>
+                        <td className="border border-slate-200 px-3 py-2 text-xs text-slate-600">
+                          {ar ? "نسبة الرطوبة المثلى OMC (%)" : "Optimum Moisture Content OMC (%)"}
+                          <span className="block text-[10px] font-normal text-slate-400">{ar ? "من اختبار بروكتور ASTM" : "from ASTM Proctor test"}</span>
+                        </td>
+                        <td className="border border-slate-200 px-1 py-1">
+                          <Input
+                            value={omcStr}
+                            onChange={e => { omcTouched.current = true; setOmcStr(e.target.value); }}
+                            disabled={submitted}
+                            className="h-8 text-xs font-mono text-center"
+                            placeholder="—"
+                          />
+                        </td>
+                      </tr>
+                    )}
                     <tr className="bg-emerald-50/60">
                       <td className="border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700">
                         {ar ? "درجة الدمك %" : "Degree of Compaction, %"}

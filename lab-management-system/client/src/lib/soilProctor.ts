@@ -14,10 +14,23 @@ export interface ProctorMethodSpec {
   hammerMass: number;
   dropHeight: number;
   energy: number;
+  /** Pre-ASTM display string (BS 1377 methods). */
+  legacyEnergy?: string;
+  /** Pre-ASTM display string (BS 1377 methods). */
+  legacyHammer?: string;
   mouldVolume: number;
   recommendedMolds: readonly string[];
   color: string;
+  isAstm: boolean;
 }
+
+/** Dropdown order: BS methods first (legacy workflow), then ASTM. */
+export const PROCTOR_METHOD_ORDER: ProctorMethodKey[] = [
+  "BS_HEAVY",
+  "BS_LIGHT",
+  "MODIFIED_PROCTOR",
+  "STANDARD_PROCTOR",
+];
 
 export const PROCTOR_METHOD_SPECS: Record<ProctorMethodKey, ProctorMethodSpec> = {
   MODIFIED_PROCTOR: {
@@ -33,6 +46,7 @@ export const PROCTOR_METHOD_SPECS: Record<ProctorMethodKey, ProctorMethodSpec> =
     mouldVolume: 2305,
     recommendedMolds: ["CBR_MOLD", "STANDARD_MOLD"],
     color: "blue",
+    isAstm: true,
   },
   STANDARD_PROCTOR: {
     label: "Standard Proctor (ASTM D698)",
@@ -47,6 +61,7 @@ export const PROCTOR_METHOD_SPECS: Record<ProctorMethodKey, ProctorMethodSpec> =
     mouldVolume: 944,
     recommendedMolds: ["STANDARD_MOLD", "LARGE_MOLD"],
     color: "green",
+    isAstm: true,
   },
   BS_HEAVY: {
     label: "BS 1377 Heavy Compaction",
@@ -57,10 +72,13 @@ export const PROCTOR_METHOD_SPECS: Record<ProctorMethodKey, ProctorMethodSpec> =
     blowsPerLayer: 27,
     hammerMass: 4.5,
     dropHeight: 450,
-    energy: 2632,
+    energy: 2674,
+    legacyEnergy: "2674 kN·m/m³",
+    legacyHammer: "4.5 kg / 450 mm",
     mouldVolume: 2305,
     recommendedMolds: ["CBR_MOLD", "STANDARD_MOLD"],
     color: "purple",
+    isAstm: false,
   },
   BS_LIGHT: {
     label: "BS 1377 Light Compaction",
@@ -72,9 +90,12 @@ export const PROCTOR_METHOD_SPECS: Record<ProctorMethodKey, ProctorMethodSpec> =
     hammerMass: 2.5,
     dropHeight: 300,
     energy: 596,
+    legacyEnergy: "596 kN·m/m³",
+    legacyHammer: "2.5 kg / 300 mm",
     mouldVolume: 1000,
     recommendedMolds: ["STANDARD_MOLD", "LARGE_MOLD"],
     color: "orange",
+    isAstm: false,
   },
 };
 
@@ -159,6 +180,18 @@ export function computeCorrectedProctor(
   return { correctedMDD, correctedOMC, pctFiner: parseFloat((pFiner * 100).toFixed(1)) };
 }
 
-export function proctorMethodLinksToAstmCbr(method: string): boolean {
+export function isAstmProctorMethod(method: string): method is "MODIFIED_PROCTOR" | "STANDARD_PROCTOR" {
   return method === "MODIFIED_PROCTOR" || method === "STANDARD_PROCTOR";
+}
+
+export function isBsProctorMethod(method: string): method is "BS_HEAVY" | "BS_LIGHT" {
+  return method === "BS_HEAVY" || method === "BS_LIGHT";
+}
+
+export function proctorMethodLinksToAstmCbr(method: string): boolean {
+  return isAstmProctorMethod(method);
+}
+
+export function proctorMethodLinksToBsCbr(method: string): boolean {
+  return isBsProctorMethod(method);
 }

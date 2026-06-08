@@ -19,9 +19,11 @@ import {
 } from "recharts";
 import {
   PROCTOR_METHOD_SPECS,
+  PROCTOR_METHOD_ORDER,
   PROCTOR_MOLD_VOLUMES,
   computeCorrectedProctor,
   computeProctorPoint,
+  isAstmProctorMethod,
   type ProctorMethodKey,
   type ProctorMoldKey,
   type ProctorPointInput,
@@ -91,7 +93,7 @@ export default function SoilProctor() {
     { enabled: !!distId },
   );
 
-  const [testMethod, setTestMethod] = useState<ProctorMethodKey>("MODIFIED_PROCTOR");
+  const [testMethod, setTestMethod] = useState<ProctorMethodKey>("BS_HEAVY");
   const [moldType, setMoldType] = useState<ProctorMoldKey>("CBR_MOLD");
   const [mouldVolumeStr, setMouldVolumeStr] = useState(String(PROCTOR_MOLD_VOLUMES.CBR_MOLD.volume));
   const [soilDescription, setSoilDescription] = useState("");
@@ -108,6 +110,7 @@ export default function SoilProctor() {
   );
 
   const currentSpecs = PROCTOR_METHOD_SPECS[testMethod];
+  const isAstm = isAstmProctorMethod(testMethod);
 
   useEffect(() => {
     if (hydrated || !existing?.formData) return;
@@ -165,15 +168,17 @@ export default function SoilProctor() {
     mddFinerNum,
     omcFinerNum,
   );
-  const reportMdd = correctedMDD > 0 && oversizeNum > 0 ? correctedMDD : fitResult?.mdd;
-  const reportOmc = correctedOMC > 0 && oversizeNum > 0 ? correctedOMC : fitResult?.omc;
+  const reportMdd = isAstm && correctedMDD > 0 && oversizeNum > 0 ? correctedMDD : fitResult?.mdd;
+  const reportOmc = isAstm && correctedOMC > 0 && oversizeNum > 0 ? correctedOMC : fitResult?.omc;
 
   const handleMethodChange = (val: ProctorMethodKey) => {
     setTestMethod(val);
     const spec = PROCTOR_METHOD_SPECS[val];
-    setMouldVolumeStr(String(spec.mouldVolume));
-    const rec = spec.recommendedMolds[0] as ProctorMoldKey;
-    if (rec in PROCTOR_MOLD_VOLUMES) setMoldType(rec);
+    if (spec.isAstm) {
+      setMouldVolumeStr(String(spec.mouldVolume));
+      const rec = spec.recommendedMolds[0] as ProctorMoldKey;
+      if (rec in PROCTOR_MOLD_VOLUMES) setMoldType(rec);
+    }
   };
 
   const saveResult = trpc.specializedTests.save.useMutation({
@@ -212,13 +217,13 @@ export default function SoilProctor() {
           mouldVolume: moldVolume,
           mouldBaseMass: Number.isFinite(mouldBaseMassNum) ? mouldBaseMassNum : null,
           soilDescription,
-          cbrStandard: currentSpecs.cbrStandard,
-          bulkSpGr: bulkSpGrNum,
-          oversizePct: oversizeNum,
-          mddFinerUnit: mddFinerNum > 0 ? mddFinerNum : null,
-          pctFiner,
-          correctedMDD: correctedMDD > 0 ? correctedMDD : null,
-          correctedOMC: correctedOMC > 0 ? correctedOMC : null,
+          cbrStandard: isAstm ? currentSpecs.cbrStandard : "BS 1377-4",
+          bulkSpGr: isAstm ? bulkSpGrNum : null,
+          oversizePct: isAstm ? oversizeNum : null,
+          mddFinerUnit: isAstm && mddFinerNum > 0 ? mddFinerNum : null,
+          pctFiner: isAstm ? pctFiner : null,
+          correctedMDD: isAstm && correctedMDD > 0 ? correctedMDD : null,
+          correctedOMC: isAstm && correctedOMC > 0 ? correctedOMC : null,
           points: computedPoints.map(p => ({
             waterAdded: p.waterAdded,
             containerNo: p.containerNo,
@@ -295,10 +300,12 @@ export default function SoilProctor() {
               <span>{lang === "ar" ? "فحوصات التربة / الدمك" : "Soil Tests / Compaction"}</span>
             </div>
             <h1 className="text-2xl font-bold text-slate-900">
-              {lang === "ar" ? "اختبار الدمك بروكتور المعدّل" : "Modified Proctor Compaction Test"}
+              {isAstm
+                ? (ar ? "اختبار الدمك بروكتور — ASTM" : "Proctor Compaction Test — ASTM")
+                : (ar ? "اختبار الدمك بروكتور — BS 1377" : "Proctor Compaction Test — BS 1377")}
             </h1>
             <p className="text-slate-500 text-sm mt-1">
-              BS 1377-4 / ASTM D1557 | {lang === "ar" ? "أمر التوزيع" : "Distribution"}: {dist?.distributionCode ?? `DIST-${distId}`}
+              {currentSpecs.standardRef} | {ar ? "أمر التوزيع" : "Distribution"}: {dist?.distributionCode ?? `DIST-${distId}`}
             </p>
           </div>
           <div className="flex gap-2">
@@ -342,9 +349,12 @@ export default function SoilProctor() {
                 <Select value={testMethod} onValueChange={v => handleMethodChange(v as ProctorMethodKey)}>
                   <SelectTrigger className="w-full *:data-[slot=select-value]:min-w-0"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    {(Object.entries(PROCTOR_METHOD_SPECS) as [ProctorMethodKey, typeof currentSpecs][]).map(([key, spec]) => (
-                      <SelectItem key={key} value={key}>{ar ? spec.labelAr : spec.label}</SelectItem>
-                    ))}
+                    {PROCTOR_METHOD_ORDER.map(key => {
+                      const spec = PROCTOR_METHOD_SPECS[key];
+                      return (
+                        <SelectItem key={key} value={key}>{ar ? spec.labelAr : spec.label}</SelectItem>
+                      );
+                    })}
                   </SelectContent>
                 </Select>
               </div>
@@ -390,13 +400,15 @@ export default function SoilProctor() {
                   className="font-mono"
                 />
               </div>
-              <div>
-                <Label className="text-xs text-slate-500 mb-1 block">{ar ? "معيار CBR المرتبط" : "Linked CBR Standard"}</Label>
-                <div className="h-9 px-3 flex items-center bg-blue-50 border border-blue-200 rounded-md">
-                  <span className="text-sm font-semibold text-blue-700">{currentSpecs.cbrStandard}</span>
-                  <span className="text-xs text-blue-500 ml-2">({ar ? "تلقائي" : "auto"})</span>
+              {isAstm && (
+                <div>
+                  <Label className="text-xs text-slate-500 mb-1 block">{ar ? "معيار CBR المرتبط" : "Linked CBR Standard"}</Label>
+                  <div className="h-9 px-3 flex items-center bg-blue-50 border border-blue-200 rounded-md">
+                    <span className="text-sm font-semibold text-blue-700">{currentSpecs.cbrStandard}</span>
+                    <span className="text-xs text-blue-500 ml-2">({ar ? "تلقائي" : "auto"})</span>
+                  </div>
                 </div>
-              </div>
+              )}
               <div>
                 <Label className="text-xs text-slate-500 mb-1 block">{ar ? "وصف التربة" : "Soil Description"}</Label>
                 <Input value={soilDescription} onChange={e => setSoilDescription(e.target.value)} placeholder={ar ? "مثال: طين رملي، مواد ردم" : "e.g. Sandy clay, Fill material"} />
@@ -428,33 +440,57 @@ export default function SoilProctor() {
                 orange: "bg-orange-100 text-orange-700",
               };
               return (
-                <div className={`mt-4 border rounded-xl p-4 ${colorMap[spec.color]}`}>
-                  <p className="text-xs font-bold mb-3">
-                    {ar ? "مواصفات الاختبار — " : "Test Specifications — "}
-                    <span className={`px-2 py-0.5 rounded text-xs font-bold ${badgeMap[spec.color]}`}>{spec.standardRef}</span>
-                  </p>
-                  <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-                    <div className="flex flex-col items-center p-2 bg-white rounded-lg border border-blue-100">
-                      <span className="text-[10px] text-blue-600 mb-1">{ar ? "عدد الطبقات" : "Layers"}</span>
-                      <span className="text-xl font-bold text-blue-900">{spec.layers}</span>
-                    </div>
-                    <div className="flex flex-col items-center p-2 bg-white rounded-lg border border-blue-100">
-                      <span className="text-[10px] text-blue-600 mb-1">{ar ? "ضربات/طبقة" : "Blows/Layer"}</span>
-                      <span className="text-xl font-bold text-blue-900">{spec.blowsPerLayer}</span>
-                    </div>
-                    <div className="flex flex-col items-center p-2 bg-white rounded-lg border border-blue-100">
-                      <span className="text-[10px] text-blue-600 mb-1">{ar ? "كتلة المطرقة" : "Hammer"}</span>
-                      <span className="text-xl font-bold text-blue-900">{spec.hammerMass} kg</span>
-                    </div>
-                    <div className="flex flex-col items-center p-2 bg-white rounded-lg border border-blue-100">
-                      <span className="text-[10px] text-blue-600 mb-1">{ar ? "ارتفاع السقوط" : "Drop Height"}</span>
-                      <span className="text-xl font-bold text-blue-900">{spec.dropHeight} mm</span>
-                    </div>
-                    <div className="flex flex-col items-center p-2 bg-white rounded-lg border border-blue-100">
-                      <span className="text-[10px] text-blue-600 mb-1">{ar ? "طاقة الضغط" : "Energy"}</span>
-                      <span className="text-lg font-bold text-blue-900">{spec.energy} kN·m/m³</span>
-                    </div>
+                <div className={`mt-4 border rounded-lg p-4 ${colorMap[spec.color]}`}>
+                  <div className="flex items-center gap-2 mb-3">
+                    <Info size={14} />
+                    <span className="font-semibold text-sm">
+                      {ar ? "المواصفات المرجعية — " : "Reference Specifications — "}
+                      <span className={`px-2 py-0.5 rounded text-xs font-bold ${badgeMap[spec.color]}`}>{spec.standardRef}</span>
+                    </span>
                   </div>
+                  {spec.isAstm ? (
+                    <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                      <div className="flex flex-col items-center p-2 bg-white rounded-lg border border-blue-100">
+                        <span className="text-[10px] text-blue-600 mb-1">{ar ? "عدد الطبقات" : "Layers"}</span>
+                        <span className="text-xl font-bold text-blue-900">{spec.layers}</span>
+                      </div>
+                      <div className="flex flex-col items-center p-2 bg-white rounded-lg border border-blue-100">
+                        <span className="text-[10px] text-blue-600 mb-1">{ar ? "ضربات/طبقة" : "Blows/Layer"}</span>
+                        <span className="text-xl font-bold text-blue-900">{spec.blowsPerLayer}</span>
+                      </div>
+                      <div className="flex flex-col items-center p-2 bg-white rounded-lg border border-blue-100">
+                        <span className="text-[10px] text-blue-600 mb-1">{ar ? "كتلة المطرقة" : "Hammer"}</span>
+                        <span className="text-xl font-bold text-blue-900">{spec.hammerMass} kg</span>
+                      </div>
+                      <div className="flex flex-col items-center p-2 bg-white rounded-lg border border-blue-100">
+                        <span className="text-[10px] text-blue-600 mb-1">{ar ? "ارتفاع السقوط" : "Drop Height"}</span>
+                        <span className="text-xl font-bold text-blue-900">{spec.dropHeight} mm</span>
+                      </div>
+                      <div className="flex flex-col items-center p-2 bg-white rounded-lg border border-blue-100">
+                        <span className="text-[10px] text-blue-600 mb-1">{ar ? "طاقة الضغط" : "Energy"}</span>
+                        <span className="text-lg font-bold text-blue-900">{spec.energy} kN·m/m³</span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+                      <div className="flex flex-col gap-0.5">
+                        <span className="opacity-60 uppercase tracking-wide">{ar ? "عدد الطبقات" : "Layers"}</span>
+                        <span className="text-lg font-bold">{spec.layers}</span>
+                      </div>
+                      <div className="flex flex-col gap-0.5">
+                        <span className="opacity-60 uppercase tracking-wide">{ar ? "ضربات/طبقة" : "Blows/Layer"}</span>
+                        <span className="text-lg font-bold">{spec.blowsPerLayer}</span>
+                      </div>
+                      <div className="flex flex-col gap-0.5">
+                        <span className="opacity-60 uppercase tracking-wide">{ar ? "طاقة الدمك" : "Compaction Energy"}</span>
+                        <span className="font-bold">{spec.legacyEnergy}</span>
+                      </div>
+                      <div className="flex flex-col gap-0.5">
+                        <span className="opacity-60 uppercase tracking-wide">{ar ? "المطرقة" : "Hammer"}</span>
+                        <span className="font-bold">{spec.legacyHammer}</span>
+                      </div>
+                    </div>
+                  )}
                   {isMoldWarning && (
                     <div className="mt-3 flex items-center gap-2 bg-yellow-50 border border-yellow-300 text-yellow-800 rounded p-2 text-xs">
                       <span>⚠️</span>
@@ -728,7 +764,8 @@ export default function SoilProctor() {
           </Card>
         </div>
 
-        {/* Corrected MDD (oversize correction per ASTM D4718) */}
+        {/* Corrected MDD — ASTM D4718 only (not used for BS 1377 heavy/light) */}
+        {isAstm && (
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-sm font-semibold">
@@ -798,6 +835,7 @@ export default function SoilProctor() {
             </div>
           </CardContent>
         </Card>
+        )}
 
         {/* Notes */}
         <Card>
