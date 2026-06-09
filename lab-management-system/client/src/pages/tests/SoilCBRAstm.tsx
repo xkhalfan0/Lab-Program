@@ -154,7 +154,7 @@ export function SoilCBRAstm({
                 <p className="text-[10px] text-slate-500 mt-0.5">{mddPcf} lbf/ft³</p>
               )}
               {proctorMdd != null && (
-                <p className="text-[10px] text-emerald-600">{L(ar, "من بروكتور", "from Proctor")}</p>
+                <p className="text-[10px] text-emerald-600">{L(ar, "from Proctor", "من بروكتور")}</p>
               )}
             </div>
             <div>
@@ -166,7 +166,7 @@ export function SoilCBRAstm({
                 disabled={submitted}
               />
               {proctorOmc != null && (
-                <p className="text-[10px] text-emerald-600">{L(ar, "من بروكتور", "from Proctor")}</p>
+                <p className="text-[10px] text-emerald-600">{L(ar, "from Proctor", "من بروكتور")}</p>
               )}
             </div>
             <div>
@@ -180,7 +180,7 @@ export function SoilCBRAstm({
           </div>
           {retained20mm != null && (
             <p className="text-xs text-amber-700 mt-3">
-              {L(ar, "المحتجز على 20 مم:", "Retained on 20 mm:")} {retained20mm}%
+              {L(ar, "Retained on 20 mm:", "المحتجز على 20 مم:")} {retained20mm}%
             </p>
           )}
         </CardContent>
@@ -200,7 +200,7 @@ export function SoilCBRAstm({
                 <th className={`${labelCls} font-semibold`}>{L(ar, "Parameter", "البيان")}</th>
                 {ASTM_SPECIMEN_BLOWS.map(b => (
                   <th key={b} className="border border-slate-200 px-2 py-2 text-xs font-bold text-center min-w-[7rem]">
-                    {b} {L(ar, "ضربة/طبقة", "blows/layer")}
+                    {b} {L(ar, "blows/layer", "ضربة/طبقة")}
                   </th>
                 ))}
               </tr>
@@ -342,8 +342,9 @@ export function SoilCBRAstm({
                 </tbody>
               </table>
               <p className="text-[10px] text-slate-500 mt-2">
-                {L(ar, "الإجهاد = الحمل ÷ 3 in² | CBR @ 0.1\" = حمل/1000×100 | CBR @ 0.2\" = حمل/1500×100",
-                  "Stress = Load ÷ 3 in² | CBR @ 0.1\" = Load/1000×100 | CBR @ 0.2\" = Load/1500×100")}
+                {L(ar,
+                  "Stress = Load ÷ 3 in² | CBR @ 0.1\" = Load/1000×100 | CBR @ 0.2\" = Load/1500×100",
+                  "الإجهاد = الحمل ÷ 3 in² | CBR @ 0.1\" = حمل/1000×100 | CBR @ 0.2\" = حمل/1500×100")}
               </p>
             </div>
             <div>
@@ -365,7 +366,7 @@ export function SoilCBRAstm({
                 </ResponsiveContainer>
               ) : (
                 <div className="h-72 border rounded flex items-center justify-center text-slate-400 text-sm">
-                  {L(ar, "أدخل قراءات الحمل", "Enter load readings")}
+                  {L(ar, "Enter load readings", "أدخل قراءات الحمل")}
                 </div>
               )}
             </div>
@@ -476,7 +477,7 @@ export function SoilCBRAstm({
                 </ResponsiveContainer>
               ) : (
                 <div className="h-72 border rounded flex items-center justify-center text-slate-400 text-sm">
-                  {L(ar, "أدخل 2 عينات على الأقل", "Enter at least 2 specimens")}
+                  {L(ar, "Enter at least 2 specimens", "أدخل 2 عينات على الأقل")}
                 </div>
               )}
             </div>
@@ -486,7 +487,7 @@ export function SoilCBRAstm({
 
       <Card>
         <CardContent className="pt-4">
-          <Label className="text-xs text-slate-500">{L(ar, "ملاحظات", "Notes")}</Label>
+          <Label className="text-xs text-slate-500">{L(ar, "Notes", "ملاحظات")}</Label>
           <Textarea value={notes} onChange={e => setNotes(e.target.value)} rows={3} className="mt-1" />
         </CardContent>
       </Card>
