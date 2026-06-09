@@ -14,6 +14,7 @@ import {
   buildStressPenetrationChartData,
   computeAllAstmSpecimens,
   computeCbrAtMddPercentages,
+  isLegacyAstmPenetrationLoads,
   normalizeAstmPenetrationLoads,
   mgToPcf,
   type AstmCBRSpecimenComputed,
@@ -92,7 +93,10 @@ export function SoilCBRAstm({
     if (loadsSynced.current) return;
     loadsSynced.current = true;
     setSpecimens(prev => {
-      const needsFix = prev.some(s => s.penetrationLoads.length !== ASTM_PENETRATION_IN.length);
+      const needsFix = prev.some(s =>
+        s.penetrationLoads.length !== ASTM_PENETRATION_IN.length
+        || isLegacyAstmPenetrationLoads(s.penetrationLoads),
+      );
       if (!needsFix) return prev;
       return prev.map(s => ({
         ...s,
@@ -124,6 +128,7 @@ export function SoilCBRAstm({
     setSpecimens(prev => prev.map(s => {
       if (s.id !== id) return s;
       const loads = s.penetrationLoads.length === ASTM_PENETRATION_IN.length
+        && !isLegacyAstmPenetrationLoads(s.penetrationLoads)
         ? [...s.penetrationLoads]
         : normalizeAstmPenetrationLoads(s.penetrationLoads);
       loads[depthIdx] = value;
@@ -343,12 +348,14 @@ export function SoilCBRAstm({
                           {fmtDepth(depth, "in")}
                         </td>
                         {specimens.map(sp => (
-                          <td key={`l-${sp.id}-${di}`} className="border border-slate-200 px-0.5 py-0.5">
-                            <Input
+                          <td key={`l-${sp.id}-${di}`} className="border border-slate-200 p-0">
+                            <input
+                              type="text"
+                              inputMode="decimal"
                               value={sp.penetrationLoads[di] ?? ""}
                               onChange={e => updateLoad(sp.id, di, e.target.value)}
                               disabled={submitted}
-                              className={`h-7 text-[11px] text-center font-mono w-full ${is01 || is02 ? CELL_IN : ""}`}
+                              className={`w-full h-7 text-[11px] text-center font-mono border-0 rounded-none outline-none focus:ring-2 focus:ring-inset focus:ring-blue-400 ${is01 || is02 ? CELL_IN : "bg-white"}`}
                             />
                           </td>
                         ))}
@@ -364,8 +371,8 @@ export function SoilCBRAstm({
               </table>
               <p className="text-[10px] text-slate-500 px-3 py-2 bg-slate-50 border-t border-slate-200">
                 {L(ar,
-                  "Stress = Load ÷ 3 in² | CBR @ 0.1\" = Load/1000×100 | CBR @ 0.2\" = Load/1500×100",
-                  "الإجهاد = الحمل ÷ 3 in² | CBR @ 0.1\" = حمل/1000×100 | CBR @ 0.2\" = حمل/1500×100")}
+                  "Stress = Load ÷ 3 in² | CBR @ 0.1\" = Stress/1000×100 | CBR @ 0.2\" = Stress/1500×100",
+                  "الإجهاد = الحمل ÷ 3 in² | CBR @ 0.1\" = إجهاد/1000×100 | CBR @ 0.2\" = إجهاد/1500×100")}
               </p>
             </div>
             <div>
@@ -424,21 +431,19 @@ export function SoilCBRAstm({
                       <td className="border border-slate-200 px-2 py-1.5 text-center font-mono">{fmtN(sp.moistureContent, 1)}</td>
                       <td className="border border-slate-200 px-2 py-1.5 text-center font-mono font-bold text-blue-800">{fmtN(sp.cbr01, 0)}</td>
                       <td className="border border-slate-200 px-2 py-1.5 text-center font-mono font-bold text-purple-800">{fmtN(sp.cbr02, 0)}</td>
-                      <td className="border border-slate-200 px-1 py-0.5">
+                      <td className={`border border-slate-200 px-1 py-0.5 ${!sp.correctedCbr01 ? CELL_CALC : ""}`}>
                         <Input
-                          value={sp.correctedCbr01}
+                          value={sp.correctedCbr01 !== "" ? sp.correctedCbr01 : (sp.correctedCbr01Val != null ? String(sp.correctedCbr01Val) : "")}
                           onChange={e => updateSpecimen(sp.id, "correctedCbr01", e.target.value)}
                           disabled={submitted}
-                          placeholder={sp.correctedCbr01Val != null ? String(sp.correctedCbr01Val) : ""}
                           className="h-7 text-[11px] text-center font-mono"
                         />
                       </td>
-                      <td className="border border-slate-200 px-1 py-0.5">
+                      <td className={`border border-slate-200 px-1 py-0.5 ${!sp.correctedCbr02 ? CELL_CALC : ""}`}>
                         <Input
-                          value={sp.correctedCbr02}
+                          value={sp.correctedCbr02 !== "" ? sp.correctedCbr02 : (sp.correctedCbr02Val != null ? String(sp.correctedCbr02Val) : "")}
                           onChange={e => updateSpecimen(sp.id, "correctedCbr02", e.target.value)}
                           disabled={submitted}
-                          placeholder={sp.correctedCbr02Val != null ? String(sp.correctedCbr02Val) : ""}
                           className="h-7 text-[11px] text-center font-mono"
                         />
                       </td>

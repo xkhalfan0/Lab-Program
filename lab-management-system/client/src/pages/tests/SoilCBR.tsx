@@ -550,7 +550,7 @@ export default function SoilCBR() {
               الإجهاد (psi) = الحمل / 3 in² | CBR التصميمي من المنحنى عند 95% / 98% / 100% من MDD.</>
             ) : (
               <><strong>ASTM D1883 Procedure:</strong> 3 specimens (10 / 30 / 65 blows/layer, 5 layers).
-              CBR @ 0.1" = Load / 1000 lbf × 100 | CBR @ 0.2" = Load / 1500 lbf × 100.
+              CBR @ 0.1" = Stress / 1000 psi × 100 | CBR @ 0.2" = Stress / 1500 psi × 100.
               Stress (psi) = Load / 3 in² | Design CBR from curve at 95% / 98% / 100% of MDD.</>
             )
           ) : (

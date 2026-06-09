@@ -1,7 +1,7 @@
 /**
  * ASTM D1883 CBR — 3 specimens @ 10 / 30 / 65 blows per layer
- * CBR @ 0.1" = Load / 1000 × 100 | CBR @ 0.2" = Load / 1500 × 100
- * Stress (psi) = Load (lbf) / 3
+ * Stress (psi) = Load (lbf) / 3 in²
+ * CBR @ 0.1" = Stress / 1000 × 100 | CBR @ 0.2" = Stress / 1500 × 100  (lab worksheet)
  */
 
 import { CBR_STANDARDS } from "./soilCBR";
@@ -16,6 +16,9 @@ export const ASTM_PEN_IDX_02 = ASTM_PENETRATION_IN.indexOf(0.2);
 export const ASTM_PISTON_AREA_IN2 = 3;
 export const ASTM_STD_LOAD_01_LBF = 1000;
 export const ASTM_STD_LOAD_02_LBF = 1500;
+/** Worksheet divisors applied to stress (psi), e.g. 330 / 1000 × 100 = 33 */
+export const ASTM_STD_STRESS_CBR_01 = 1000;
+export const ASTM_STD_STRESS_CBR_02 = 1500;
 export const ASTM_STD_SURCHARGE_LBF = 10;
 export const MG_M3_TO_PCF = 62.428;
 
@@ -77,13 +80,28 @@ export function defaultAstmSpecimens(): AstmCBRSpecimenInput[] {
   return ASTM_SPECIMEN_BLOWS.map((b, i) => newAstmSpecimen(b, i));
 }
 
-/** Re-map legacy penetration arrays (pre-0.15 row or with 0.4") onto current depths. */
+/** True when a 10-row array is the old layout (0.2" at index 5, no 0.15 row). */
+export function isLegacyAstmPenetrationLoads(loads: string[]): boolean {
+  if (loads.length !== 10) return false;
+  const at5 = String(loads[5] ?? "").trim();
+  const at6 = String(loads[6] ?? "").trim();
+  // New format: 0.15" row at 5 and 0.2" at 6 are both typically filled once tested
+  if (at5 && at6) return false;
+  // Legacy: 0.2" stored at index 5, index 6+ hold deeper penetrations
+  return Boolean(at5);
+}
+
+/** Pad, trim, or migrate legacy penetration load arrays onto current depth table. */
 export function normalizeAstmPenetrationLoads(loads: string[]): string[] {
   const n = ASTM_PENETRATION_IN.length;
   const out = Array(n).fill("");
 
-  if (loads.length === 10) {
-    // Legacy: 0 … 0.1, 0.2 … 0.4 (no 0.15 row)
+  if (loads.length === n) {
+    if (!isLegacyAstmPenetrationLoads(loads)) {
+      for (let i = 0; i < n; i++) out[i] = loads[i] ?? "";
+      return out;
+    }
+    // Legacy 10-row without 0.15: remap 0.2" from index 5 → 6
     for (let i = 0; i < 5; i++) out[i] = loads[i] ?? "";
     if (loads[5] != null && loads[5] !== "") out[ASTM_PEN_IDX_02] = loads[5];
     for (let i = 6; i < 9; i++) out[i + 1] = loads[i] ?? "";
@@ -91,7 +109,6 @@ export function normalizeAstmPenetrationLoads(loads: string[]): string[] {
   }
 
   if (loads.length === 11 && n === 10) {
-    // Legacy with 0.15 and trailing 0.4 — drop 0.4
     for (let i = 0; i < n; i++) out[i] = loads[i] ?? "";
     return out;
   }
@@ -105,9 +122,9 @@ export function parseAstmLoad(v: string): number {
   return Number.isFinite(n) && n > 0 ? n : 0;
 }
 
-export function calcAstmCbr(loadLbf: number, stdLoadLbf: number): number | undefined {
-  if (!(loadLbf > 0) || !(stdLoadLbf > 0)) return undefined;
-  return Math.round((loadLbf / stdLoadLbf) * 100);
+export function calcAstmCbrFromStress(stressPsi: number, stdStressPsi: number): number | undefined {
+  if (!(stressPsi > 0) || !(stdStressPsi > 0)) return undefined;
+  return Math.round((stressPsi / stdStressPsi) * 100);
 }
 
 export function computeAstmSpecimen(
@@ -154,17 +171,16 @@ export function computeAstmSpecimen(
   const load02 = loads[ASTM_PEN_IDX_02] ?? 0;
   out.load01 = load01 > 0 ? load01 : undefined;
   out.load02 = load02 > 0 ? load02 : undefined;
-  out.cbr01 = calcAstmCbr(load01, ASTM_STD_LOAD_01_LBF);
-  out.cbr02 = calcAstmCbr(load02, ASTM_STD_LOAD_02_LBF);
-
-  const surchargeFactor = surchargeLbf > 0 ? ASTM_STD_SURCHARGE_LBF / surchargeLbf : 1;
-  const autoCorr01 = out.cbr01 != null ? Math.round(out.cbr01 * surchargeFactor) : undefined;
-  const autoCorr02 = out.cbr02 != null ? Math.round(out.cbr02 * surchargeFactor) : undefined;
+  const stress01 = out.stresses[ASTM_PEN_IDX_01];
+  const stress02 = out.stresses[ASTM_PEN_IDX_02];
+  out.cbr01 = stress01 != null ? calcAstmCbrFromStress(stress01, ASTM_STD_STRESS_CBR_01) : undefined;
+  out.cbr02 = stress02 != null ? calcAstmCbrFromStress(stress02, ASTM_STD_STRESS_CBR_02) : undefined;
 
   const corr01 = num(sp.correctedCbr01);
   const corr02 = num(sp.correctedCbr02);
-  out.correctedCbr01Val = Number.isFinite(corr01) && corr01 > 0 ? corr01 : autoCorr01;
-  out.correctedCbr02Val = Number.isFinite(corr02) && corr02 > 0 ? corr02 : autoCorr02;
+  // Auto corrected from stress curve — manual override only when user enters a value
+  out.correctedCbr01Val = Number.isFinite(corr01) && corr01 > 0 ? corr01 : out.cbr01;
+  out.correctedCbr02Val = Number.isFinite(corr02) && corr02 > 0 ? corr02 : out.cbr02;
   const adopted01 = out.correctedCbr01Val ?? 0;
   const adopted02 = out.correctedCbr02Val ?? 0;
   out.adoptedCbr = Math.max(adopted01, adopted02) || undefined;
