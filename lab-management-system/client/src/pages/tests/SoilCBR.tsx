@@ -29,6 +29,13 @@ import {
   type CBRStandardKey,
 } from "@/lib/soilCBR";
 import { proctorMethodLinksToAstmCbr, proctorMethodLinksToBsCbr } from "@/lib/soilProctor";
+import {
+  computeAllAstmSpecimens,
+  computeCbrAtMddPercentages,
+  defaultAstmSpecimens,
+  type AstmCBRSpecimenInput,
+} from "@/lib/soilCBRAstm";
+import { SoilCBRAstm } from "./SoilCBRAstm";
 
 type CBRFace = CBRFaceInput;
 
@@ -84,6 +91,10 @@ export default function SoilCBR() {
   const mddTouched = useRef(false);
   const omcTouched = useRef(false);
   const [linkedProctorMethod, setLinkedProctorMethod] = useState<string | null>(null);
+  const [astmSpecimens, setAstmSpecimens] = useState<AstmCBRSpecimenInput[]>(defaultAstmSpecimens());
+  const [compactionMethod, setCompactionMethod] = useState("ASTM D1557");
+  const [sampleCondition, setSampleCondition] = useState("Soaked");
+  const [surchargeLbf, setSurchargeLbf] = useState("10");
 
   // Pull a sieve analysis from the same sample (if CBR is run in a batch with it).
   // This only auto-fills the value; the two tests are NOT linked/required for each other.
@@ -173,6 +184,25 @@ export default function SoilCBR() {
         readings: Array.isArray(f.readings) ? f.readings.map(String) : [],
       })));
     }
+    if (Array.isArray(fd.astmSpecimens) && fd.astmSpecimens.length > 0) {
+      setAstmSpecimens((fd.astmSpecimens as AstmCBRSpecimenInput[]).map((s, i) => ({
+        id: s.id ?? `astm_sp_${i}`,
+        blowsPerLayer: s.blowsPerLayer ?? ([10, 30, 65] as const)[i] ?? 10,
+        volumeMould: String(s.volumeMould ?? ""),
+        massMouldSample: String(s.massMouldSample ?? ""),
+        massMould: String(s.massMould ?? ""),
+        massWetCont: String(s.massWetCont ?? ""),
+        massDryCont: String(s.massDryCont ?? ""),
+        massContainer: String(s.massContainer ?? ""),
+        moistureAfterSoak: String(s.moistureAfterSoak ?? ""),
+        penetrationLoads: Array.isArray(s.penetrationLoads) ? s.penetrationLoads.map(String) : [],
+        correctedCbr01: String(s.correctedCbr01 ?? ""),
+        correctedCbr02: String(s.correctedCbr02 ?? ""),
+      })));
+    }
+    if (typeof fd.compactionMethod === "string") setCompactionMethod(fd.compactionMethod);
+    if (typeof fd.sampleCondition === "string") setSampleCondition(fd.sampleCondition);
+    if (fd.surchargeLbf != null) setSurchargeLbf(String(fd.surchargeLbf));
     if (typeof existing.notes === "string") setNotes(existing.notes);
     if (existing.status === "submitted") setSubmitted(true);
     setHydrated(true);
@@ -205,12 +235,26 @@ export default function SoilCBR() {
   const handleStandardChange = (val: CBRStandardKey) => {
     standardTouched.current = true;
     setStandard(val);
-    const depthCount = CBR_STANDARDS[val].penetrationDepths.length;
-    setFaces(prev => prev.map(f => ({
-      ...f,
-      readings: Array.from({ length: depthCount }, (_, i) => f.readings[i] ?? ""),
-    })));
+    if (val === "ASTM_D1883") {
+      setAstmSpecimens(prev => (prev.some(s => s.volumeMould || s.massMouldSample) ? prev : defaultAstmSpecimens()));
+    } else {
+      const depthCount = CBR_STANDARDS[val].penetrationDepths.length;
+      setFaces(prev => prev.map(f => ({
+        ...f,
+        readings: Array.from({ length: depthCount }, (_, i) => f.readings[i] ?? ""),
+      })));
+    }
   };
+
+  const computedAstmSpecimens = useMemo(
+    () => (standard === "ASTM_D1883" ? computeAllAstmSpecimens(astmSpecimens) : []),
+    [standard, astmSpecimens],
+  );
+  const astmDesignCbr = useMemo(() => {
+    const mdd = parseFloat(mddStr);
+    if (standard !== "ASTM_D1883" || !(mdd > 0)) return null;
+    return computeCbrAtMddPercentages(computedAstmSpecimens, mdd);
+  }, [standard, computedAstmSpecimens, mddStr]);
 
   const layerSpec = LAYER_TYPES.find(l => l.value === layerType) ?? LAYER_TYPES[0];
   const computedFaces = faces.map(f => computeCBRFace(f, stdSpec));
@@ -306,15 +350,29 @@ export default function SoilCBR() {
       toast.error(lang === "ar" ? "معرف العينة مفقود" : "Sample ID missing");
       return;
     }
-    if (status === "submitted" && validFaces.length === 0) {
-      const d1 = stdSpec.keyDepthPrimary;
-      const d2 = stdSpec.keyDepthSecondary;
-      const unit = stdSpec.penetrationUnit;
-      toast.error(ar
-        ? `الرجاء إدخال قراءات الحمل عند ${d1}${unit} و ${d2}${unit} على الأقل`
-        : `Please enter load readings at ${d1}" and ${d2}" (${unit})`);
-      return;
+
+    const isAstm = standard === "ASTM_D1883";
+    const astmValid = computedAstmSpecimens.some(s => s.cbr01 != null || s.cbr02 != null);
+
+    if (status === "submitted") {
+      if (isAstm && !astmValid) {
+        toast.error(ar
+          ? "الرجاء إدخال قراءات الحمل عند 0.1\" و 0.2\" لعينة واحدة على الأقل"
+          : "Please enter load readings at 0.1\" and 0.2\" for at least one specimen");
+        return;
+      }
+      if (!isAstm && validFaces.length === 0) {
+        toast.error(ar
+          ? `الرجاء إدخال قراءات الحمل عند ${stdSpec.keyDepthPrimary}${stdSpec.penetrationUnit} و ${stdSpec.keyDepthSecondary}${stdSpec.penetrationUnit} على الأقل`
+          : `Please enter load readings at key penetration depths`);
+        return;
+      }
     }
+
+    const astmOverall: "pass" | "fail" | "pending" = isAstm
+      ? (astmDesignCbr?.cbr98 != null ? "pass" : "pending")
+      : overallResult;
+
     setSaving(true);
     try {
       await saveResult.mutateAsync({
@@ -322,7 +380,26 @@ export default function SoilCBR() {
         sampleId: dist.sampleId,
         testTypeCode: "SOIL_CBR",
         formTemplate: "soil_cbr",
-        formData: {
+        formData: isAstm ? {
+          standard,
+          standardLabel: stdSpec.label,
+          linkedProctorMethod,
+          soilDescription,
+          soakingPeriod,
+          passing19_5: Number.isFinite(passing19Num) ? passing19Num : null,
+          retained20mm: retained20mm ?? null,
+          compactionMethod,
+          sampleCondition,
+          surchargeLbf: parseFloat(surchargeLbf) || null,
+          mdd: Number.isFinite(mddNum) ? mddNum : null,
+          mddPcf: astmDesignCbr?.mddPcf ?? null,
+          omc: parseFloat(omcStr) || null,
+          astmSpecimens: computedAstmSpecimens,
+          cbrAt95Mdd: astmDesignCbr?.cbr95 ?? null,
+          cbrAt98Mdd: astmDesignCbr?.cbr98 ?? null,
+          cbrAt100Mdd: astmDesignCbr?.cbr100 ?? null,
+          overallResult: astmOverall,
+        } : {
           standard,
           standardLabel: stdSpec.label,
           penetrationUnit: stdSpec.penetrationUnit,
@@ -341,7 +418,6 @@ export default function SoilCBR() {
           cbrMin: layerSpec.cbrMin,
           overallResult,
           mdd: Number.isFinite(mddNum) ? mddNum : null,
-          omc: standard === "ASTM_D1883" && parseFloat(omcStr) ? parseFloat(omcStr) : null,
           dryDensityPct: dryDensityPct ?? null,
           initialDensity: {
             massWetSoilCont: parseFloat(massWetSoilCont) || null,
@@ -357,8 +433,16 @@ export default function SoilCBR() {
             dryDensityPct: dryDensityPct ?? null,
           },
         },
-        overallResult,
-        summaryValues: {
+        overallResult: isAstm ? astmOverall : overallResult,
+        summaryValues: isAstm ? {
+          standard: stdSpec.label,
+          mdd: Number.isFinite(mddNum) ? mddNum : null,
+          omc: parseFloat(omcStr) || null,
+          cbrAt95Mdd: astmDesignCbr?.cbr95 ?? null,
+          cbrAt98Mdd: astmDesignCbr?.cbr98 ?? null,
+          cbrAt100Mdd: astmDesignCbr?.cbr100 ?? null,
+          retained20mm: retained20mm ?? null,
+        } : {
           topCBR: topCBR ?? null,
           bottomCBR: bottomCBR ?? null,
           finalCBR: finalCBR ?? null,
@@ -405,7 +489,7 @@ export default function SoilCBR() {
 
   return (
     <DashboardLayout>
-      <div className="max-w-6xl mx-auto p-6 space-y-6">
+      <div className={`${standard === "ASTM_D1883" ? "max-w-7xl" : "max-w-6xl"} mx-auto p-6 space-y-6`}>
         <SampleInfoCard dist={dist} />
         {/* Header */}
         <div className="flex items-start justify-between flex-wrap gap-3">
@@ -415,10 +499,12 @@ export default function SoilCBR() {
               <span>{ar ? "اختبارات التربة / CBR" : "Soil Tests / CBR"}</span>
             </div>
             <h1 className="text-2xl font-bold text-slate-900">
-              {ar ? "اختبار نسبة تحمل كاليفورنيا (CBR)" : "California Bearing Ratio (CBR) Test"}
+              {standard === "ASTM_D1883"
+                ? (ar ? "اختبار CBR — ASTM D1883" : "California Bearing Ratio — ASTM D1883")
+                : (ar ? "اختبار نسبة تحمل كاليفورنيا (CBR)" : "California Bearing Ratio (CBR) Test")}
             </h1>
             <p className="text-slate-500 text-sm mt-1">
-              BS 1377-4 / ASTM D1883 | {ar ? "أمر التوزيع:" : "Distribution:"} {dist?.distributionCode ?? `DIST-${distId}`}
+              {stdSpec.label} | {ar ? "أمر التوزيع:" : "Distribution:"} {dist?.distributionCode ?? `DIST-${distId}`}
             </p>
           </div>
           <div className="flex gap-2">
@@ -455,15 +541,13 @@ export default function SoilCBR() {
           <Info size={12} className="inline mr-1" />
           {standard === "ASTM_D1883" ? (
             ar ? (
-              <><strong>إجراء ASTM D1883:</strong> {penetrationDepths.length} قراءة لكل وجه (علوي + سفلي) بالبوصة.
+              <><strong>إجراء ASTM D1883:</strong> 3 عينات (10 / 30 / 65 ضربة/طبقة، 5 طبقات).
               CBR @ 0.1" = الحمل / 1000 lbf × 100 | CBR @ 0.2" = الحمل / 1500 lbf × 100.
-              CBR المعتمد = الأعلى بين 0.1" و 0.2" | CBR النهائي = متوسط الوجهين.
-              3 عينات: {stdSpec.specimens.join("، ")} ضربة/طبقة ({stdSpec.layers} طبقات).</>
+              الإجهاد (psi) = الحمل / 3 in² | CBR التصميمي من المنحنى عند 95% / 98% / 100% من MDD.</>
             ) : (
-              <><strong>ASTM D1883 Procedure:</strong> {penetrationDepths.length} readings per face (Top + Bottom) in inches.
+              <><strong>ASTM D1883 Procedure:</strong> 3 specimens (10 / 30 / 65 blows/layer, 5 layers).
               CBR @ 0.1" = Load / 1000 lbf × 100 | CBR @ 0.2" = Load / 1500 lbf × 100.
-              Adopted CBR = max(0.1", 0.2") | Final CBR = average of top and bottom faces.
-              3 specimens: {stdSpec.specimens.join(", ")} blows/layer ({stdSpec.layers} layers).</>
+              Stress (psi) = Load / 3 in² | Design CBR from curve at 95% / 98% / 100% of MDD.</>
             )
           ) : (
             ar ? (
@@ -499,7 +583,7 @@ export default function SoilCBR() {
           </div>
         )}
 
-        {/* Test Info */}
+        {/* Standard selector — always visible */}
         <Card>
           <CardHeader className="pb-3"><CardTitle className="text-base">{ar ? "معلومات الاختبار" : "Test Information"}</CardTitle></CardHeader>
           <CardContent>
@@ -515,6 +599,16 @@ export default function SoilCBR() {
                   </SelectContent>
                 </Select>
               </div>
+              {standard === "ASTM_D1883" ? (
+                <div>
+                  <Label className="text-xs text-slate-500 mb-1 block">{ar ? "الفاحص" : "Tested By"}</Label>
+                  <div className="flex items-center gap-2 px-3 py-2 bg-green-50 border border-green-200 rounded-lg h-9">
+                    <UserCheck size={14} className="text-green-600 shrink-0" />
+                    <span className="text-sm font-semibold text-green-800">{user?.name ?? "—"}</span>
+                  </div>
+                </div>
+              ) : (
+              <>
               <div>
                 <Label className="text-xs text-slate-500 mb-1 block">{ar ? "نوع الطبقة" : "Layer Type"}</Label>
                 <Select value={layerType} onValueChange={setLayerType}>
@@ -557,9 +651,11 @@ export default function SoilCBR() {
                   )}
                 </div>
               </div>
+              </>
+              )}
             </div>
 
-            {/* Retained % on 20mm sieve = 100 − passing(19.5mm), from the sieve analysis */}
+            {standard !== "ASTM_D1883" && (
             <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <Label className="text-xs text-slate-500 mb-1 block">
@@ -593,9 +689,42 @@ export default function SoilCBR() {
                 </div>
               </div>
             </div>
+            )}
           </CardContent>
         </Card>
 
+        {standard === "ASTM_D1883" ? (
+          <SoilCBRAstm
+            ar={ar}
+            submitted={submitted}
+            soilDescription={soilDescription}
+            setSoilDescription={setSoilDescription}
+            soakingPeriod={soakingPeriod}
+            setSoakingPeriod={setSoakingPeriod}
+            passing19_5={passing19_5}
+            setPassing19_5={v => { passing19Touched.current = true; setPassing19_5(v); }}
+            retained20mm={retained20mm}
+            mddStr={mddStr}
+            setMddStr={setMddStr}
+            mddTouched={mddTouched}
+            omcStr={omcStr}
+            setOmcStr={setOmcStr}
+            omcTouched={omcTouched}
+            proctorMdd={proctorMdd}
+            proctorOmc={proctorOmc}
+            specimens={astmSpecimens}
+            setSpecimens={setAstmSpecimens}
+            compactionMethod={compactionMethod}
+            setCompactionMethod={setCompactionMethod}
+            sampleCondition={sampleCondition}
+            setSampleCondition={setSampleCondition}
+            surchargeLbf={surchargeLbf}
+            setSurchargeLbf={setSurchargeLbf}
+            notes={notes}
+            setNotes={setNotes}
+          />
+        ) : (
+        <>
         {/* Penetration vs. Load — Top & Bottom in one table + one combined chart */}
         <Card>
           <CardHeader className="pb-3">
@@ -935,6 +1064,8 @@ export default function SoilCBR() {
             <Textarea value={notes} onChange={e => setNotes(e.target.value)} rows={3} />
           </CardContent>
         </Card>
+        </>
+        )}
       </div>
     </DashboardLayout>
   );

@@ -1496,8 +1496,139 @@ function CBRReportLoadChart({
   );
 }
 
+function CBRReportAstmStressChart({
+  data,
+  isAr,
+}: {
+  data: Array<{ depth: number; s10?: number | null; s30?: number | null; s65?: number | null }>;
+  isAr: boolean;
+}) {
+  if (data.length < 2) return null;
+  return (
+    <div className="sieve-report-chart border border-slate-300 rounded-md bg-white p-1" style={{ height: 280 }}>
+      <ResponsiveContainer width="100%" height="100%">
+        <LineChart data={data} margin={{ top: 10, right: 16, left: 0, bottom: 26 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+          <XAxis type="number" dataKey="depth" tick={{ fontSize: 9 }} label={{ value: isAr ? "الاختراق (in)" : "Penetration (in)", position: "insideBottom", offset: -16, style: { fontSize: 10 } }} />
+          <YAxis width={42} tick={{ fontSize: 9 }} label={{ value: isAr ? "الإجهاد (psi)" : "Stress (psi)", angle: -90, position: "insideLeft", style: { fontSize: 10 } }} />
+          <Tooltip contentStyle={{ fontSize: 10 }} />
+          <Legend wrapperStyle={{ fontSize: 9 }} iconSize={8} />
+          <ReferenceLine x={0.1} stroke="#3b82f6" strokeDasharray="4 4" />
+          <ReferenceLine x={0.2} stroke="#8b5cf6" strokeDasharray="4 4" />
+          <Line type="monotone" dataKey="s10" stroke="#2563eb" strokeWidth={2} dot={{ r: 2 }} name="10" connectNulls />
+          <Line type="monotone" dataKey="s30" stroke="#059669" strokeWidth={2} dot={{ r: 2 }} name="30" connectNulls />
+          <Line type="monotone" dataKey="s65" stroke="#dc2626" strokeWidth={2} dot={{ r: 2 }} name="65" connectNulls />
+        </LineChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
+function CBRReportAstmCbrDensityChart({
+  data,
+  mddPcf,
+  isAr,
+}: {
+  data: Array<{ dryDensityPcf: number; cbr02: number }>;
+  mddPcf?: number | null;
+  isAr: boolean;
+}) {
+  if (data.length < 2) return null;
+  return (
+    <div className="sieve-report-chart border border-slate-300 rounded-md bg-white p-1" style={{ height: 280 }}>
+      <ResponsiveContainer width="100%" height="100%">
+        <ScatterChart margin={{ top: 10, right: 16, left: 0, bottom: 26 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+          <XAxis type="number" dataKey="dryDensityPcf" tick={{ fontSize: 9 }} label={{ value: isAr ? "الكثافة الجافة (lbf/ft³)" : "Dry Density (lbf/ft³)", position: "insideBottom", offset: -16, style: { fontSize: 10 } }} />
+          <YAxis width={42} tick={{ fontSize: 9 }} label={{ value: isAr ? "CBR @ 0.2\" (%)" : "CBR @ 0.2\" (%)", angle: -90, position: "insideLeft", style: { fontSize: 10 } }} />
+          <Tooltip contentStyle={{ fontSize: 10 }} />
+          <Scatter data={data} fill="#059669" line={{ stroke: "#059669", strokeWidth: 2 }} />
+          {mddPcf != null && mddPcf > 0 && (
+            <>
+              <ReferenceLine x={Math.round(mddPcf * 0.95)} stroke="#3b82f6" strokeDasharray="3 3" />
+              <ReferenceLine x={Math.round(mddPcf * 0.98)} stroke="#10b981" strokeDasharray="3 3" />
+              <ReferenceLine x={mddPcf} stroke="#8b5cf6" strokeDasharray="3 3" />
+            </>
+          )}
+        </ScatterChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
 function renderSoilCBR(fd: any, isAr: boolean) {
   const L = (en: string, ars: string) => (isAr ? ars : en);
+
+  if (fd.standard === "ASTM_D1883" && Array.isArray(fd.astmSpecimens)) {
+    const specimens: any[] = fd.astmSpecimens;
+    const stressData = specimens.length > 0
+      ? (() => {
+          const depths = [0, 0.025, 0.05, 0.075, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4];
+          return depths.map((depth, i) => {
+            const row: { depth: number; s10?: number | null; s30?: number | null; s65?: number | null } = { depth };
+            for (const sp of specimens) {
+              const stress = sp.stresses?.[i];
+              if (sp.blowsPerLayer === 10) row.s10 = stress ?? null;
+              if (sp.blowsPerLayer === 30) row.s30 = stress ?? null;
+              if (sp.blowsPerLayer === 65) row.s65 = stress ?? null;
+            }
+            return row;
+          }).filter(r => (r.s10 ?? 0) > 0 || (r.s30 ?? 0) > 0 || (r.s65 ?? 0) > 0);
+        })()
+      : [];
+    const cbrDensityData = specimens
+      .filter((s: any) => s.dryDensityPcf != null && s.correctedCbr02Val != null)
+      .map((s: any) => ({ dryDensityPcf: Number(s.dryDensityPcf), cbr02: Number(s.correctedCbr02Val) }))
+      .sort((a: any, b: any) => a.dryDensityPcf - b.dryDensityPcf);
+
+    const specCols: Column[] = [
+      { header: L("Blows/Layer", "ضربات/طبقة"), field: "blowsPerLayer", align: "center" },
+      { header: L("Dry Density (lbf/ft³)", "كثافة جافة (lbf/ft³)"), field: "dryDensityPcf", align: "center", render: v => fmt(v, 0) },
+      { header: L("MC %", "رطوبة %"), field: "moistureContent", align: "center", render: v => fmt(v, 1) },
+      { header: L("MC after soak %", "رطوبة بعد النقع %"), field: "moistureAfterSoak", align: "center", render: v => v != null && v !== "" ? fmt(v, 1) : "—" },
+      { header: "CBR @ 0.1\"", field: "cbr01", align: "center", render: v => fmt(v, 0) },
+      { header: "CBR @ 0.2\"", field: "cbr02", align: "center", render: v => fmt(v, 0) },
+      { header: L("Corr. CBR 0.1\"", "CBR مصحح 0.1\""), field: "correctedCbr01Val", align: "center", render: v => fmt(v, 0) },
+      { header: L("Corr. CBR 0.2\"", "CBR مصحح 0.2\""), field: "correctedCbr02Val", align: "center", render: v => fmt(v, 0) },
+    ];
+
+    return (
+      <div className="space-y-4">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+          <div className="border rounded p-2"><div className="text-slate-500">{L("MDD", "MDD")}</div><div className="font-bold">{fmt(fd.mdd, 3)} Mg/m³{fd.mddPcf != null ? ` (${fmt(fd.mddPcf, 0)} pcf)` : ""}</div></div>
+          <div className="border rounded p-2"><div className="text-slate-500">OMC</div><div className="font-bold">{fmt(fd.omc, 1)}%</div></div>
+          <div className="border rounded p-2"><div className="text-slate-500">{L("Compaction", "الدمك")}</div><div className="font-bold">{fd.compactionMethod ?? "ASTM D1557"}</div></div>
+          <div className="border rounded p-2"><div className="text-slate-500">{L("Condition", "الحالة")}</div><div className="font-bold">{fd.sampleCondition ?? "Soaked"}</div></div>
+        </div>
+        <FlexibleResultsTable columns={specCols} rows={specimens} />
+        <div className="grid grid-cols-3 gap-2 text-xs">
+          <div className="bg-blue-50 border border-blue-200 rounded p-3 text-center">
+            <p className="text-blue-600 font-semibold">{L("CBR @ 95% MDD", "CBR @ 95% MDD")}</p>
+            <p className="text-xl font-bold text-blue-800">{fmt(fd.cbrAt95Mdd, 0)}%</p>
+          </div>
+          <div className="bg-emerald-50 border border-emerald-200 rounded p-3 text-center">
+            <p className="text-emerald-600 font-semibold">{L("CBR @ 98% MDD", "CBR @ 98% MDD")}</p>
+            <p className="text-xl font-bold text-emerald-800">{fmt(fd.cbrAt98Mdd, 0)}%</p>
+          </div>
+          <div className="bg-purple-50 border border-purple-200 rounded p-3 text-center">
+            <p className="text-purple-600 font-semibold">{L("CBR @ 100% MDD", "CBR @ 100% MDD")}</p>
+            <p className="text-xl font-bold text-purple-800">{fmt(fd.cbrAt100Mdd, 0)}%</p>
+          </div>
+        </div>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <div>
+            <p className="text-xs font-semibold text-slate-700 mb-1">{L("Stress vs. Penetration", "الإجهاد مقابل الاختراق")}</p>
+            <CBRReportAstmStressChart data={stressData} isAr={isAr} />
+          </div>
+          <div>
+            <p className="text-xs font-semibold text-slate-700 mb-1">{L("Corrected CBR @ 0.2\" vs. Dry Density", "CBR @ 0.2\" مقابل الكثافة الجافة")}</p>
+            <CBRReportAstmCbrDensityChart data={cbrDensityData} mddPcf={fd.mddPcf} isAr={isAr} />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   const faces: any[] = Array.isArray(fd.faces) ? fd.faces : [];
   const topFace = faces.find(f => f.faceLabel === "Top") ?? faces[0];
   const bottomFace = faces.find(f => f.faceLabel === "Bottom") ?? faces[1];
