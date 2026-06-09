@@ -455,7 +455,8 @@ export function SoilCBRAstm({
                         onChange={e => updateSpecimen(sp.id, "correctedCbr02", e.target.value)}
                         disabled={submitted}
                         placeholder={sp.correctedCbr02Val != null ? String(sp.correctedCbr02Val) : ""}
-                        className="h-7 text-[11px] text-center font-mono bg-white"
+                        title={L(ar, "Used for design CBR if left blank", "يُستخدم في CBR التصميمي إذا تُرك فارغاً")}
+                        className={`h-7 text-[11px] text-center font-mono ${sp.correctedCbr02 ? "bg-white" : "bg-emerald-50"}`}
                       />
                     </td>
                     <td className="border border-slate-200 px-2 py-1.5 text-center">
@@ -472,9 +473,9 @@ export function SoilCBRAstm({
           {designCbr && mddPcf != null && (
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               {[
-                { label: L(ar, "CBR @ 95% MDD", "CBR @ 95% MDD"), value: designCbr.cbr95, pcf: Math.round(mddPcf * 0.95), box: "bg-blue-50 border-blue-200", title: "text-blue-700", val: "text-blue-900" },
-                { label: L(ar, "CBR @ 98% MDD", "CBR @ 98% MDD"), value: designCbr.cbr98, pcf: Math.round(mddPcf * 0.98), box: "bg-emerald-50 border-emerald-200", title: "text-emerald-700", val: "text-emerald-900" },
-                { label: L(ar, "CBR @ 100% MDD", "CBR @ 100% MDD"), value: designCbr.cbr100, pcf: mddPcf, box: "bg-purple-50 border-purple-200", title: "text-purple-700", val: "text-purple-900" },
+                { label: L(ar, "CBR @ 95% MDD", "CBR @ 95% MDD"), value: designCbr.cbr95, pcf: designCbr.targetPcf95.toFixed(1), box: "bg-blue-50 border-blue-200", title: "text-blue-700", val: "text-blue-900" },
+                { label: L(ar, "CBR @ 98% MDD", "CBR @ 98% MDD"), value: designCbr.cbr98, pcf: designCbr.targetPcf98.toFixed(1), box: "bg-emerald-50 border-emerald-200", title: "text-emerald-700", val: "text-emerald-900" },
+                { label: L(ar, "CBR @ 100% MDD", "CBR @ 100% MDD"), value: designCbr.cbr100, pcf: designCbr.targetPcf100.toFixed(1), box: "bg-purple-50 border-purple-200", title: "text-purple-700", val: "text-purple-900" },
               ].map(kpi => (
                 <div key={kpi.label} className={`rounded-xl border p-4 text-center shadow-sm ${kpi.box}`}>
                   <p className={`text-[11px] font-medium ${kpi.title}`}>{kpi.label}</p>
@@ -506,11 +507,11 @@ export function SoilCBRAstm({
                     />
                     <Tooltip />
                     <Scatter data={cbrDensityData} fill="#059669" line={{ stroke: "#059669", strokeWidth: 2 }} />
-                    {designCbr && mddPcf != null && (
+                    {designCbr && (
                       <>
-                        <ReferenceLine x={Math.round(mddPcf * 0.95)} stroke="#3b82f6" strokeDasharray="3 3" />
-                        <ReferenceLine x={Math.round(mddPcf * 0.98)} stroke="#10b981" strokeDasharray="3 3" />
-                        <ReferenceLine x={mddPcf} stroke="#8b5cf6" strokeDasharray="3 3" />
+                        <ReferenceLine x={designCbr.targetPcf95} stroke="#3b82f6" strokeDasharray="3 3" />
+                        <ReferenceLine x={designCbr.targetPcf98} stroke="#10b981" strokeDasharray="3 3" />
+                        <ReferenceLine x={designCbr.targetPcf100} stroke="#8b5cf6" strokeDasharray="3 3" />
                       </>
                     )}
                   </ScatterChart>
@@ -527,7 +528,8 @@ export function SoilCBRAstm({
                 <li>{L(ar, "CBR @ 0.1\" = dial load (lbf) ÷ 1,000 × 100", "CBR @ 0.1\" = الحمل ÷ 1,000 × 100")}</li>
                 <li>{L(ar, "CBR @ 0.2\" = dial load (lbf) ÷ 1,500 × 100", "CBR @ 0.2\" = الحمل ÷ 1,500 × 100")}</li>
                 <li>{L(ar, "Adopted CBR = higher of corrected values at 0.1\" and 0.2\"", "المعتمد = الأعلى بين المصحح عند 0.1\" و 0.2\"")}</li>
-                <li>{L(ar, "Design CBR interpolated from corrected CBR @ 0.2\" vs dry density curve", "CBR التصميمي من منحنى CBR @ 0.2\" مقابل الكثافة الجافة")}</li>
+                <li>{L(ar, "Target density (pcf) = MDD (Mg/m³) × 62.428 × 95% / 98% / 100%", "الكثافة المستهدفة = MDD × 62.428 × النسبة")}</li>
+                <li>{L(ar, "Design CBR = read corrected CBR @ 0.2\" from the density curve at each target", "CBR التصميمي = قراءة CBR المصحح @ 0.2\" من المنحنى عند كل كثافة مستهدفة")}</li>
               </ul>
             </div>
           </div>

@@ -44,6 +44,7 @@ import {
   ReferenceLine,
   ResponsiveContainer,
 } from "recharts";
+import { buildCbrDensityChartData, computeCbrAtMddPercentages } from "@/lib/soilCBRAstm";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function fmt(v: any, dec = 2) {
@@ -1527,13 +1528,18 @@ function CBRReportAstmStressChart({
 function CBRReportAstmCbrDensityChart({
   data,
   mddPcf,
+  designTargets,
   isAr,
 }: {
   data: Array<{ dryDensityPcf: number; cbr02: number }>;
   mddPcf?: number | null;
+  designTargets?: { targetPcf95: number; targetPcf98: number; targetPcf100: number } | null;
   isAr: boolean;
 }) {
   if (data.length < 2) return null;
+  const pcf95 = designTargets?.targetPcf95 ?? (mddPcf != null ? mddPcf * 0.95 : null);
+  const pcf98 = designTargets?.targetPcf98 ?? (mddPcf != null ? mddPcf * 0.98 : null);
+  const pcf100 = designTargets?.targetPcf100 ?? mddPcf;
   return (
     <div className="sieve-report-chart border border-slate-300 rounded-md bg-white p-1" style={{ height: 280 }}>
       <ResponsiveContainer width="100%" height="100%">
@@ -1543,13 +1549,9 @@ function CBRReportAstmCbrDensityChart({
           <YAxis width={42} tick={{ fontSize: 9 }} label={{ value: isAr ? "CBR @ 0.2\" (%)" : "CBR @ 0.2\" (%)", angle: -90, position: "insideLeft", style: { fontSize: 10 } }} />
           <Tooltip contentStyle={{ fontSize: 10 }} />
           <Scatter data={data} fill="#059669" line={{ stroke: "#059669", strokeWidth: 2 }} />
-          {mddPcf != null && mddPcf > 0 && (
-            <>
-              <ReferenceLine x={Math.round(mddPcf * 0.95)} stroke="#3b82f6" strokeDasharray="3 3" />
-              <ReferenceLine x={Math.round(mddPcf * 0.98)} stroke="#10b981" strokeDasharray="3 3" />
-              <ReferenceLine x={mddPcf} stroke="#8b5cf6" strokeDasharray="3 3" />
-            </>
-          )}
+          {pcf95 != null && pcf95 > 0 && <ReferenceLine x={pcf95} stroke="#3b82f6" strokeDasharray="3 3" />}
+          {pcf98 != null && pcf98 > 0 && <ReferenceLine x={pcf98} stroke="#10b981" strokeDasharray="3 3" />}
+          {pcf100 != null && pcf100 > 0 && <ReferenceLine x={pcf100} stroke="#8b5cf6" strokeDasharray="3 3" />}
         </ScatterChart>
       </ResponsiveContainer>
     </div>
@@ -1576,10 +1578,9 @@ function renderSoilCBR(fd: any, isAr: boolean) {
           }).filter(r => (r.s10 ?? 0) > 0 || (r.s30 ?? 0) > 0 || (r.s65 ?? 0) > 0);
         })()
       : [];
-    const cbrDensityData = specimens
-      .filter((s: any) => s.dryDensityPcf != null && s.correctedCbr02Val != null)
-      .map((s: any) => ({ dryDensityPcf: Number(s.dryDensityPcf), cbr02: Number(s.correctedCbr02Val) }))
-      .sort((a: any, b: any) => a.dryDensityPcf - b.dryDensityPcf);
+    const cbrDensityData = buildCbrDensityChartData(specimens as any);
+    const mddMg = fd.mdd != null ? Number(fd.mdd) : 0;
+    const designCbr = mddMg > 0 ? computeCbrAtMddPercentages(specimens as any, mddMg) : null;
 
     const specCols: Column[] = [
       { header: L("Blows/Layer", "ضربات/طبقة"), field: "blowsPerLayer", align: "center" },
@@ -1595,7 +1596,7 @@ function renderSoilCBR(fd: any, isAr: boolean) {
     return (
       <div className="space-y-4">
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
-          <div className="border rounded p-2"><div className="text-slate-500">{L("MDD", "MDD")}</div><div className="font-bold">{fmt(fd.mdd, 3)} Mg/m³{fd.mddPcf != null ? ` (${fmt(fd.mddPcf, 0)} pcf)` : ""}</div></div>
+          <div className="border rounded p-2"><div className="text-slate-500">{L("MDD", "MDD")}</div><div className="font-bold">{fmt(fd.mdd, 3)} Mg/m³{designCbr ? ` (${fmt(designCbr.mddPcf, 0)} pcf)` : fd.mddPcf != null ? ` (${fmt(fd.mddPcf, 0)} pcf)` : ""}</div></div>
           <div className="border rounded p-2"><div className="text-slate-500">OMC</div><div className="font-bold">{fmt(fd.omc, 1)}%</div></div>
           <div className="border rounded p-2"><div className="text-slate-500">{L("Compaction", "الدمك")}</div><div className="font-bold">{fd.compactionMethod ?? "ASTM D1557"}</div></div>
           <div className="border rounded p-2"><div className="text-slate-500">{L("Condition", "الحالة")}</div><div className="font-bold">{fd.sampleCondition ?? "Soaked"}</div></div>
@@ -1604,15 +1605,18 @@ function renderSoilCBR(fd: any, isAr: boolean) {
         <div className="grid grid-cols-3 gap-2 text-xs">
           <div className="bg-blue-50 border border-blue-200 rounded p-3 text-center">
             <p className="text-blue-600 font-semibold">{L("CBR @ 95% MDD", "CBR @ 95% MDD")}</p>
-            <p className="text-xl font-bold text-blue-800">{fmt(fd.cbrAt95Mdd, 0)}%</p>
+            <p className="text-xl font-bold text-blue-800">{fmt(designCbr?.cbr95 ?? fd.cbrAt95Mdd, 0)}%</p>
+            {designCbr && <p className="text-[9px] text-slate-500 mt-0.5">{designCbr.targetPcf95.toFixed(1)} pcf</p>}
           </div>
           <div className="bg-emerald-50 border border-emerald-200 rounded p-3 text-center">
             <p className="text-emerald-600 font-semibold">{L("CBR @ 98% MDD", "CBR @ 98% MDD")}</p>
-            <p className="text-xl font-bold text-emerald-800">{fmt(fd.cbrAt98Mdd, 0)}%</p>
+            <p className="text-xl font-bold text-emerald-800">{fmt(designCbr?.cbr98 ?? fd.cbrAt98Mdd, 0)}%</p>
+            {designCbr && <p className="text-[9px] text-slate-500 mt-0.5">{designCbr.targetPcf98.toFixed(1)} pcf</p>}
           </div>
           <div className="bg-purple-50 border border-purple-200 rounded p-3 text-center">
             <p className="text-purple-600 font-semibold">{L("CBR @ 100% MDD", "CBR @ 100% MDD")}</p>
-            <p className="text-xl font-bold text-purple-800">{fmt(fd.cbrAt100Mdd, 0)}%</p>
+            <p className="text-xl font-bold text-purple-800">{fmt(designCbr?.cbr100 ?? fd.cbrAt100Mdd, 0)}%</p>
+            {designCbr && <p className="text-[9px] text-slate-500 mt-0.5">{designCbr.targetPcf100.toFixed(1)} pcf</p>}
           </div>
         </div>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -1622,7 +1626,7 @@ function renderSoilCBR(fd: any, isAr: boolean) {
           </div>
           <div>
             <p className="text-xs font-semibold text-slate-700 mb-1">{L("Corrected CBR @ 0.2\" vs. Dry Density", "CBR @ 0.2\" مقابل الكثافة الجافة")}</p>
-            <CBRReportAstmCbrDensityChart data={cbrDensityData} mddPcf={fd.mddPcf} isAr={isAr} />
+            <CBRReportAstmCbrDensityChart data={cbrDensityData} mddPcf={designCbr?.mddPcf ?? fd.mddPcf} designTargets={designCbr} isAr={isAr} />
           </div>
         </div>
       </div>

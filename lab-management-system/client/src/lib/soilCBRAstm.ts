@@ -179,48 +179,104 @@ export function computeAllAstmSpecimens(
   return specimens.map(sp => computeAstmSpecimen(sp, surchargeLbf));
 }
 
-/** Linear interpolation of CBR at target dry density (pcf). */
-export function interpolateCbrAtDensity(
-  points: { dryDensityPcf: number; cbr: number }[],
+export interface DesignCbrCurvePoint {
+  dryDensityPcf: number;
+  cbr: number;
+  blowsPerLayer?: number;
+}
+
+/** Design curve: dry density (pcf) vs corrected CBR @ 0.2" — per ASTM D1883 worksheet. */
+export function buildDesignCbrCurvePoints(
+  specimens: AstmCBRSpecimenComputed[],
+): DesignCbrCurvePoint[] {
+  return specimens
+    .filter(s => s.dryDensityPcf != null && s.correctedCbr02Val != null && s.correctedCbr02Val > 0)
+    .map(s => ({
+      dryDensityPcf: s.dryDensityPcf as number,
+      cbr: s.correctedCbr02Val as number,
+      blowsPerLayer: s.blowsPerLayer,
+    }))
+    .sort((a, b) => a.dryDensityPcf - b.dryDensityPcf);
+}
+
+function linearCbrAtDensity(
+  sorted: DesignCbrCurvePoint[],
   targetPcf: number,
 ): number | null {
-  const valid = points.filter(p => p.dryDensityPcf > 0 && p.cbr > 0);
-  if (valid.length === 0) return null;
-  if (valid.length === 1) return valid[0].cbr;
+  if (sorted.length === 1) return sorted[0].cbr;
 
-  const sorted = [...valid].sort((a, b) => a.dryDensityPcf - b.dryDensityPcf);
-  if (targetPcf <= sorted[0].dryDensityPcf) return sorted[0].cbr;
-  if (targetPcf >= sorted[sorted.length - 1].dryDensityPcf) return sorted[sorted.length - 1].cbr;
+  if (targetPcf <= sorted[0].dryDensityPcf) {
+    const a = sorted[0];
+    const b = sorted[1];
+    const span = b.dryDensityPcf - a.dryDensityPcf;
+    if (span <= 0) return a.cbr;
+    const t = (targetPcf - a.dryDensityPcf) / span;
+    return Math.round(a.cbr + t * (b.cbr - a.cbr));
+  }
 
   for (let i = 0; i < sorted.length - 1; i++) {
     const a = sorted[i];
     const b = sorted[i + 1];
     if (targetPcf >= a.dryDensityPcf && targetPcf <= b.dryDensityPcf) {
-      const t = (targetPcf - a.dryDensityPcf) / (b.dryDensityPcf - a.dryDensityPcf);
+      const span = b.dryDensityPcf - a.dryDensityPcf;
+      if (span <= 0) return a.cbr;
+      const t = (targetPcf - a.dryDensityPcf) / span;
       return Math.round(a.cbr + t * (b.cbr - a.cbr));
     }
   }
-  return null;
+
+  const a = sorted[sorted.length - 2];
+  const b = sorted[sorted.length - 1];
+  const span = b.dryDensityPcf - a.dryDensityPcf;
+  if (span <= 0) return b.cbr;
+  const t = (targetPcf - a.dryDensityPcf) / span;
+  return Math.round(a.cbr + t * (b.cbr - a.cbr));
 }
 
+/** Linear interpolation / extrapolation of corrected CBR @ 0.2" at target dry density (pcf). */
+export function interpolateCbrAtDensity(
+  points: DesignCbrCurvePoint[],
+  targetPcf: number,
+): number | null {
+  const valid = points.filter(p => p.dryDensityPcf > 0 && p.cbr > 0);
+  if (valid.length === 0) return null;
+  const sorted = [...valid].sort((a, b) => a.dryDensityPcf - b.dryDensityPcf);
+  return linearCbrAtDensity(sorted, targetPcf);
+}
+
+export interface DesignCbrAtMddResult {
+  mddPcf: number;
+  mddPcfExact: number;
+  targetPcf95: number;
+  targetPcf98: number;
+  targetPcf100: number;
+  cbr95: number | null;
+  cbr98: number | null;
+  cbr100: number | null;
+}
+
+/** MDD (Mg/m³) × 62.428 → pcf; interpolate corrected CBR @ 0.2" at 95 / 98 / 100% of MDD. */
 export function computeCbrAtMddPercentages(
   specimens: AstmCBRSpecimenComputed[],
   mddMg: number,
-  useCorrected = true,
-): { cbr95: number | null; cbr98: number | null; cbr100: number | null; mddPcf: number } {
-  const mddPcf = mddMg > 0 ? parseFloat((mddMg * MG_M3_TO_PCF).toFixed(0)) : 0;
-  const curvePoints = specimens
-    .filter(s => s.dryDensityPcf != null && (useCorrected ? s.correctedCbr02Val : s.cbr02) != null)
-    .map(s => ({
-      dryDensityPcf: s.dryDensityPcf as number,
-      cbr: (useCorrected ? s.correctedCbr02Val : s.cbr02) as number,
-    }));
+): DesignCbrAtMddResult {
+  const mddPcfExact = mddMg > 0 ? mddMg * MG_M3_TO_PCF : 0;
+  const mddPcf = mddPcfExact > 0 ? Math.round(mddPcfExact) : 0;
+  const curvePoints = buildDesignCbrCurvePoints(specimens);
+
+  const targetPcf95 = mddPcfExact * 0.95;
+  const targetPcf98 = mddPcfExact * 0.98;
+  const targetPcf100 = mddPcfExact;
 
   return {
     mddPcf,
-    cbr95: mddPcf > 0 ? interpolateCbrAtDensity(curvePoints, mddPcf * 0.95) : null,
-    cbr98: mddPcf > 0 ? interpolateCbrAtDensity(curvePoints, mddPcf * 0.98) : null,
-    cbr100: mddPcf > 0 ? interpolateCbrAtDensity(curvePoints, mddPcf) : null,
+    mddPcfExact,
+    targetPcf95,
+    targetPcf98,
+    targetPcf100,
+    cbr95: mddPcfExact > 0 ? interpolateCbrAtDensity(curvePoints, targetPcf95) : null,
+    cbr98: mddPcfExact > 0 ? interpolateCbrAtDensity(curvePoints, targetPcf98) : null,
+    cbr100: mddPcfExact > 0 ? interpolateCbrAtDensity(curvePoints, targetPcf100) : null,
   };
 }
 
@@ -242,18 +298,19 @@ export function buildStressPenetrationChartData(
 export function buildCbrDensityChartData(
   specimens: AstmCBRSpecimenComputed[],
 ): Array<{ dryDensityPcf: number; cbr02: number; blows: number }> {
-  return specimens
-    .filter(s => s.dryDensityPcf != null && s.correctedCbr02Val != null)
-    .map(s => ({
-      dryDensityPcf: s.dryDensityPcf as number,
-      cbr02: s.correctedCbr02Val as number,
-      blows: s.blowsPerLayer,
-    }))
-    .sort((a, b) => a.dryDensityPcf - b.dryDensityPcf);
+  return buildDesignCbrCurvePoints(specimens).map(p => ({
+    dryDensityPcf: p.dryDensityPcf,
+    cbr02: p.cbr,
+    blows: p.blowsPerLayer ?? 0,
+  }));
+}
+
+export function mgToPcfExact(mg: number): number {
+  return mg * MG_M3_TO_PCF;
 }
 
 export function mgToPcf(mg: number): number {
-  return parseFloat((mg * MG_M3_TO_PCF).toFixed(0));
+  return Math.round(mgToPcfExact(mg));
 }
 
 export function pcfToMg(pcf: number): number {
