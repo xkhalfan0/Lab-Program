@@ -1563,7 +1563,7 @@ function renderSoilCBR(fd: any, isAr: boolean) {
     const specimens: any[] = fd.astmSpecimens;
     const stressData = specimens.length > 0
       ? (() => {
-          const depths = [0, 0.025, 0.05, 0.075, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4];
+          const depths = [0, 0.025, 0.05, 0.075, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35];
           return depths.map((depth, i) => {
             const row: { depth: number; s10?: number | null; s30?: number | null; s65?: number | null } = { depth };
             for (const sp of specimens) {

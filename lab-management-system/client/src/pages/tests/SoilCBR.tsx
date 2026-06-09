@@ -33,6 +33,7 @@ import {
   computeAllAstmSpecimens,
   computeCbrAtMddPercentages,
   defaultAstmSpecimens,
+  normalizeAstmPenetrationLoads,
   type AstmCBRSpecimenInput,
 } from "@/lib/soilCBRAstm";
 import { SoilCBRAstm } from "./SoilCBRAstm";
@@ -195,7 +196,9 @@ export default function SoilCBR() {
         massDryCont: String(s.massDryCont ?? ""),
         massContainer: String(s.massContainer ?? ""),
         moistureAfterSoak: String(s.moistureAfterSoak ?? ""),
-        penetrationLoads: Array.isArray(s.penetrationLoads) ? s.penetrationLoads.map(String) : [],
+        penetrationLoads: normalizeAstmPenetrationLoads(
+          Array.isArray(s.penetrationLoads) ? s.penetrationLoads.map(String) : [],
+        ),
         correctedCbr01: String(s.correctedCbr01 ?? ""),
         correctedCbr02: String(s.correctedCbr02 ?? ""),
       })));
@@ -246,9 +249,10 @@ export default function SoilCBR() {
     }
   };
 
+  const astmSurchargeLbf = parseFloat(surchargeLbf) || 10;
   const computedAstmSpecimens = useMemo(
-    () => (standard === "ASTM_D1883" ? computeAllAstmSpecimens(astmSpecimens) : []),
-    [standard, astmSpecimens],
+    () => (standard === "ASTM_D1883" ? computeAllAstmSpecimens(astmSpecimens, astmSurchargeLbf) : []),
+    [standard, astmSpecimens, astmSurchargeLbf],
   );
   const astmDesignCbr = useMemo(() => {
     const mdd = parseFloat(mddStr);

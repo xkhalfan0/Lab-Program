@@ -10,9 +10,13 @@ export const ASTM_SPECIMEN_BLOWS = [10, 30, 65] as const;
 export type AstmSpecimenBlows = (typeof ASTM_SPECIMEN_BLOWS)[number];
 
 export const ASTM_PENETRATION_IN = CBR_STANDARDS.ASTM_D1883.penetrationDepths;
+/** Fixed indices — do not use findIndex (legacy saved arrays may differ in length). */
+export const ASTM_PEN_IDX_01 = ASTM_PENETRATION_IN.indexOf(0.1);
+export const ASTM_PEN_IDX_02 = ASTM_PENETRATION_IN.indexOf(0.2);
 export const ASTM_PISTON_AREA_IN2 = 3;
 export const ASTM_STD_LOAD_01_LBF = 1000;
 export const ASTM_STD_LOAD_02_LBF = 1500;
+export const ASTM_STD_SURCHARGE_LBF = 10;
 export const MG_M3_TO_PCF = 62.428;
 
 export interface AstmCBRSpecimenInput {
@@ -38,6 +42,8 @@ export interface AstmCBRSpecimenComputed extends AstmCBRSpecimenInput {
   dryDensityMg?: number;
   dryDensityPcf?: number;
   stresses: (number | undefined)[];
+  load01?: number;
+  load02?: number;
   cbr01?: number;
   cbr02?: number;
   correctedCbr01Val?: number;
@@ -71,11 +77,44 @@ export function defaultAstmSpecimens(): AstmCBRSpecimenInput[] {
   return ASTM_SPECIMEN_BLOWS.map((b, i) => newAstmSpecimen(b, i));
 }
 
-function depthIdx(depth: number): number {
-  return ASTM_PENETRATION_IN.findIndex(d => Math.abs(d - depth) < 0.001);
+/** Re-map legacy penetration arrays (pre-0.15 row or with 0.4") onto current depths. */
+export function normalizeAstmPenetrationLoads(loads: string[]): string[] {
+  const n = ASTM_PENETRATION_IN.length;
+  const out = Array(n).fill("");
+
+  if (loads.length === 10) {
+    // Legacy: 0 … 0.1, 0.2 … 0.4 (no 0.15 row)
+    for (let i = 0; i < 5; i++) out[i] = loads[i] ?? "";
+    if (loads[5] != null && loads[5] !== "") out[ASTM_PEN_IDX_02] = loads[5];
+    for (let i = 6; i < 9; i++) out[i + 1] = loads[i] ?? "";
+    return out;
+  }
+
+  if (loads.length === 11 && n === 10) {
+    // Legacy with 0.15 and trailing 0.4 — drop 0.4
+    for (let i = 0; i < n; i++) out[i] = loads[i] ?? "";
+    return out;
+  }
+
+  for (let i = 0; i < Math.min(loads.length, n); i++) out[i] = loads[i] ?? "";
+  return out;
 }
 
-export function computeAstmSpecimen(sp: AstmCBRSpecimenInput): AstmCBRSpecimenComputed {
+export function parseAstmLoad(v: string): number {
+  const n = parseFloat(String(v).trim());
+  return Number.isFinite(n) && n > 0 ? n : 0;
+}
+
+export function calcAstmCbr(loadLbf: number, stdLoadLbf: number): number | undefined {
+  if (!(loadLbf > 0) || !(stdLoadLbf > 0)) return undefined;
+  return Math.round((loadLbf / stdLoadLbf) * 100);
+}
+
+export function computeAstmSpecimen(
+  sp: AstmCBRSpecimenInput,
+  surchargeLbf = ASTM_STD_SURCHARGE_LBF,
+): AstmCBRSpecimenComputed {
+  const normalizedLoads = normalizeAstmPenetrationLoads(sp.penetrationLoads);
   const vol = num(sp.volumeMould);
   const mSample = num(sp.massMouldSample);
   const mMould = num(sp.massMould);
@@ -108,28 +147,36 @@ export function computeAstmSpecimen(sp: AstmCBRSpecimenInput): AstmCBRSpecimenCo
     out.dryDensityPcf = parseFloat((out.dryDensityMg * MG_M3_TO_PCF).toFixed(0));
   }
 
-  const loads = sp.penetrationLoads.map(r => parseFloat(r) || 0);
+  const loads = normalizedLoads.map(parseAstmLoad);
   out.stresses = loads.map(l => (l > 0 ? Math.round(l / ASTM_PISTON_AREA_IN2) : undefined));
 
-  const i01 = depthIdx(0.1);
-  const i02 = depthIdx(0.2);
-  const load01 = i01 >= 0 ? loads[i01] : 0;
-  const load02 = i02 >= 0 ? loads[i02] : 0;
+  const load01 = loads[ASTM_PEN_IDX_01] ?? 0;
+  const load02 = loads[ASTM_PEN_IDX_02] ?? 0;
+  out.load01 = load01 > 0 ? load01 : undefined;
+  out.load02 = load02 > 0 ? load02 : undefined;
+  out.cbr01 = calcAstmCbr(load01, ASTM_STD_LOAD_01_LBF);
+  out.cbr02 = calcAstmCbr(load02, ASTM_STD_LOAD_02_LBF);
 
-  if (load01 > 0) out.cbr01 = parseFloat(((load01 / ASTM_STD_LOAD_01_LBF) * 100).toFixed(0));
-  if (load02 > 0) out.cbr02 = parseFloat(((load02 / ASTM_STD_LOAD_02_LBF) * 100).toFixed(0));
+  const surchargeFactor = surchargeLbf > 0 ? ASTM_STD_SURCHARGE_LBF / surchargeLbf : 1;
+  const autoCorr01 = out.cbr01 != null ? Math.round(out.cbr01 * surchargeFactor) : undefined;
+  const autoCorr02 = out.cbr02 != null ? Math.round(out.cbr02 * surchargeFactor) : undefined;
 
   const corr01 = num(sp.correctedCbr01);
   const corr02 = num(sp.correctedCbr02);
-  out.correctedCbr01Val = Number.isFinite(corr01) && corr01 > 0 ? corr01 : out.cbr01;
-  out.correctedCbr02Val = Number.isFinite(corr02) && corr02 > 0 ? corr02 : out.cbr02;
-  out.adoptedCbr = Math.max(out.correctedCbr01Val ?? 0, out.correctedCbr02Val ?? 0) || undefined;
+  out.correctedCbr01Val = Number.isFinite(corr01) && corr01 > 0 ? corr01 : autoCorr01;
+  out.correctedCbr02Val = Number.isFinite(corr02) && corr02 > 0 ? corr02 : autoCorr02;
+  const adopted01 = out.correctedCbr01Val ?? 0;
+  const adopted02 = out.correctedCbr02Val ?? 0;
+  out.adoptedCbr = Math.max(adopted01, adopted02) || undefined;
 
   return out;
 }
 
-export function computeAllAstmSpecimens(specimens: AstmCBRSpecimenInput[]): AstmCBRSpecimenComputed[] {
-  return specimens.map(computeAstmSpecimen);
+export function computeAllAstmSpecimens(
+  specimens: AstmCBRSpecimenInput[],
+  surchargeLbf = ASTM_STD_SURCHARGE_LBF,
+): AstmCBRSpecimenComputed[] {
+  return specimens.map(sp => computeAstmSpecimen(sp, surchargeLbf));
 }
 
 /** Linear interpolation of CBR at target dry density (pcf). */

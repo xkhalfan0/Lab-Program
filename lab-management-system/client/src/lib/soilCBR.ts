@@ -41,7 +41,7 @@ export const CBR_STANDARDS: Record<CBRStandardKey, CBRStandardSpec> = {
     label: "ASTM D1883",
     loadUnit: "lbf",
     penetrationUnit: "in",
-    penetrationDepths: [0, 0.025, 0.05, 0.075, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4],
+    penetrationDepths: [0, 0.025, 0.05, 0.075, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35],
     keyDepthPrimary: 0.1,
     keyDepthSecondary: 0.2,
     standardLoadPrimary: 1000,
