@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -87,13 +87,20 @@ export function SoilCBRAstm({
   setNotes,
 }: SoilCBRAstmProps) {
   const surchargeNum = parseFloat(surchargeLbf) || 10;
-  const displaySpecimens = useMemo(
-    () => specimens.map(s => ({
-      ...s,
-      penetrationLoads: normalizeAstmPenetrationLoads(s.penetrationLoads),
-    })),
-    [specimens],
-  );
+  const loadsSynced = useRef(false);
+  useEffect(() => {
+    if (loadsSynced.current) return;
+    loadsSynced.current = true;
+    setSpecimens(prev => {
+      const needsFix = prev.some(s => s.penetrationLoads.length !== ASTM_PENETRATION_IN.length);
+      if (!needsFix) return prev;
+      return prev.map(s => ({
+        ...s,
+        penetrationLoads: normalizeAstmPenetrationLoads(s.penetrationLoads),
+      }));
+    });
+  }, [setSpecimens]);
+
   const computed = useMemo(
     () => computeAllAstmSpecimens(specimens, surchargeNum),
     [specimens, surchargeNum],
@@ -116,7 +123,9 @@ export function SoilCBRAstm({
   const updateLoad = useCallback((id: string, depthIdx: number, value: string) => {
     setSpecimens(prev => prev.map(s => {
       if (s.id !== id) return s;
-      const loads = normalizeAstmPenetrationLoads(s.penetrationLoads);
+      const loads = s.penetrationLoads.length === ASTM_PENETRATION_IN.length
+        ? [...s.penetrationLoads]
+        : normalizeAstmPenetrationLoads(s.penetrationLoads);
       loads[depthIdx] = value;
       return { ...s, penetrationLoads: loads };
     }));
@@ -301,95 +310,83 @@ export function SoilCBRAstm({
       </Card>
 
       {/* Penetration vs load */}
-      <Card className="overflow-hidden border-slate-200 shadow-sm">
-        <CardHeader className="pb-2 bg-gradient-to-r from-slate-50 to-white border-b">
+      <Card className="border-slate-200">
+        <CardHeader className="pb-3">
           <CardTitle className="text-base">{L(ar, "Penetration vs. Load (lbf) & Stress (psi)", "الاختراق مقابل الحمل والإجهاد")}</CardTitle>
-          <p className="text-[11px] text-slate-500 mt-1">
-            {L(ar, "Enter dial loads below — CBR @ 0.1\" and 0.2\" are calculated automatically in the summary.", "أدخل قراءات الحمل — يُحسب CBR @ 0.1\" و 0.2\" تلقائياً في الملخص.")}
-          </p>
         </CardHeader>
-        <CardContent className="pt-4">
+        <CardContent>
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-            <div className="rounded-lg border border-slate-200 overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full text-xs border-collapse">
-                  <thead>
-                    <tr className="bg-slate-800 text-white">
-                      <th rowSpan={2} className="border border-slate-700 px-2 py-2 font-semibold">{L(ar, "Pen. (in)", "اختراق (in)")}</th>
-                      <th colSpan={3} className="border border-slate-700 px-2 py-1.5 text-center text-blue-200">{L(ar, "Force (lbf)", "الحمل (lbf)")}</th>
-                      <th colSpan={3} className="border border-slate-700 px-2 py-1.5 text-center text-emerald-200">{L(ar, "Stress (psi)", "الإجهاد (psi)")}</th>
-                    </tr>
-                    <tr className="bg-slate-700 text-white">
-                      {ASTM_SPECIMEN_BLOWS.map(b => (
-                        <th key={`f${b}`} className="border border-slate-600 px-2 py-1 font-mono">{b}</th>
-                      ))}
-                      {ASTM_SPECIMEN_BLOWS.map(b => (
-                        <th key={`s${b}`} className="border border-slate-600 px-2 py-1 font-mono">{b}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {ASTM_PENETRATION_IN.map((depth, di) => {
-                      const is01 = Math.abs(depth - 0.1) < 0.001;
-                      const is02 = Math.abs(depth - 0.2) < 0.001;
-                      const rowCls = is01
-                        ? "bg-amber-50/80 ring-1 ring-inset ring-amber-200"
-                        : is02
-                          ? "bg-blue-50/80 ring-1 ring-inset ring-blue-200"
-                          : di % 2 === 0 ? "bg-white" : "bg-slate-50/40";
-                      return (
-                        <tr key={di} className={rowCls}>
-                          <td className={`border border-slate-200 px-2 py-1 text-center font-mono font-bold ${is01 ? "text-amber-800" : is02 ? "text-blue-800" : "text-slate-700"}`}>
-                            {fmtDepth(depth, "in")}
-                            {is01 && <span className="block text-[9px] font-normal text-amber-600">CBR ÷1000</span>}
-                            {is02 && <span className="block text-[9px] font-normal text-blue-600">CBR ÷1500</span>}
+            <div className="overflow-x-auto rounded-md border border-slate-200">
+              <table className="w-full text-xs border-collapse">
+                <thead>
+                  <tr className="bg-slate-100">
+                    <th rowSpan={2} className="border border-slate-200 px-2 py-1.5 font-semibold text-slate-700">{L(ar, "Pen. (in)", "اختراق (in)")}</th>
+                    <th colSpan={3} className="border border-slate-200 px-2 py-1 text-blue-700 font-semibold">{L(ar, "Force (lbf)", "الحمل (lbf)")}</th>
+                    <th colSpan={3} className="border border-slate-200 px-2 py-1 text-emerald-700 font-semibold">{L(ar, "Stress (psi)", "الإجهاد (psi)")}</th>
+                  </tr>
+                  <tr className="bg-slate-50">
+                    {ASTM_SPECIMEN_BLOWS.map(b => (
+                      <th key={`f${b}`} className="border border-slate-200 px-2 py-1 font-mono">{b}</th>
+                    ))}
+                    {ASTM_SPECIMEN_BLOWS.map(b => (
+                      <th key={`s${b}`} className="border border-slate-200 px-2 py-1 font-mono">{b}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {ASTM_PENETRATION_IN.map((depth, di) => {
+                    const is01 = Math.abs(depth - 0.1) < 0.001;
+                    const is02 = Math.abs(depth - 0.2) < 0.001;
+                    return (
+                      <tr key={di} className={is01 ? "bg-amber-50/60" : is02 ? "bg-blue-50/60" : ""}>
+                        <td className={`border border-slate-200 px-2 py-1 text-center font-mono font-semibold ${is01 || is02 ? "text-slate-800" : "text-slate-600"}`}>
+                          {fmtDepth(depth, "in")}
+                        </td>
+                        {specimens.map(sp => (
+                          <td key={`l-${sp.id}-${di}`} className="border border-slate-200 px-0.5 py-0.5">
+                            <Input
+                              value={sp.penetrationLoads[di] ?? ""}
+                              onChange={e => updateLoad(sp.id, di, e.target.value)}
+                              disabled={submitted}
+                              className={`h-7 text-[11px] text-center font-mono w-full ${is01 || is02 ? CELL_IN : ""}`}
+                            />
                           </td>
-                          {displaySpecimens.map(sp => (
-                            <td key={`l-${sp.id}`} className="border border-slate-200 px-1 py-0.5">
-                              <Input
-                                value={sp.penetrationLoads[di] ?? ""}
-                                onChange={e => updateLoad(sp.id, di, e.target.value)}
-                                disabled={submitted}
-                                className={`h-7 text-[11px] text-center font-mono border-0 shadow-none ${is01 || is02 ? CELL_IN : "bg-transparent"}`}
-                              />
-                            </td>
-                          ))}
-                          {ASTM_SPECIMEN_BLOWS.map(b => (
-                            <td key={`st-${b}-${di}`} className={`border border-slate-200 px-2 py-1 text-center font-mono text-slate-700 ${CELL_CALC}`}>
-                              {fmtN(spByBlows(b)?.stresses[di], 0)}
-                            </td>
-                          ))}
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-              <div className="flex flex-wrap gap-2 px-3 py-2 bg-slate-50 border-t text-[10px] text-slate-600">
-                <span className="rounded-full bg-white border px-2 py-0.5">{L(ar, "Stress = Load ÷ 3 in²", "الإجهاد = الحمل ÷ 3 in²")}</span>
-                <span className="rounded-full bg-amber-50 border border-amber-200 px-2 py-0.5">{L(ar, "CBR @ 0.1\" = Load ÷ 1000 × 100", "CBR @ 0.1\" = حمل ÷ 1000 × 100")}</span>
-                <span className="rounded-full bg-blue-50 border border-blue-200 px-2 py-0.5">{L(ar, "CBR @ 0.2\" = Load ÷ 1500 × 100", "CBR @ 0.2\" = حمل ÷ 1500 × 100")}</span>
-              </div>
+                        ))}
+                        {ASTM_SPECIMEN_BLOWS.map(b => (
+                          <td key={`st-${b}-${di}`} className={`border border-slate-200 px-2 py-1 text-center font-mono ${CELL_CALC}`}>
+                            {fmtN(spByBlows(b)?.stresses[di], 0)}
+                          </td>
+                        ))}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+              <p className="text-[10px] text-slate-500 px-3 py-2 bg-slate-50 border-t border-slate-200">
+                {L(ar,
+                  "Stress = Load ÷ 3 in² | CBR @ 0.1\" = Load/1000×100 | CBR @ 0.2\" = Load/1500×100",
+                  "الإجهاد = الحمل ÷ 3 in² | CBR @ 0.1\" = حمل/1000×100 | CBR @ 0.2\" = حمل/1500×100")}
+              </p>
             </div>
-            <div className="rounded-lg border border-slate-200 bg-white p-3">
+            <div>
               <p className="text-xs font-semibold text-slate-700 mb-2">{L(ar, "Stress vs. Penetration", "الإجهاد مقابل الاختراق")}</p>
               {hasStressChart ? (
-                <ResponsiveContainer width="100%" height={300}>
+                <ResponsiveContainer width="100%" height={320}>
                   <LineChart data={stressChartData} margin={{ top: 8, right: 12, left: 4, bottom: 24 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
                     <XAxis dataKey="depth" type="number" tick={{ fontSize: 9 }} domain={[0, 0.35]} label={{ value: L(ar, "Penetration (in)", "الاختراق (in)"), position: "insideBottom", offset: -12, fontSize: 9 }} />
                     <YAxis tick={{ fontSize: 9 }} label={{ value: L(ar, "Stress (psi)", "الإجهاد (psi)"), angle: -90, position: "insideLeft", fontSize: 9 }} />
                     <Tooltip />
                     <Legend wrapperStyle={{ fontSize: 9 }} />
-                    <ReferenceLine x={0.1} stroke="#f59e0b" strokeDasharray="4 4" label={{ value: "0.1\"", position: "top", fontSize: 8, fill: "#b45309" }} />
-                    <ReferenceLine x={0.2} stroke="#3b82f6" strokeDasharray="4 4" label={{ value: "0.2\"", position: "top", fontSize: 8, fill: "#1d4ed8" }} />
-                    <Line type="monotone" dataKey="s10" name="10" stroke="#2563eb" strokeWidth={2} dot={{ r: 3 }} connectNulls />
-                    <Line type="monotone" dataKey="s30" name="30" stroke="#059669" strokeWidth={2} dot={{ r: 3 }} connectNulls />
-                    <Line type="monotone" dataKey="s65" name="65" stroke="#dc2626" strokeWidth={2} dot={{ r: 3 }} connectNulls />
+                    <ReferenceLine x={0.1} stroke="#3b82f6" strokeDasharray="4 4" />
+                    <ReferenceLine x={0.2} stroke="#8b5cf6" strokeDasharray="4 4" />
+                    <Line type="monotone" dataKey="s10" name="10" stroke="#2563eb" strokeWidth={2} dot={{ r: 2 }} connectNulls />
+                    <Line type="monotone" dataKey="s30" name="30" stroke="#059669" strokeWidth={2} dot={{ r: 2 }} connectNulls />
+                    <Line type="monotone" dataKey="s65" name="65" stroke="#dc2626" strokeWidth={2} dot={{ r: 2 }} connectNulls />
                   </LineChart>
                 </ResponsiveContainer>
               ) : (
-                <div className="h-[300px] rounded-md border border-dashed border-slate-200 flex items-center justify-center text-slate-400 text-sm">
+                <div className="h-72 border border-dashed border-slate-200 rounded-md flex items-center justify-center text-slate-400 text-sm">
                   {L(ar, "Enter load readings", "أدخل قراءات الحمل")}
                 </div>
               )}
@@ -399,98 +396,81 @@ export function SoilCBRAstm({
       </Card>
 
       {/* CBR summary + design values */}
-      <Card className="overflow-hidden border-slate-200 shadow-sm">
-        <CardHeader className="pb-2 bg-gradient-to-r from-emerald-50/60 to-white border-b">
+      <Card className="border-slate-200">
+        <CardHeader className="pb-3">
           <CardTitle className="text-base">{L(ar, "CBR Summary & Design Values", "ملخص CBR والقيم التصميمية")}</CardTitle>
-          <p className="text-[11px] text-slate-500 mt-1">
-            {L(ar, "CBR values are computed from loads at 0.1\" and 0.2\" only. Override corrected values if surcharge correction differs.", "تُحسب قيم CBR من الحمل عند 0.1\" و 0.2\" فقط. عدّل القيم المصححة عند الحاجة.")}
-          </p>
         </CardHeader>
-        <CardContent className="pt-4 space-y-5">
-          <div className="rounded-lg border border-slate-200 overflow-x-auto">
-            <table className="w-full text-xs border-collapse min-w-[720px]">
-              <thead>
-                <tr className="bg-slate-800 text-white">
-                  <th rowSpan={2} className="border border-slate-700 px-2 py-2">{L(ar, "Blows", "ضربات")}</th>
-                  <th rowSpan={2} className="border border-slate-700 px-2 py-2">{L(ar, "Dry Dens.", "كثافة جافة")}</th>
-                  <th rowSpan={2} className="border border-slate-700 px-2 py-2">{L(ar, "MC %", "رطوبة %")}</th>
-                  <th colSpan={2} className="border border-slate-700 px-2 py-1.5 bg-amber-900/40 text-amber-100">{L(ar, "@ 0.1\"", "@ 0.1\"")}</th>
-                  <th colSpan={2} className="border border-slate-700 px-2 py-1.5 bg-blue-900/40 text-blue-100">{L(ar, "@ 0.2\"", "@ 0.2\"")}</th>
-                  <th colSpan={2} className="border border-slate-700 px-2 py-1.5">{L(ar, "Corrected", "مصحح")}</th>
-                  <th rowSpan={2} className="border border-slate-700 px-2 py-2 bg-emerald-900/50 text-emerald-100">{L(ar, "Adopted", "المعتمد")}</th>
-                </tr>
-                <tr className="bg-slate-700 text-white text-[10px]">
-                  <th className="border border-slate-600 px-2 py-1">{L(ar, "Load", "حمل")}</th>
-                  <th className="border border-slate-600 px-2 py-1">CBR %</th>
-                  <th className="border border-slate-600 px-2 py-1">{L(ar, "Load", "حمل")}</th>
-                  <th className="border border-slate-600 px-2 py-1">CBR %</th>
-                  <th className="border border-slate-600 px-2 py-1">0.1"</th>
-                  <th className="border border-slate-600 px-2 py-1">0.2"</th>
-                </tr>
-              </thead>
-              <tbody>
-                {[...computed].sort((a, b) => a.blowsPerLayer - b.blowsPerLayer).map((sp, ri) => (
-                  <tr key={sp.id} className={ri % 2 === 0 ? "bg-white" : "bg-slate-50/50"}>
-                    <td className="border border-slate-200 px-2 py-2 text-center">
-                      <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-slate-800 text-white font-bold text-sm">{sp.blowsPerLayer}</span>
-                    </td>
-                    <td className="border border-slate-200 px-2 py-1.5 text-center font-mono">{fmtN(sp.dryDensityPcf, 0)}</td>
-                    <td className="border border-slate-200 px-2 py-1.5 text-center font-mono">{fmtN(sp.moistureContent, 1)}</td>
-                    <td className="border border-slate-200 px-2 py-1.5 text-center font-mono text-slate-600 bg-amber-50/30">{fmtN(sp.load01, 0)}</td>
-                    <td className="border border-slate-200 px-2 py-1.5 text-center font-mono font-bold text-amber-800 bg-amber-50/50">{fmtN(sp.cbr01, 0)}</td>
-                    <td className="border border-slate-200 px-2 py-1.5 text-center font-mono text-slate-600 bg-blue-50/30">{fmtN(sp.load02, 0)}</td>
-                    <td className="border border-slate-200 px-2 py-1.5 text-center font-mono font-bold text-blue-800 bg-blue-50/50">{fmtN(sp.cbr02, 0)}</td>
-                    <td className="border border-slate-200 px-1 py-0.5">
-                      <Input
-                        value={sp.correctedCbr01}
-                        onChange={e => updateSpecimen(sp.id, "correctedCbr01", e.target.value)}
-                        disabled={submitted}
-                        placeholder={sp.correctedCbr01Val != null ? String(sp.correctedCbr01Val) : ""}
-                        className="h-7 text-[11px] text-center font-mono bg-white"
-                      />
-                    </td>
-                    <td className="border border-slate-200 px-1 py-0.5">
-                      <Input
-                        value={sp.correctedCbr02}
-                        onChange={e => updateSpecimen(sp.id, "correctedCbr02", e.target.value)}
-                        disabled={submitted}
-                        placeholder={sp.correctedCbr02Val != null ? String(sp.correctedCbr02Val) : ""}
-                        title={L(ar, "Used for design CBR if left blank", "يُستخدم في CBR التصميمي إذا تُرك فارغاً")}
-                        className={`h-7 text-[11px] text-center font-mono ${sp.correctedCbr02 ? "bg-white" : "bg-emerald-50"}`}
-                      />
-                    </td>
-                    <td className="border border-slate-200 px-2 py-1.5 text-center">
-                      <span className="inline-block min-w-[2.5rem] rounded-md bg-emerald-100 border border-emerald-300 px-2 py-1 font-mono font-bold text-emerald-900 text-sm">
-                        {fmtN(sp.adoptedCbr, 0)}
-                      </span>
-                    </td>
+        <CardContent>
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs border-collapse rounded-md border border-slate-200 overflow-hidden">
+                <thead>
+                  <tr className="bg-slate-100">
+                    <th className="border border-slate-200 px-2 py-1.5">{L(ar, "Blows/Layer", "ضربات/طبقة")}</th>
+                    <th className="border border-slate-200 px-2 py-1.5">{L(ar, "Dry Dens. (lbf/ft³)", "كثافة جافة")}</th>
+                    <th className="border border-slate-200 px-2 py-1.5">{L(ar, "MC %", "رطوبة %")}</th>
+                    <th className="border border-slate-200 px-2 py-1.5 bg-blue-50">CBR 0.1"</th>
+                    <th className="border border-slate-200 px-2 py-1.5 bg-purple-50">CBR 0.2"</th>
+                    <th className="border border-slate-200 px-2 py-1.5">{L(ar, "Corr. 0.1\"", "مصحح 0.1\"")}</th>
+                    <th className="border border-slate-200 px-2 py-1.5">{L(ar, "Corr. 0.2\"", "مصحح 0.2\"")}</th>
+                    <th className="border border-slate-200 px-2 py-1.5">{L(ar, "Adopted", "المعتمد")}</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          {designCbr && mddPcf != null && (
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              {[
-                { label: L(ar, "CBR @ 95% MDD", "CBR @ 95% MDD"), value: designCbr.cbr95, pcf: designCbr.targetPcf95.toFixed(1), box: "bg-blue-50 border-blue-200", title: "text-blue-700", val: "text-blue-900" },
-                { label: L(ar, "CBR @ 98% MDD", "CBR @ 98% MDD"), value: designCbr.cbr98, pcf: designCbr.targetPcf98.toFixed(1), box: "bg-emerald-50 border-emerald-200", title: "text-emerald-700", val: "text-emerald-900" },
-                { label: L(ar, "CBR @ 100% MDD", "CBR @ 100% MDD"), value: designCbr.cbr100, pcf: designCbr.targetPcf100.toFixed(1), box: "bg-purple-50 border-purple-200", title: "text-purple-700", val: "text-purple-900" },
-              ].map(kpi => (
-                <div key={kpi.label} className={`rounded-xl border p-4 text-center shadow-sm ${kpi.box}`}>
-                  <p className={`text-[11px] font-medium ${kpi.title}`}>{kpi.label}</p>
-                  <p className={`text-3xl font-bold mt-1 ${kpi.val}`}>{fmtN(kpi.value, 0)}</p>
-                  <p className="text-[10px] text-slate-500 mt-1">{kpi.pcf} pcf</p>
+                </thead>
+                <tbody>
+                  {computed.map(sp => (
+                    <tr key={sp.id}>
+                      <td className="border border-slate-200 px-2 py-1.5 text-center font-bold">{sp.blowsPerLayer}</td>
+                      <td className="border border-slate-200 px-2 py-1.5 text-center font-mono">{fmtN(sp.dryDensityPcf, 0)}</td>
+                      <td className="border border-slate-200 px-2 py-1.5 text-center font-mono">{fmtN(sp.moistureContent, 1)}</td>
+                      <td className="border border-slate-200 px-2 py-1.5 text-center font-mono font-bold text-blue-800">{fmtN(sp.cbr01, 0)}</td>
+                      <td className="border border-slate-200 px-2 py-1.5 text-center font-mono font-bold text-purple-800">{fmtN(sp.cbr02, 0)}</td>
+                      <td className="border border-slate-200 px-1 py-0.5">
+                        <Input
+                          value={sp.correctedCbr01}
+                          onChange={e => updateSpecimen(sp.id, "correctedCbr01", e.target.value)}
+                          disabled={submitted}
+                          placeholder={sp.correctedCbr01Val != null ? String(sp.correctedCbr01Val) : ""}
+                          className="h-7 text-[11px] text-center font-mono"
+                        />
+                      </td>
+                      <td className="border border-slate-200 px-1 py-0.5">
+                        <Input
+                          value={sp.correctedCbr02}
+                          onChange={e => updateSpecimen(sp.id, "correctedCbr02", e.target.value)}
+                          disabled={submitted}
+                          placeholder={sp.correctedCbr02Val != null ? String(sp.correctedCbr02Val) : ""}
+                          className="h-7 text-[11px] text-center font-mono"
+                        />
+                      </td>
+                      <td className="border border-slate-200 px-2 py-1.5 text-center font-mono font-bold text-emerald-800">{fmtN(sp.adoptedCbr, 0)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {designCbr && mddPcf != null && (
+                <div className="mt-4 grid grid-cols-3 gap-2">
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-center">
+                    <p className="text-[10px] text-blue-600 font-medium">{L(ar, "CBR @ 95% MDD", "CBR @ 95% MDD")}</p>
+                    <p className="text-2xl font-bold text-blue-900">{fmtN(designCbr.cbr95, 0)}</p>
+                    <p className="text-[9px] text-slate-500">{designCbr.targetPcf95.toFixed(1)} pcf</p>
+                  </div>
+                  <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3 text-center">
+                    <p className="text-[10px] text-emerald-600 font-medium">{L(ar, "CBR @ 98% MDD", "CBR @ 98% MDD")}</p>
+                    <p className="text-2xl font-bold text-emerald-900">{fmtN(designCbr.cbr98, 0)}</p>
+                    <p className="text-[9px] text-slate-500">{designCbr.targetPcf98.toFixed(1)} pcf</p>
+                  </div>
+                  <div className="bg-purple-50 border border-purple-200 rounded-lg p-3 text-center">
+                    <p className="text-[10px] text-purple-600 font-medium">{L(ar, "CBR @ 100% MDD", "CBR @ 100% MDD")}</p>
+                    <p className="text-2xl font-bold text-purple-900">{fmtN(designCbr.cbr100, 0)}</p>
+                    <p className="text-[9px] text-slate-500">{designCbr.targetPcf100.toFixed(1)} pcf</p>
+                  </div>
                 </div>
-              ))}
+              )}
             </div>
-          )}
-
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-            <div className="rounded-lg border border-slate-200 bg-white p-3">
+            <div>
               <p className="text-xs font-semibold text-slate-700 mb-2">{L(ar, "Corrected CBR @ 0.2\" vs. Dry Density", "CBR المصحح @ 0.2\" مقابل الكثافة الجافة")}</p>
               {hasCbrChart ? (
-                <ResponsiveContainer width="100%" height={280}>
+                <ResponsiveContainer width="100%" height={320}>
                   <ScatterChart margin={{ top: 8, right: 12, left: 4, bottom: 24 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
                     <XAxis
@@ -503,7 +483,7 @@ export function SoilCBRAstm({
                     <YAxis
                       dataKey="cbr02"
                       tick={{ fontSize: 9 }}
-                      label={{ value: L(ar, "Corrected CBR @ 0.2\" (%)", "CBR @ 0.2\" (%)"), angle: -90, position: "insideLeft", fontSize: 9 }}
+                      label={{ value: L(ar, "Corrected CBR @ 0.2\"", "CBR @ 0.2\""), angle: -90, position: "insideLeft", fontSize: 9 }}
                     />
                     <Tooltip />
                     <Scatter data={cbrDensityData} fill="#059669" line={{ stroke: "#059669", strokeWidth: 2 }} />
@@ -517,20 +497,10 @@ export function SoilCBRAstm({
                   </ScatterChart>
                 </ResponsiveContainer>
               ) : (
-                <div className="h-[280px] rounded-md border border-dashed border-slate-200 flex items-center justify-center text-slate-400 text-sm">
+                <div className="h-72 border border-dashed border-slate-200 rounded-md flex items-center justify-center text-slate-400 text-sm">
                   {L(ar, "Enter at least 2 specimens", "أدخل 2 عينات على الأقل")}
                 </div>
               )}
-            </div>
-            <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-xs text-slate-600 space-y-2">
-              <p className="font-semibold text-slate-800">{L(ar, "How CBR is calculated", "طريقة حساب CBR")}</p>
-              <ul className="list-disc list-inside space-y-1 text-[11px]">
-                <li>{L(ar, "CBR @ 0.1\" = dial load (lbf) ÷ 1,000 × 100", "CBR @ 0.1\" = الحمل ÷ 1,000 × 100")}</li>
-                <li>{L(ar, "CBR @ 0.2\" = dial load (lbf) ÷ 1,500 × 100", "CBR @ 0.2\" = الحمل ÷ 1,500 × 100")}</li>
-                <li>{L(ar, "Adopted CBR = higher of corrected values at 0.1\" and 0.2\"", "المعتمد = الأعلى بين المصحح عند 0.1\" و 0.2\"")}</li>
-                <li>{L(ar, "Target density (pcf) = MDD (Mg/m³) × 62.428 × 95% / 98% / 100%", "الكثافة المستهدفة = MDD × 62.428 × النسبة")}</li>
-                <li>{L(ar, "Design CBR = read corrected CBR @ 0.2\" from the density curve at each target", "CBR التصميمي = قراءة CBR المصحح @ 0.2\" من المنحنى عند كل كثافة مستهدفة")}</li>
-              </ul>
             </div>
           </div>
         </CardContent>
