@@ -17,6 +17,7 @@ import {
   isLegacyAstmPenetrationLoads,
   normalizeAstmPenetrationLoads,
   mgToPcf,
+  resolveMddToPcf,
   type AstmCBRSpecimenComputed,
   type AstmCBRSpecimenInput,
 } from "@/lib/soilCBRAstm";
@@ -111,12 +112,25 @@ export function SoilCBRAstm({
   );
   const mddNum = parseFloat(mddStr);
   const mddPcf = mddNum > 0 ? mgToPcf(mddNum) : null;
+  const mddLooksMistyped = mddNum > 0 && (
+    (mddNum > 20 && mddNum < 80)
+    || mddNum > 3500
+    || (mddNum > 180 && resolveMddToPcf(mddNum) < 100)
+  );
   const designCbr = useMemo(
     () => (mddNum > 0 ? computeCbrAtMddPercentages(computed, mddNum) : null),
     [computed, mddNum],
   );
   const stressChartData = useMemo(() => buildStressPenetrationChartData(computed), [computed]);
   const cbrDensityData = useMemo(() => buildCbrDensityChartData(computed), [computed]);
+  const designCbrMarkers = useMemo(() => {
+    if (!designCbr) return [];
+    return [
+      { pct: "95%", dryDensityPcf: designCbr.targetPcf95, cbr02: designCbr.cbr95, color: "#3b82f6" },
+      { pct: "98%", dryDensityPcf: designCbr.targetPcf98, cbr02: designCbr.cbr98, color: "#10b981" },
+      { pct: "100%", dryDensityPcf: designCbr.targetPcf100, cbr02: designCbr.cbr100, color: "#8b5cf6" },
+    ].filter(m => m.dryDensityPcf > 0 && m.cbr02 != null && m.cbr02 > 0);
+  }, [designCbr]);
   const hasStressChart = stressChartData.length >= 2;
   const hasCbrChart = cbrDensityData.length >= 2;
 
@@ -177,7 +191,14 @@ export function SoilCBRAstm({
                 disabled={submitted}
               />
               {mddPcf != null && (
-                <p className="text-[10px] text-slate-500 mt-0.5">{mddPcf} lbf/ft³</p>
+                <p className="text-[10px] text-slate-500 mt-0.5">= {mddPcf} lbf/ft³</p>
+              )}
+              {mddLooksMistyped && (
+                <p className="text-[10px] text-amber-700 mt-0.5">
+                  {L(ar,
+                    "Enter Proctor MDD in Mg/m³ (e.g. 2.13), not specimen dry density in pcf.",
+                    "أدخل MDD من بروكتور بـ Mg/m³ (مثال 2.13)، وليس كثافة العينة بـ pcf.")}
+                </p>
               )}
               {proctorMdd != null && (
                 <p className="text-[10px] text-emerald-600">{L(ar, "from Proctor", "من بروكتور")}</p>
@@ -491,20 +512,78 @@ export function SoilCBRAstm({
                       label={{ value: L(ar, "Corrected CBR @ 0.2\"", "CBR @ 0.2\""), angle: -90, position: "insideLeft", fontSize: 9 }}
                     />
                     <Tooltip />
-                    <Scatter data={cbrDensityData} fill="#059669" line={{ stroke: "#059669", strokeWidth: 2 }} />
-                    {designCbr && (
+                    <Scatter
+                      name={L(ar, "Specimens", "العينات")}
+                      data={cbrDensityData}
+                      fill="#059669"
+                      line={{ stroke: "#059669", strokeWidth: 2 }}
+                    />
+                    {designCbr && designCbr.cbr95 != null && designCbr.cbr95 > 0 && (
                       <>
-                        <ReferenceLine x={designCbr.targetPcf95} stroke="#3b82f6" strokeDasharray="3 3" />
-                        <ReferenceLine x={designCbr.targetPcf98} stroke="#10b981" strokeDasharray="3 3" />
-                        <ReferenceLine x={designCbr.targetPcf100} stroke="#8b5cf6" strokeDasharray="3 3" />
+                        <ReferenceLine
+                          x={designCbr.targetPcf95}
+                          stroke="#3b82f6"
+                          strokeWidth={1.5}
+                          strokeDasharray="4 4"
+                          label={{ value: "95%", position: "top", fontSize: 9, fill: "#3b82f6", fontWeight: 700 }}
+                        />
+                        <ReferenceLine y={designCbr.cbr95} stroke="#3b82f6" strokeWidth={1.5} strokeDasharray="4 4" />
                       </>
                     )}
+                    {designCbr && designCbr.cbr98 != null && designCbr.cbr98 > 0 && (
+                      <>
+                        <ReferenceLine
+                          x={designCbr.targetPcf98}
+                          stroke="#10b981"
+                          strokeWidth={1.5}
+                          strokeDasharray="4 4"
+                          label={{ value: "98%", position: "top", fontSize: 9, fill: "#10b981", fontWeight: 700 }}
+                        />
+                        <ReferenceLine y={designCbr.cbr98} stroke="#10b981" strokeWidth={1.5} strokeDasharray="4 4" />
+                      </>
+                    )}
+                    {designCbr && designCbr.cbr100 != null && designCbr.cbr100 > 0 && (
+                      <>
+                        <ReferenceLine
+                          x={designCbr.targetPcf100}
+                          stroke="#8b5cf6"
+                          strokeWidth={1.5}
+                          strokeDasharray="4 4"
+                          label={{ value: "100%", position: "top", fontSize: 9, fill: "#8b5cf6", fontWeight: 700 }}
+                        />
+                        <ReferenceLine y={designCbr.cbr100} stroke="#8b5cf6" strokeWidth={1.5} strokeDasharray="4 4" />
+                      </>
+                    )}
+                    {designCbrMarkers.map(m => (
+                      <Scatter
+                        key={m.pct}
+                        name={`${m.pct} MDD`}
+                        data={[m]}
+                        fill={m.color}
+                        shape={(props: { cx?: number; cy?: number }) => {
+                          const { cx = 0, cy = 0 } = props;
+                          return (
+                            <g>
+                              <circle cx={cx} cy={cy} r={7} fill={m.color} stroke="#fff" strokeWidth={2} />
+                              <circle cx={cx} cy={cy} r={2.5} fill="#fff" />
+                            </g>
+                          );
+                        }}
+                      />
+                    ))}
                   </ScatterChart>
                 </ResponsiveContainer>
               ) : (
                 <div className="h-72 border border-dashed border-slate-200 rounded-md flex items-center justify-center text-slate-400 text-sm">
                   {L(ar, "Enter at least 2 specimens", "أدخل 2 عينات على الأقل")}
                 </div>
+              )}
+              {designCbrMarkers.length > 0 && (
+                <p className="text-[10px] text-slate-500 mt-2 leading-relaxed">
+                  {L(ar,
+                    "Dashed crosshairs show where each % MDD density (vertical) meets the curve CBR (horizontal). Dots mark the design CBR value.",
+                    "الخطوط المتقطعة تعرض تقاطع كثافة % MDD (عمودي) مع قيمة CBR من المنحنى (أفقي). النقاط = قيمة CBR التصميمية.")}
+                </p>
               )}
             </div>
           </div>

@@ -1533,25 +1533,68 @@ function CBRReportAstmCbrDensityChart({
 }: {
   data: Array<{ dryDensityPcf: number; cbr02: number }>;
   mddPcf?: number | null;
-  designTargets?: { targetPcf95: number; targetPcf98: number; targetPcf100: number } | null;
+  designTargets?: {
+    targetPcf95: number;
+    targetPcf98: number;
+    targetPcf100: number;
+    cbr95?: number | null;
+    cbr98?: number | null;
+    cbr100?: number | null;
+  } | null;
   isAr: boolean;
 }) {
   if (data.length < 2) return null;
   const pcf95 = designTargets?.targetPcf95 ?? (mddPcf != null ? mddPcf * 0.95 : null);
   const pcf98 = designTargets?.targetPcf98 ?? (mddPcf != null ? mddPcf * 0.98 : null);
   const pcf100 = designTargets?.targetPcf100 ?? mddPcf;
+  const markers = [
+    { pct: "95%", dryDensityPcf: pcf95, cbr02: designTargets?.cbr95, color: "#3b82f6" },
+    { pct: "98%", dryDensityPcf: pcf98, cbr02: designTargets?.cbr98, color: "#10b981" },
+    { pct: "100%", dryDensityPcf: pcf100, cbr02: designTargets?.cbr100, color: "#8b5cf6" },
+  ].filter(m => (m.dryDensityPcf ?? 0) > 0 && m.cbr02 != null && m.cbr02 > 0);
   return (
     <div className="sieve-report-chart border border-slate-300 rounded-md bg-white p-1" style={{ height: 280 }}>
       <ResponsiveContainer width="100%" height="100%">
-        <ScatterChart margin={{ top: 10, right: 16, left: 0, bottom: 26 }}>
+        <ScatterChart margin={{ top: 14, right: 16, left: 0, bottom: 26 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
           <XAxis type="number" dataKey="dryDensityPcf" tick={{ fontSize: 9 }} label={{ value: isAr ? "الكثافة الجافة (lbf/ft³)" : "Dry Density (lbf/ft³)", position: "insideBottom", offset: -16, style: { fontSize: 10 } }} />
           <YAxis width={42} tick={{ fontSize: 9 }} label={{ value: isAr ? "CBR @ 0.2\" (%)" : "CBR @ 0.2\" (%)", angle: -90, position: "insideLeft", style: { fontSize: 10 } }} />
           <Tooltip contentStyle={{ fontSize: 10 }} />
           <Scatter data={data} fill="#059669" line={{ stroke: "#059669", strokeWidth: 2 }} />
-          {pcf95 != null && pcf95 > 0 && <ReferenceLine x={pcf95} stroke="#3b82f6" strokeDasharray="3 3" />}
-          {pcf98 != null && pcf98 > 0 && <ReferenceLine x={pcf98} stroke="#10b981" strokeDasharray="3 3" />}
-          {pcf100 != null && pcf100 > 0 && <ReferenceLine x={pcf100} stroke="#8b5cf6" strokeDasharray="3 3" />}
+          {pcf95 != null && pcf95 > 0 && designTargets?.cbr95 != null && designTargets.cbr95 > 0 && (
+            <>
+              <ReferenceLine x={pcf95} stroke="#3b82f6" strokeWidth={1.5} strokeDasharray="4 4" label={{ value: "95%", position: "top", fontSize: 8, fill: "#3b82f6", fontWeight: 700 }} />
+              <ReferenceLine y={designTargets.cbr95} stroke="#3b82f6" strokeWidth={1.5} strokeDasharray="4 4" />
+            </>
+          )}
+          {pcf98 != null && pcf98 > 0 && designTargets?.cbr98 != null && designTargets.cbr98 > 0 && (
+            <>
+              <ReferenceLine x={pcf98} stroke="#10b981" strokeWidth={1.5} strokeDasharray="4 4" label={{ value: "98%", position: "top", fontSize: 8, fill: "#10b981", fontWeight: 700 }} />
+              <ReferenceLine y={designTargets.cbr98} stroke="#10b981" strokeWidth={1.5} strokeDasharray="4 4" />
+            </>
+          )}
+          {pcf100 != null && pcf100 > 0 && designTargets?.cbr100 != null && designTargets.cbr100 > 0 && (
+            <>
+              <ReferenceLine x={pcf100} stroke="#8b5cf6" strokeWidth={1.5} strokeDasharray="4 4" label={{ value: "100%", position: "top", fontSize: 8, fill: "#8b5cf6", fontWeight: 700 }} />
+              <ReferenceLine y={designTargets.cbr100} stroke="#8b5cf6" strokeWidth={1.5} strokeDasharray="4 4" />
+            </>
+          )}
+          {markers.map(m => (
+            <Scatter
+              key={m.pct}
+              data={[{ dryDensityPcf: m.dryDensityPcf, cbr02: m.cbr02 }]}
+              fill={m.color}
+              shape={(props: { cx?: number; cy?: number }) => {
+                const { cx = 0, cy = 0 } = props;
+                return (
+                  <g>
+                    <circle cx={cx} cy={cy} r={6} fill={m.color} stroke="#fff" strokeWidth={1.5} />
+                    <circle cx={cx} cy={cy} r={2} fill="#fff" />
+                  </g>
+                );
+              }}
+            />
+          ))}
         </ScatterChart>
       </ResponsiveContainer>
     </div>
