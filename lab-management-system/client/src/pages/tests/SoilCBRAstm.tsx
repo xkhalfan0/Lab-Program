@@ -470,21 +470,20 @@ export function SoilCBRAstm({
             <AlertDescription className="text-purple-800 text-xs mt-2 space-y-1">
               <p>
                 {L(ar,
-                  "If the load-penetration curve is concave upward at the initial portion, graphical correction must be applied.",
-                  "إذا كان منحنى الحمل-الاختراق مقعراً للأعلى عند البداية → يجب تطبيق التصحيح البياني.")}
+                  "Per ASTM D1883 §7.2, when the load-penetration curve is concave upward at the start, corrected CBR @ 0.1\" and 0.2\" are calculated automatically from the penetration readings.",
+                  "وفق ASTM D1883 §7.2، عندما يكون منحنى الحمل-الاختراق مقعراً للأعلى عند البداية، تُحسب قيم CBR المصححة @ 0.1\" و 0.2\" تلقائياً من قراءات الاختراق.")}
               </p>
-              <p className="font-semibold">{L(ar, "Correction steps:", "خطوات التصحيح:")}</p>
+              <p className="font-semibold">{L(ar, "Automatic method:", "الطريقة التلقائية:")}</p>
               <ol className="list-decimal list-inside space-y-0.5 ml-2">
-                <li>{L(ar, "Plot curve and check if concave upward at origin", "ارسم المنحنى وافحص إذا كان مقعراً للأعلى عند نقطة الصفر")}</li>
-                <li>{L(ar, "Draw tangent at steepest point of curve", "ارسم مماساً عند أعلى نقطة تدرج في المنحنى")}</li>
-                <li>{L(ar, "Where tangent crosses x-axis = corrected zero point", "حيث يتقاطع المماس مع محور x = نقطة الصفر الجديدة")}</li>
-                <li>{L(ar, "Read corrected CBR at 0.1\" and 0.2\" from shifted curve", "اقرأ قيم CBR المصححة عند 0.1\" و 0.2\" من المنحنى المصحح")}</li>
-                <li>{L(ar, "Enter corrected values manually in the fields provided", "أدخل القيم المصححة يدوياً في الحقول المخصصة")}</li>
+                <li>{L(ar, "Detect concave-upward toe on the stress-penetration curve", "اكتشاف المقعر للأعلى عند بداية المنحنى")}</li>
+                <li>{L(ar, "Draw tangent at the steepest point (≤ 0.2 in)", "رسم مماس عند أعلى تدرج (≤ 0.2 in)")}</li>
+                <li>{L(ar, "X-axis intercept = corrected zero offset", "تقاطع المماس مع محور x = إزاحة الصفر")}</li>
+                <li>{L(ar, "Read loads at (0.1 + offset) and (0.2 + offset), then compute CBR", "قراءة الأحمال عند (0.1 + الإزاحة) و (0.2 + الإزاحة) ثم حساب CBR")}</li>
               </ol>
               <p className="mt-2 text-purple-600">
                 {L(ar,
-                  "If curve is NOT concave upward → no correction needed; raw CBR values are used.",
-                  "إذا لم يكن المنحنى مقعراً → لا حاجة للتصحيح، تُستخدم قيم CBR الخام.")}
+                  "If no correction applies, corrected values equal raw CBR (shown in green).",
+                  "إذا لم ينطبق التصحيح، تساوي القيم المصححة CBR الخام (تظهر باللون الأخضر).")}
               </p>
             </AlertDescription>
           </Alert>
@@ -514,8 +513,8 @@ export function SoilCBRAstm({
               <tbody>
                 {computed.map((sp, idx) => {
                   const input = specimens.find(s => s.id === sp.id);
-                  const needs01 = input?.needsCorrection01 ?? false;
-                  const needs02 = input?.needsCorrection02 ?? false;
+                  const corr01 = sp.needsCorrection01 ?? false;
+                  const corr02 = sp.needsCorrection02 ?? false;
                   return (
                     <tr key={sp.id} className="hover:bg-slate-50">
                       <td className="border border-slate-300 px-2 py-2 text-center font-bold">{idx + 1}</td>
@@ -536,60 +535,30 @@ export function SoilCBRAstm({
                       <td className="border border-slate-300 px-2 py-2 text-center bg-green-100 font-mono font-bold text-green-800">{fmtN(sp.cbr01, 0)}</td>
                       <td className="border border-slate-300 px-2 py-2 text-center bg-green-100 font-mono font-bold text-green-800">{fmtN(sp.cbr02, 0)}</td>
                       <td className="border border-slate-300 px-2 py-2 bg-purple-50">
-                        <div className="flex flex-col gap-1">
-                          <label className="flex items-center gap-1.5 cursor-pointer select-none">
-                            <input
-                              type="checkbox"
-                              checked={needs01}
-                              onChange={e => updateSpecimen(sp.id, "needsCorrection01", e.target.checked)}
-                              disabled={submitted}
-                              className="w-3.5 h-3.5"
-                            />
-                            <span className="text-[10px] text-purple-700">{L(ar, "Correction needed", "تصحيح مطلوب")}</span>
-                          </label>
-                          {needs01 ? (
-                            <Input
-                              type="number"
-                              step="0.1"
-                              value={input?.correctedCbr01 ?? ""}
-                              onChange={e => updateSpecimen(sp.id, "correctedCbr01", e.target.value)}
-                              disabled={submitted}
-                              className="h-8 text-sm font-bold text-center border-2 border-purple-400"
-                              placeholder={L(ar, "Read from curve", "أدخل من المنحنى")}
-                            />
-                          ) : (
-                            <div className="h-8 flex items-center justify-center text-sm font-bold text-green-700 bg-green-50 rounded border border-green-200">
-                              {fmtN(sp.cbr01, 0)}
-                            </div>
+                        <div className={`min-h-10 py-1 flex flex-col items-center justify-center text-sm font-bold rounded border ${
+                          corr01
+                            ? "text-purple-900 bg-purple-100 border-purple-400"
+                            : "text-green-700 bg-green-50 border-green-200"
+                        }`}>
+                          <span>{fmtN(sp.adoptedCbr01, 0)}</span>
+                          {corr01 && sp.correctionZeroOffsetIn != null && (
+                            <span className="text-[9px] font-normal text-purple-600 leading-none">
+                              {L(ar, `auto (X=${sp.correctionZeroOffsetIn}\")`, `تلقائي (X=${sp.correctionZeroOffsetIn}\")`)}
+                            </span>
                           )}
                         </div>
                       </td>
                       <td className="border border-slate-300 px-2 py-2 bg-purple-50">
-                        <div className="flex flex-col gap-1">
-                          <label className="flex items-center gap-1.5 cursor-pointer select-none">
-                            <input
-                              type="checkbox"
-                              checked={needs02}
-                              onChange={e => updateSpecimen(sp.id, "needsCorrection02", e.target.checked)}
-                              disabled={submitted}
-                              className="w-3.5 h-3.5"
-                            />
-                            <span className="text-[10px] text-purple-700">{L(ar, "Correction needed", "تصحيح مطلوب")}</span>
-                          </label>
-                          {needs02 ? (
-                            <Input
-                              type="number"
-                              step="0.1"
-                              value={input?.correctedCbr02 ?? ""}
-                              onChange={e => updateSpecimen(sp.id, "correctedCbr02", e.target.value)}
-                              disabled={submitted}
-                              className="h-8 text-sm font-bold text-center border-2 border-purple-400"
-                              placeholder={L(ar, "Read from curve", "أدخل من المنحنى")}
-                            />
-                          ) : (
-                            <div className="h-8 flex items-center justify-center text-sm font-bold text-green-700 bg-green-50 rounded border border-green-200">
-                              {fmtN(sp.cbr02, 0)}
-                            </div>
+                        <div className={`min-h-10 py-1 flex flex-col items-center justify-center text-sm font-bold rounded border ${
+                          corr02
+                            ? "text-purple-900 bg-purple-100 border-purple-400"
+                            : "text-green-700 bg-green-50 border-green-200"
+                        }`}>
+                          <span>{fmtN(sp.adoptedCbr02, 0)}</span>
+                          {corr02 && sp.correctionZeroOffsetIn != null && (
+                            <span className="text-[9px] font-normal text-purple-600 leading-none">
+                              {L(ar, `auto (X=${sp.correctionZeroOffsetIn}\")`, `تلقائي (X=${sp.correctionZeroOffsetIn}\")`)}
+                            </span>
                           )}
                         </div>
                       </td>

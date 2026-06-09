@@ -44,7 +44,13 @@ import {
   ReferenceLine,
   ResponsiveContainer,
 } from "recharts";
-import { buildCbrDensityChartData, computeCbrAtMddPercentages } from "@/lib/soilCBRAstm";
+import {
+  buildCbrDensityChartData,
+  computeAllAstmSpecimens,
+  computeCbrAtMddPercentages,
+  hydrateAstmSpecimenInput,
+} from "@/lib/soilCBRAstm";
+import { peakProctorMdd } from "@/lib/soilProctor";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function fmt(v: any, dec = 2) {
@@ -1318,6 +1324,9 @@ function ProctorReportCompactionChart({
 
 function renderSoilProctor(fd: any, isAr: boolean) {
   const points = fd.points ?? [];
+  const savedMdd = fd.mdd != null && fd.mdd !== "" ? Number(fd.mdd) : null;
+  const displayMdd = peakProctorMdd(points, savedMdd) ?? savedMdd;
+  const displayOmc = fd.omc != null && fd.omc !== "" ? Number(fd.omc) : null;
   const headers = isAr
     ? ["النقطة", "قالب+تربة (غ)", "القالب (غ)", "التربة (غ)", "الكثافة الرطبة (Mg/m³)", "نسبة الرطوبة (%)", "الكثافة الجافة (Mg/m³)"]
     : ["Point", "Mould+Soil (g)", "Mould (g)", "Soil (g)", "Wet Density (Mg/m³)", "Water Content (%)", "Dry Density (Mg/m³)"];
@@ -1336,11 +1345,11 @@ function renderSoilProctor(fd: any, isAr: boolean) {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">
         <div className="bg-blue-50 border border-blue-200 rounded p-3 text-center">
           <p className="text-blue-600 font-semibold">{isAr ? "أقصى كثافة جافة (MDD)" : "Max Dry Density (MDD)"}</p>
-          <p className="text-xl font-bold text-blue-800">{fmt(fd.mddValue ?? fd.mdd, 2)} {isAr ? "Mg/m³" : "Mg/m³"}</p>
+          <p className="text-xl font-bold text-blue-800">{fmt(displayMdd, 2)} {isAr ? "Mg/m³" : "Mg/m³"}</p>
         </div>
         <div className="bg-green-50 border border-green-200 rounded p-3 text-center">
           <p className="text-green-600 font-semibold">{isAr ? "نسبة الرطوبة المثلى (OMC)" : "Optimum Moisture Content (OMC)"}</p>
-          <p className="text-xl font-bold text-green-800">{fmt(fd.omcValue ?? fd.omc)} %</p>
+          <p className="text-xl font-bold text-green-800">{fmt(displayOmc)} %</p>
         </div>
         {fd.correctedMDD != null && (
           <div className="bg-emerald-50 border border-emerald-200 rounded p-3 text-center">
@@ -1371,8 +1380,8 @@ function renderSoilProctor(fd: any, isAr: boolean) {
         </p>
         <ProctorReportCompactionChart
           points={points}
-          mdd={fd.mdd != null && fd.mdd !== "" ? Number(fd.mdd) : null}
-          omc={fd.omc != null && fd.omc !== "" ? Number(fd.omc) : null}
+          mdd={displayMdd}
+          omc={displayOmc}
           isAr={isAr}
         />
       </div>
@@ -1605,7 +1614,13 @@ function renderSoilCBR(fd: any, isAr: boolean) {
   const L = (en: string, ars: string) => (isAr ? ars : en);
 
   if (fd.standard === "ASTM_D1883" && Array.isArray(fd.astmSpecimens)) {
-    const specimens: any[] = fd.astmSpecimens;
+    const rawSpecimens: any[] = fd.astmSpecimens;
+    const specimens = rawSpecimens[0]?.adoptedCbr != null
+      ? rawSpecimens
+      : computeAllAstmSpecimens(
+        rawSpecimens.map((s, i) => hydrateAstmSpecimenInput(s, i)),
+        Number(fd.surchargeLbf) || 10,
+      );
     const stressData = specimens.length > 0
       ? (() => {
           const depths = [0, 0.025, 0.05, 0.075, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35];
@@ -1632,8 +1647,26 @@ function renderSoilCBR(fd: any, isAr: boolean) {
       { header: L("MC after soak %", "رطوبة بعد النقع %"), field: "moistureAfterSoak", align: "center", render: v => v != null && v !== "" ? fmt(v, 1) : "—" },
       { header: L("Raw CBR 0.1\"", "CBR خام 0.1\""), field: "cbr01", align: "center", render: v => fmt(v, 0) },
       { header: L("Raw CBR 0.2\"", "CBR خام 0.2\""), field: "cbr02", align: "center", render: v => fmt(v, 0) },
-      { header: L("Adopted 0.1\"", "معتمد 0.1\""), field: "adoptedCbr01", align: "center", render: v => fmt(v, 0) },
-      { header: L("Adopted 0.2\"", "معتمد 0.2\""), field: "adoptedCbr02", align: "center", render: v => fmt(v, 0) },
+      {
+        header: L("Corr. CBR 0.1\"", "CBR مصحح 0.1\""),
+        field: "adoptedCbr01",
+        align: "center",
+        render: (v, row) => {
+          const r = row as any;
+          const corrected = r.needsCorrection01 || (r.cbr01 != null && v != null && Number(v) !== Number(r.cbr01));
+          return <span className={corrected ? "font-bold text-purple-800" : ""}>{fmt(v, 0)}</span>;
+        },
+      },
+      {
+        header: L("Corr. CBR 0.2\"", "CBR مصحح 0.2\""),
+        field: "adoptedCbr02",
+        align: "center",
+        render: (v, row) => {
+          const r = row as any;
+          const corrected = r.needsCorrection02 || (r.cbr02 != null && v != null && Number(v) !== Number(r.cbr02));
+          return <span className={corrected ? "font-bold text-purple-800" : ""}>{fmt(v, 0)}</span>;
+        },
+      },
       { header: L("Adopted CBR", "CBR المعتمد"), field: "adoptedCbr", align: "center", render: v => fmt(v, 0) },
     ];
 

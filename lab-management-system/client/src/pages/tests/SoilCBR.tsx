@@ -136,24 +136,17 @@ export default function SoilCBR() {
   const proctorMdd = useMemo(() => {
     const fd = proctorData?.formData;
     if (!fd) return undefined;
-    const tm = fd.testMethod as string | undefined;
-    if (proctorMethodLinksToAstmCbr(tm ?? "")) {
-      const corrected = fd.correctedMDD;
-      if (corrected != null && Number(corrected) > 0) return Number(corrected);
-    }
     const m = fd.mdd ?? fd.mddValue ?? proctorData?.summaryValues?.mdd;
     if (m != null && Number.isFinite(Number(m))) return Number(m);
     return undefined;
   }, [proctorData]);
 
-  /** ASTM D1883 — MDD from linked ASTM Proctor only */
+  /** ASTM D1883 — MDD from linked ASTM Proctor only (uncorrected peak, not D4718 corrected) */
   const astmProctorMdd = useMemo(() => {
     const fd = proctorData?.formData;
     if (!fd) return undefined;
     const tm = fd.testMethod as string | undefined;
     if (!proctorMethodLinksToAstmCbr(tm ?? "")) return undefined;
-    const corrected = fd.correctedMDD;
-    if (corrected != null && Number(corrected) > 0) return Number(corrected);
     const m = fd.mdd ?? fd.mddValue ?? proctorData?.summaryValues?.mdd;
     if (m != null && Number.isFinite(Number(m))) return Number(m);
     return undefined;

@@ -163,6 +163,23 @@ export function computeProctorPoint(
 }
 
 /** ASTM D4718 oversize correction */
+/** Peak MDD from measured dry densities (max table value); parabola fit as fallback. */
+export function peakProctorMdd(
+  points: { dryDensity?: number | null }[],
+  fitMdd?: number | null,
+): number | undefined {
+  const densities = points
+    .map(p => p.dryDensity)
+    .filter((d): d is number => typeof d === "number" && Number.isFinite(d) && d > 0);
+  if (densities.length > 0) {
+    return parseFloat(Math.max(...densities).toFixed(3));
+  }
+  if (fitMdd != null && Number.isFinite(fitMdd) && fitMdd > 0) {
+    return parseFloat(fitMdd.toFixed(3));
+  }
+  return undefined;
+}
+
 export function computeCorrectedProctor(
   oversizePct: number,
   bulkSpGr: number,

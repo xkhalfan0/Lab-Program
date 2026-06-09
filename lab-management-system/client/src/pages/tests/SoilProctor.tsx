@@ -22,6 +22,7 @@ import {
   PROCTOR_METHOD_ORDER,
   PROCTOR_MOLD_VOLUMES,
   computeCorrectedProctor,
+  peakProctorMdd,
   computeProctorPoint,
   isAstmProctorMethod,
   type ProctorMethodKey,
@@ -157,8 +158,9 @@ export default function SoilProctor() {
     .sort((a, b) => a.wc - b.wc);
 
   const fitResult = fitParabola(chartData.map(d => ({ x: d.wc, y: d.dd ?? 0 })));
+  const peakMdd = peakProctorMdd(validPoints, fitResult?.mdd);
 
-  const mddFinerNum = parseFloat(mddFinerUnit) || (fitResult?.mdd ?? 0);
+  const mddFinerNum = parseFloat(mddFinerUnit) || peakMdd || 0;
   const omcFinerNum = fitResult?.omc ?? 0;
   const oversizeNum = parseFloat(oversizePct) || 0;
   const bulkSpGrNum = parseFloat(bulkSpGr) || 2.65;
@@ -168,9 +170,6 @@ export default function SoilProctor() {
     mddFinerNum,
     omcFinerNum,
   );
-  const reportMdd = isAstm && correctedMDD > 0 && oversizeNum > 0 ? correctedMDD : fitResult?.mdd;
-  const reportOmc = isAstm && correctedOMC > 0 && oversizeNum > 0 ? correctedOMC : fitResult?.omc;
-
   const handleMethodChange = (val: ProctorMethodKey) => {
     setTestMethod(val);
     const spec = PROCTOR_METHOD_SPECS[val];
@@ -239,15 +238,15 @@ export default function SoilProctor() {
             waterContent: p.waterContent ?? null,
             dryDensity: p.dryDensity ?? null,
           })),
-          mdd: fitResult?.mdd,
-          omc: fitResult?.omc,
-          mddValue: reportMdd ?? null,
-          omcValue: reportOmc ?? null,
+          mdd: peakMdd ?? null,
+          omc: fitResult?.omc ?? null,
+          mddValue: peakMdd ?? null,
+          omcValue: fitResult?.omc ?? null,
         },
         overallResult: "pending",
         summaryValues: {
-          mdd: reportMdd ?? fitResult?.mdd,
-          omc: reportOmc ?? fitResult?.omc,
+          mdd: peakMdd ?? null,
+          omc: fitResult?.omc ?? null,
           testMethod,
           cbrStandard: currentSpecs.cbrStandard,
         },
@@ -665,20 +664,20 @@ export default function SoilProctor() {
             </div>
 
               {/* MDD / OMC Summary */}
-              {fitResult && (
+              {(peakMdd != null || fitResult?.omc != null) && (
                 <div className="mt-4 grid grid-cols-2 gap-3">
                   <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 text-center">
                     <p className="text-xs text-emerald-600 font-semibold mb-1">
                       {lang === "ar" ? "أقصى كثافة جافة (MDD)" : "Maximum Dry Density (MDD)"}
                     </p>
-                    <p className="text-3xl font-bold text-emerald-800">{fitResult.mdd.toFixed(2)}</p>
+                    <p className="text-3xl font-bold text-emerald-800">{peakMdd != null ? peakMdd.toFixed(2) : "—"}</p>
                     <p className="text-xs text-emerald-500">Mg/m³</p>
                   </div>
                   <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-center">
                     <p className="text-xs text-blue-600 font-semibold mb-1">
                       {lang === "ar" ? "نسبة الرطوبة المثلى (OMC)" : "Optimum Moisture Content (OMC)"}
                     </p>
-                    <p className="text-3xl font-bold text-blue-800">{fitResult.omc}</p>
+                    <p className="text-3xl font-bold text-blue-800">{fitResult?.omc ?? "—"}</p>
                     <p className="text-xs text-blue-500">%</p>
                   </div>
                 </div>
@@ -720,15 +719,15 @@ export default function SoilProctor() {
                       fill="#2563eb"
                       line={{ stroke: "#2563eb", strokeWidth: 2 }}
                     />
-                    {fitResult && (
+                    {peakMdd != null && fitResult && (
                       <>
                         <ReferenceLine
-                          y={fitResult.mdd}
+                          y={peakMdd}
                           stroke="#059669"
                           strokeDasharray="5 4"
                           strokeWidth={1.5}
                           label={{
-                            value: `MDD = ${fitResult.mdd.toFixed(2)} Mg/m³`,
+                            value: `MDD = ${peakMdd.toFixed(2)} Mg/m³`,
                             position: "insideTopRight",
                             fontSize: 12,
                             fontWeight: 700,
@@ -795,11 +794,11 @@ export default function SoilProctor() {
                   value={mddFinerUnit}
                   onChange={e => setMddFinerUnit(e.target.value)}
                   className="h-9 bg-white font-mono"
-                  placeholder={fitResult?.mdd != null ? String(fitResult.mdd) : (ar ? "من المنحنى" : "From curve")}
+                  placeholder={peakMdd != null ? String(peakMdd) : (ar ? "من المنحنى" : "From curve")}
                 />
-                {fitResult && !mddFinerUnit && (
+                {peakMdd != null && !mddFinerUnit && (
                   <p className="text-[10px] text-slate-500">
-                    {ar ? `من المنحنى: ${fitResult.mdd.toFixed(3)} Mg/m³` : `From curve: ${fitResult.mdd.toFixed(3)} Mg/m³`}
+                    {ar ? `من المنحنى: ${peakMdd.toFixed(3)} Mg/m³` : `From curve: ${peakMdd.toFixed(3)} Mg/m³`}
                   </p>
                 )}
               </div>
