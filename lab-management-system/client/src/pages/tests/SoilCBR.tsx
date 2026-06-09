@@ -33,6 +33,7 @@ import {
   computeAllAstmSpecimens,
   computeCbrAtMddPercentages,
   defaultAstmSpecimens,
+  hydrateAstmSpecimenInput,
   normalizeAstmPenetrationLoads,
   type AstmCBRSpecimenInput,
 } from "@/lib/soilCBRAstm";
@@ -206,22 +207,9 @@ export default function SoilCBR() {
       })));
     }
     if (Array.isArray(fd.astmSpecimens) && fd.astmSpecimens.length > 0) {
-      setAstmSpecimens((fd.astmSpecimens as AstmCBRSpecimenInput[]).map((s, i) => ({
-        id: s.id ?? `astm_sp_${i}`,
-        blowsPerLayer: s.blowsPerLayer ?? ([10, 30, 65] as const)[i] ?? 10,
-        volumeMould: String(s.volumeMould ?? ""),
-        massMouldSample: String(s.massMouldSample ?? ""),
-        massMould: String(s.massMould ?? ""),
-        massWetCont: String(s.massWetCont ?? ""),
-        massDryCont: String(s.massDryCont ?? ""),
-        massContainer: String(s.massContainer ?? ""),
-        moistureAfterSoak: String(s.moistureAfterSoak ?? ""),
-        penetrationLoads: normalizeAstmPenetrationLoads(
-          Array.isArray(s.penetrationLoads) ? s.penetrationLoads.map(String) : [],
-        ),
-        correctedCbr01: String(s.correctedCbr01 ?? ""),
-        correctedCbr02: String(s.correctedCbr02 ?? ""),
-      })));
+      setAstmSpecimens(
+        (fd.astmSpecimens as Partial<AstmCBRSpecimenInput>[]).map((s, i) => hydrateAstmSpecimenInput(s, i)),
+      );
     }
     if (typeof fd.compactionMethod === "string") setCompactionMethod(fd.compactionMethod);
     if (typeof fd.sampleCondition === "string") setSampleCondition(fd.sampleCondition);

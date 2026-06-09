@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef } from "react";
+import { Info } from "lucide-react";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -132,7 +134,11 @@ export function SoilCBRAstm({
   const hasStressChart = stressChartData.length >= 2;
   const hasCbrChart = cbrDensityData.length >= 2;
 
-  const updateSpecimen = useCallback((id: string, field: keyof AstmCBRSpecimenInput, value: string) => {
+  const updateSpecimen = useCallback(<K extends keyof AstmCBRSpecimenInput>(
+    id: string,
+    field: K,
+    value: AstmCBRSpecimenInput[K],
+  ) => {
     setSpecimens(prev => prev.map(s => (s.id === id ? { ...s, [field]: value } : s)));
   }, [setSpecimens]);
 
@@ -448,58 +454,167 @@ export function SoilCBRAstm({
         </CardContent>
       </Card>
 
-      {/* CBR summary + design values */}
+      {/* CBR results summary + design values */}
       <Card className="border-slate-200">
         <CardHeader className="pb-3">
-          <CardTitle className="text-base">{L(ar, "CBR Summary & Design Values", "ملخص CBR والقيم التصميمية")}</CardTitle>
+          <CardTitle className="text-base">{L(ar, "CBR Results Summary", "ملخص نتائج CBR")}</CardTitle>
         </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-            <div className="overflow-x-auto">
-              <table className="w-full text-xs border-collapse rounded-md border border-slate-200 overflow-hidden">
-                <thead>
-                  <tr className="bg-slate-100">
-                    <th className="border border-slate-200 px-2 py-1.5">{L(ar, "Blows/Layer", "ضربات/طبقة")}</th>
-                    <th className="border border-slate-200 px-2 py-1.5">{L(ar, "Dry Dens. (lbf/ft³)", "كثافة جافة")}</th>
-                    <th className="border border-slate-200 px-2 py-1.5">{L(ar, "MC %", "رطوبة %")}</th>
-                    <th className="border border-slate-200 px-2 py-1.5 bg-blue-50">CBR 0.1"</th>
-                    <th className="border border-slate-200 px-2 py-1.5 bg-purple-50">CBR 0.2"</th>
-                    <th className="border border-slate-200 px-2 py-1.5">{L(ar, "Corr. 0.1\"", "مصحح 0.1\"")}</th>
-                    <th className="border border-slate-200 px-2 py-1.5">{L(ar, "Corr. 0.2\"", "مصحح 0.2\"")}</th>
-                    <th className="border border-slate-200 px-2 py-1.5">{L(ar, "Adopted", "المعتمد")}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {computed.map(sp => (
-                    <tr key={sp.id}>
-                      <td className="border border-slate-200 px-2 py-1.5 text-center font-bold">{sp.blowsPerLayer}</td>
-                      <td className="border border-slate-200 px-2 py-1.5 text-center font-mono">{fmtN(sp.dryDensityPcf, 0)}</td>
-                      <td className="border border-slate-200 px-2 py-1.5 text-center font-mono">{fmtN(sp.moistureContent, 1)}</td>
-                      <td className="border border-slate-200 px-2 py-1.5 text-center font-mono font-bold text-blue-800">{fmtN(sp.cbr01, 0)}</td>
-                      <td className="border border-slate-200 px-2 py-1.5 text-center font-mono font-bold text-purple-800">{fmtN(sp.cbr02, 0)}</td>
-                      <td className={`border border-slate-200 px-1 py-0.5 ${!sp.correctedCbr01 ? CELL_CALC : ""}`}>
+        <CardContent className="space-y-4">
+          <Alert className="bg-purple-50 border-purple-200">
+            <Info className="h-4 w-4 text-purple-600" />
+            <AlertTitle className="text-purple-900 font-semibold text-sm">
+              {L(ar,
+                "Penetration Curve Correction (ASTM D1883 Section 7.2)",
+                "تصحيح منحنى الاختراق (ASTM D1883 القسم 7.2)")}
+            </AlertTitle>
+            <AlertDescription className="text-purple-800 text-xs mt-2 space-y-1">
+              <p>
+                {L(ar,
+                  "If the load-penetration curve is concave upward at the initial portion, graphical correction must be applied.",
+                  "إذا كان منحنى الحمل-الاختراق مقعراً للأعلى عند البداية → يجب تطبيق التصحيح البياني.")}
+              </p>
+              <p className="font-semibold">{L(ar, "Correction steps:", "خطوات التصحيح:")}</p>
+              <ol className="list-decimal list-inside space-y-0.5 ml-2">
+                <li>{L(ar, "Plot curve and check if concave upward at origin", "ارسم المنحنى وافحص إذا كان مقعراً للأعلى عند نقطة الصفر")}</li>
+                <li>{L(ar, "Draw tangent at steepest point of curve", "ارسم مماساً عند أعلى نقطة تدرج في المنحنى")}</li>
+                <li>{L(ar, "Where tangent crosses x-axis = corrected zero point", "حيث يتقاطع المماس مع محور x = نقطة الصفر الجديدة")}</li>
+                <li>{L(ar, "Read corrected CBR at 0.1\" and 0.2\" from shifted curve", "اقرأ قيم CBR المصححة عند 0.1\" و 0.2\" من المنحنى المصحح")}</li>
+                <li>{L(ar, "Enter corrected values manually in the fields provided", "أدخل القيم المصححة يدوياً في الحقول المخصصة")}</li>
+              </ol>
+              <p className="mt-2 text-purple-600">
+                {L(ar,
+                  "If curve is NOT concave upward → no correction needed; raw CBR values are used.",
+                  "إذا لم يكن المنحنى مقعراً → لا حاجة للتصحيح، تُستخدم قيم CBR الخام.")}
+              </p>
+            </AlertDescription>
+          </Alert>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs border-collapse border border-slate-300 min-w-[900px]">
+              <thead>
+                <tr className="bg-slate-100">
+                  <th className="border border-slate-300 px-2 py-2 font-bold" rowSpan={2}>{L(ar, "Test No.", "رقم الاختبار")}</th>
+                  <th className="border border-slate-300 px-2 py-2 font-bold" rowSpan={2}>{L(ar, "Blows/Layer", "ضربات/طبقة")}</th>
+                  <th className="border border-slate-300 px-2 py-2 font-bold bg-blue-50" colSpan={2}>{L(ar, "As Compacted", "كما دُمِّك")}</th>
+                  <th className="border border-slate-300 px-2 py-2 font-bold bg-amber-50" rowSpan={2}>{L(ar, "MC After Soak %", "رطوبة بعد النقع %")}</th>
+                  <th className="border border-slate-300 px-2 py-2 font-bold bg-green-50" colSpan={2}>{L(ar, "Raw CBR", "CBR الخام")}</th>
+                  <th className="border border-slate-300 px-2 py-2 font-bold bg-purple-50" colSpan={2}>{L(ar, "Corrected CBR", "CBR المصحح")}</th>
+                  <th className="border border-slate-300 px-2 py-2 font-bold" rowSpan={2}>{L(ar, "Adopted", "المعتمد")}</th>
+                  <th className="border border-slate-300 px-2 py-2 font-bold" rowSpan={2}>{L(ar, "Surcharge", "الحمل الزائد")}</th>
+                </tr>
+                <tr className="bg-slate-50">
+                  <th className="border border-slate-300 px-2 py-1.5 font-semibold bg-blue-50">{L(ar, "Dry Dens. (lbf/ft³)", "كثافة جافة")}</th>
+                  <th className="border border-slate-300 px-2 py-1.5 font-semibold bg-blue-50">{L(ar, "MC %", "رطوبة %")}</th>
+                  <th className="border border-slate-300 px-2 py-1.5 font-semibold bg-green-50">CBR @ 0.1"</th>
+                  <th className="border border-slate-300 px-2 py-1.5 font-semibold bg-green-50">CBR @ 0.2"</th>
+                  <th className="border border-slate-300 px-2 py-1.5 font-semibold bg-purple-100">{L(ar, "Corr. @ 0.1\"", "مصحح @ 0.1\"")}</th>
+                  <th className="border border-slate-300 px-2 py-1.5 font-semibold bg-purple-100">{L(ar, "Corr. @ 0.2\"", "مصحح @ 0.2\"")}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {computed.map((sp, idx) => {
+                  const input = specimens.find(s => s.id === sp.id);
+                  const needs01 = input?.needsCorrection01 ?? false;
+                  const needs02 = input?.needsCorrection02 ?? false;
+                  return (
+                    <tr key={sp.id} className="hover:bg-slate-50">
+                      <td className="border border-slate-300 px-2 py-2 text-center font-bold">{idx + 1}</td>
+                      <td className="border border-slate-300 px-2 py-2 text-center font-bold text-blue-700">{sp.blowsPerLayer}</td>
+                      <td className="border border-slate-300 px-2 py-2 text-center bg-blue-50 font-mono font-semibold">{fmtN(sp.dryDensityPcf, 0)}</td>
+                      <td className="border border-slate-300 px-2 py-2 text-center bg-blue-50 font-mono">{fmtN(sp.moistureContent, 1)}</td>
+                      <td className="border border-slate-300 px-1 py-1 bg-amber-50">
                         <Input
-                          value={sp.correctedCbr01 !== "" ? sp.correctedCbr01 : (sp.correctedCbr01Val != null ? String(sp.correctedCbr01Val) : "")}
-                          onChange={e => updateSpecimen(sp.id, "correctedCbr01", e.target.value)}
+                          type="number"
+                          step="0.1"
+                          value={input?.moistureAfterSoak ?? ""}
+                          onChange={e => updateSpecimen(sp.id, "moistureAfterSoak", e.target.value)}
                           disabled={submitted}
-                          className="h-7 text-[11px] text-center font-mono"
+                          className="h-8 text-xs text-center font-mono bg-white"
+                          placeholder="0.0"
                         />
                       </td>
-                      <td className={`border border-slate-200 px-1 py-0.5 ${!sp.correctedCbr02 ? CELL_CALC : ""}`}>
-                        <Input
-                          value={sp.correctedCbr02 !== "" ? sp.correctedCbr02 : (sp.correctedCbr02Val != null ? String(sp.correctedCbr02Val) : "")}
-                          onChange={e => updateSpecimen(sp.id, "correctedCbr02", e.target.value)}
-                          disabled={submitted}
-                          className="h-7 text-[11px] text-center font-mono"
-                        />
+                      <td className="border border-slate-300 px-2 py-2 text-center bg-green-100 font-mono font-bold text-green-800">{fmtN(sp.cbr01, 0)}</td>
+                      <td className="border border-slate-300 px-2 py-2 text-center bg-green-100 font-mono font-bold text-green-800">{fmtN(sp.cbr02, 0)}</td>
+                      <td className="border border-slate-300 px-2 py-2 bg-purple-50">
+                        <div className="flex flex-col gap-1">
+                          <label className="flex items-center gap-1.5 cursor-pointer select-none">
+                            <input
+                              type="checkbox"
+                              checked={needs01}
+                              onChange={e => updateSpecimen(sp.id, "needsCorrection01", e.target.checked)}
+                              disabled={submitted}
+                              className="w-3.5 h-3.5"
+                            />
+                            <span className="text-[10px] text-purple-700">{L(ar, "Correction needed", "تصحيح مطلوب")}</span>
+                          </label>
+                          {needs01 ? (
+                            <Input
+                              type="number"
+                              step="0.1"
+                              value={input?.correctedCbr01 ?? ""}
+                              onChange={e => updateSpecimen(sp.id, "correctedCbr01", e.target.value)}
+                              disabled={submitted}
+                              className="h-8 text-sm font-bold text-center border-2 border-purple-400"
+                              placeholder={L(ar, "Read from curve", "أدخل من المنحنى")}
+                            />
+                          ) : (
+                            <div className="h-8 flex items-center justify-center text-sm font-bold text-green-700 bg-green-50 rounded border border-green-200">
+                              {fmtN(sp.cbr01, 0)}
+                            </div>
+                          )}
+                        </div>
                       </td>
-                      <td className="border border-slate-200 px-2 py-1.5 text-center font-mono font-bold text-emerald-800">{fmtN(sp.adoptedCbr, 0)}</td>
+                      <td className="border border-slate-300 px-2 py-2 bg-purple-50">
+                        <div className="flex flex-col gap-1">
+                          <label className="flex items-center gap-1.5 cursor-pointer select-none">
+                            <input
+                              type="checkbox"
+                              checked={needs02}
+                              onChange={e => updateSpecimen(sp.id, "needsCorrection02", e.target.checked)}
+                              disabled={submitted}
+                              className="w-3.5 h-3.5"
+                            />
+                            <span className="text-[10px] text-purple-700">{L(ar, "Correction needed", "تصحيح مطلوب")}</span>
+                          </label>
+                          {needs02 ? (
+                            <Input
+                              type="number"
+                              step="0.1"
+                              value={input?.correctedCbr02 ?? ""}
+                              onChange={e => updateSpecimen(sp.id, "correctedCbr02", e.target.value)}
+                              disabled={submitted}
+                              className="h-8 text-sm font-bold text-center border-2 border-purple-400"
+                              placeholder={L(ar, "Read from curve", "أدخل من المنحنى")}
+                            />
+                          ) : (
+                            <div className="h-8 flex items-center justify-center text-sm font-bold text-green-700 bg-green-50 rounded border border-green-200">
+                              {fmtN(sp.cbr02, 0)}
+                            </div>
+                          )}
+                        </div>
+                      </td>
+                      <td className="border border-slate-300 px-2 py-2 text-center font-mono font-bold text-emerald-800">{fmtN(sp.adoptedCbr, 0)}</td>
+                      <td className="border border-slate-300 px-2 py-2 text-center text-slate-500">{surchargeLbf || "10"} lbf</td>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-              {designCbr && mddPcf != null && (
-                <div className="mt-4 grid grid-cols-3 gap-2">
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          <p className="text-[10px] text-blue-700 bg-blue-50 border border-blue-200 rounded-md px-3 py-2">
+            <span className="font-semibold">{L(ar, "Note: ", "ملاحظة: ")}</span>
+            {L(ar,
+              "Design CBR @ 95/98/100% MDD uses Adopted CBR @ 0.2\" (corrected where applied) vs dry density on the graph below.",
+              "قيم CBR التصميمية @ 95/98/100% MDD تُقرأ من منحنى CBR المعتمد @ 0.2\" (المصحح حيث ينطبق) مقابل الكثافة الجافة.")}
+          </p>
+
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 pt-2">
+            <div>
+              <p className="text-xs font-semibold text-slate-700">{L(ar, "CBR Values at % of MDD", "قيم CBR عند نسب من MDD")}</p>
+              <p className="text-[10px] text-slate-500 mb-2">{L(ar, "From CBR vs Dry Density curve", "من المنحنى البياني")}</p>
+              {designCbr && mddPcf != null ? (
+                <div className="grid grid-cols-3 gap-2">
                   <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-center">
                     <p className="text-[10px] text-blue-600 font-medium">{L(ar, "CBR @ 95% MDD", "CBR @ 95% MDD")}</p>
                     <p className="text-2xl font-bold text-blue-900">{fmtN(designCbr.cbr95, 0)}</p>
@@ -516,10 +631,12 @@ export function SoilCBRAstm({
                     <p className="text-[9px] text-slate-500">{designCbr.targetPcf100.toFixed(1)} pcf</p>
                   </div>
                 </div>
+              ) : (
+                <p className="text-xs text-slate-400">{L(ar, "Enter MDD from Proctor", "أدخل MDD من بروكتور")}</p>
               )}
             </div>
             <div>
-              <p className="text-xs font-semibold text-slate-700 mb-2">{L(ar, "Corrected CBR @ 0.2\" vs. Dry Density", "CBR المصحح @ 0.2\" مقابل الكثافة الجافة")}</p>
+              <p className="text-xs font-semibold text-slate-700 mb-2">{L(ar, "Adopted CBR @ 0.2\" vs. Dry Density", "CBR المعتمد @ 0.2\" مقابل الكثافة الجافة")}</p>
               {hasCbrChart ? (
                 <ResponsiveContainer width="100%" height={320}>
                   <ScatterChart margin={{ top: 8, right: 12, left: 4, bottom: 24 }}>

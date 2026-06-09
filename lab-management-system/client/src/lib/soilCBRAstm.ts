@@ -33,7 +33,13 @@ export interface AstmCBRSpecimenInput {
   massContainer: string;
   moistureAfterSoak: string;
   penetrationLoads: string[];
+  /** ASTM D1883 §7.2 — graphical correction applied at 0.1" */
+  needsCorrection01: boolean;
+  /** ASTM D1883 §7.2 — graphical correction applied at 0.2" */
+  needsCorrection02: boolean;
+  /** Manual CBR @ 0.1" read from corrected penetration curve */
   correctedCbr01: string;
+  /** Manual CBR @ 0.2" read from corrected penetration curve */
   correctedCbr02: string;
 }
 
@@ -49,6 +55,11 @@ export interface AstmCBRSpecimenComputed extends AstmCBRSpecimenInput {
   load02?: number;
   cbr01?: number;
   cbr02?: number;
+  /** Adopted @ 0.1" — corrected if flagged, else raw */
+  adoptedCbr01?: number;
+  /** Adopted @ 0.2" — corrected if flagged, else raw */
+  adoptedCbr02?: number;
+  /** Same as adoptedCbr01/02 — used on design curve & reports */
   correctedCbr01Val?: number;
   correctedCbr02Val?: number;
   adoptedCbr?: number;
@@ -71,8 +82,38 @@ export function newAstmSpecimen(blows: AstmSpecimenBlows, index: number): AstmCB
     massContainer: "",
     moistureAfterSoak: "",
     penetrationLoads: Array(ASTM_PENETRATION_IN.length).fill(""),
+    needsCorrection01: false,
+    needsCorrection02: false,
     correctedCbr01: "",
     correctedCbr02: "",
+  };
+}
+
+/** Infer correction flags from legacy saves that only stored correctedCbr strings. */
+export function hydrateAstmSpecimenInput(
+  raw: Partial<AstmCBRSpecimenInput> & Record<string, unknown>,
+  index: number,
+): AstmCBRSpecimenInput {
+  const blows = (raw.blowsPerLayer ?? ([10, 30, 65] as const)[index] ?? 10) as AstmSpecimenBlows;
+  const corrected01 = String(raw.correctedCbr01 ?? "");
+  const corrected02 = String(raw.correctedCbr02 ?? "");
+  return {
+    id: String(raw.id ?? `astm_sp_${blows}_${index}`),
+    blowsPerLayer: blows,
+    volumeMould: String(raw.volumeMould ?? ""),
+    massMouldSample: String(raw.massMouldSample ?? ""),
+    massMould: String(raw.massMould ?? ""),
+    massWetCont: String(raw.massWetCont ?? ""),
+    massDryCont: String(raw.massDryCont ?? ""),
+    massContainer: String(raw.massContainer ?? ""),
+    moistureAfterSoak: String(raw.moistureAfterSoak ?? ""),
+    penetrationLoads: normalizeAstmPenetrationLoads(
+      Array.isArray(raw.penetrationLoads) ? raw.penetrationLoads.map(String) : [],
+    ),
+    needsCorrection01: Boolean(raw.needsCorrection01 ?? (corrected01.trim() !== "")),
+    needsCorrection02: Boolean(raw.needsCorrection02 ?? (corrected02.trim() !== "")),
+    correctedCbr01: corrected01,
+    correctedCbr02: corrected02,
   };
 }
 
@@ -178,11 +219,21 @@ export function computeAstmSpecimen(
 
   const corr01 = num(sp.correctedCbr01);
   const corr02 = num(sp.correctedCbr02);
-  // Auto corrected from stress curve — manual override only when user enters a value
-  out.correctedCbr01Val = Number.isFinite(corr01) && corr01 > 0 ? corr01 : out.cbr01;
-  out.correctedCbr02Val = Number.isFinite(corr02) && corr02 > 0 ? corr02 : out.cbr02;
-  const adopted01 = out.correctedCbr01Val ?? 0;
-  const adopted02 = out.correctedCbr02Val ?? 0;
+  // ASTM D1883 §7.2 — adopted = manual corrected value when flagged, else raw CBR
+  if (sp.needsCorrection01 && Number.isFinite(corr01) && corr01 > 0) {
+    out.adoptedCbr01 = Math.round(corr01);
+  } else {
+    out.adoptedCbr01 = out.cbr01;
+  }
+  if (sp.needsCorrection02 && Number.isFinite(corr02) && corr02 > 0) {
+    out.adoptedCbr02 = Math.round(corr02);
+  } else {
+    out.adoptedCbr02 = out.cbr02;
+  }
+  out.correctedCbr01Val = out.adoptedCbr01;
+  out.correctedCbr02Val = out.adoptedCbr02;
+  const adopted01 = out.adoptedCbr01 ?? 0;
+  const adopted02 = out.adoptedCbr02 ?? 0;
   out.adoptedCbr = Math.max(adopted01, adopted02) || undefined;
 
   return out;

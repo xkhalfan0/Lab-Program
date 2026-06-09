@@ -1630,10 +1630,11 @@ function renderSoilCBR(fd: any, isAr: boolean) {
       { header: L("Dry Density (lbf/ft³)", "كثافة جافة (lbf/ft³)"), field: "dryDensityPcf", align: "center", render: v => fmt(v, 0) },
       { header: L("MC %", "رطوبة %"), field: "moistureContent", align: "center", render: v => fmt(v, 1) },
       { header: L("MC after soak %", "رطوبة بعد النقع %"), field: "moistureAfterSoak", align: "center", render: v => v != null && v !== "" ? fmt(v, 1) : "—" },
-      { header: "CBR @ 0.1\"", field: "cbr01", align: "center", render: v => fmt(v, 0) },
-      { header: "CBR @ 0.2\"", field: "cbr02", align: "center", render: v => fmt(v, 0) },
-      { header: L("Corr. CBR 0.1\"", "CBR مصحح 0.1\""), field: "correctedCbr01Val", align: "center", render: v => fmt(v, 0) },
-      { header: L("Corr. CBR 0.2\"", "CBR مصحح 0.2\""), field: "correctedCbr02Val", align: "center", render: v => fmt(v, 0) },
+      { header: L("Raw CBR 0.1\"", "CBR خام 0.1\""), field: "cbr01", align: "center", render: v => fmt(v, 0) },
+      { header: L("Raw CBR 0.2\"", "CBR خام 0.2\""), field: "cbr02", align: "center", render: v => fmt(v, 0) },
+      { header: L("Adopted 0.1\"", "معتمد 0.1\""), field: "adoptedCbr01", align: "center", render: v => fmt(v, 0) },
+      { header: L("Adopted 0.2\"", "معتمد 0.2\""), field: "adoptedCbr02", align: "center", render: v => fmt(v, 0) },
+      { header: L("Adopted CBR", "CBR المعتمد"), field: "adoptedCbr", align: "center", render: v => fmt(v, 0) },
     ];
 
     return (
