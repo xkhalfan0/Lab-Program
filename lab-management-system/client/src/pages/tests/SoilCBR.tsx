@@ -89,6 +89,7 @@ export default function SoilCBR() {
   const [volumeMould, setVolumeMould] = useState("");           // volume of mould, cc
   const [mddStr, setMddStr] = useState("");
   const [omcStr, setOmcStr] = useState("");
+  const [mddOverride, setMddOverride] = useState(false);
   const mddTouched = useRef(false);
   const omcTouched = useRef(false);
   const [linkedProctorMethod, setLinkedProctorMethod] = useState<string | null>(null);
@@ -144,6 +145,19 @@ export default function SoilCBR() {
     return undefined;
   }, [proctorData]);
 
+  /** ASTM D1883 — MDD from linked ASTM Proctor only */
+  const astmProctorMdd = useMemo(() => {
+    const fd = proctorData?.formData;
+    if (!fd) return undefined;
+    const tm = fd.testMethod as string | undefined;
+    if (!proctorMethodLinksToAstmCbr(tm ?? "")) return undefined;
+    const corrected = fd.correctedMDD;
+    if (corrected != null && Number(corrected) > 0) return Number(corrected);
+    const m = fd.mdd ?? fd.mddValue ?? proctorData?.summaryValues?.mdd;
+    if (m != null && Number.isFinite(Number(m))) return Number(m);
+    return undefined;
+  }, [proctorData]);
+
   const proctorOmc = useMemo(() => {
     const fd = proctorData?.formData;
     if (!fd) return undefined;
@@ -168,6 +182,12 @@ export default function SoilCBR() {
     if (fd.soakingPeriod != null) setSoakingPeriod(String(fd.soakingPeriod));
     if (fd.passing19_5 != null) setPassing19_5(String(fd.passing19_5));
     if (fd.mdd != null) setMddStr(String(fd.mdd));
+    if (fd.mddFromProctor === false) {
+      setMddOverride(true);
+      mddTouched.current = true;
+    } else if (fd.mddFromProctor === true) {
+      setMddOverride(false);
+    }
     if (fd.omc != null) setOmcStr(String(fd.omc));
     const idd = fd.initialDensity as Record<string, unknown> | undefined;
     if (idd) {
@@ -228,6 +248,12 @@ export default function SoilCBR() {
       setMddStr(String(proctorMdd));
     }
   }, [proctorMdd, mddStr]);
+
+  // ASTM D1883 — auto-fill MDD from linked Proctor; locked until user overrides
+  useEffect(() => {
+    if (standard !== "ASTM_D1883" || astmProctorMdd === undefined || mddOverride) return;
+    setMddStr(String(astmProctorMdd));
+  }, [standard, astmProctorMdd, mddOverride]);
 
   useEffect(() => {
     if (proctorOmc !== undefined && !omcTouched.current && omcStr === "") {
@@ -396,6 +422,7 @@ export default function SoilCBR() {
           sampleCondition,
           surchargeLbf: parseFloat(surchargeLbf) || null,
           mdd: Number.isFinite(mddNum) ? mddNum : null,
+          mddFromProctor: !mddOverride && astmProctorMdd != null,
           mddPcf: astmDesignCbr?.mddPcf ?? null,
           omc: parseFloat(omcStr) || null,
           astmSpecimens: computedAstmSpecimens,
@@ -711,10 +738,12 @@ export default function SoilCBR() {
             mddStr={mddStr}
             setMddStr={setMddStr}
             mddTouched={mddTouched}
+            mddOverride={mddOverride}
+            setMddOverride={setMddOverride}
             omcStr={omcStr}
             setOmcStr={setOmcStr}
             omcTouched={omcTouched}
-            proctorMdd={proctorMdd}
+            proctorMdd={astmProctorMdd}
             proctorOmc={proctorOmc}
             specimens={astmSpecimens}
             setSpecimens={setAstmSpecimens}

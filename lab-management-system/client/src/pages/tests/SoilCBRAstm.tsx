@@ -17,7 +17,6 @@ import {
   isLegacyAstmPenetrationLoads,
   normalizeAstmPenetrationLoads,
   mgToPcf,
-  resolveMddToPcf,
   type AstmCBRSpecimenComputed,
   type AstmCBRSpecimenInput,
 } from "@/lib/soilCBRAstm";
@@ -39,6 +38,8 @@ interface SoilCBRAstmProps {
   mddStr: string;
   setMddStr: (v: string) => void;
   mddTouched: React.MutableRefObject<boolean>;
+  mddOverride: boolean;
+  setMddOverride: (v: boolean) => void;
   omcStr: string;
   setOmcStr: (v: string) => void;
   omcTouched: React.MutableRefObject<boolean>;
@@ -72,6 +73,8 @@ export function SoilCBRAstm({
   mddStr,
   setMddStr,
   mddTouched,
+  mddOverride,
+  setMddOverride,
   omcStr,
   setOmcStr,
   omcTouched,
@@ -112,11 +115,6 @@ export function SoilCBRAstm({
   );
   const mddNum = parseFloat(mddStr);
   const mddPcf = mddNum > 0 ? mgToPcf(mddNum) : null;
-  const mddLooksMistyped = mddNum > 0 && (
-    (mddNum > 20 && mddNum < 80)
-    || mddNum > 3500
-    || (mddNum > 180 && resolveMddToPcf(mddNum) < 100)
-  );
   const designCbr = useMemo(
     () => (mddNum > 0 ? computeCbrAtMddPercentages(computed, mddNum) : null),
     [computed, mddNum],
@@ -129,7 +127,7 @@ export function SoilCBRAstm({
       { pct: "95%", dryDensityPcf: designCbr.targetPcf95, cbr02: designCbr.cbr95, color: "#3b82f6" },
       { pct: "98%", dryDensityPcf: designCbr.targetPcf98, cbr02: designCbr.cbr98, color: "#10b981" },
       { pct: "100%", dryDensityPcf: designCbr.targetPcf100, cbr02: designCbr.cbr100, color: "#8b5cf6" },
-    ].filter(m => m.dryDensityPcf > 0 && m.cbr02 != null && m.cbr02 > 0);
+    ].filter(m => m.dryDensityPcf > 0 && m.cbr02 != null);
   }, [designCbr]);
   const hasStressChart = stressChartData.length >= 2;
   const hasCbrChart = cbrDensityData.length >= 2;
@@ -156,6 +154,7 @@ export function SoilCBRAstm({
   const inputCls = "h-7 text-xs text-center font-mono w-full min-w-[4rem]";
 
   const spByBlows = (b: number) => computed.find(s => s.blowsPerLayer === b);
+  const mddLockedFromProctor = proctorMdd != null && !mddOverride && !submitted;
 
   return (
     <div className="space-y-6">
@@ -183,25 +182,51 @@ export function SoilCBRAstm({
               <Input value={sampleCondition} onChange={e => setSampleCondition(e.target.value)} className="h-9 mt-1" disabled={submitted} placeholder="Soaked" />
             </div>
             <div>
-              <Label className="text-xs text-slate-500">{L(ar, "MDD (Mg/m³)", "أقصى كثافة جافة (Mg/m³)")}</Label>
-              <Input
-                value={mddStr}
-                onChange={e => { mddTouched.current = true; setMddStr(e.target.value); }}
-                className="h-9 mt-1 font-mono"
-                disabled={submitted}
-              />
+              <Label className="text-xs text-slate-500">
+                {L(ar, "MDD (Mg/m³)", "أقصى كثافة جافة (Mg/m³)")}
+                {proctorMdd != null && !mddOverride && (
+                  <span className="block text-[10px] font-normal text-emerald-600 mt-0.5">
+                    {L(ar, "From Proctor test (auto-linked)", "من اختبار بروكتور (مرتبط تلقائياً)")}
+                  </span>
+                )}
+              </Label>
+              <div className="flex items-center gap-1 mt-1">
+                <Input
+                  value={mddStr}
+                  readOnly={mddLockedFromProctor}
+                  onChange={e => { mddTouched.current = true; setMddStr(e.target.value); }}
+                  className={`h-9 font-mono flex-1 ${mddLockedFromProctor ? "bg-emerald-50 text-emerald-900 cursor-default" : ""}`}
+                  disabled={submitted}
+                />
+                {!submitted && proctorMdd != null && (
+                  mddOverride ? (
+                    <button
+                      type="button"
+                      className="text-[10px] text-emerald-700 hover:underline whitespace-nowrap px-1"
+                      onClick={() => {
+                        setMddOverride(false);
+                        mddTouched.current = false;
+                        setMddStr(String(proctorMdd));
+                      }}
+                    >
+                      {L(ar, "Use Proctor", "استخدم بروكتور")}
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      className="text-[10px] text-slate-500 hover:underline whitespace-nowrap px-1"
+                      onClick={() => {
+                        setMddOverride(true);
+                        mddTouched.current = true;
+                      }}
+                    >
+                      {L(ar, "Change", "تعديل")}
+                    </button>
+                  )
+                )}
+              </div>
               {mddPcf != null && (
-                <p className="text-[10px] text-slate-500 mt-0.5">= {mddPcf} lbf/ft³</p>
-              )}
-              {mddLooksMistyped && (
-                <p className="text-[10px] text-amber-700 mt-0.5">
-                  {L(ar,
-                    "Enter Proctor MDD in Mg/m³ (e.g. 2.13), not specimen dry density in pcf.",
-                    "أدخل MDD من بروكتور بـ Mg/m³ (مثال 2.13)، وليس كثافة العينة بـ pcf.")}
-                </p>
-              )}
-              {proctorMdd != null && (
-                <p className="text-[10px] text-emerald-600">{L(ar, "from Proctor", "من بروكتور")}</p>
+                <p className="text-[10px] text-slate-500 mt-0.5">{mddPcf} lbf/ft³</p>
               )}
             </div>
             <div>
@@ -518,7 +543,7 @@ export function SoilCBRAstm({
                       fill="#059669"
                       line={{ stroke: "#059669", strokeWidth: 2 }}
                     />
-                    {designCbr && designCbr.cbr95 != null && designCbr.cbr95 > 0 && (
+                    {designCbr && designCbr.cbr95 != null && (
                       <>
                         <ReferenceLine
                           x={designCbr.targetPcf95}
@@ -530,7 +555,7 @@ export function SoilCBRAstm({
                         <ReferenceLine y={designCbr.cbr95} stroke="#3b82f6" strokeWidth={1.5} strokeDasharray="4 4" />
                       </>
                     )}
-                    {designCbr && designCbr.cbr98 != null && designCbr.cbr98 > 0 && (
+                    {designCbr && designCbr.cbr98 != null && (
                       <>
                         <ReferenceLine
                           x={designCbr.targetPcf98}
@@ -542,7 +567,7 @@ export function SoilCBRAstm({
                         <ReferenceLine y={designCbr.cbr98} stroke="#10b981" strokeWidth={1.5} strokeDasharray="4 4" />
                       </>
                     )}
-                    {designCbr && designCbr.cbr100 != null && designCbr.cbr100 > 0 && (
+                    {designCbr && designCbr.cbr100 != null && (
                       <>
                         <ReferenceLine
                           x={designCbr.targetPcf100}

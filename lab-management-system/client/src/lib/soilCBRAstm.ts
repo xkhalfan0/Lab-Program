@@ -215,11 +215,6 @@ export function buildDesignCbrCurvePoints(
     .sort((a, b) => a.dryDensityPcf - b.dryDensityPcf);
 }
 
-function clampDesignCbr(cbr: number): number {
-  if (!Number.isFinite(cbr)) return 0;
-  return Math.max(0, Math.min(500, Math.round(cbr)));
-}
-
 function linearCbrAtDensity(
   sorted: DesignCbrCurvePoint[],
   targetPcf: number,
@@ -232,7 +227,7 @@ function linearCbrAtDensity(
     const span = b.dryDensityPcf - a.dryDensityPcf;
     if (span <= 0) return a.cbr;
     const t = (targetPcf - a.dryDensityPcf) / span;
-    return clampDesignCbr(a.cbr + t * (b.cbr - a.cbr));
+    return Math.round(a.cbr + t * (b.cbr - a.cbr));
   }
 
   for (let i = 0; i < sorted.length - 1; i++) {
@@ -242,7 +237,7 @@ function linearCbrAtDensity(
       const span = b.dryDensityPcf - a.dryDensityPcf;
       if (span <= 0) return a.cbr;
       const t = (targetPcf - a.dryDensityPcf) / span;
-      return clampDesignCbr(a.cbr + t * (b.cbr - a.cbr));
+      return Math.round(a.cbr + t * (b.cbr - a.cbr));
     }
   }
 
@@ -251,7 +246,7 @@ function linearCbrAtDensity(
   const span = b.dryDensityPcf - a.dryDensityPcf;
   if (span <= 0) return b.cbr;
   const t = (targetPcf - a.dryDensityPcf) / span;
-  return clampDesignCbr(a.cbr + t * (b.cbr - a.cbr));
+  return Math.round(a.cbr + t * (b.cbr - a.cbr));
 }
 
 /** Linear interpolation / extrapolation of corrected CBR @ 0.2" at target dry density (pcf). */
@@ -276,44 +271,12 @@ export interface DesignCbrAtMddResult {
   cbr100: number | null;
 }
 
-/**
- * Normalize MDD input to lbf/ft³ (pcf).
- * Accepts Mg/m³ (~2.1), kg/m³ (~2100), pcf (~133), or mistyped pcf without decimal (121714 → 121.714).
- */
-export function resolveMddToPcf(mddInput: number): number {
-  if (!(mddInput > 0)) return 0;
-
-  // Mg/m³ — typical soil range 1.4–3.0
-  if (mddInput <= 3) {
-    return mddInput * MG_M3_TO_PCF;
-  }
-
-  // kg/m³ stored without ÷1000 (e.g. 2130)
-  if (mddInput > 500 && mddInput <= 3500) {
-    return (mddInput / 1000) * MG_M3_TO_PCF;
-  }
-
-  // Already lbf/ft³
-  if (mddInput >= 80 && mddInput <= 180) {
-    return mddInput;
-  }
-
-  // Mistyped pcf without decimal (e.g. 121714 → 121.714, 133000 → 133)
-  if (mddInput > 180) {
-    const scaled = mddInput / 1000;
-    if (scaled >= 80 && scaled <= 180) return scaled;
-  }
-
-  // Fallback: treat as Mg/m³
-  return mddInput * MG_M3_TO_PCF;
-}
-
-/** MDD → pcf; interpolate corrected CBR @ 0.2" at 95 / 98 / 100% of MDD. */
+/** MDD (Mg/m³) × 62.428 → pcf; interpolate corrected CBR @ 0.2" at 95 / 98 / 100% of MDD. */
 export function computeCbrAtMddPercentages(
   specimens: AstmCBRSpecimenComputed[],
-  mddInput: number,
+  mddMg: number,
 ): DesignCbrAtMddResult {
-  const mddPcfExact = resolveMddToPcf(mddInput);
+  const mddPcfExact = mddMg > 0 ? mddMg * MG_M3_TO_PCF : 0;
   const mddPcf = mddPcfExact > 0 ? Math.round(mddPcfExact) : 0;
   const curvePoints = buildDesignCbrCurvePoints(specimens);
 
@@ -359,11 +322,11 @@ export function buildCbrDensityChartData(
 }
 
 export function mgToPcfExact(mg: number): number {
-  return resolveMddToPcf(mg);
+  return mg * MG_M3_TO_PCF;
 }
 
 export function mgToPcf(mg: number): number {
-  return Math.round(resolveMddToPcf(mg));
+  return Math.round(mgToPcfExact(mg));
 }
 
 export function pcfToMg(pcf: number): number {
