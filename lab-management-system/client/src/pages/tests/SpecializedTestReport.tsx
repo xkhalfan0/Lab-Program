@@ -50,7 +50,7 @@ import {
   computeCbrAtMddPercentages,
   hydrateAstmSpecimenInput,
 } from "@/lib/soilCBRAstm";
-import { peakProctorMdd } from "@/lib/soilProctor";
+import { peakProctorMdd, peakProctorOmc } from "@/lib/soilProctor";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function fmt(v: any, dec = 2) {
@@ -1325,8 +1325,9 @@ function ProctorReportCompactionChart({
 function renderSoilProctor(fd: any, isAr: boolean) {
   const points = fd.points ?? [];
   const savedMdd = fd.mdd != null && fd.mdd !== "" ? Number(fd.mdd) : null;
+  const savedOmc = fd.omc != null && fd.omc !== "" ? Number(fd.omc) : null;
   const displayMdd = peakProctorMdd(points, savedMdd) ?? savedMdd;
-  const displayOmc = fd.omc != null && fd.omc !== "" ? Number(fd.omc) : null;
+  const displayOmc = peakProctorOmc(points, savedOmc) ?? savedOmc;
   const headers = isAr
     ? ["النقطة", "قالب+تربة (غ)", "القالب (غ)", "التربة (غ)", "الكثافة الرطبة (Mg/m³)", "نسبة الرطوبة (%)", "الكثافة الجافة (Mg/m³)"]
     : ["Point", "Mould+Soil (g)", "Mould (g)", "Soil (g)", "Wet Density (Mg/m³)", "Water Content (%)", "Dry Density (Mg/m³)"];

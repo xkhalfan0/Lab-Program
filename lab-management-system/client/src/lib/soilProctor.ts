@@ -180,6 +180,25 @@ export function peakProctorMdd(
   return undefined;
 }
 
+/** OMC at the table row with peak dry density; parabola fit as fallback. */
+export function peakProctorOmc(
+  points: { dryDensity?: number | null; waterContent?: number | null }[],
+  fitOmc?: number | null,
+): number | undefined {
+  const valid = points.filter(
+    p => typeof p.dryDensity === "number" && p.dryDensity > 0
+      && typeof p.waterContent === "number" && Number.isFinite(p.waterContent),
+  );
+  if (valid.length > 0) {
+    const peak = valid.reduce((a, b) => (b.dryDensity! > a.dryDensity! ? b : a));
+    return parseFloat((peak.waterContent as number).toFixed(1));
+  }
+  if (fitOmc != null && Number.isFinite(fitOmc) && fitOmc > 0) {
+    return parseFloat(fitOmc.toFixed(1));
+  }
+  return undefined;
+}
+
 export function computeCorrectedProctor(
   oversizePct: number,
   bulkSpGr: number,
@@ -191,7 +210,8 @@ export function computeCorrectedProctor(
   const Gs = bulkSpGr > 0 ? bulkSpGr : 2.65;
   let correctedMDD = 0;
   if (mddFiner > 0 && Gs > 0) {
-    correctedMDD = parseFloat((100 / (pOver / Gs + pFiner / mddFiner)).toFixed(3));
+    // Mg/m³ (metric): 1 / (P_over/Gs + P_finer/MDD_finer) — not ×100 (that is the pcf form)
+    correctedMDD = parseFloat((1 / (pOver / Gs + pFiner / mddFiner)).toFixed(3));
   }
   const correctedOMC = omcFiner > 0 ? parseFloat((omcFiner * pFiner).toFixed(1)) : 0;
   return { correctedMDD, correctedOMC, pctFiner: parseFloat((pFiner * 100).toFixed(1)) };

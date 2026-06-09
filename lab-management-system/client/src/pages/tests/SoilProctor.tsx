@@ -23,6 +23,7 @@ import {
   PROCTOR_MOLD_VOLUMES,
   computeCorrectedProctor,
   peakProctorMdd,
+  peakProctorOmc,
   computeProctorPoint,
   isAstmProctorMethod,
   type ProctorMethodKey,
@@ -159,9 +160,10 @@ export default function SoilProctor() {
 
   const fitResult = fitParabola(chartData.map(d => ({ x: d.wc, y: d.dd ?? 0 })));
   const peakMdd = peakProctorMdd(validPoints, fitResult?.mdd);
+  const peakOmc = peakProctorOmc(validPoints, fitResult?.omc);
 
   const mddFinerNum = parseFloat(mddFinerUnit) || peakMdd || 0;
-  const omcFinerNum = fitResult?.omc ?? 0;
+  const omcFinerNum = peakOmc ?? 0;
   const oversizeNum = parseFloat(oversizePct) || 0;
   const bulkSpGrNum = parseFloat(bulkSpGr) || 2.65;
   const { correctedMDD, correctedOMC, pctFiner } = computeCorrectedProctor(
@@ -239,14 +241,14 @@ export default function SoilProctor() {
             dryDensity: p.dryDensity ?? null,
           })),
           mdd: peakMdd ?? null,
-          omc: fitResult?.omc ?? null,
+          omc: peakOmc ?? null,
           mddValue: peakMdd ?? null,
-          omcValue: fitResult?.omc ?? null,
+          omcValue: peakOmc ?? null,
         },
         overallResult: "pending",
         summaryValues: {
           mdd: peakMdd ?? null,
-          omc: fitResult?.omc ?? null,
+          omc: peakOmc ?? null,
           testMethod,
           cbrStandard: currentSpecs.cbrStandard,
         },
@@ -664,7 +666,7 @@ export default function SoilProctor() {
             </div>
 
               {/* MDD / OMC Summary */}
-              {(peakMdd != null || fitResult?.omc != null) && (
+              {(peakMdd != null || peakOmc != null) && (
                 <div className="mt-4 grid grid-cols-2 gap-3">
                   <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 text-center">
                     <p className="text-xs text-emerald-600 font-semibold mb-1">
@@ -677,7 +679,7 @@ export default function SoilProctor() {
                     <p className="text-xs text-blue-600 font-semibold mb-1">
                       {lang === "ar" ? "نسبة الرطوبة المثلى (OMC)" : "Optimum Moisture Content (OMC)"}
                     </p>
-                    <p className="text-3xl font-bold text-blue-800">{fitResult?.omc ?? "—"}</p>
+                    <p className="text-3xl font-bold text-blue-800">{peakOmc != null ? peakOmc : "—"}</p>
                     <p className="text-xs text-blue-500">%</p>
                   </div>
                 </div>
@@ -719,7 +721,7 @@ export default function SoilProctor() {
                       fill="#2563eb"
                       line={{ stroke: "#2563eb", strokeWidth: 2 }}
                     />
-                    {peakMdd != null && fitResult && (
+                    {peakMdd != null && peakOmc != null && (
                       <>
                         <ReferenceLine
                           y={peakMdd}
@@ -735,12 +737,12 @@ export default function SoilProctor() {
                           }}
                         />
                         <ReferenceLine
-                          x={fitResult.omc}
+                          x={peakOmc}
                           stroke="#059669"
                           strokeDasharray="5 4"
                           strokeWidth={1.5}
                           label={{
-                            value: `OMC = ${fitResult.omc}%`,
+                            value: `OMC = ${peakOmc}%`,
                             position: "top",
                             fontSize: 12,
                             fontWeight: 700,
@@ -821,7 +823,7 @@ export default function SoilProctor() {
                   {correctedMDD > 0 && mddFinerNum > 0 ? correctedMDD.toFixed(3) : "—"}
                 </p>
                 <p className="text-xs text-green-600 mt-1">Mg/m³</p>
-                <p className="text-[10px] text-green-500 mt-1">100 / (Pover/Gs + Pfiner/MDD_finer)</p>
+                <p className="text-[10px] text-green-500 mt-1">1 / (Pover/Gs + Pfiner/MDD_finer)</p>
               </div>
               <div className="p-4 bg-blue-50 border-2 border-blue-400 rounded-xl text-center">
                 <p className="text-xs text-blue-700 font-medium mb-1">{ar ? "محتوى الرطوبة الأمثل المصحح" : "Corrected OMC"}</p>
