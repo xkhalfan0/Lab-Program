@@ -123,6 +123,11 @@ export default function SoilProctor() {
   }, [dist?.testSubType, hydrated, existing?.formData]);
 
   useEffect(() => {
+    if (!orderedProctorMethod) return;
+    setTestMethod(orderedProctorMethod);
+  }, [orderedProctorMethod]);
+
+  useEffect(() => {
     if (hydrated || !existing?.formData) return;
     const fd = existing.formData as Record<string, unknown>;
     if (typeof fd.testMethod === "string") {
@@ -186,6 +191,7 @@ export default function SoilProctor() {
     omcFinerNum,
   );
   const handleMethodChange = (val: ProctorMethodKey) => {
+    if (orderedProctorMethod) return;
     setTestMethod(val);
     const spec = PROCTOR_METHOD_SPECS[val];
     if (spec.isAstm) {
@@ -360,21 +366,31 @@ export default function SoilProctor() {
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <div>
                 <Label className="text-xs text-slate-500 mb-1 block">{ar ? "طريقة الاختبار" : "Test Method"}</Label>
-                <Select
-                  value={testMethod}
-                  disabled={!!orderedProctorMethod}
-                  onValueChange={v => handleMethodChange(v as ProctorMethodKey)}
-                >
-                  <SelectTrigger className="w-full *:data-[slot=select-value]:min-w-0"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {PROCTOR_METHOD_ORDER.map(key => {
-                      const spec = PROCTOR_METHOD_SPECS[key];
-                      return (
-                        <SelectItem key={key} value={key}>{ar ? spec.labelAr : spec.label}</SelectItem>
-                      );
-                    })}
-                  </SelectContent>
-                </Select>
+                {orderedProctorMethod ? (
+                  <div>
+                    <div className="flex h-9 w-full items-center rounded-lg border border-slate-200 bg-slate-100 px-3 text-sm font-medium text-slate-700">
+                      {ar ? currentSpecs.labelAr : currentSpecs.label}
+                    </div>
+                    <p className="mt-1 text-[10px] text-slate-400">
+                      {ar ? "محدد من الاستقبال — لا يمكن تغييره" : "Set at reception — cannot be changed"}
+                    </p>
+                  </div>
+                ) : (
+                  <Select
+                    value={testMethod}
+                    onValueChange={v => handleMethodChange(v as ProctorMethodKey)}
+                  >
+                    <SelectTrigger className="w-full *:data-[slot=select-value]:min-w-0"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {PROCTOR_METHOD_ORDER.map(key => {
+                        const spec = PROCTOR_METHOD_SPECS[key];
+                        return (
+                          <SelectItem key={key} value={key}>{ar ? spec.labelAr : spec.label}</SelectItem>
+                        );
+                      })}
+                    </SelectContent>
+                  </Select>
+                )}
               </div>
               <div>
                 <Label className="text-xs text-slate-500 mb-1 block">{ar ? "نوع القالب" : "Mold Type"}</Label>

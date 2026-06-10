@@ -167,6 +167,11 @@ export default function SoilCBR() {
   const orderedCbrStandard = cbrStandardFromReceptionSubtype(dist?.testSubType);
 
   useEffect(() => {
+    if (!orderedCbrStandard) return;
+    setStandard(orderedCbrStandard);
+  }, [orderedCbrStandard]);
+
+  useEffect(() => {
     if (hydrated || !existing?.formData) return;
     const fd = existing.formData as Record<string, unknown>;
     if (typeof fd.standard === "string" && fd.standard in CBR_STANDARDS) {
@@ -254,6 +259,7 @@ export default function SoilCBR() {
   }, [proctorOmc, omcStr]);
 
   const handleStandardChange = (val: CBRStandardKey) => {
+    if (orderedCbrStandard) return;
     standardTouched.current = true;
     setStandard(val);
     if (val === "ASTM_D1883") {
@@ -613,18 +619,28 @@ export default function SoilCBR() {
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <div>
                 <Label className="text-xs text-slate-500 mb-1 block">{ar ? "المعيار" : "Standard"}</Label>
-                <Select
-                  value={standard}
-                  disabled={!!orderedCbrStandard}
-                  onValueChange={v => handleStandardChange(v as CBRStandardKey)}
-                >
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {CBR_STANDARD_ORDER.map(k => (
-                      <SelectItem key={k} value={k}>{CBR_STANDARDS[k].label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                {orderedCbrStandard ? (
+                  <div>
+                    <div className="flex h-9 w-full items-center rounded-lg border border-slate-200 bg-slate-100 px-3 text-sm font-medium text-slate-700">
+                      {CBR_STANDARDS[orderedCbrStandard].label}
+                    </div>
+                    <p className="mt-1 text-[10px] text-slate-400">
+                      {ar ? "محدد من الاستقبال — لا يمكن تغييره" : "Set at reception — cannot be changed"}
+                    </p>
+                  </div>
+                ) : (
+                  <Select
+                    value={standard}
+                    onValueChange={v => handleStandardChange(v as CBRStandardKey)}
+                  >
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {CBR_STANDARD_ORDER.map(k => (
+                        <SelectItem key={k} value={k}>{CBR_STANDARDS[k].label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
               </div>
               {standard === "ASTM_D1883" ? (
                 <div>

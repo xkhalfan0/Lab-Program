@@ -28,20 +28,46 @@ export function isSoilCbrSubtype(v: string | null | undefined): v is SoilCbrSubt
   return SOIL_CBR_SUBTYPES.includes(v as SoilCbrSubtype);
 }
 
+export function normalizeProctorReceptionSubtype(
+  subType: string | null | undefined,
+): SoilProctorSubtype | undefined {
+  if (!subType) return undefined;
+  if (isSoilProctorSubtype(subType)) return subType;
+  const s = subType.toLowerCase();
+  if (s.includes("heavy") || s.includes("ثقيل")) return "BS_HEAVY";
+  if (s.includes("light") || s.includes("خفيف")) return "BS_LIGHT";
+  if (s.includes("modified") || s.includes("d1557") || s.includes("معد")) return "MODIFIED_PROCTOR";
+  if (s.includes("d698") || s.includes("standard proctor")) return "MODIFIED_PROCTOR";
+  return undefined;
+}
+
+export function normalizeCbrReceptionSubtype(
+  subType: string | null | undefined,
+): SoilCbrSubtype | undefined {
+  if (!subType) return undefined;
+  if (isSoilCbrSubtype(subType)) return subType;
+  const s = subType.toLowerCase();
+  if (s.includes("1883") || s.includes("astm_d1883")) return "ASTM_D1883";
+  if (s.includes("1377") || s.includes("bs_1377")) return "BS_1377_4";
+  return undefined;
+}
+
 export function proctorMethodFromReceptionSubtype(
   subType: string | null | undefined,
 ): ProctorMethodKey | undefined {
-  if (subType === "BS_HEAVY") return "BS_HEAVY";
-  if (subType === "BS_LIGHT") return "BS_LIGHT";
-  if (subType === "MODIFIED_PROCTOR") return "MODIFIED_PROCTOR";
+  const normalized = normalizeProctorReceptionSubtype(subType);
+  if (normalized === "BS_HEAVY") return "BS_HEAVY";
+  if (normalized === "BS_LIGHT") return "BS_LIGHT";
+  if (normalized === "MODIFIED_PROCTOR") return "MODIFIED_PROCTOR";
   return undefined;
 }
 
 export function cbrStandardFromReceptionSubtype(
   subType: string | null | undefined,
 ): "BS1377" | "ASTM_D1883" | undefined {
-  if (subType === "BS_1377_4") return "BS1377";
-  if (subType === "ASTM_D1883") return "ASTM_D1883";
+  const normalized = normalizeCbrReceptionSubtype(subType);
+  if (normalized === "BS_1377_4") return "BS1377";
+  if (normalized === "ASTM_D1883") return "ASTM_D1883";
   return undefined;
 }
 

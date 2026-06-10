@@ -1010,7 +1010,15 @@ ${testSummaries.length > 0 ? testSummaries.join("\n\n") : "لم تُجرَ اخ�
         const dist = await getDistributionById(input.id);
         if (!dist) throw new TRPCError({ code: "NOT_FOUND" });
         const orderId = await getOrderIdForDistribution(input.id);
-        return { ...dist, orderId: orderId ?? undefined };
+        let testSubType = dist.testSubType;
+        if (!testSubType && orderId) {
+          const items = await getLabOrderItems(orderId);
+          const item = items.find(
+            (i) => Number(i.distributionId) === input.id || i.testTypeCode === dist.testType,
+          );
+          if (item?.testSubType) testSubType = item.testSubType;
+        }
+        return { ...dist, testSubType: testSubType ?? null, orderId: orderId ?? undefined };
       }),
 
     getBatchSiblings: protectedProcedure
