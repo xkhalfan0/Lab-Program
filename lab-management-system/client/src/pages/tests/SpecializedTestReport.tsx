@@ -1553,7 +1553,7 @@ function CBRReportAstmCbrDensityChart({
   } | null;
   isAr: boolean;
 }) {
-  if (data.length < 2) return null;
+  if (data.length < 1) return null;
   const pcf95 = designTargets?.targetPcf95 ?? (mddPcf != null ? mddPcf * 0.95 : null);
   const pcf98 = designTargets?.targetPcf98 ?? (mddPcf != null ? mddPcf * 0.98 : null);
   const pcf100 = designTargets?.targetPcf100 ?? mddPcf;
@@ -1567,8 +1567,21 @@ function CBRReportAstmCbrDensityChart({
       <ResponsiveContainer width="100%" height="100%">
         <ScatterChart margin={{ top: 14, right: 16, left: 0, bottom: 26 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-          <XAxis type="number" dataKey="dryDensityPcf" tick={{ fontSize: 9 }} label={{ value: isAr ? "الكثافة الجافة (lbf/ft³)" : "Dry Density (lbf/ft³)", position: "insideBottom", offset: -16, style: { fontSize: 10 } }} />
-          <YAxis width={42} tick={{ fontSize: 9 }} label={{ value: isAr ? "CBR @ 0.2\" (%)" : "CBR @ 0.2\" (%)", angle: -90, position: "insideLeft", style: { fontSize: 10 } }} />
+          <XAxis
+            type="number"
+            dataKey="dryDensityPcf"
+            domain={["auto", "auto"]}
+            tick={{ fontSize: 9 }}
+            label={{ value: isAr ? "الكثافة الجافة (lbf/ft³)" : "Dry Density (lbf/ft³)", position: "insideBottom", offset: -16, style: { fontSize: 10 } }}
+          />
+          <YAxis
+            type="number"
+            dataKey="cbr02"
+            width={42}
+            domain={["auto", "auto"]}
+            tick={{ fontSize: 9 }}
+            label={{ value: isAr ? "CBR @ 0.2\"" : "CBR @ 0.2\"", angle: -90, position: "insideLeft", style: { fontSize: 10 } }}
+          />
           <Tooltip contentStyle={{ fontSize: 10 }} />
           <Scatter data={data} fill="#059669" line={{ stroke: "#059669", strokeWidth: 2 }} />
           {pcf95 != null && pcf95 > 0 && designTargets?.cbr95 != null && (
@@ -1616,12 +1629,10 @@ function renderSoilCBR(fd: any, isAr: boolean) {
 
   if (fd.standard === "ASTM_D1883" && Array.isArray(fd.astmSpecimens)) {
     const rawSpecimens: any[] = fd.astmSpecimens;
-    const specimens = rawSpecimens[0]?.adoptedCbr != null
-      ? rawSpecimens
-      : computeAllAstmSpecimens(
-        rawSpecimens.map((s, i) => hydrateAstmSpecimenInput(s, i)),
-        Number(fd.surchargeLbf) || 10,
-      );
+    const specimens = computeAllAstmSpecimens(
+      rawSpecimens.map((s, i) => hydrateAstmSpecimenInput(s, i)),
+      Number(fd.surchargeLbf) || 10,
+    );
     const stressData = specimens.length > 0
       ? (() => {
           const depths = [0, 0.025, 0.05, 0.075, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35];
@@ -1683,17 +1694,17 @@ function renderSoilCBR(fd: any, isAr: boolean) {
         <div className="grid grid-cols-3 gap-2 text-xs">
           <div className="bg-blue-50 border border-blue-200 rounded p-3 text-center">
             <p className="text-blue-600 font-semibold">{L("CBR @ 95% MDD", "CBR @ 95% MDD")}</p>
-            <p className="text-xl font-bold text-blue-800">{fmt(designCbr?.cbr95 ?? fd.cbrAt95Mdd, 0)}%</p>
+            <p className="text-xl font-bold text-blue-800">{fmt(designCbr?.cbr95 ?? fd.cbrAt95Mdd, 0)}</p>
             {designCbr && <p className="text-[9px] text-slate-500 mt-0.5">{designCbr.targetPcf95.toFixed(1)} pcf</p>}
           </div>
           <div className="bg-emerald-50 border border-emerald-200 rounded p-3 text-center">
             <p className="text-emerald-600 font-semibold">{L("CBR @ 98% MDD", "CBR @ 98% MDD")}</p>
-            <p className="text-xl font-bold text-emerald-800">{fmt(designCbr?.cbr98 ?? fd.cbrAt98Mdd, 0)}%</p>
+            <p className="text-xl font-bold text-emerald-800">{fmt(designCbr?.cbr98 ?? fd.cbrAt98Mdd, 0)}</p>
             {designCbr && <p className="text-[9px] text-slate-500 mt-0.5">{designCbr.targetPcf98.toFixed(1)} pcf</p>}
           </div>
           <div className="bg-purple-50 border border-purple-200 rounded p-3 text-center">
             <p className="text-purple-600 font-semibold">{L("CBR @ 100% MDD", "CBR @ 100% MDD")}</p>
-            <p className="text-xl font-bold text-purple-800">{fmt(designCbr?.cbr100 ?? fd.cbrAt100Mdd, 0)}%</p>
+            <p className="text-xl font-bold text-purple-800">{fmt(designCbr?.cbr100 ?? fd.cbrAt100Mdd, 0)}</p>
             {designCbr && <p className="text-[9px] text-slate-500 mt-0.5">{designCbr.targetPcf100.toFixed(1)} pcf</p>}
           </div>
         </div>
@@ -3444,7 +3455,7 @@ function renderConcreteCubes(fd: any, isAr: boolean) {
   );
 }
 
-function formatSummaryLabel(key: string, formTemplate: string, isAr: boolean): string {
+export function formatSummaryLabel(key: string, formTemplate: string, isAr: boolean): string {
   const L = (en: string, ar: string) => (isAr ? ar : en);
   const maps: Record<string, Record<string, string>> = {
     agg_specific_gravity: {
@@ -3454,17 +3465,42 @@ function formatSummaryLabel(key: string, formTemplate: string, isAr: boolean): s
       avgAbsorption: L("Average Water Absorption (%)", "متوسط امتصاص الماء (%)"),
       overallResult: L("Overall Result", "النتيجة الإجمالية"),
     },
+    soil_cbr: {
+      mdd: L("MDD (Mg/m³)", "MDD (Mg/m³)"),
+      omc: L("OMC (%)", "OMC (%)"),
+      standard: L("Standard", "المعيار"),
+      cbrAt95Mdd: L("CBR @ 95% MDD", "CBR @ 95% MDD"),
+      cbrAt98Mdd: L("CBR @ 98% MDD", "CBR @ 98% MDD"),
+      cbrAt100Mdd: L("CBR @ 100% MDD", "CBR @ 100% MDD"),
+      retained20mm: L("% Retained on 20 mm", "% محتجز على 20 مم"),
+      finalCBR: L("Final CBR", "CBR النهائي"),
+      cbrMin: L("Required CBR", "CBR المطلوب"),
+    },
+    soil_proctor: {
+      mdd: L("MDD (Mg/m³)", "MDD (Mg/m³)"),
+      omc: L("OMC (%)", "OMC (%)"),
+      testMethod: L("Test Method", "طريقة الاختبار"),
+      cbrStandard: L("Linked CBR Standard", "معيار CBR المرتبط"),
+    },
   };
   return maps[formTemplate]?.[key] ?? key.replace(/_/g, " ");
 }
 
-function formatSummaryValue(key: string, value: unknown, isAr: boolean): string {
+export function formatSummaryValue(key: string, value: unknown, isAr: boolean): string {
   if (value == null || value === "") return "—";
   if (key === "overallResult") {
     const v = String(value).toLowerCase();
     if (v === "pass") return isAr ? "مطابق" : "PASS";
     if (v === "fail") return isAr ? "غير مطابق" : "FAIL";
     if (v === "pending") return isAr ? "قيد الانتظار" : "Pending";
+  }
+  if (/^cbrAt\d+Mdd$/i.test(key)) {
+    const n = Number(value);
+    return Number.isFinite(n) ? String(Math.round(n)) : "—";
+  }
+  if (key === "finalCBR") {
+    const n = Number(value);
+    return Number.isFinite(n) ? String(Math.round(n)) : "—";
   }
   if (key === "avgApparentSg" || key === "avgSg") return formatSgDisplay(value);
   if (key === "avgAbsorption") return formatAbsorptionDisplay(value);

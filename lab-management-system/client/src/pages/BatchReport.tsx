@@ -12,7 +12,11 @@ import { PassFailBadge, ResultBanner } from "@/components/PassFailBadge";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { formatCalendarDate } from "@/lib/dateFormat";
 import { getOfficialTestDisplayName } from "@/lib/officialTestCatalog";
-import { renderFormData } from "@/pages/tests/SpecializedTestReport";
+import {
+  formatSummaryLabel,
+  formatSummaryValue,
+  renderFormData,
+} from "@/pages/tests/SpecializedTestReport";
 import {
   Loader2,
   Printer,
@@ -25,6 +29,13 @@ import {
 
 const EM_DASH = "\u2014";
 const SUMMARY_SKIP_KEYS = new Set(["overallResult", "overallPass", "passesSpec"]);
+
+/** Proctor supplies MDD/OMC only — no pass/fail; batch verdict uses CBR (and similar) tests only. */
+const INFORMATIONAL_BATCH_TESTS = new Set(["SOIL_PROCTOR"]);
+
+function isInformationalBatchTest(testType: string | null | undefined): boolean {
+  return !!testType && INFORMATIONAL_BATCH_TESTS.has(testType);
+}
 
 type BatchSibling = {
   id: number;
@@ -309,9 +320,10 @@ export default function BatchReport() {
     [sorted, testTypes, isAr],
   );
 
-  const total = sections.length;
-  const completedCount = sorted.filter(s => s.status === "completed").length;
-  const passCount = sections.filter(s => s.overallResult === "pass").length;
+  const evaluatableSections = sections.filter(s => !isInformationalBatchTest(s.sibling.testType));
+  const total = evaluatableSections.length;
+  const completedCount = evaluatableSections.filter(s => s.sibling.status === "completed").length;
+  const passCount = evaluatableSections.filter(s => s.overallResult === "pass").length;
   const batchStatus = computeBatchStatus(passCount, total, completedCount);
   const testedBy = sections.map(s => s.testedBy).find(Boolean);
 
@@ -512,7 +524,17 @@ export default function BatchReport() {
                           {sibling.distributionCode ? ` \u00b7 ${sibling.distributionCode}` : ""}
                         </p>
                       </div>
-                      <PassFailBadge result={overallResult} size="sm" lang={isAr ? "ar" : "en"} />
+                      {isInformationalBatchTest(sibling.testType) ? (
+                        sibling.status === "completed" ? (
+                          <span className="inline-flex items-center rounded-full text-xs px-2 py-0.5 font-semibold bg-slate-100 text-slate-700 border border-slate-300">
+                            {isAr ? "مكتمل" : "DONE"}
+                          </span>
+                        ) : (
+                          <PassFailBadge result="pending" size="sm" lang={isAr ? "ar" : "en"} />
+                        )
+                      ) : (
+                        <PassFailBadge result={overallResult} size="sm" lang={isAr ? "ar" : "en"} />
+                      )}
                     </div>
                     <div className="p-3 space-y-3">
                       {isMarshallDensity && summaryEntries.length > 0 ? (
@@ -533,19 +555,19 @@ export default function BatchReport() {
                                   const [a, b] = [pair[0], pair[1]];
                                   return (
                                     <tr key={ri}>
-                                      <td className="border border-gray-200 px-2 py-1 text-gray-500 capitalize w-[22%]">
-                                        {humanizeKey(a[0])}
+                                      <td className="border border-gray-200 px-2 py-1 text-gray-500 w-[22%]">
+                                        {formatSummaryLabel(a[0], formTemplate ?? "", isAr)}
                                       </td>
                                       <td className="border border-gray-200 px-2 py-1 font-bold text-gray-900 w-[28%]">
-                                        {String(a[1])}
+                                        {formatSummaryValue(a[0], a[1], isAr)}
                                       </td>
                                       {b ? (
                                         <>
-                                          <td className="border border-gray-200 px-2 py-1 text-gray-500 capitalize w-[22%]">
-                                            {humanizeKey(b[0])}
+                                          <td className="border border-gray-200 px-2 py-1 text-gray-500 w-[22%]">
+                                            {formatSummaryLabel(b[0], formTemplate ?? "", isAr)}
                                           </td>
                                           <td className="border border-gray-200 px-2 py-1 font-bold text-gray-900 w-[28%]">
-                                            {String(b[1])}
+                                            {formatSummaryValue(b[0], b[1], isAr)}
                                           </td>
                                         </>
                                       ) : (

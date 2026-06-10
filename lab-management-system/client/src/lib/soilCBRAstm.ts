@@ -389,14 +389,19 @@ export interface DesignCbrCurvePoint {
 }
 
 /** Design curve: dry density (pcf) vs corrected CBR @ 0.2" — per ASTM D1883 worksheet. */
+function adoptedCbr02ForCurve(s: AstmCBRSpecimenComputed): number | null {
+  const v = s.correctedCbr02Val ?? s.adoptedCbr02;
+  return v != null && Number(v) > 0 ? Number(v) : null;
+}
+
 export function buildDesignCbrCurvePoints(
   specimens: AstmCBRSpecimenComputed[],
 ): DesignCbrCurvePoint[] {
   return specimens
-    .filter(s => s.dryDensityPcf != null && s.correctedCbr02Val != null && s.correctedCbr02Val > 0)
+    .filter(s => s.dryDensityPcf != null && adoptedCbr02ForCurve(s) != null)
     .map(s => ({
       dryDensityPcf: s.dryDensityPcf as number,
-      cbr: s.correctedCbr02Val as number,
+      cbr: adoptedCbr02ForCurve(s) as number,
       blowsPerLayer: s.blowsPerLayer,
     }))
     .sort((a, b) => a.dryDensityPcf - b.dryDensityPcf);
