@@ -38,6 +38,7 @@ import {
   getProctorSubtypeLabel,
   requiredProctorSubtypeForCbr,
   SOIL_PROCTOR_UNIT_PRICE,
+  syncCbrFromProctor,
   validateSoilTestOrder,
 } from "@/lib/soilTestReception";
 
@@ -637,11 +638,10 @@ export default function Reception() {
       newTest.testSubType = asphaltMixCourse;
     }
 
-    setSelectedTests(prev => {
-      const ids = new Set(prev.map(s => s.testTypeId));
-      const additions = [...deps, newTest].filter(t => !ids.has(t.testTypeId));
-      return [...prev, ...additions];
-    });
+    const ids = new Set(selectedTests.map(s => s.testTypeId));
+    const additions = [...deps, newTest].filter(t => !ids.has(t.testTypeId));
+    const nextTests = syncCbrFromProctor([...selectedTests, ...additions]);
+    setSelectedTests(nextTests);
     if (deps.length > 0) {
       toast.info(
         lang === "ar"
@@ -652,7 +652,8 @@ export default function Reception() {
 
     const subTypes = SUBTYPES_BY_CODE[tt.code] ?? [];
     const isCasting = CASTING_DATE_TESTS.includes(tt.code);
-    if (subTypes.length > 0 && !isCasting) {
+    const addedItem = nextTests.find(s => s.testTypeId === tt.id);
+    if (subTypes.length > 0 && !isCasting && !addedItem?.testSubType) {
       setSubtypeFor(tt.id);
     }
   };
@@ -671,7 +672,7 @@ export default function Reception() {
       const without = prev.filter(s => s.testTypeId !== tt.id);
       const ids = new Set(without.map(s => s.testTypeId));
       const additions = [...deps, newTest].filter(t => !ids.has(t.testTypeId));
-      return [...without, ...additions];
+      return syncCbrFromProctor([...without, ...additions]);
     });
 
     if (deps.length > 0) {
@@ -730,7 +731,7 @@ export default function Reception() {
         }
       }
 
-      return next;
+      return syncCbrFromProctor(next);
     });
     setSubtypeFor(null);
   };
@@ -1307,7 +1308,7 @@ export default function Reception() {
                                     )}
                                   </div>
                                   <span className="flex-shrink-0 rounded-lg bg-green-50 px-2.5 py-1 text-sm font-semibold text-green-700">
-                                    {Number(tt.unitPrice).toFixed(0)} {lang === "ar" ? "درهم" : "AED"}
+                                    {Number(isSelected && selectedItem ? selectedItem.unitPrice : tt.unitPrice).toFixed(0)} {lang === "ar" ? "درهم" : "AED"}
                                   </span>
                                 </div>
                                 {renderTestDependencyHint(tt.code, selectedItem)}

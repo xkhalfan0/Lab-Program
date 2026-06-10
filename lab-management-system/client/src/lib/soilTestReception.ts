@@ -45,6 +45,30 @@ export function cbrStandardFromReceptionSubtype(
   return undefined;
 }
 
+/** CBR subtype + price follow the ordered Proctor method when both are on the same sample. */
+export function cbrSubtypeFromProctorSubtype(
+  proctorSubtype: string | null | undefined,
+): SoilCbrSubtype | undefined {
+  if (proctorSubtype === "MODIFIED_PROCTOR") return "ASTM_D1883";
+  if (proctorSubtype === "BS_HEAVY" || proctorSubtype === "BS_LIGHT") return "BS_1377_4";
+  return undefined;
+}
+
+export function syncCbrFromProctor<T extends { testTypeCode: string; testSubType?: string; unitPrice: number }>(
+  tests: T[],
+): T[] {
+  const proctor = tests.find(t => t.testTypeCode === "SOIL_PROCTOR");
+  const cbrSubtype = cbrSubtypeFromProctorSubtype(proctor?.testSubType);
+  if (!cbrSubtype) return tests;
+  const cbrIdx = tests.findIndex(t => t.testTypeCode === "SOIL_CBR");
+  if (cbrIdx < 0) return tests;
+  return tests.map((s, i) =>
+    i === cbrIdx
+      ? { ...s, testSubType: cbrSubtype, unitPrice: getCbrUnitPrice(cbrSubtype) }
+      : s,
+  );
+}
+
 /** Mg/m³ — reject corrupt / pcf-scale values saved as MDD. */
 export function saneProctorMddMg(m: unknown): number | undefined {
   const n = Number(m);
@@ -91,8 +115,8 @@ export function getCbrDependencyHint(
       : "Requires: BS 1377 Proctor (Light or Heavy)";
   }
   return lang === "ar"
-    ? "يتطلب: اختبار بروكتور (اختر نوع CBR أولاً)"
-    : "Requires: Proctor test (select CBR type first)";
+    ? "يتطلب: اختبار بروكتور — نوع CBR يُحدد تلقائياً من البروكتور"
+    : "Requires: Proctor test — CBR type is set automatically from Proctor";
 }
 
 export function getProctorSubtypeLabel(subtype: string, lang: "ar" | "en"): string {
