@@ -32,6 +32,14 @@ import {
   getSteelDeferredSubtypeOrderHint,
 } from "../../../server/data/official-test-catalog";
 import { resolveOfficialTestLabel } from "@/lib/officialTestCatalog";
+import {
+  getCbrDependencyHint,
+  getCbrUnitPrice,
+  getProctorSubtypeLabel,
+  requiredProctorSubtypeForCbr,
+  SOIL_PROCTOR_UNIT_PRICE,
+  validateSoilTestOrder,
+} from "@/lib/soilTestReception";
 
 // ─── Sub-type options per test CODE ─────────────────────────────────────────
 const SUBTYPES_BY_CODE: Record<string, { value: string; labelAr: string; labelEn: string }[]> = {
@@ -61,6 +69,15 @@ const SUBTYPES_BY_CODE: Record<string, { value: string; labelAr: string; labelEn
     { value: "agg_0_5mm", labelAr: "ركام 0-5مم", labelEn: "0-5mm Aggregate" },
     { value: "dune_sand", labelAr: "رمل كثبان", labelEn: "Dune Sand" },
     { value: "others", labelAr: "أخرى", labelEn: "Others" },
+  ],
+  SOIL_PROCTOR: [
+    { value: "BS_HEAVY", labelAr: "BS 1377 دمك ثقيل", labelEn: "BS 1377 Heavy Compaction" },
+    { value: "BS_LIGHT", labelAr: "BS 1377 دمك خفيف", labelEn: "BS 1377 Light Compaction" },
+    { value: "MODIFIED_PROCTOR", labelAr: "بروكتور معدّل (ASTM D1557)", labelEn: "Modified Proctor (ASTM D1557)" },
+  ],
+  SOIL_CBR: [
+    { value: "BS_1377_4", labelAr: "BS 1377-4 (عينة واحدة)", labelEn: "BS 1377-4 (1 sample)" },
+    { value: "ASTM_D1883", labelAr: "ASTM D1883 (3 عينات — 10/30/65 ضربة)", labelEn: "ASTM D1883 (3 samples — 10/30/65 blows)" },
   ],
   SOIL_SIEVE: [
     { value: "formation_level", labelAr: "مادة مستوى التأسيس", labelEn: "Formation Level Material" },
@@ -497,17 +514,35 @@ export default function Reception() {
     };
   };
 
+  const makeProctorDependency = (
+    reqTt: { id: number; code?: string | null; nameAr?: string | null; nameEn: string; formTemplate?: string | null; unitPrice?: string | null },
+    proctorSubtype?: string,
+  ): SelectedTest => ({
+    ...makeSelectedTestFromType(reqTt),
+    testSubType: proctorSubtype,
+    unitPrice: SOIL_PROCTOR_UNIT_PRICE,
+  });
+
   /** Returns prerequisite tests to add, [] if none, null if user cancelled or prerequisite missing. */
-  const confirmAndResolveMissingDependencies = (tt: { code?: string | null }): SelectedTest[] | null => {
+  const confirmAndResolveMissingDependencies = (
+    tt: { code?: string | null },
+    cbrSubtype?: string | null,
+  ): SelectedTest[] | null => {
     const required = getRequiredTestsForCode(tt.code);
     const missing = required.filter((reqCode) => !selectedTestsIncludeCode(selectedTests, reqCode));
     if (missing.length === 0) return [];
 
-    const requiredTestNames = getRequiredTestDisplayNames(missing);
+    const cbrReq = tt.code === "SOIL_CBR" ? requiredProctorSubtypeForCbr(cbrSubtype) : null;
+    const requiredLabel = cbrReq === "MODIFIED_PROCTOR"
+      ? (lang === "ar" ? "بروكتور معدّل (ASTM D1557)" : "Modified Proctor (ASTM D1557)")
+      : cbrReq === "BS_LIGHT_OR_HEAVY"
+        ? (lang === "ar" ? "بروكتور BS 1377 (خفيف أو ثقيل)" : "BS 1377 Proctor (Light or Heavy)")
+        : getRequiredTestDisplayNames(missing);
+
     const confirmed = window.confirm(
       lang === "ar"
-        ? `هذا الاختبار يتطلب: ${requiredTestNames}\nسيتم إضافتها تلقائياً. هل تريد المتابعة؟`
-        : `This test requires: ${requiredTestNames}\nThey will be added automatically. Continue?`,
+        ? `هذا الاختبار يتطلب: ${requiredLabel}\nسيتم إضافتها تلقائياً. هل تريد المتابعة؟`
+        : `This test requires: ${requiredLabel}\nThey will be added automatically. Continue?`,
     );
     if (!confirmed) return null;
 
@@ -522,12 +557,25 @@ export default function Reception() {
         );
         return null;
       }
-      toAdd.push(makeSelectedTestFromType(reqTt));
+      if (code === "SOIL_PROCTOR" && cbrReq === "MODIFIED_PROCTOR") {
+        toAdd.push(makeProctorDependency(reqTt, "MODIFIED_PROCTOR"));
+      } else if (code === "SOIL_PROCTOR") {
+        toAdd.push(makeProctorDependency(reqTt));
+      } else {
+        toAdd.push(makeSelectedTestFromType(reqTt));
+      }
     }
     return toAdd;
   };
 
-  const renderTestDependencyHint = (testCode: string | null | undefined) => {
+  const renderTestDependencyHint = (testCode: string | null | undefined, selectedItem?: SelectedTest) => {
+    if (testCode === "SOIL_CBR") {
+      return (
+        <p className="text-xs text-amber-700 mt-0.5">
+          {getCbrDependencyHint(selectedItem?.testSubType, lang)}
+        </p>
+      );
+    }
     const required = getRequiredTestsForCode(testCode);
     if (required.length === 0) return null;
     return (
@@ -656,9 +704,34 @@ export default function Reception() {
   };
 
   const setTestSubtype = (testTypeId: number, subType: string) => {
-    setSelectedTests(prev => prev.map(s =>
-      s.testTypeId === testTypeId ? { ...s, testSubType: subType } : s
-    ));
+    setSelectedTests(prev => {
+      const target = prev.find(s => s.testTypeId === testTypeId);
+      if (!target) return prev;
+
+      let next = prev.map(s => {
+        if (s.testTypeId !== testTypeId) return s;
+        if (s.testTypeCode === "SOIL_CBR") {
+          return { ...s, testSubType: subType, unitPrice: getCbrUnitPrice(subType) };
+        }
+        return { ...s, testSubType: subType };
+      });
+
+      if (target.testTypeCode === "SOIL_CBR" && subType === "ASTM_D1883") {
+        const proctorTt = findTestTypeByCode("SOIL_PROCTOR");
+        const proctorIdx = next.findIndex(s => s.testTypeCode === "SOIL_PROCTOR");
+        if (proctorTt) {
+          if (proctorIdx >= 0) {
+            next = next.map((s, i) => i === proctorIdx
+              ? { ...s, testSubType: "MODIFIED_PROCTOR", unitPrice: SOIL_PROCTOR_UNIT_PRICE }
+              : s);
+          } else {
+            next = [...next, makeProctorDependency(proctorTt, "MODIFIED_PROCTOR")];
+          }
+        }
+      }
+
+      return next;
+    });
     setSubtypeFor(null);
   };
 
@@ -741,6 +814,11 @@ export default function Reception() {
         );
         return;
       }
+    }
+    const soilErr = validateSoilTestOrder(selectedTests, lang);
+    if (soilErr) {
+      toast.error(soilErr);
+      return;
     }
     // Convert castingDate (Date object) to ISO string yyyy-mm-dd
     let castingDateISO: string | undefined = undefined;
@@ -1232,7 +1310,7 @@ export default function Reception() {
                                     {Number(tt.unitPrice).toFixed(0)} {lang === "ar" ? "درهم" : "AED"}
                                   </span>
                                 </div>
-                                {renderTestDependencyHint(tt.code)}
+                                {renderTestDependencyHint(tt.code, selectedItem)}
                               </label>
                             </div>
                             {/* Steel tensile: subtype chosen on technician test form */}

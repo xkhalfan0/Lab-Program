@@ -1,8 +1,8 @@
 /**
- * Proctor compaction — ASTM D1557 / ASTM D698 / BS 1377-4
+ * Proctor compaction — ASTM D1557 / BS 1377-4
  */
 
-export type ProctorMethodKey = "MODIFIED_PROCTOR" | "STANDARD_PROCTOR" | "BS_HEAVY" | "BS_LIGHT";
+export type ProctorMethodKey = "MODIFIED_PROCTOR" | "BS_HEAVY" | "BS_LIGHT";
 
 export interface ProctorMethodSpec {
   label: string;
@@ -29,7 +29,6 @@ export const PROCTOR_METHOD_ORDER: ProctorMethodKey[] = [
   "BS_HEAVY",
   "BS_LIGHT",
   "MODIFIED_PROCTOR",
-  "STANDARD_PROCTOR",
 ];
 
 export const PROCTOR_METHOD_SPECS: Record<ProctorMethodKey, ProctorMethodSpec> = {
@@ -46,21 +45,6 @@ export const PROCTOR_METHOD_SPECS: Record<ProctorMethodKey, ProctorMethodSpec> =
     mouldVolume: 2305,
     recommendedMolds: ["CBR_MOLD", "STANDARD_MOLD"],
     color: "blue",
-    isAstm: true,
-  },
-  STANDARD_PROCTOR: {
-    label: "Standard Proctor (ASTM D698)",
-    labelAr: "بروكتور القياسي (ASTM D698)",
-    standardRef: "ASTM D698",
-    cbrStandard: "ASTM D1883",
-    layers: 3,
-    blowsPerLayer: 25,
-    hammerMass: 2.49,
-    dropHeight: 305,
-    energy: 600,
-    mouldVolume: 944,
-    recommendedMolds: ["STANDARD_MOLD", "LARGE_MOLD"],
-    color: "green",
     isAstm: true,
   },
   BS_HEAVY: {
@@ -217,8 +201,8 @@ export function computeCorrectedProctor(
   return { correctedMDD, correctedOMC, pctFiner: parseFloat((pFiner * 100).toFixed(1)) };
 }
 
-export function isAstmProctorMethod(method: string): method is "MODIFIED_PROCTOR" | "STANDARD_PROCTOR" {
-  return method === "MODIFIED_PROCTOR" || method === "STANDARD_PROCTOR";
+export function isAstmProctorMethod(method: string): method is "MODIFIED_PROCTOR" {
+  return method === "MODIFIED_PROCTOR";
 }
 
 export function isBsProctorMethod(method: string): method is "BS_HEAVY" | "BS_LIGHT" {

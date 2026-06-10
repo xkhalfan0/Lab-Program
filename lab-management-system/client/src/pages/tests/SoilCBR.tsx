@@ -30,6 +30,11 @@ import {
 } from "@/lib/soilCBR";
 import { proctorMethodLinksToAstmCbr, proctorMethodLinksToBsCbr } from "@/lib/soilProctor";
 import {
+  cbrStandardFromReceptionSubtype,
+  saneProctorMddMg,
+  saneProctorOmcPct,
+} from "@/lib/soilTestReception";
+import {
   computeAllAstmSpecimens,
   computeCbrAtMddPercentages,
   defaultAstmSpecimens,
@@ -137,8 +142,7 @@ export default function SoilCBR() {
     const fd = proctorData?.formData;
     if (!fd) return undefined;
     const m = fd.mdd ?? fd.mddValue ?? proctorData?.summaryValues?.mdd;
-    if (m != null && Number.isFinite(Number(m))) return Number(m);
-    return undefined;
+    return saneProctorMddMg(m);
   }, [proctorData]);
 
   /** ASTM D1883 — MDD from linked ASTM Proctor only (uncorrected peak, not D4718 corrected) */
@@ -148,8 +152,7 @@ export default function SoilCBR() {
     const tm = fd.testMethod as string | undefined;
     if (!proctorMethodLinksToAstmCbr(tm ?? "")) return undefined;
     const m = fd.mdd ?? fd.mddValue ?? proctorData?.summaryValues?.mdd;
-    if (m != null && Number.isFinite(Number(m))) return Number(m);
-    return undefined;
+    return saneProctorMddMg(m);
   }, [proctorData]);
 
   const proctorOmc = useMemo(() => {
@@ -157,12 +160,11 @@ export default function SoilCBR() {
     if (!fd) return undefined;
     const tm = fd.testMethod as string | undefined;
     if (!proctorMethodLinksToAstmCbr(tm ?? "")) return undefined;
-    const corrected = fd.correctedOMC;
-    if (corrected != null && Number(corrected) > 0) return Number(corrected);
     const o = fd.omc ?? fd.omcValue ?? proctorData?.summaryValues?.omc;
-    if (o != null && Number.isFinite(Number(o))) return Number(o);
-    return undefined;
+    return saneProctorOmcPct(o);
   }, [proctorData]);
+
+  const orderedCbrStandard = cbrStandardFromReceptionSubtype(dist?.testSubType);
 
   useEffect(() => {
     if (hydrated || !existing?.formData) return;
@@ -213,15 +215,24 @@ export default function SoilCBR() {
   }, [existing, hydrated]);
 
   useEffect(() => {
+    if (hydrated || standardTouched.current) return;
+    if (orderedCbrStandard) {
+      setStandard(orderedCbrStandard);
+      return;
+    }
     const tm = proctorData?.formData?.testMethod as string | undefined;
     if (!tm) return;
     setLinkedProctorMethod(tm);
-    if (standardTouched.current) return;
     if (proctorMethodLinksToAstmCbr(tm)) {
       setStandard("ASTM_D1883");
     } else if (proctorMethodLinksToBsCbr(tm)) {
       setStandard("BS1377");
     }
+  }, [proctorData, orderedCbrStandard, hydrated]);
+
+  useEffect(() => {
+    const tm = proctorData?.formData?.testMethod as string | undefined;
+    if (tm) setLinkedProctorMethod(tm);
   }, [proctorData]);
 
   useEffect(() => {
@@ -577,8 +588,8 @@ export default function SoilCBR() {
         {linkedProctorMethod && proctorMethodLinksToAstmCbr(linkedProctorMethod) && standard === "ASTM_D1883" && (
           <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3 text-xs text-emerald-800">
             {ar
-              ? `تم ربط CBR تلقائياً باختبار بروكتور (${linkedProctorMethod === "MODIFIED_PROCTOR" ? "ASTM D1557" : "ASTM D698"}) → ASTM D1883`
-              : `CBR auto-linked to Proctor (${linkedProctorMethod === "MODIFIED_PROCTOR" ? "ASTM D1557" : "ASTM D698"}) → ASTM D1883`}
+              ? "تم ربط CBR تلقائياً باختبار بروكتور (ASTM D1557) → ASTM D1883"
+              : "CBR auto-linked to Proctor (ASTM D1557) → ASTM D1883"}
             {proctorMdd != null && (
               <span className="ml-2 font-semibold">| MDD: {proctorMdd} Mg/m³{proctorOmc != null ? `, OMC: ${proctorOmc}%` : ""}</span>
             )}
@@ -602,7 +613,11 @@ export default function SoilCBR() {
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <div>
                 <Label className="text-xs text-slate-500 mb-1 block">{ar ? "المعيار" : "Standard"}</Label>
-                <Select value={standard} onValueChange={v => handleStandardChange(v as CBRStandardKey)}>
+                <Select
+                  value={standard}
+                  disabled={!!orderedCbrStandard}
+                  onValueChange={v => handleStandardChange(v as CBRStandardKey)}
+                >
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     {CBR_STANDARD_ORDER.map(k => (

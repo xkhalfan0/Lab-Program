@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useParams, useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { redirectAfterTestSave } from "@/lib/batchHelpers";
+import { proctorMethodFromReceptionSubtype } from "@/lib/soilTestReception";
 import DashboardLayout from "@/components/DashboardLayout";
 import { SampleInfoCard } from "@/components/SampleInfoCard";
 import { Button } from "@/components/ui/button";
@@ -111,14 +112,26 @@ export default function SoilProctor() {
     Array.from({ length: 4 }, (_, i) => newPoint(i))
   );
 
+  const orderedProctorMethod = proctorMethodFromReceptionSubtype(dist?.testSubType);
   const currentSpecs = PROCTOR_METHOD_SPECS[testMethod];
   const isAstm = isAstmProctorMethod(testMethod);
 
   useEffect(() => {
+    if (hydrated || existing?.formData) return;
+    const fromOrder = proctorMethodFromReceptionSubtype(dist?.testSubType);
+    if (fromOrder) setTestMethod(fromOrder);
+  }, [dist?.testSubType, hydrated, existing?.formData]);
+
+  useEffect(() => {
     if (hydrated || !existing?.formData) return;
     const fd = existing.formData as Record<string, unknown>;
-    if (typeof fd.testMethod === "string" && fd.testMethod in PROCTOR_METHOD_SPECS) {
-      setTestMethod(fd.testMethod as ProctorMethodKey);
+    if (typeof fd.testMethod === "string") {
+      const method = fd.testMethod === "STANDARD_PROCTOR"
+        ? "MODIFIED_PROCTOR"
+        : fd.testMethod;
+      if (method in PROCTOR_METHOD_SPECS) {
+        setTestMethod(method as ProctorMethodKey);
+      }
     }
     if (typeof fd.moldType === "string" && fd.moldType in PROCTOR_MOLD_VOLUMES) {
       setMoldType(fd.moldType as ProctorMoldKey);
@@ -347,7 +360,11 @@ export default function SoilProctor() {
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <div>
                 <Label className="text-xs text-slate-500 mb-1 block">{ar ? "طريقة الاختبار" : "Test Method"}</Label>
-                <Select value={testMethod} onValueChange={v => handleMethodChange(v as ProctorMethodKey)}>
+                <Select
+                  value={testMethod}
+                  disabled={!!orderedProctorMethod}
+                  onValueChange={v => handleMethodChange(v as ProctorMethodKey)}
+                >
                   <SelectTrigger className="w-full *:data-[slot=select-value]:min-w-0"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     {PROCTOR_METHOD_ORDER.map(key => {

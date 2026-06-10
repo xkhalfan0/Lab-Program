@@ -99,12 +99,7 @@ export const OFFICIAL_TEST_CATALOG: OfficialTest[] = [
     standardRef: "BS 1377-4",
     formTemplate: "soil_proctor",
     sortOrder: 120,
-    testSubType: [
-      "BS 1377 Heavy Compaction",
-      "BS 1377 Light Compaction",
-      "Modified Proctor (ASTM D1557)",
-      "Standard Proctor (ASTM D698)",
-    ],
+    testSubType: ["BS_HEAVY", "BS_LIGHT", "MODIFIED_PROCTOR"],
   },
   {
     category: "soil",
@@ -113,11 +108,11 @@ export const OFFICIAL_TEST_CATALOG: OfficialTest[] = [
     code: "SOIL_CBR",
     unitPrice: "250",
     unit: "%",
-    standardRef: "BS 1377-4",
+    standardRef: "BS 1377-4 / ASTM D1883",
     formTemplate: "soil_cbr",
     sortOrder: 130,
     requiredTests: ["SOIL_PROCTOR"],
-    testSubType: ["BS 1377-4", "ASTM D1883"],
+    testSubType: ["BS_1377_4", "ASTM_D1883"],
   },
   { category: "soil", nameEn: "Field Density (Compaction Test)", nameAr: "كثافة حقلية", code: "SOIL_FIELD_DENSITY", unitPrice: "100", unit: "Mg/m³", standardRef: "BS 1377-9", formTemplate: "soil_field_density", sortOrder: 140 },
   {
