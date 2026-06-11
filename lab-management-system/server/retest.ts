@@ -27,9 +27,21 @@ import {
   notifyUsersByRole,
   samplesHasRetestColumns,
 } from "./db";
+import { normalizeTestCode } from "./data/official-test-catalog";
 import { generateRetestSampleCode } from "./utils/codeGenerator";
 import { requireRole } from "./_core/requireRole";
 import { labOrderReceptionCreateInputSchema } from "./routers/orders";
+
+function resolveCatalogTestType(
+  code: string,
+  allTestTypes: Awaited<ReturnType<typeof getAllTestTypes>>
+) {
+  const normalized = normalizeTestCode(code) ?? code;
+  return (
+    allTestTypes.find((t) => t.code === code) ??
+    allTestTypes.find((t) => t.code === normalized)
+  );
+}
 
 /** Sample statuses that block retest registration. */
 const EXCLUDED_SAMPLE_STATUSES = ["revision_requested"] as const;
@@ -353,15 +365,19 @@ export async function getRetestSource(rootSampleId: number) {
   const orders = await getLabOrdersBySampleId(rootSampleId);
   await assertRetestEligible(root, orders);
 
-  const latestOrder = orders[0];
   const allTestTypes = await getAllTestTypes();
   let tests: Awaited<ReturnType<typeof buildRetestTestsFromOrder>>["tests"] = [];
   let defaultPriority: "low" | "normal" | "high" | "urgent" = "normal";
 
-  if (latestOrder) {
-    const built = await buildRetestTestsFromOrder(rootSampleId, latestOrder.id, allTestTypes);
-    tests = built.tests;
-    defaultPriority = (latestOrder.priority as typeof defaultPriority) ?? "normal";
+  for (const order of orders) {
+    const items = await getLabOrderItems(order.id);
+    if (items.length === 0) continue;
+    const built = await buildRetestTestsFromOrder(rootSampleId, order.id, allTestTypes);
+    if (built.tests.length > 0) {
+      tests = built.tests;
+      defaultPriority = (order.priority as typeof defaultPriority) ?? "normal";
+      break;
+    }
   }
 
   if (tests.length === 0) {
@@ -370,7 +386,10 @@ export async function getRetestSource(rootSampleId: number) {
   }
 
   if (tests.length === 0) {
-    throw new TRPCError({ code: "BAD_REQUEST", message: "No tests found on the original sample" });
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: "No tests found on the original sample — check lab order items or distributions",
+    });
   }
 
   return {
@@ -402,12 +421,14 @@ async function buildRetestTestsFromOrder(
   const items = await getLabOrderItems(orderId);
   const tests = await Promise.all(
     items.map(async (item) => {
-      const tt = allTestTypes.find((t) => t.id === item.testTypeId);
+      const tt =
+        allTestTypes.find((t) => t.id === item.testTypeId) ??
+        resolveCatalogTestType(item.testTypeCode, allTestTypes);
       const isFailed = await isOrderItemSpecFailed(sampleId, item);
       return {
-        testTypeId: item.testTypeId,
+        testTypeId: tt?.id ?? item.testTypeId,
         testTypeCode: item.testTypeCode,
-        testTypeName: item.testTypeName,
+        testTypeName: item.testTypeName || tt?.nameEn || item.testTypeCode,
         formTemplate: item.formTemplate ?? tt?.formTemplate ?? null,
         testSubType: item.testSubType,
         quantity: item.quantity,
@@ -417,7 +438,7 @@ async function buildRetestTestsFromOrder(
       };
     })
   );
-  return { tests };
+  return { tests: tests.filter((t) => t.testTypeId > 0) };
 }
 
 async function buildRetestTestsFromDistributions(
@@ -427,7 +448,7 @@ async function buildRetestTestsFromDistributions(
   const dists = await getDistributionsBySample(sampleId);
   const tests = await Promise.all(
     dists.map(async (dist) => {
-      const tt = allTestTypes.find((t) => t.code === dist.testType);
+      const tt = resolveCatalogTestType(dist.testType, allTestTypes);
       const isFailed = await isOrderItemSpecFailed(sampleId, {
         testTypeCode: dist.testType,
         distributionId: dist.id,
@@ -435,7 +456,7 @@ async function buildRetestTestsFromDistributions(
       return {
         testTypeId: tt?.id ?? 0,
         testTypeCode: dist.testType,
-        testTypeName: dist.testName ?? dist.testType,
+        testTypeName: dist.testName ?? tt?.nameEn ?? dist.testType,
         formTemplate: tt?.formTemplate ?? null,
         testSubType: null as string | null,
         quantity: dist.quantity ?? 1,

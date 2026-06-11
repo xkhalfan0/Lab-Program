@@ -35,6 +35,11 @@ export function ReceptionRetestPanel({ onSuccess, onCancel }: Props) {
 
   const [searchQ, setSearchQ] = useState("");
   const [rootId, setRootId] = useState<number | null>(null);
+  const [selectedMeta, setSelectedMeta] = useState<{
+    id: number;
+    sampleCode: string;
+    contractorName: string | null;
+  } | null>(null);
   const [tests, setTests] = useState<RetestTest[]>([]);
   const [location, setLocation] = useState("");
   const [castingDate, setCastingDate] = useState("");
@@ -56,10 +61,24 @@ export function ReceptionRetestPanel({ onSuccess, onCancel }: Props) {
     limit: 20,
   });
 
-  const { data: source, isLoading: loadingSource } = trpc.samples.getRetestSource.useQuery(
+  const selectedSample =
+    selectedMeta ?? eligibleSamples?.find((s) => s.id === rootId) ?? null;
+
+  const {
+    data: source,
+    isFetching: loadingSource,
+    isError: sourceError,
+    error: sourceErrorDetail,
+  } = trpc.samples.getRetestSource.useQuery(
     { rootSampleId: rootId! },
-    { enabled: rootId != null }
+    { enabled: rootId != null, retry: 1 }
   );
+
+  useEffect(() => {
+    if (sourceError && sourceErrorDetail?.message) {
+      toast.error(sourceErrorDetail.message);
+    }
+  }, [sourceError, sourceErrorDetail?.message]);
 
   const createRetest = trpc.orders.createRetest.useMutation({
     onSuccess: (res) => {
@@ -73,8 +92,25 @@ export function ReceptionRetestPanel({ onSuccess, onCancel }: Props) {
     onError: (e) => toast.error(e.message),
   });
 
-  const selectRoot = (id: number) => {
-    setRootId(id);
+  const clearSelection = () => {
+    setRootId(null);
+    setSelectedMeta(null);
+    setTests([]);
+    setRetestReason("");
+    setRetestReasonNotes("");
+  };
+
+  const selectRoot = (sample: {
+    id: number;
+    sampleCode: string;
+    contractorName: string | null;
+  }) => {
+    setRootId(sample.id);
+    setSelectedMeta({
+      id: sample.id,
+      sampleCode: sample.sampleCode,
+      contractorName: sample.contractorName,
+    });
     setTests([]);
   };
 
@@ -164,7 +200,10 @@ export function ReceptionRetestPanel({ onSuccess, onCancel }: Props) {
               className="ps-9"
               placeholder={isAr ? "رمز العينة / العقد / المقاول" : "Sample code / contract / contractor"}
               value={searchQ}
-              onChange={(e) => { setSearchQ(e.target.value); setRootId(null); setTests([]); }}
+              onChange={(e) => {
+                setSearchQ(e.target.value);
+                clearSelection();
+              }}
             />
           </div>
           {!isSearching && (
@@ -180,6 +219,17 @@ export function ReceptionRetestPanel({ onSuccess, onCancel }: Props) {
           {searchError && (
             <p className="text-xs text-destructive">{searchErrorDetail?.message}</p>
           )}
+          {rootId && selectedSample != null && (
+            <div className="flex items-center justify-between gap-2 rounded-lg border bg-muted/30 px-3 py-2 text-sm">
+              <div>
+                <span className="font-mono font-semibold text-primary">{selectedSample.sampleCode}</span>
+                <span className="text-muted-foreground ms-2">{selectedSample.contractorName ?? "—"}</span>
+              </div>
+              <Button type="button" variant="ghost" size="sm" onClick={clearSelection}>
+                {isAr ? "تغيير" : "Change"}
+              </Button>
+            </div>
+          )}
           {eligibleSamples && eligibleSamples.length > 0 && !rootId && (
             <div className="border rounded-lg divide-y max-h-48 overflow-y-auto">
               {eligibleSamples.map((r) => (
@@ -187,7 +237,7 @@ export function ReceptionRetestPanel({ onSuccess, onCancel }: Props) {
                   key={r.id}
                   type="button"
                   className="w-full text-start px-3 py-2 hover:bg-muted/50 text-sm"
-                  onClick={() => selectRoot(r.id)}
+                  onClick={() => selectRoot(r)}
                 >
                   <span className="font-mono font-semibold text-primary">{r.sampleCode}</span>
                   <span className="text-muted-foreground ms-2">{r.contractorName ?? "—"}</span>
@@ -203,7 +253,7 @@ export function ReceptionRetestPanel({ onSuccess, onCancel }: Props) {
               ))}
             </div>
           )}
-          {!loadingEligible && eligibleSamples?.length === 0 && (
+          {!loadingEligible && eligibleSamples?.length === 0 && !rootId && (
             <p className="text-xs text-muted-foreground">
               {isSearching
                 ? isAr
@@ -216,9 +266,18 @@ export function ReceptionRetestPanel({ onSuccess, onCancel }: Props) {
           )}
         </div>
 
-        {loadingSource && rootId && (
+        {loadingSource && rootId && !source && (
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Loader2 className="w-4 h-4 animate-spin" /> {isAr ? "تحميل..." : "Loading..."}
+            <Loader2 className="w-4 h-4 animate-spin" /> {isAr ? "تحميل تفاصيل العينة..." : "Loading sample details..."}
+          </div>
+        )}
+
+        {sourceError && rootId && (
+          <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-3 text-sm space-y-2">
+            <p className="text-destructive">{sourceErrorDetail?.message}</p>
+            <Button type="button" variant="outline" size="sm" onClick={clearSelection}>
+              {isAr ? "العودة إلى القائمة" : "Back to list"}
+            </Button>
           </div>
         )}
 
