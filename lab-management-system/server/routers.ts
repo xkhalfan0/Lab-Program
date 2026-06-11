@@ -9,6 +9,9 @@ import { sectorRouter } from "./routers/sector";
 import { dashboardRouter } from "./routers/dashboard";
 import { deletionRouter } from "./routers/deletion";
 import { labOrderReceptionCreateInputSchema, runLabOrderReceptionCreate } from "./routers/orders";
+import { ensureConcreteGroupsFromReceptionPlan } from "./concreteCubeGroups";
+import { parseConcCubePlan } from "@shared/concreteCubeReception";
+import { calcActualAgeDays, resolveBs1881AgeFactor } from "@shared/concreteCubeBs1881";
 import { generateSampleCode } from "./utils/codeGenerator";
 import { requireRole } from "./_core/requireRole";
 import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
@@ -1631,6 +1634,18 @@ ${testSummaries.length > 0 ? testSummaries.join("\n\n") : "لم تُجرَ اخ�
         return result;
       }),
 
+    /** Create age groups + cube rows from reception plan (idempotent). */
+    ensureReceptionGroups: protectedProcedure
+      .input(z.object({ distributionId: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        requireRole(ctx.user.role, ["admin", "technician", "lab_manager"]);
+        return ensureConcreteGroupsFromReceptionPlan(
+          input.distributionId,
+          ctx.user.id,
+          ctx.user.name ?? ctx.user.username,
+        );
+      }),
+
     // Get all test groups for a sample (for report/review)
     groupsBySample: protectedProcedure
       .input(z.object({ sampleId: z.number() }))
@@ -1706,7 +1721,7 @@ ${testSummaries.length > 0 ? testSummaries.join("\n\n") : "لم تُجرَ اخ�
         groupId: z.number(),
         markNo: z.number(),
         cubeId: z.string().optional(),
-        dateTested: z.string().optional(), // ignored: server stores NOW() on save
+        dateTested: z.string().optional(),
         length: z.string().optional().default("150"),
         width: z.string().optional().default("150"),
         height: z.string().optional().default("150"),
@@ -1740,7 +1755,7 @@ ${testSummaries.length > 0 ? testSummaries.join("\n\n") : "لم تُجرَ اخ�
           groupId: input.groupId,
           markNo: input.markNo,
           cubeId: input.cubeId,
-          dateTested: new Date(),
+          dateTested: input.dateTested ? new Date(input.dateTested) : new Date(),
           length: input.length ?? "150",
           width: input.width ?? "150",
           height: input.height ?? "150",
@@ -1831,14 +1846,18 @@ ${testSummaries.length > 0 ? testSummaries.join("\n\n") : "لم تُجرَ اخ�
           { key: "slump", label: "Slump (mm)" },
           { key: "placeOfSampling", label: "Place of Sampling" },
         ];
-        const missing = requiredHeaderFields
-          .filter((f) => !String(group[f.key] ?? "").trim())
-          .map((f) => f.label);
-        if (missing.length > 0) {
-          throw new TRPCError({
-            code: "BAD_REQUEST",
-            message: `Missing required fields: ${missing.join(", ")}`,
-          });
+        const distForPlan = await getDistributionById(group.distributionId);
+        const receptionPlan = parseConcCubePlan(distForPlan?.testSubType);
+        if (!receptionPlan) {
+          const missing = requiredHeaderFields
+            .filter((f) => !String(group[f.key] ?? "").trim())
+            .map((f) => f.label);
+          if (missing.length > 0) {
+            throw new TRPCError({
+              code: "BAD_REQUEST",
+              message: `Missing required fields: ${missing.join(", ")}`,
+            });
+          }
         }
         await updateConcreteGroupSummary(input.groupId, {
           status: "submitted",
@@ -1848,6 +1867,23 @@ ${testSummaries.length > 0 ? testSummaries.join("\n\n") : "لم تُجرَ اخ�
 
         const submittedGroup = (await getConcreteGroupById(input.groupId))!;
         const cubes = await getCubesByGroup(input.groupId);
+        if (receptionPlan) {
+          const sampleForAge = await getSampleById(group.sampleId);
+          const castingRef = sampleForAge?.castingDate ?? group.batchDateTime ?? group.dateSampled;
+          const testRef = cubes.find(c => c.dateTested)?.dateTested ?? new Date();
+          if (castingRef) {
+            const actualAge = calcActualAgeDays(castingRef, testRef);
+            if (actualAge != null) {
+              const ageFactor = resolveBs1881AgeFactor(actualAge, receptionPlan.designStrength);
+              if (ageFactor.status === "invalid") {
+                throw new TRPCError({
+                  code: "BAD_REQUEST",
+                  message: ageFactor.message ?? "Too early — result invalid",
+                });
+              }
+            }
+          }
+        }
         const rawValues = cubes
           .map((c) => parseFloat(c.compressiveStrengthMpa ?? "0"))
           .filter((v) => v > 0);
@@ -2976,8 +3012,12 @@ ${testSummaries.length > 0 ? testSummaries.join("\n\n") : "لم تُجرَ اخ�
           await updateLabOrderFields(input.orderId, { priority: input.priority });
         }
         const items = await getLabOrderItems(input.orderId);
+        const techUser = await getUserById(input.technicianId);
         // Create a distribution for each order item
         for (const item of items) {
+          const cubePlan = item.testTypeCode === "CONC_CUBE"
+            ? parseConcCubePlan(item.testSubType)
+            : null;
           const distCode = await generateDistributionCode();
           const dist = await createDistribution({
             distributionCode: distCode,
@@ -2993,8 +3033,16 @@ ${testSummaries.length > 0 ? testSummaries.join("\n\n") : "لم تُجرَ اخ�
             priority: distPriority,
             notes: input.notes ?? null,
             status: "pending",
+            minAcceptable: cubePlan ? String(cubePlan.designStrength) : undefined,
           });
           await updateLabOrderItemDistribution(item.id, dist.id);
+          if (item.testTypeCode === "CONC_CUBE" && dist?.id) {
+            await ensureConcreteGroupsFromReceptionPlan(
+              dist.id,
+              input.technicianId,
+              techUser?.name ?? techUser?.username,
+            );
+          }
         }
         // Update order status
         await updateLabOrderStatus(input.orderId, "distributed", {

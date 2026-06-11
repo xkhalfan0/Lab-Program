@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, type ReactNode } from "react";
 import { useParams, useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
@@ -14,8 +14,20 @@ import { toast } from "sonner";
 import { useLanguage } from "@/contexts/LanguageContext";
 import {
   Plus, Trash2, Save, Send, Printer, ChevronDown, ChevronUp,
-  FlaskConical, CheckCircle, AlertTriangle, XCircle, Info
+  FlaskConical, CheckCircle, AlertTriangle, XCircle, Info, Lock
 } from "lucide-react";
+import {
+  calcActualAgeDays,
+  cubeAreaMm2,
+  cubeEdgeMmFromNominal,
+  daysUntilDue,
+  dueDateFromCasting,
+  evaluateCubePass,
+  evaluateGroupPass,
+  FRACTURE_TYPE_OPTIONS,
+  resolveBs1881AgeFactor,
+} from "@shared/concreteCubeBs1881";
+import { parseConcCubePlan, type ConcCubeReceptionPlan } from "@shared/concreteCubeReception";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface CubeRow {
@@ -184,6 +196,15 @@ function emptyRow(markNo: number, edgeMm: "100" | "150" = "150"): CubeRow {
   };
 }
 
+function LockedLabel({ children }: { children: ReactNode }) {
+  return (
+    <span className="inline-flex items-center gap-1 text-xs text-gray-500">
+      <Lock className="w-3 h-3" />
+      {children}
+    </span>
+  );
+}
+
 // ─── Single Age Group Panel ───────────────────────────────────────────────────
 interface GroupPanelProps {
   group: any;
@@ -192,6 +213,7 @@ interface GroupPanelProps {
   castingDate?: Date | string | null;
   /** From sample (reception); default cube face size */
   distributionNominalCube?: string | null;
+  receptionPlan?: ConcCubeReceptionPlan | null;
 }
 
 function initialSelectedTestAge(g: { comments?: string | null; testAge?: number }): number | null {
@@ -201,7 +223,7 @@ function initialSelectedTestAge(g: { comments?: string | null; testAge?: number 
   return [7, 14, 28].includes(gt) ? gt : null;
 }
 
-function GroupPanel({ group, distributionId, onRefresh, castingDate: distCastingDate, distributionNominalCube }: GroupPanelProps) {
+function GroupPanel({ group, distributionId, onRefresh, castingDate: distCastingDate, distributionNominalCube, receptionPlan }: GroupPanelProps) {
   const { lang } = useLanguage();
   const ar = lang === "ar";
   const [open, setOpen] = useState(true);
@@ -230,6 +252,11 @@ function GroupPanel({ group, distributionId, onRefresh, castingDate: distCasting
   const submitGroup = trpc.concrete.submitGroup.useMutation();
 
   const defaultEdge = edgeMmFromNominal(group.nominalCubeSize ?? distributionNominalCube);
+  const planLocked = !!receptionPlan;
+  const nominalAge = group.testAge ?? 28;
+  const fcMpa = receptionPlan?.designStrength ?? parseFloat(group.minAcceptable ?? "0");
+  const edgeMmNum = receptionPlan?.cubeSizeMm ?? cubeEdgeMmFromNominal(group.nominalCubeSize ?? distributionNominalCube);
+  const [testDate, setTestDate] = useState(() => new Date().toISOString().split("T")[0]);
 
   useEffect(() => {
     setComments(stripAgeMetaFromComments(group.comments ?? ""));
@@ -244,7 +271,7 @@ function GroupPanel({ group, distributionId, onRefresh, castingDate: distCasting
   // Init cubes from server data
   useEffect(() => {
     if (group.cubes && group.cubes.length > 0) {
-      setCubes(group.cubes.map((c: any) => ({
+      const mapped = group.cubes.map((c: any) => ({
         id: c.id,
         markNo: c.markNo,
         cubeId: c.cubeId ?? "",
@@ -253,16 +280,21 @@ function GroupPanel({ group, distributionId, onRefresh, castingDate: distCasting
         width: c.width ?? String(defaultEdge),
         height: c.height ?? String(defaultEdge),
         massKg: c.massKg ?? "",
-        maxLoadKN: c.maxLoadKN ?? "",
+        maxLoadKN: c.maxLoadKN && c.maxLoadKN !== "0" ? c.maxLoadKN : "",
         fractureType: c.fractureType ?? "SF",
         withinSpec: c.withinSpec ?? null,
         densityKgM3: c.densityKgM3 ?? "",
         compressiveStrengthMpa: c.compressiveStrengthMpa ?? "",
-      })));
-    } else {
+      }));
+      setCubes(mapped);
+      const firstDate = mapped.find(c => c.dateTested)?.dateTested;
+      if (firstDate) setTestDate(firstDate);
+    } else if (!planLocked) {
       setCubes([emptyRow(1, defaultEdge)]);
+    } else {
+      setCubes([]);
     }
-  }, [group.id, defaultEdge]);
+  }, [group.id, defaultEdge, planLocked]);
 
   // Recompute derived fields on change
   const updateCube = (idx: number, field: keyof CubeRow, value: string) => {
@@ -287,6 +319,7 @@ function GroupPanel({ group, distributionId, onRefresh, castingDate: distCasting
   };
 
   const addRow = () => {
+    if (planLocked) return;
     setCubes(prev => {
       if (prev.length >= 16) {
         toast.error("Maximum 16 cubes per test group");
@@ -297,6 +330,7 @@ function GroupPanel({ group, distributionId, onRefresh, castingDate: distCasting
   };
 
   const removeRow = async (idx: number) => {
+    if (planLocked) return;
     const cube = cubes[idx];
     if (cube.id) {
       await deleteCubeMut.mutateAsync({ id: cube.id });
@@ -310,10 +344,25 @@ function GroupPanel({ group, distributionId, onRefresh, castingDate: distCasting
       ? (distCastingDate instanceof Date ? distCastingDate.toISOString() : String(distCastingDate))
       : (group.batchDateTime ? group.batchDateTime.split(" ")[0] : null);
 
+  const isSubmitted = group.status === "submitted" || group.status === "approved";
+  const castingStr = getCastingDateStr();
+  const daysUntil = castingStr && planLocked ? daysUntilDue(castingStr, nominalAge) : 0;
+  const groupLocked = planLocked && !isSubmitted && daysUntil > 0;
+  const dueDate = castingStr && planLocked ? dueDateFromCasting(castingStr, nominalAge) : null;
+  const panelActualAgeForFactor =
+    castingStr && planLocked ? calcActualAgeDays(castingStr, testDate) : null;
+  const ageResult =
+    panelActualAgeForFactor != null && fcMpa > 0
+      ? resolveBs1881AgeFactor(panelActualAgeForFactor, fcMpa)
+      : null;
+
   const computePanelActualAge = (): number | null => {
     const castingDateStr = getCastingDateStr();
+    if (planLocked && castingDateStr) {
+      return calcActualAgeDays(castingDateStr, testDate);
+    }
     const ages = cubes
-      .map(c => calcCubeAge(castingDateStr, c.dateTested))
+      .map(c => calcCubeAge(castingDateStr ?? "", c.dateTested))
       .filter((a): a is number => a !== null);
     return ages.length > 0 ? Math.max(...ages) : null;
   };
@@ -344,11 +393,14 @@ function GroupPanel({ group, distributionId, onRefresh, castingDate: distCasting
     });
   };
 
+  const effectiveTestAge = planLocked ? nominalAge : testAge;
+
   const saveSingleCube = async (idx: number) => {
-    if (!testAge) {
+    if (!effectiveTestAge) {
       toast.error(lang === "ar" ? "يجب اختيار عمر الاختبار" : "Please select test age");
       return;
     }
+    if (planLocked && groupLocked) return;
     const cube = cubes[idx];
     if (!cube.maxLoadKN) {
       toast.error("Max Load (kN) is required");
@@ -361,8 +413,8 @@ function GroupPanel({ group, distributionId, onRefresh, castingDate: distCasting
         groupId: group.id,
         markNo: cube.markNo,
         cubeId: cube.cubeId || undefined,
-        // Date tested is auto-set by backend on save
-        length: String(defaultEdge),
+        dateTested: planLocked ? testDate : undefined,
+        length: String(planLocked ? edgeMmNum : defaultEdge),
         width: String(defaultEdge),
         height: String(defaultEdge),
         massKg: cube.massKg || undefined,
@@ -382,7 +434,7 @@ function GroupPanel({ group, distributionId, onRefresh, castingDate: distCasting
           return next;
         });
       }
-      await persistAgeMetaToComments(testAge);
+      await persistAgeMetaToComments(effectiveTestAge);
       toast.success(`Cube ${cube.markNo} saved`);
       onRefresh();
     } catch (e: any) {
@@ -393,25 +445,26 @@ function GroupPanel({ group, distributionId, onRefresh, castingDate: distCasting
   };
 
   const saveAllCubes = async () => {
-    if (!testAge) {
+    if (!effectiveTestAge) {
       toast.error(lang === "ar" ? "يجب اختيار عمر الاختبار" : "Please select test age");
       return;
     }
+    if (planLocked && groupLocked) return;
     for (let i = 0; i < cubes.length; i++) {
       if (cubes[i].maxLoadKN) await saveSingleCube(i);
     }
   };
 
   const saveHeader = async () => {
-    if (!isSubmitted && !testAge) {
+    if (!isSubmitted && !effectiveTestAge) {
       toast.error(lang === "ar" ? "يجب اختيار عمر الاختبار" : "Please select test age");
       return;
     }
     try {
       const batchVal = castingLocked ? (castingIso ?? undefined) : (batchDateTime || undefined);
       const commentsPayload =
-        !isSubmitted && testAge
-          ? mergeAgeMetaIntoComments(comments, buildAgeFormData(testAge))
+        !isSubmitted && effectiveTestAge
+          ? mergeAgeMetaIntoComments(comments, buildAgeFormData(effectiveTestAge))
           : comments;
       await updateGroup.mutateAsync({
         groupId: group.id,
@@ -436,31 +489,41 @@ function GroupPanel({ group, distributionId, onRefresh, castingDate: distCasting
   };
 
   const handleSubmit = async () => {
-    if (!testAge) {
+    if (!effectiveTestAge) {
       toast.error(lang === "ar" ? "يجب اختيار عمر الاختبار" : "Please select test age");
       return;
     }
-    const requiredFields = [
-      { label: ar ? "مصدر/مورد الخرسانة" : "Concrete Source/Supplier", value: sourceSupplier },
-      { label: ar ? "درجة الخرسانة" : "Class of Concrete", value: classOfConcrete },
-      { label: ar ? "أقصى حجم للركام (مم)" : "Maximum Aggregate Size (mm)", value: maxAggSize },
-      { label: ar ? "الهطول (مم)" : "Slump (mm)", value: slump },
-      { label: ar ? "مكان أخذ العينة" : "Place of Sampling", value: placeOfSampling },
-    ];
-    const missing = requiredFields.filter((f) => !String(f.value ?? "").trim()).map((f) => f.label);
-    if (missing.length > 0) {
-      toast.error(
-        ar
-          ? `الرجاء تعبئة الحقول المطلوبة: ${missing.join("، ")}`
-          : `Please fill required fields: ${missing.join(", ")}`
-      );
+    if (planLocked && groupLocked) {
+      toast.error(ar ? "لم يحن موعد الاختبار بعد" : "This age group is not yet due for testing");
       return;
+    }
+    if (planLocked && ageResult?.status === "invalid") {
+      toast.error(ageResult.message ?? "Too early — result invalid");
+      return;
+    }
+    if (!planLocked) {
+      const requiredFields = [
+        { label: ar ? "مصدر/مورد الخرسانة" : "Concrete Source/Supplier", value: sourceSupplier },
+        { label: ar ? "درجة الخرسانة" : "Class of Concrete", value: classOfConcrete },
+        { label: ar ? "أقصى حجم للركام (مم)" : "Maximum Aggregate Size (mm)", value: maxAggSize },
+        { label: ar ? "الهطول (مم)" : "Slump (mm)", value: slump },
+        { label: ar ? "مكان أخذ العينة" : "Place of Sampling", value: placeOfSampling },
+      ];
+      const missing = requiredFields.filter((f) => !String(f.value ?? "").trim()).map((f) => f.label);
+      if (missing.length > 0) {
+        toast.error(
+          ar
+            ? `الرجاء تعبئة الحقول المطلوبة: ${missing.join("، ")}`
+            : `Please fill required fields: ${missing.join(", ")}`
+        );
+        return;
+      }
     }
     await saveHeader();
     await saveAllCubes();
     try {
       await submitGroup.mutateAsync({ groupId: group.id });
-      toast.success(`${group.testAge}-day results submitted for review`);
+      toast.success(`${nominalAge}-day results submitted for review`);
       onRefresh();
     } catch (e: any) {
       toast.error(e.message);
@@ -471,17 +534,24 @@ function GroupPanel({ group, distributionId, onRefresh, castingDate: distCasting
   const cubeStrengthVals = cubes
     .map(c => parseFloat(c.compressiveStrengthMpa ?? calcStrength(c.maxLoadKN, c.length, c.width)))
     .filter(v => v > 0);
-  const strengthBandMilestone = testAge ?? group.testAge ?? 28;
-  const compliance = complianceColor(avg, group.minAcceptable, group.maxAcceptable, strengthBandMilestone, cubeStrengthVals);
-  const targetMpa = group.minAcceptable ? parseFloat(group.minAcceptable) : null;
+  const strengthBandMilestone = planLocked ? nominalAge : (testAge ?? group.testAge ?? 28);
+  const targetMpa = planLocked ? fcMpa : (group.minAcceptable ? parseFloat(group.minAcceptable) : null);
   const testAgeN = strengthBandMilestone;
-  const requiredMpa =
-    targetMpa != null && testAgeN >= 28 ? targetMpa : targetMpa != null ? getRequiredStrength(targetMpa, testAgeN) : null;
-  const isSubmitted = group.status === "submitted" || group.status === "approved";
+  const requiredMpa = planLocked && ageResult
+    ? ageResult.minStrengthMpa
+    : targetMpa != null && testAgeN >= 28
+      ? targetMpa
+      : targetMpa != null
+        ? getRequiredStrength(targetMpa, testAgeN)
+        : null;
+  const compliance = planLocked && ageResult && ageResult.status !== "invalid"
+    ? (cubeStrengthVals.length > 0 && evaluateGroupPass(cubeStrengthVals, ageResult.minStrengthMpa) ? "pass" : cubeStrengthVals.length > 0 ? "fail" : "none")
+    : complianceColor(avg, group.minAcceptable, group.maxAcceptable, strengthBandMilestone, cubeStrengthVals);
   const panelActualAge = computePanelActualAge();
+  const inputsDisabled = isSubmitted || groupLocked;
 
   return (
-    <Card className="border-2">
+    <Card className={`border-2 ${groupLocked ? "opacity-60" : ""}`}>
       {/* Group Header */}
       <CardHeader
         className="cursor-pointer select-none pb-3"
@@ -525,8 +595,80 @@ function GroupPanel({ group, distributionId, onRefresh, castingDate: distCasting
 
       {open && (
         <CardContent className="pt-0">
-          {/* Expandable header info */}
-          <div className="mb-4">
+          {planLocked && (
+            <div className="mb-4 p-3 rounded-lg border bg-gray-50 space-y-2 text-sm">
+              <div className="flex flex-wrap gap-x-6 gap-y-1">
+                <div>
+                  <span className="text-gray-500">{ar ? "موعد الاستحقاق" : "Due date"}:</span>{" "}
+                  <strong>
+                    {dueDate
+                      ? dueDate.toLocaleDateString("en-GB", { day: "2-digit", month: "2-digit", year: "numeric" })
+                      : "—"}
+                  </strong>
+                  <span className="text-gray-400 ml-1">({nominalAge}-day)</span>
+                </div>
+                {groupLocked ? (
+                  <div className="text-amber-700 font-medium flex items-center gap-1">
+                    <AlertTriangle className="w-4 h-4" />
+                    {ar ? `متبقي ${daysUntil} يوم` : `Due in ${daysUntil} day${daysUntil === 1 ? "" : "s"}`}
+                  </div>
+                ) : (
+                  <div>
+                    <Label className="text-xs text-gray-500">{ar ? "تاريخ الاختبار الفعلي" : "Actual test date"}</Label>
+                    <Input
+                      type="date"
+                      value={testDate}
+                      onChange={e => {
+                        setTestDate(e.target.value);
+                        setCubes(prev => prev.map(c => ({ ...c, dateTested: e.target.value })));
+                      }}
+                      className="h-8 text-sm w-40 mt-0.5"
+                      disabled={inputsDisabled}
+                    />
+                  </div>
+                )}
+              </div>
+              {!groupLocked && panelActualAge != null && ageResult && (
+                <div className="space-y-1 text-xs border-t pt-2">
+                  <div>
+                    <span className="text-gray-500">{ar ? "العمر الفعلي" : "Actual age"}:</span>{" "}
+                    <strong>{panelActualAge} {ar ? "يوم" : "days"}</strong>
+                  </div>
+                  {ageResult.rangeLabel && (
+                    <div>
+                      <span className="text-gray-500">{ar ? "النطاق" : "Range"}:</span> {ageResult.rangeLabel}
+                    </div>
+                  )}
+                  <div>
+                    <span className="text-gray-500">{ar ? "عامل القوة" : "Strength factor"}:</span>{" "}
+                    <strong>{ageResult.factorPct}%</strong>
+                    {ageResult.interpolated && (
+                      <span className="text-amber-600 ml-1">({ageResult.message})</span>
+                    )}
+                  </div>
+                  <div>
+                    <span className="text-gray-500">{ar ? "الحد الأدنى المطلوب" : "Min required"}:</span>{" "}
+                    <strong>{ageResult.minStrengthMpa.toFixed(1)} N/mm²</strong>
+                  </div>
+                  {ageResult.status === "invalid" && (
+                    <div className="text-red-600 font-semibold flex items-center gap-1">
+                      <XCircle className="w-4 h-4" />
+                      {ageResult.message}
+                    </div>
+                  )}
+                  {ageResult.status === "beyond90" && (
+                    <div className="text-amber-700 flex items-center gap-1">
+                      <AlertTriangle className="w-4 h-4" />
+                      {ageResult.message}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Expandable header info — legacy orders only */}
+          {!planLocked && <div className="mb-4">
             <button
               className="text-sm text-blue-600 underline flex items-center gap-1"
               onClick={() => setHeaderExpanded(h => !h)}
@@ -595,10 +737,10 @@ function GroupPanel({ group, distributionId, onRefresh, castingDate: distCasting
                 </div>
               </div>
             )}
-          </div>
+          </div>}
 
           {/* Calculation Details */}
-          {group.minAcceptable && (
+          {!planLocked && group.minAcceptable && (
             <div className="mb-3 text-sm bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 space-y-1">
               <div className="flex items-center gap-2 font-semibold text-blue-800 mb-2">
                 <Info className="w-4 h-4 shrink-0" />
@@ -629,74 +771,50 @@ function GroupPanel({ group, distributionId, onRefresh, castingDate: distCasting
             </div>
           )}
 
-          <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded">
-            <label className="block text-sm font-semibold mb-2">
-              {lang === "ar" ? "عمر الاختبار *" : "Test Age *"}
-              <span className="text-red-600">{lang === "ar" ? " (مطلوب)" : " (required)"}</span>
-            </label>
-
-            <div className="flex flex-wrap gap-4 mb-3">
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="radio"
-                  name={`testAge-${group.id}`}
-                  value="7"
-                  checked={testAge === 7}
-                  onChange={() => setTestAge(7)}
-                  disabled={isSubmitted}
-                />
-                <span>{lang === "ar" ? "7 أيام" : "7-Day"}</span>
+          {!planLocked && (
+            <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded">
+              <label className="block text-sm font-semibold mb-2">
+                {lang === "ar" ? "عمر الاختبار *" : "Test Age *"}
+                <span className="text-red-600">{lang === "ar" ? " (مطلوب)" : " (required)"}</span>
               </label>
-
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="radio"
-                  name={`testAge-${group.id}`}
-                  value="14"
-                  checked={testAge === 14}
-                  onChange={() => setTestAge(14)}
-                  disabled={isSubmitted}
-                />
-                <span>{lang === "ar" ? "14 يوم" : "14-Day"}</span>
-              </label>
-
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="radio"
-                  name={`testAge-${group.id}`}
-                  value="28"
-                  checked={testAge === 28}
-                  onChange={() => setTestAge(28)}
-                  disabled={isSubmitted}
-                />
-                <span>{lang === "ar" ? "28 يوم" : "28-Day"}</span>
-              </label>
-            </div>
-
-            {testAge != null && (
-              <div
-                className={`p-2 rounded text-sm ${
-                  panelActualAge != null && panelActualAge > testAge + 5
-                    ? "bg-amber-100 text-amber-700"
-                    : "bg-gray-100 text-gray-700"
-                }`}
-              >
-                {lang === "ar" ? "العمر الفعلي:" : "Current Age:"}
-                <strong className="ml-2">
-                  {panelActualAge != null
-                    ? `${panelActualAge} ${lang === "ar" ? "يوم" : "days"}`
-                    : lang === "ar"
-                      ? "—"
-                      : "—"}
-                </strong>
-                {panelActualAge != null && panelActualAge > testAge + 5 && (
-                  <span className="ml-2">
-                    ⚠️ ({lang === "ar" ? "متأخر" : "tested late"})
-                  </span>
-                )}
+              <div className="flex flex-wrap gap-4 mb-3">
+                {[7, 14, 28].map(age => (
+                  <label key={age} className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name={`testAge-${group.id}`}
+                      value={age}
+                      checked={testAge === age}
+                      onChange={() => setTestAge(age)}
+                      disabled={isSubmitted}
+                    />
+                    <span>{age}-{lang === "ar" ? "يوم" : "Day"}</span>
+                  </label>
+                ))}
               </div>
-            )}
-          </div>
+              {testAge != null && (
+                <div className={`p-2 rounded text-sm ${panelActualAge != null && panelActualAge > testAge + 5 ? "bg-amber-100 text-amber-700" : "bg-gray-100 text-gray-700"}`}>
+                  {lang === "ar" ? "العمر الفعلي:" : "Current Age:"}
+                  <strong className="ml-2">{panelActualAge != null ? `${panelActualAge} ${lang === "ar" ? "يوم" : "days"}` : "—"}</strong>
+                </div>
+              )}
+            </div>
+          )}
+
+          {planLocked && fcMpa > 0 && (
+            <div className="mb-3 text-sm bg-blue-50 border border-blue-200 rounded-lg px-4 py-3">
+              <div className="flex items-center gap-2 font-semibold text-blue-800 mb-1">
+                <Info className="w-4 h-4" />
+                BS 1881 — {nominalAge}-Day Group
+              </div>
+              <div className="text-xs text-gray-700 grid grid-cols-2 gap-x-4">
+                <div><LockedLabel>{ar ? "مقاومة التصميم" : "Design strength"}</LockedLabel> <strong>{fcMpa} N/mm²</strong></div>
+                <div><LockedLabel>{ar ? "حجم المكعب" : "Cube size"}</LockedLabel> <strong>{edgeMmNum} mm</strong></div>
+                <div><span className="text-gray-500">{ar ? "مساحة الوجه" : "Face area"}:</span> <strong>{cubeAreaMm2(edgeMmNum).toLocaleString()} mm²</strong></div>
+                <div><span className="text-gray-500">{ar ? "عدد المكعبات" : "Cube count"}:</span> <strong>{cubes.length}</strong> <LockedLabel>{ar ? "محدد عند الاستقبال" : "Set at reception"}</LockedLabel></div>
+              </div>
+            </div>
+          )}
 
           {/* Results Table */}
           <div className="overflow-x-auto">
@@ -704,18 +822,17 @@ function GroupPanel({ group, distributionId, onRefresh, castingDate: distCasting
               <thead>
                 <tr className="bg-gray-100">
                   <th className="border px-2 py-1 text-center w-8">Mark</th>
-                  <th className="border px-2 py-1 text-center">Cube ID</th>
-                  <th className="border px-2 py-1 text-center bg-orange-50" title="Actual age calculated from casting date to test date">Age (days)</th>
-                  <th className="border px-2 py-1 text-center">L × W × H (mm)</th>
-                  <th className="border px-2 py-1 text-center">Mass (kg)</th>
-                  <th className="border px-2 py-1 text-center bg-yellow-50">
-                    Max Load (kN) *
-                  </th>
-                  <th className="border px-2 py-1 text-center bg-blue-50">Density (kg/m³)</th>
+                  {!planLocked && <th className="border px-2 py-1 text-center">Cube ID</th>}
+                  {!planLocked && <th className="border px-2 py-1 text-center bg-orange-50">Age (days)</th>}
+                  {!planLocked && <th className="border px-2 py-1 text-center">L × W × H (mm)</th>}
+                  {!planLocked && <th className="border px-2 py-1 text-center">Mass (kg)</th>}
+                  <th className="border px-2 py-1 text-center bg-yellow-50">Load (kN) *</th>
                   <th className="border px-2 py-1 text-center bg-blue-50">Strength (N/mm²)</th>
                   <th className="border px-2 py-1 text-center">Fracture</th>
-                  <th className="border px-2 py-1 text-center w-20 bg-green-50" title="Technician manually confirms this cube is within specification">Within Spec ✓</th>
-                  <th className="border px-2 py-1 text-center w-16">Action</th>
+                  {planLocked && <th className="border px-2 py-1 text-center w-16">Pass</th>}
+                  {!planLocked && <th className="border px-2 py-1 text-center bg-blue-50">Density (kg/m³)</th>}
+                  {!planLocked && <th className="border px-2 py-1 text-center w-20 bg-green-50">Within Spec ✓</th>}
+                  {!planLocked && <th className="border px-2 py-1 text-center w-16">Action</th>}
                 </tr>
               </thead>
               <tbody>
@@ -723,106 +840,128 @@ function GroupPanel({ group, distributionId, onRefresh, castingDate: distCasting
                   const strength = cube.compressiveStrengthMpa || calcStrength(cube.maxLoadKN, cube.length, cube.width);
                   const density = cube.densityKgM3 || calcDensity(cube.massKg, cube.length, cube.width, cube.height);
                   const strengthVal = parseFloat(strength);
-                  const minV = group.minAcceptable ? parseFloat(group.minAcceptable) : null;
-                  // Calculate actual age from casting date (prefer distribution castingDate, fallback to batchDateTime)
+                  const minV = planLocked && ageResult ? ageResult.minStrengthMpa : (group.minAcceptable ? parseFloat(group.minAcceptable) : null);
                   const castingDateStr = distCastingDate
                     ? (distCastingDate instanceof Date ? distCastingDate.toISOString() : String(distCastingDate))
                     : (group.batchDateTime ? group.batchDateTime.split(' ')[0] : null);
-                  const actualAge = calcCubeAge(castingDateStr, cube.dateTested);
+                  const actualAge = planLocked ? panelActualAge : calcCubeAge(castingDateStr, cube.dateTested);
                   const effectiveAge =
-                    actualAge !== null
+                    actualAge !== null && !planLocked
                       ? getEffectiveAge(actualAge, strengthBandMilestone)
                       : strengthBandMilestone;
-                  const requiredV = minV ? getRequiredStrength(minV, effectiveAge) : null;
+                  const requiredV = planLocked && ageResult
+                    ? ageResult.minStrengthMpa
+                    : minV ? getRequiredStrength(minV, effectiveAge) : null;
                   const rowFail = (() => {
-                    if (!strength || cube.withinSpec === true) return false;
+                    if (!strength || (!planLocked && cube.withinSpec === true)) return false;
+                    if (planLocked && ageResult) {
+                      return !evaluateCubePass(strengthVal, ageResult.minStrengthMpa);
+                    }
                     if (strengthBandMilestone >= 28 && minV != null) return strengthVal < minV - 4;
                     if (requiredV != null) return strengthVal < requiredV;
                     return false;
                   })();
+                  const rowPass = strengthVal > 0 && requiredV != null && !rowFail;
 
                   return (
                     <tr key={idx} className={rowFail ? "bg-red-50" : ""}>
                       <td className="border px-1 py-1 text-center font-bold text-gray-600">{cube.markNo}</td>
-                      <td className="border px-1 py-1">
-                        <Input value={cube.cubeId} onChange={e => updateCube(idx, "cubeId", e.target.value)}
-                          className="h-7 text-xs w-20" disabled={isSubmitted} />
-                      </td>
-                      <td className="border px-1 py-1 bg-orange-50 text-center text-xs font-mono font-semibold text-gray-700">
-                        {actualAge !== null ? (
-                          <span>
-                            {actualAge} {ar ? "يوم" : "days"}
-                          </span>
-                        ) : (
-                          <span className="text-gray-400">—</span>
-                        )}
-                      </td>
-                      <td className="border px-1 py-1">
-                        <div className="h-7 text-xs flex items-center justify-center font-mono text-gray-700 bg-gray-50 border rounded">
-                          {defaultEdge} × {defaultEdge} × {defaultEdge}
-                        </div>
-                      </td>
-                      <td className="border px-1 py-1">
-                        <Input value={cube.massKg} onChange={e => updateCube(idx, "massKg", e.target.value)}
-                          className="h-7 text-xs w-20" placeholder="kg" disabled={isSubmitted} />
-                      </td>
+                      {!planLocked && (
+                        <td className="border px-1 py-1">
+                          <Input value={cube.cubeId} onChange={e => updateCube(idx, "cubeId", e.target.value)}
+                            className="h-7 text-xs w-20" disabled={inputsDisabled} />
+                        </td>
+                      )}
+                      {!planLocked && (
+                        <td className="border px-1 py-1 bg-orange-50 text-center text-xs font-mono font-semibold text-gray-700">
+                          {actualAge !== null ? `${actualAge} ${ar ? "يوم" : "days"}` : "—"}
+                        </td>
+                      )}
+                      {!planLocked && (
+                        <td className="border px-1 py-1">
+                          <div className="h-7 text-xs flex items-center justify-center font-mono text-gray-700 bg-gray-50 border rounded">
+                            {defaultEdge} × {defaultEdge} × {defaultEdge}
+                          </div>
+                        </td>
+                      )}
+                      {!planLocked && (
+                        <td className="border px-1 py-1">
+                          <Input value={cube.massKg} onChange={e => updateCube(idx, "massKg", e.target.value)}
+                            className="h-7 text-xs w-20" placeholder="kg" disabled={inputsDisabled} />
+                        </td>
+                      )}
                       <td className="border px-1 py-1 bg-yellow-50">
                         <Input value={cube.maxLoadKN} onChange={e => updateCube(idx, "maxLoadKN", e.target.value)}
-                          className="h-7 text-xs w-24 font-semibold border-yellow-400" placeholder="kN" disabled={isSubmitted} />
+                          className="h-7 text-xs w-24 font-semibold border-yellow-400" placeholder="kN" disabled={inputsDisabled} />
                       </td>
-                      <td className="border px-1 py-1 bg-blue-50 text-center text-xs text-gray-600 font-mono">
-                        {density || "—"}
-                      </td>
-                      <td className={`border px-1 py-1 bg-blue-50 text-center text-xs font-mono font-bold ${rowFail ? "text-red-600" : "text-green-700"}`}>
+                      <td className={`border px-1 py-1 bg-blue-50 text-center text-xs font-mono font-bold ${rowFail ? "text-red-600" : strength ? "text-green-700" : ""}`}>
                         {strength || "—"}
                       </td>
                       <td className="border px-1 py-1">
-                        <Select value={cube.fractureType} onValueChange={v => updateCube(idx, "fractureType", v)} disabled={isSubmitted}>
-                          <SelectTrigger className="h-7 text-xs w-16">
+                        <Select value={cube.fractureType} onValueChange={v => updateCube(idx, "fractureType", v)} disabled={inputsDisabled}>
+                          <SelectTrigger className="h-7 text-xs w-20">
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="SF">SF</SelectItem>
-                            <SelectItem value="USF">USF</SelectItem>
+                            {(planLocked ? FRACTURE_TYPE_OPTIONS : ["SF", "USF"]).map(ft => (
+                              <SelectItem key={ft} value={ft}>{ft}</SelectItem>
+                            ))}
                           </SelectContent>
                         </Select>
                       </td>
-                      <td className="border px-1 py-1 text-center bg-green-50">
-                        <button
-                          type="button"
-                          disabled={isSubmitted}
-                          onClick={() => {
-                            const next = cube.withinSpec === true ? null : true;
-                            setCubes(prev => {
-                              const arr = [...prev];
-                              arr[idx] = { ...arr[idx], withinSpec: next };
-                              return arr;
-                            });
-                          }}
-                          className={`w-6 h-6 rounded border-2 flex items-center justify-center mx-auto transition-colors ${
-                            cube.withinSpec === true
-                              ? 'bg-green-500 border-green-600 text-white'
-                              : 'bg-white border-gray-300 text-transparent hover:border-green-400'
-                          } ${isSubmitted ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'}`}
-                          title={cube.withinSpec === true ? 'Marked as Within Spec (click to clear)' : 'Click to mark as Within Spec'}
-                        >
-                          ✓
-                        </button>
-                      </td>
-                      <td className="border px-1 py-1 text-center">
-                        {!isSubmitted && (
-                          <div className="flex gap-1 justify-center">
-                            <Button size="icon" variant="ghost" className="h-6 w-6"
-                              onClick={() => saveSingleCube(idx)} disabled={saving === idx}>
-                              <Save className="w-3 h-3 text-blue-600" />
-                            </Button>
-                            <Button size="icon" variant="ghost" className="h-6 w-6"
-                              onClick={() => removeRow(idx)}>
-                              <Trash2 className="w-3 h-3 text-red-500" />
-                            </Button>
-                          </div>
-                        )}
-                      </td>
+                      {planLocked && (
+                        <td className="border px-1 py-1 text-center text-xs">
+                          {strengthVal > 0 && (
+                            rowPass
+                              ? <span className="text-green-600 font-bold">✓</span>
+                              : <span className="text-red-600 font-bold">✗</span>
+                          )}
+                        </td>
+                      )}
+                      {!planLocked && (
+                        <td className="border px-1 py-1 bg-blue-50 text-center text-xs text-gray-600 font-mono">
+                          {density || "—"}
+                        </td>
+                      )}
+                      {!planLocked && (
+                        <td className="border px-1 py-1 text-center bg-green-50">
+                          <button
+                            type="button"
+                            disabled={inputsDisabled}
+                            onClick={() => {
+                              const next = cube.withinSpec === true ? null : true;
+                              setCubes(prev => {
+                                const arr = [...prev];
+                                arr[idx] = { ...arr[idx], withinSpec: next };
+                                return arr;
+                              });
+                            }}
+                            className={`w-6 h-6 rounded border-2 flex items-center justify-center mx-auto transition-colors ${
+                              cube.withinSpec === true
+                                ? 'bg-green-500 border-green-600 text-white'
+                                : 'bg-white border-gray-300 text-transparent hover:border-green-400'
+                            } ${inputsDisabled ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'}`}
+                          >
+                            ✓
+                          </button>
+                        </td>
+                      )}
+                      {!planLocked && (
+                        <td className="border px-1 py-1 text-center">
+                          {!isSubmitted && (
+                            <div className="flex gap-1 justify-center">
+                              <Button size="icon" variant="ghost" className="h-6 w-6"
+                                onClick={() => saveSingleCube(idx)} disabled={saving === idx}>
+                                <Save className="w-3 h-3 text-blue-600" />
+                              </Button>
+                              <Button size="icon" variant="ghost" className="h-6 w-6"
+                                onClick={() => removeRow(idx)}>
+                                <Trash2 className="w-3 h-3 text-red-500" />
+                              </Button>
+                            </div>
+                          )}
+                        </td>
+                      )}
                     </tr>
                   );
                 })}
@@ -831,11 +970,11 @@ function GroupPanel({ group, distributionId, onRefresh, castingDate: distCasting
               {avg > 0 && (
                 <tfoot>
                   <tr className="bg-gray-100 font-bold">
-                    <td colSpan={10} className="border px-2 py-1 text-right text-sm">Average Compressive Strength:</td>
+                    <td colSpan={planLocked ? 3 : 10} className="border px-2 py-1 text-right text-sm">Average Compressive Strength:</td>
                     <td className={`border px-2 py-1 text-center text-sm font-mono ${compliance === "fail" ? "text-red-600" : "text-green-700"}`}>
                       {avg.toFixed(2)} N/mm²
                     </td>
-                    <td colSpan={3} className="border px-2 py-1 text-center">
+                    <td colSpan={planLocked ? 2 : 3} className="border px-2 py-1 text-center">
                       {compliance === "pass" && <span className="text-green-600 text-xs font-bold">✓ PASS</span>}
                       {compliance === "fail" && (
                         <div className="text-red-600 text-xs font-bold">
@@ -864,17 +1003,23 @@ function GroupPanel({ group, distributionId, onRefresh, castingDate: distCasting
           </div>
 
           {/* Actions */}
-          {!isSubmitted && (
+          {!isSubmitted && !groupLocked && (
             <div className="mt-4 flex flex-wrap gap-2 justify-between items-center">
-              <Button variant="outline" size="sm" onClick={addRow}>
-                <Plus className="w-4 h-4 mr-1" /> Add Cube
-              </Button>
-              <div className="flex gap-2">
+              {!planLocked && (
+                <Button variant="outline" size="sm" onClick={addRow}>
+                  <Plus className="w-4 h-4 mr-1" /> Add Cube
+                </Button>
+              )}
+              <div className={`flex gap-2 ${planLocked ? "ml-auto" : ""}`}>
                 <Button variant="outline" size="sm" onClick={saveAllCubes}>
                   <Save className="w-4 h-4 mr-1" /> Save All
                 </Button>
                 <Button size="sm" className="bg-blue-600 hover:bg-blue-700 text-white" onClick={handleSubmit}
-                  disabled={submitGroup.isPending || cubes.filter(c => c.maxLoadKN).length === 0}>
+                  disabled={
+                    submitGroup.isPending
+                    || cubes.filter(c => c.maxLoadKN).length === 0
+                    || (planLocked && ageResult?.status === "invalid")
+                  }>
                   <Send className="w-4 h-4 mr-1" />
                   {submitGroup.isPending ? "Submitting..." : "Submit for Review"}
                 </Button>
@@ -896,11 +1041,16 @@ export default function ConcreteTest() {
   const [newAge, setNewAge] = useState("28");
   const [showAddAge, setShowAddAge] = useState(false);
   const [nominalCubeSize, setNominalCubeSize] = useState("150mm");
+  const ensuredRef = useRef(false);
 
   const { data: distribution } = trpc.distributions.get.useQuery(
     { id: distId },
     { enabled: distId > 0 }
   );
+
+  const receptionPlan = distribution?.testSubType
+    ? parseConcCubePlan(distribution.testSubType)
+    : null;
 
   const { data: groups = [], refetch } = trpc.concrete.groupsByDistribution.useQuery(
     { distributionId: distId },
@@ -908,6 +1058,15 @@ export default function ConcreteTest() {
   );
 
   const createGroup = trpc.concrete.createGroup.useMutation();
+  const ensureGroups = trpc.concrete.ensureReceptionGroups.useMutation();
+
+  useEffect(() => {
+    if (!distId || !receptionPlan || ensuredRef.current) return;
+    ensuredRef.current = true;
+    ensureGroups.mutateAsync({ distributionId: distId })
+      .then(() => refetch())
+      .catch(() => { ensuredRef.current = false; });
+  }, [distId, receptionPlan]);
 
   const handleAddAge = async () => {
     const age = parseInt(newAge);
@@ -971,15 +1130,31 @@ export default function ConcreteTest() {
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
                 <div><span className="text-gray-500">Contract No:</span> <strong>{distribution.contractNumber ?? distribution.sampleId}</strong></div>
                 <div><span className="text-gray-500">Priority:</span> <strong className="capitalize">{distribution.priority}</strong></div>
-                <div><span className="text-gray-500">Min Acceptable:</span> <strong>{distribution.minAcceptable ?? "—"} N/mm²</strong></div>
-                <div><span className="text-gray-500">Max Acceptable:</span> <strong>{distribution.maxAcceptable ?? "—"} N/mm²</strong></div>
+                <div>
+                  <span className="text-gray-500">Design Strength (f'c):</span>{" "}
+                  <strong>{receptionPlan?.designStrength ?? distribution.minAcceptable ?? "—"} N/mm²</strong>
+                  {receptionPlan && <LockedLabel>Set at reception</LockedLabel>}
+                </div>
+                <div>
+                  <span className="text-gray-500">Cube Size:</span>{" "}
+                  <strong>{receptionPlan ? `${receptionPlan.cubeSizeMm} mm` : (distribution.nominalCubeSize ?? "150mm")}</strong>
+                  {receptionPlan && <LockedLabel>Set at reception</LockedLabel>}
+                </div>
                 {distribution.castingDate && (
                   <div className="col-span-2 md:col-span-4 border-t pt-2 mt-1">
-                    <span className="text-gray-500">Date of Casting (from sample):</span>{" "}
+                    <span className="text-gray-500">Date of Casting:</span>{" "}
                     <strong className="text-blue-700">
                       {new Date(distribution.castingDate).toLocaleDateString("en-GB", { day: '2-digit', month: '2-digit', year: 'numeric' })}
                     </strong>
+                    {receptionPlan && <LockedLabel>Set at reception</LockedLabel>}
                     <span className="text-xs text-gray-400 ml-2">(used for age calculation)</span>
+                  </div>
+                )}
+                {receptionPlan && (
+                  <div className="col-span-2 md:col-span-4 text-xs text-gray-600">
+                    <span className="text-gray-500">Age groups:</span>{" "}
+                    {receptionPlan.ageGroups.map(g => `${g.nominalAge}d × ${g.cubeCount}`).join(", ")}
+                    <LockedLabel>Set at reception</LockedLabel>
                   </div>
                 )}
               </div>
@@ -995,51 +1170,12 @@ export default function ConcreteTest() {
           <Card className="border-dashed border-2 border-gray-300">
             <CardContent className="py-12 text-center">
               <FlaskConical className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-              <p className="text-gray-500 mb-4">No test age groups yet. Add your first age group to start entering results.</p>
-              <div className="flex items-center justify-center gap-2 flex-wrap">
-                <Input
-                  type="number"
-                  value={newAge}
-                  onChange={e => setNewAge(e.target.value)}
-                  className="w-24 text-center"
-                  placeholder="Days"
-                  min={1}
-                />
-                <span className="text-sm text-gray-500">days</span>
-                <select
-                  value={nominalCubeSize}
-                  onChange={e => setNominalCubeSize(e.target.value)}
-                  className="h-9 text-sm border rounded px-2"
-                >
-                  <option value="150mm">150mm cube</option>
-                  <option value="100mm">100mm cube</option>
-                </select>
-                <Button onClick={handleAddAge} disabled={createGroup.isPending}>
-                  <Plus className="w-4 h-4 mr-1" />
-                  {createGroup.isPending ? "Creating..." : "Add Age Group"}
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        ) : (
-          <div className="space-y-4">
-            {(groups as any[]).map((group: any) => (
-              <GroupPanel
-                key={group.id}
-                group={group}
-                distributionId={distId}
-                onRefresh={refetch}
-                castingDate={distribution?.castingDate}
-                distributionNominalCube={distribution?.nominalCubeSize}
-              />
-            ))}
-
-            {/* Add another age group */}
-            <Card className="border-dashed border-2 border-gray-200">
-              <CardContent className="py-4">
-                {showAddAge ? (
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <Label className="text-sm whitespace-nowrap">Add age group:</Label>
+              {receptionPlan ? (
+                <p className="text-gray-500">Loading age groups from reception plan…</p>
+              ) : (
+                <>
+                  <p className="text-gray-500 mb-4">No test age groups yet. Add your first age group to start entering results.</p>
+                  <div className="flex items-center justify-center gap-2 flex-wrap">
                     <Input
                       type="number"
                       value={newAge}
@@ -1052,27 +1188,74 @@ export default function ConcreteTest() {
                     <select
                       value={nominalCubeSize}
                       onChange={e => setNominalCubeSize(e.target.value)}
-                      className="h-8 text-sm border rounded px-2"
+                      className="h-9 text-sm border rounded px-2"
                     >
-                      <option value="150mm">150mm</option>
+                      <option value="150mm">150mm cube</option>
                       <option value="100mm">100mm</option>
                     </select>
-                    <Button size="sm" onClick={handleAddAge} disabled={createGroup.isPending}>
+                    <Button onClick={handleAddAge} disabled={createGroup.isPending}>
                       <Plus className="w-4 h-4 mr-1" />
-                      {createGroup.isPending ? "..." : "Add"}
+                      {createGroup.isPending ? "Creating..." : "Add Age Group"}
                     </Button>
-                    <Button size="sm" variant="ghost" onClick={() => setShowAddAge(false)}>Cancel</Button>
                   </div>
-                ) : (
-                  <button
-                    className="w-full text-sm text-blue-600 hover:text-blue-800 flex items-center justify-center gap-2"
-                    onClick={() => setShowAddAge(true)}
-                  >
-                    <Plus className="w-4 h-4" /> Add another age group (e.g. 7-day, 14-day, 28-day)
-                  </button>
-                )}
-              </CardContent>
-            </Card>
+                </>
+              )}
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="space-y-4">
+            {(groups as any[]).map((group: any) => (
+              <GroupPanel
+                key={group.id}
+                group={group}
+                distributionId={distId}
+                onRefresh={refetch}
+                castingDate={distribution?.castingDate}
+                distributionNominalCube={distribution?.nominalCubeSize}
+                receptionPlan={receptionPlan}
+              />
+            ))}
+
+            {!receptionPlan && (
+              <Card className="border-dashed border-2 border-gray-200">
+                <CardContent className="py-4">
+                  {showAddAge ? (
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <Label className="text-sm whitespace-nowrap">Add age group:</Label>
+                      <Input
+                        type="number"
+                        value={newAge}
+                        onChange={e => setNewAge(e.target.value)}
+                        className="w-24 text-center"
+                        placeholder="Days"
+                        min={1}
+                      />
+                      <span className="text-sm text-gray-500">days</span>
+                      <select
+                        value={nominalCubeSize}
+                        onChange={e => setNominalCubeSize(e.target.value)}
+                        className="h-8 text-sm border rounded px-2"
+                      >
+                        <option value="150mm">150mm</option>
+                        <option value="100mm">100mm</option>
+                      </select>
+                      <Button size="sm" onClick={handleAddAge} disabled={createGroup.isPending}>
+                        <Plus className="w-4 h-4 mr-1" />
+                        {createGroup.isPending ? "..." : "Add"}
+                      </Button>
+                      <Button size="sm" variant="ghost" onClick={() => setShowAddAge(false)}>Cancel</Button>
+                    </div>
+                  ) : (
+                    <button
+                      className="w-full text-sm text-blue-600 hover:text-blue-800 flex items-center justify-center gap-2"
+                      onClick={() => setShowAddAge(true)}
+                    >
+                      <Plus className="w-4 h-4" /> Add another age group (e.g. 7-day, 14-day, 28-day)
+                    </button>
+                  )}
+                </CardContent>
+              </Card>
+            )}
           </div>
         )}
 
@@ -1081,7 +1264,7 @@ export default function ConcreteTest() {
           <strong>Legend:</strong> &nbsp;
           <span className="bg-yellow-50 px-1 rounded">Yellow = Input field (required)</span> &nbsp;
           <span className="bg-blue-50 px-1 rounded">Blue = Auto-calculated</span> &nbsp;
-          SF = Satisfactory Fracture &nbsp; USF = Unsatisfactory Fracture
+          SF = Satisfactory Fracture &nbsp; USF = Unsatisfactory Fracture &nbsp; Type 1–6 = BS fracture types
         </div>
       </div>
     </DashboardLayout>
