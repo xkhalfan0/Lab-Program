@@ -51,9 +51,15 @@ let _db: ReturnType<typeof drizzle> | null = null;
 
 /** After first DB connect: whether `samples.deletedAt` exists (Phase 1 adds it). */
 let _samplesSoftDeleteColumnsExist: boolean | null = null;
+/** Whether retest columns exist (`npm run db:retest-columns`). */
+let _samplesRetestColumnsExist: boolean | null = null;
 
 function samplesHasSoftDeleteColumns(): boolean {
   return _samplesSoftDeleteColumnsExist === true;
+}
+
+export function samplesHasRetestColumns(): boolean {
+  return _samplesRetestColumnsExist === true;
 }
 
 async function initSamplesSoftDeleteColumnFlag(db: ReturnType<typeof drizzle>) {
@@ -73,6 +79,25 @@ async function initSamplesSoftDeleteColumnFlag(db: ReturnType<typeof drizzle>) {
   } catch (e) {
     console.warn("[Database] Could not probe samples.deletedAt; soft-delete filters disabled.", e);
     _samplesSoftDeleteColumnsExist = false;
+  }
+}
+
+async function initSamplesRetestColumnFlag(db: ReturnType<typeof drizzle>) {
+  if (_samplesRetestColumnsExist !== null) return;
+  try {
+    const raw = await db.execute(
+      sql`SELECT COUNT(*) AS c FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ${"samples"} AND COLUMN_NAME = ${"originalSampleId"}`
+    );
+    const rows = (raw as unknown as [Array<{ c?: number | bigint }>, unknown])[0];
+    _samplesRetestColumnsExist = Number(rows?.[0]?.c ?? 0) > 0;
+    if (!_samplesRetestColumnsExist) {
+      console.warn(
+        "[Database] samples retest columns not found — run: npm run db:retest-columns"
+      );
+    }
+  } catch (e) {
+    console.warn("[Database] Could not probe retest columns; retest feature disabled.", e);
+    _samplesRetestColumnsExist = false;
   }
 }
 
@@ -98,6 +123,7 @@ export async function getDb() {
       });
       _db = drizzle(pool);
       await initSamplesSoftDeleteColumnFlag(_db);
+      await initSamplesRetestColumnFlag(_db);
     } catch (error) {
       console.warn("[Database] Failed to connect:", error);
       _db = null;
@@ -341,36 +367,87 @@ const SAMPLE_ROW_BASE = {
   castingDate: samples.castingDate,
   receivedById: samples.receivedById,
   receivedAt: samples.receivedAt,
-  originalSampleId: samples.originalSampleId,
-  retestNumber: samples.retestNumber,
-  retestReason: samples.retestReason,
-  retestReasonNotes: samples.retestReasonNotes,
   managerReadAt: samples.managerReadAt,
   createdAt: samples.createdAt,
   updatedAt: samples.updatedAt,
 } as const;
 
+const SAMPLE_RETEST_FIELDS = {
+  originalSampleId: samples.originalSampleId,
+  retestNumber: samples.retestNumber,
+  retestReason: samples.retestReason,
+  retestReasonNotes: samples.retestReasonNotes,
+} as const;
+
 function sampleRowSelect() {
+  let row: Record<string, unknown> = { ...SAMPLE_ROW_BASE };
+  if (samplesHasRetestColumns()) {
+    row = { ...row, ...SAMPLE_RETEST_FIELDS };
+  }
   if (samplesHasSoftDeleteColumns()) {
-    return {
-      ...SAMPLE_ROW_BASE,
+    row = {
+      ...row,
       deletedAt: samples.deletedAt,
       deletedBy: samples.deletedBy,
       deletionReason: samples.deletionReason,
       deletionCategory: samples.deletionCategory,
     };
   }
-  return SAMPLE_ROW_BASE;
+  return row as typeof SAMPLE_ROW_BASE;
 }
+
+const SAMPLE_INSERT_BASE_COLUMNS = [
+  "sampleCode",
+  "contractId",
+  "contractNumber",
+  "contractName",
+  "contractorName",
+  "sampleType",
+  "sector",
+  "sectorNameAr",
+  "sectorNameEn",
+  "quantity",
+  "condition",
+  "notes",
+  "status",
+  "requestedTestTypeId",
+  "testSubType",
+  "sampleSubType",
+  "testTypeName",
+  "batchId",
+  "location",
+  "nominalCubeSize",
+  "castingDate",
+  "receivedById",
+  "receivedAt",
+] as const;
+
+const SAMPLE_INSERT_RETEST_COLUMNS = [
+  "originalSampleId",
+  "retestNumber",
+  "retestReason",
+  "retestReasonNotes",
+] as const;
 
 export async function createSample(data: InsertSample) {
   console.log("[createSample] Called with sampleCode:", data.sampleCode);
   const db = await getDb();
   if (!db) throw new Error("DB not available");
 
+  const hasRetest = samplesHasRetestColumns();
+  const isRetestRow =
+    data.originalSampleId != null ||
+    data.retestNumber != null ||
+    data.retestReason != null;
+  if (isRetestRow && !hasRetest) {
+    throw new Error(
+      "Retest columns are not in the database yet. Run: npm run db:retest-columns"
+    );
+  }
+
   // Explicit column list only — never pass soft-delete / audit columns so Drizzle
   // cannot emit them in INSERT (avoids placeholder/param mismatch vs. DB).
-  const insertValues = {
+  const insertValues: Record<string, unknown> = {
     sampleCode: data.sampleCode,
     contractId: data.contractId ?? null,
     contractNumber: data.contractNumber ?? null,
@@ -394,44 +471,20 @@ export async function createSample(data: InsertSample) {
     castingDate: data.castingDate ?? null,
     receivedById: data.receivedById,
     receivedAt: data.receivedAt,
-    originalSampleId: data.originalSampleId ?? null,
-    retestNumber: data.retestNumber ?? null,
-    retestReason: data.retestReason ?? null,
-    retestReasonNotes: data.retestReasonNotes ?? null,
     managerReadAt: data.managerReadAt ?? null,
   };
+  if (hasRetest) {
+    insertValues.originalSampleId = data.originalSampleId ?? null;
+    insertValues.retestNumber = data.retestNumber ?? null;
+    insertValues.retestReason = data.retestReason ?? null;
+    insertValues.retestReasonNotes = data.retestReasonNotes ?? null;
+  }
 
   try {
     console.log("[createSample] insertValues keys:", Object.keys(insertValues));
-    console.log("[createSample] insertValues object:", JSON.stringify(insertValues, null, 2));
     const columns = [
-      "sampleCode",
-      "contractId",
-      "contractNumber",
-      "contractName",
-      "contractorName",
-      "sampleType",
-      "sector",
-      "sectorNameAr",
-      "sectorNameEn",
-      "quantity",
-      "condition",
-      "notes",
-      "status",
-      "requestedTestTypeId",
-      "testSubType",
-      "sampleSubType",
-      "testTypeName",
-      "batchId",
-      "location",
-      "nominalCubeSize",
-      "castingDate",
-      "receivedById",
-      "receivedAt",
-      "originalSampleId",
-      "retestNumber",
-      "retestReason",
-      "retestReasonNotes",
+      ...SAMPLE_INSERT_BASE_COLUMNS,
+      ...(hasRetest ? SAMPLE_INSERT_RETEST_COLUMNS : []),
       "managerReadAt",
     ] as const;
     const values = columns.map((col) => insertValues[col]);
@@ -459,6 +512,9 @@ export async function createSample(data: InsertSample) {
 }
 
 export async function getNextRetestNumber(rootSampleId: number): Promise<number> {
+  if (!samplesHasRetestColumns()) {
+    throw new Error("Retest columns missing. Run: npm run db:retest-columns");
+  }
   const db = await getDb();
   if (!db) return 1;
   const result = await db
@@ -469,6 +525,7 @@ export async function getNextRetestNumber(rootSampleId: number): Promise<number>
 }
 
 export async function getRetestsByRootId(rootSampleId: number) {
+  if (!samplesHasRetestColumns()) return [];
   const db = await getDb();
   if (!db) return [];
   return db
@@ -919,8 +976,7 @@ export async function getDistributionsByTechnician(technicianId: number) {
   const pendingDistributionDeletion = alias(deletionRequests, "pendingDistributionDeletion");
   const pendingLabOrderDeletion = alias(deletionRequests, "pendingLabOrderDeletion");
   const activeSampleFilter = samplesHasSoftDeleteColumns() ? isNull(samples.deletedAt) : sql`TRUE`;
-  const rows = await db
-    .select({
+  const rowSelect: Record<string, unknown> = {
       id: distributions.id,
       distributionCode: distributions.distributionCode,
       sampleId: distributions.sampleId,
@@ -940,14 +996,17 @@ export async function getDistributionsByTechnician(technicianId: number) {
       createdAt: distributions.createdAt,
       updatedAt: distributions.updatedAt,
       batchDistributionId: distributions.batchDistributionId,
-      // Sample fields for auto-populating readings count
       sampleCode: samples.sampleCode,
       sampleQuantity: samples.quantity,
       sampleSubType: samples.sampleSubType,
-      retestNumber: samples.retestNumber,
-      originalSampleId: samples.originalSampleId,
-      retestReason: samples.retestReason,
-    })
+    };
+  if (samplesHasRetestColumns()) {
+    rowSelect.retestNumber = samples.retestNumber;
+    rowSelect.originalSampleId = samples.originalSampleId;
+    rowSelect.retestReason = samples.retestReason;
+  }
+  const rows = await db
+    .select(rowSelect as typeof rowSelect & Record<string, never>)
     .from(distributions)
     .leftJoin(testTypes, eq(distributions.testType, testTypes.code))
     .innerJoin(samples, eq(distributions.sampleId, samples.id))

@@ -4,7 +4,7 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { and, desc, eq, isNull, like, or, sql } from "drizzle-orm";
-import { samples } from "../drizzle/schema";
+import { labOrders, samples } from "../drizzle/schema";
 import type { RetestReason } from "@shared/retestReasons";
 import {
   addSampleHistory,
@@ -21,6 +21,7 @@ import {
   getSpecializedTestResultByDistribution,
   getTestResultByDistribution,
   notifyUsersByRole,
+  samplesHasRetestColumns,
 } from "./db";
 import { generateRetestSampleCode } from "./utils/codeGenerator";
 import { requireRole } from "./_core/requireRole";
@@ -41,6 +42,16 @@ type ReceptionCtx = {
   user: { id: number; role: string; name: string | null };
   req: { ip?: string };
 };
+
+function requireRetestColumns() {
+  if (!samplesHasRetestColumns()) {
+    throw new TRPCError({
+      code: "PRECONDITION_FAILED",
+      message:
+        "Retest is not available yet. Run on the server: npm run db:retest-columns",
+    });
+  }
+}
 
 export async function getLabOrdersBySampleId(sampleId: number) {
   const db = await getDb();
@@ -115,6 +126,7 @@ async function isOrderItemFailed(item: {
 }
 
 export async function searchRetestEligible(query: string) {
+  requireRetestColumns();
   const db = await getDb();
   if (!db || !query.trim()) return [];
 
@@ -168,6 +180,7 @@ export async function searchRetestEligible(query: string) {
 }
 
 export async function getRetestSource(rootSampleId: number) {
+  requireRetestColumns();
   const root = await getSampleById(rootSampleId);
   if (!root) throw new TRPCError({ code: "NOT_FOUND", message: "Sample not found" });
 
@@ -225,6 +238,7 @@ export async function runRetestCreate(
   ctx: ReceptionCtx,
   input: z.infer<typeof retestCreateInputSchema>
 ) {
+  requireRetestColumns();
   requireRole(ctx.user.role, ["admin", "reception", "lab_manager"]);
 
   const root = await getSampleById(input.rootSampleId);

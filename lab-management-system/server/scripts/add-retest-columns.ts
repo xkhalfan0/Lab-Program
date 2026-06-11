@@ -1,13 +1,22 @@
 /**
  * Adds retest linkage columns to samples.
- * Run: tsx server/scripts/add-retest-columns.ts
+ * Run: npm run db:retest-columns
+ * Requires DATABASE_URL in .env (same as the app).
  */
+import "dotenv/config";
 import { sql } from "drizzle-orm";
 import { getDb } from "../db";
 
 async function main() {
+  if (!process.env.DATABASE_URL?.trim()) {
+    console.error("[retest-migration] DATABASE_URL is not set. Add it to lab-management-system/.env");
+    process.exit(1);
+  }
   const db = await getDb();
-  if (!db) throw new Error("Database connection failed");
+  if (!db) {
+    console.error("[retest-migration] Database connection failed. Check DATABASE_URL in .env");
+    process.exit(1);
+  }
 
   const cols = await db.execute(sql`
     SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
@@ -49,6 +58,16 @@ async function main() {
 }
 
 main().catch((e) => {
-  console.error(e);
+  const cause = (e as { cause?: { code?: string; message?: string } })?.cause;
+  if (cause?.code === "ENOTFOUND" || cause?.code === "ECONNREFUSED") {
+    console.error(
+      "[retest-migration] Cannot reach the database host from this machine.",
+      "\n  - If DATABASE_URL points to Railway/cloud, run this on the deployed server",
+      "    (Railway shell / deploy) or paste the SQL below into the Railway MySQL console.",
+      "\n  - For local Docker MySQL, use DATABASE_URL=mysql://root:labroot123@localhost:3306/lab_management",
+    );
+  } else {
+    console.error(e);
+  }
   process.exit(1);
 });
