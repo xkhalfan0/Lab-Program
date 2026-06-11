@@ -3,7 +3,7 @@
  * Uses puppeteer to render an HTML template and produce a PDF,
  * then uploads the result to S3 via storagePut.
  */
-import puppeteer from "puppeteer";
+import { launchPuppeteerBrowser } from "./puppeteerBrowser";
 import { storagePut } from "./storage";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -236,11 +236,7 @@ export async function generateMonthlyReportPdf(
 ): Promise<string> {
   const html = buildHtml(data, lang);
 
-  const browser = await puppeteer.launch({
-    executablePath: "/usr/bin/chromium-browser",
-    args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
-    headless: true,
-  });
+  const browser = await launchPuppeteerBrowser();
 
   try {
     const page = await browser.newPage();

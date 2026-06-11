@@ -1,5 +1,21 @@
 [phases.setup]
 nixPkgs = ["nodejs_20", "pnpm"]
+aptPkgs = [
+  "chromium",
+  "fonts-liberation",
+  "libnss3",
+  "libatk-bridge2.0-0",
+  "libatk1.0-0",
+  "libcups2",
+  "libdrm2",
+  "libxkbcommon0",
+  "libxcomposite1",
+  "libxdamage1",
+  "libxfixes3",
+  "libxrandr2",
+  "libgbm1",
+  "libasound2",
+]
 
 [phases.install]
 cmds = ["pnpm install --frozen-lockfile"]
@@ -9,3 +25,7 @@ cmds = ["pnpm build"]
 
 [start]
 cmd = "pnpm start"
+
+[variables]
+PUPPETEER_EXECUTABLE_PATH = "/usr/bin/chromium"
+PUPPETEER_SKIP_DOWNLOAD = "true"

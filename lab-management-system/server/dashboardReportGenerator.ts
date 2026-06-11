@@ -2,7 +2,7 @@
  * Boss dashboard report generator — PDF (puppeteer) or Excel (CSV).
  * Returns base64 inline so reports work without external storage credentials.
  */
-import puppeteer from "puppeteer";
+import { launchPuppeteerBrowser } from "./puppeteerBrowser";
 import {
   computeContractReadinessRows,
   computeContractorScores,
@@ -289,15 +289,7 @@ export async function generateDashboardReport(
   }
 
   const html = buildHtml(data, input.sections);
-  const browser = await puppeteer.launch({
-    headless: true,
-    args: [
-      "--no-sandbox",
-      "--disable-setuid-sandbox",
-      "--disable-dev-shm-usage",
-      "--disable-gpu",
-    ],
-  });
+  const browser = await launchPuppeteerBrowser();
 
   try {
     const page = await browser.newPage();
