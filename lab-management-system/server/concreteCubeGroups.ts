@@ -1,5 +1,5 @@
 /**
- * Auto-create concrete test groups + placeholder cubes from reception plan.
+ * Auto-create a single concrete test group + placeholder cubes for CONC_CUBE distributions.
  */
 
 import {
@@ -9,14 +9,14 @@ import {
   getDistributionById,
   getSampleById,
   upsertConcreteCube,
-  updateConcreteGroupSummary,
 } from "./db";
 import {
   parseConcCubePlan,
   mmToNominalCubeSize,
+  nominalCubeSizeToMm,
+  DEFAULT_CONC_CUBE_COUNT,
   type ConcCubeReceptionPlan,
 } from "@shared/concreteCubeReception";
-import { cubeEdgeMmFromNominal } from "@shared/concreteCubeBs1881";
 
 export async function getConcCubePlanForDistribution(
   distributionId: number,
@@ -26,70 +26,70 @@ export async function getConcCubePlanForDistribution(
   return parseConcCubePlan(dist.testSubType);
 }
 
+export function resolveCubeSizeMm(
+  dist: { testSubType?: string | null },
+  sample: { nominalCubeSize?: string | null } | null,
+): 100 | 150 {
+  const plan = parseConcCubePlan(dist.testSubType);
+  if (plan) return plan.cubeSizeMm;
+  return nominalCubeSizeToMm(sample?.nominalCubeSize);
+}
+
 export async function ensureConcreteGroupsFromReceptionPlan(
   distributionId: number,
   technicianId: number,
   technicianName?: string | null,
 ): Promise<{ created: number; plan: ConcCubeReceptionPlan | null }> {
   const dist = await getDistributionById(distributionId);
-  if (!dist) return { created: 0, plan: null };
-
-  const plan = parseConcCubePlan(dist.testSubType);
-  if (!plan) return { created: 0, plan: null };
+  if (!dist || dist.testType !== "CONC_CUBE") return { created: 0, plan: null };
 
   const sample = await getSampleById(dist.sampleId);
-  if (!sample) return { created: 0, plan };
+  if (!sample) return { created: 0, plan: null };
+
+  const plan = parseConcCubePlan(dist.testSubType) ?? {
+    v: 2,
+    cubeSizeMm: nominalCubeSizeToMm(sample.nominalCubeSize),
+  };
 
   const existing = await getConcreteGroupsByDistribution(distributionId);
   const edge = String(plan.cubeSizeMm);
   const nominalStr = mmToNominalCubeSize(plan.cubeSizeMm);
   let created = 0;
 
-  for (const ag of plan.ageGroups) {
-    let group = existing.find(g => g.testAge === ag.nominalAge);
-    if (!group) {
-      const cast = sample.castingDate ? new Date(sample.castingDate) : null;
-      const castYmd = cast && !isNaN(cast.getTime()) ? cast.toISOString().split("T")[0] : undefined;
-      group = await createConcreteGroup({
-        distributionId,
-        sampleId: dist.sampleId,
-        technicianId,
-        testAge: ag.nominalAge,
-        contractNo: sample.contractNumber ?? undefined,
-        projectName: sample.contractName ?? undefined,
-        contractorName: sample.contractorName ?? undefined,
-        testedBy: technicianName ?? undefined,
-        minAcceptable: String(plan.designStrength),
-        classOfConcrete: `C${Math.round(plan.designStrength)}`,
-        batchDateTime: castYmd,
-        dateSampled: cast ?? undefined,
-        nominalCubeSize: nominalStr,
-        status: "draft",
-      });
-      created++;
-    } else if (!group.minAcceptable) {
-      await updateConcreteGroupSummary(group.id, {
-        minAcceptable: String(plan.designStrength),
-        classOfConcrete: `C${Math.round(plan.designStrength)}`,
-      });
-    }
+  let group = existing[0];
+  if (!group) {
+    const cast = sample.castingDate ? new Date(sample.castingDate) : null;
+    const castYmd = cast && !isNaN(cast.getTime()) ? cast.toISOString().split("T")[0] : undefined;
+    group = await createConcreteGroup({
+      distributionId,
+      sampleId: dist.sampleId,
+      technicianId,
+      testAge: 0,
+      contractNo: sample.contractNumber ?? undefined,
+      projectName: sample.contractName ?? undefined,
+      contractorName: sample.contractorName ?? undefined,
+      testedBy: technicianName ?? undefined,
+      batchDateTime: castYmd,
+      dateSampled: cast ?? undefined,
+      nominalCubeSize: nominalStr,
+      status: "draft",
+    });
+    created++;
+  }
 
-    if (!group) continue;
-
-    const cubes = await getCubesByGroup(group.id);
-    const targetCount = ag.cubeCount;
-    if (cubes.length < targetCount) {
-      for (let mark = cubes.length + 1; mark <= targetCount; mark++) {
-        await upsertConcreteCube({
-          groupId: group.id,
-          markNo: mark,
-          length: edge,
-          width: edge,
-          height: edge,
-          maxLoadKN: "0",
-          fractureType: "SF",
-        });
-      }
+  const cubes = await getCubesByGroup(group.id);
+  const targetCount = DEFAULT_CONC_CUBE_COUNT;
+  if (cubes.length < targetCount) {
+    for (let mark = cubes.length + 1; mark <= targetCount; mark++) {
+      await upsertConcreteCube({
+        groupId: group.id,
+        markNo: mark,
+        length: edge,
+        width: edge,
+        height: edge,
+        maxLoadKN: "0",
+        fractureType: "SF",
+      });
     }
   }
 

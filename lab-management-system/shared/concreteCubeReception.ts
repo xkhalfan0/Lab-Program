@@ -1,12 +1,12 @@
 /**
- * Reception plan for CONC_CUBE — stored as JSON in lab_order_items.testSubType.
+ * Reception metadata for CONC_CUBE — cube size only (stored in lab_order_items.testSubType).
+ * Design strength and test age are determined on the technician form from test date vs casting date.
  */
 
-import { BS1881_NOMINAL_AGES } from "./concreteCubeBs1881";
-
-export const CONC_CUBE_PLAN_VERSION = 1;
+export const CONC_CUBE_PLAN_VERSION = 2;
 export const CONC_CUBE_PLAN_PREFIX = "CONC_CUBE_PLAN:";
 
+/** @deprecated v1 only — age groups no longer set at reception */
 export interface ConcCubeAgeGroupPlan {
   nominalAge: number;
   cubeCount: number;
@@ -14,13 +14,11 @@ export interface ConcCubeAgeGroupPlan {
 
 export interface ConcCubeReceptionPlan {
   v: number;
-  designStrength: number;
   cubeSizeMm: 100 | 150;
-  ageGroups: ConcCubeAgeGroupPlan[];
-}
-
-export function isValidNominalAge(age: number): boolean {
-  return (BS1881_NOMINAL_AGES as readonly number[]).includes(age);
+  /** @deprecated v1 — ignored for new orders */
+  designStrength?: number;
+  /** @deprecated v1 — ignored for new orders */
+  ageGroups?: ConcCubeAgeGroupPlan[];
 }
 
 export function serializeConcCubePlan(plan: ConcCubeReceptionPlan): string {
@@ -34,18 +32,26 @@ export function parseConcCubePlan(raw: string | null | undefined): ConcCubeRecep
       ? raw.slice(CONC_CUBE_PLAN_PREFIX.length)
       : raw;
     const data = JSON.parse(json) as ConcCubeReceptionPlan;
-    if (!data || data.v !== CONC_CUBE_PLAN_VERSION) return null;
-    if (!Number.isFinite(data.designStrength) || data.designStrength <= 0) return null;
+    if (!data) return null;
     if (data.cubeSizeMm !== 100 && data.cubeSizeMm !== 150) return null;
-    if (!Array.isArray(data.ageGroups) || data.ageGroups.length === 0) return null;
-    const groups = data.ageGroups.filter(
-      g => isValidNominalAge(g.nominalAge) && g.cubeCount >= 1 && g.cubeCount <= 16,
-    );
-    if (groups.length === 0) return null;
-    return { ...data, ageGroups: groups };
+    if (data.v === CONC_CUBE_PLAN_VERSION) {
+      return { v: CONC_CUBE_PLAN_VERSION, cubeSizeMm: data.cubeSizeMm };
+    }
+    // v1 legacy: keep cube size only
+    if (data.v === 1) {
+      return { v: CONC_CUBE_PLAN_VERSION, cubeSizeMm: data.cubeSizeMm };
+    }
+    return null;
   } catch {
     return null;
   }
+}
+
+export function buildConcCubePlanFromNominalSize(nom: string | null | undefined): ConcCubeReceptionPlan {
+  return {
+    v: CONC_CUBE_PLAN_VERSION,
+    cubeSizeMm: nominalCubeSizeToMm(nom),
+  };
 }
 
 export function nominalCubeSizeToMm(nom: string | null | undefined): 100 | 150 {
@@ -57,21 +63,5 @@ export function mmToNominalCubeSize(mm: 100 | 150): string {
   return mm === 100 ? "100mm" : "150mm";
 }
 
-export function totalCubesInPlan(plan: ConcCubeReceptionPlan): number {
-  return plan.ageGroups.reduce((s, g) => s + g.cubeCount, 0);
-}
-
-export function validateConcCubeReceptionPlan(
-  plan: ConcCubeReceptionPlan | null,
-  lang: "ar" | "en",
-): string | null {
-  if (!plan) {
-    return lang === "ar"
-      ? "أدخل مقاومة التصميم ومجموعات العمر لاختبار المكعبات"
-      : "Enter design strength and age groups for cube test";
-  }
-  if (plan.ageGroups.length === 0) {
-    return lang === "ar" ? "اختر عمر اختبار واحد على الأقل" : "Select at least one test age";
-  }
-  return null;
-}
+/** Standard cube count when reception does not specify per-age quantities. */
+export const DEFAULT_CONC_CUBE_COUNT = 3;

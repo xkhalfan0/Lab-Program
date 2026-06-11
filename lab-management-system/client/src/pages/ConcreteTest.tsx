@@ -20,8 +20,6 @@ import {
   calcActualAgeDays,
   cubeAreaMm2,
   cubeEdgeMmFromNominal,
-  daysUntilDue,
-  dueDateFromCasting,
   evaluateCubePass,
   evaluateGroupPass,
   FRACTURE_TYPE_OPTIONS,
@@ -214,6 +212,7 @@ interface GroupPanelProps {
   /** From sample (reception); default cube face size */
   distributionNominalCube?: string | null;
   receptionPlan?: ConcCubeReceptionPlan | null;
+  isConcCubeOrder?: boolean;
 }
 
 function initialSelectedTestAge(g: { comments?: string | null; testAge?: number }): number | null {
@@ -223,7 +222,7 @@ function initialSelectedTestAge(g: { comments?: string | null; testAge?: number 
   return [7, 14, 28].includes(gt) ? gt : null;
 }
 
-function GroupPanel({ group, distributionId, onRefresh, castingDate: distCastingDate, distributionNominalCube, receptionPlan }: GroupPanelProps) {
+function GroupPanel({ group, distributionId, onRefresh, castingDate: distCastingDate, distributionNominalCube, receptionPlan, isConcCubeOrder }: GroupPanelProps) {
   const { lang } = useLanguage();
   const ar = lang === "ar";
   const [open, setOpen] = useState(true);
@@ -245,6 +244,7 @@ function GroupPanel({ group, distributionId, onRefresh, castingDate: distCasting
   const [cscRef, setCscRef] = useState(group.cscRef ?? "");
   const [placeOfSampling, setPlaceOfSampling] = useState(group.placeOfSampling ?? "");
   const [location, setLocation] = useState(group.location ?? "");
+  const [designStrength, setDesignStrength] = useState(group.minAcceptable ?? "");
 
   const saveCube = trpc.concrete.saveCube.useMutation();
   const deleteCubeMut = trpc.concrete.deleteCube.useMutation();
@@ -252,15 +252,15 @@ function GroupPanel({ group, distributionId, onRefresh, castingDate: distCasting
   const submitGroup = trpc.concrete.submitGroup.useMutation();
 
   const defaultEdge = edgeMmFromNominal(group.nominalCubeSize ?? distributionNominalCube);
-  const planLocked = !!receptionPlan;
-  const nominalAge = group.testAge ?? 28;
-  const fcMpa = receptionPlan?.designStrength ?? parseFloat(group.minAcceptable ?? "0");
+  const cubeOrderFlow = isConcCubeOrder ?? !!receptionPlan;
+  const fcMpa = parseFloat(designStrength);
   const edgeMmNum = receptionPlan?.cubeSizeMm ?? cubeEdgeMmFromNominal(group.nominalCubeSize ?? distributionNominalCube);
   const [testDate, setTestDate] = useState(() => new Date().toISOString().split("T")[0]);
 
   useEffect(() => {
     setComments(stripAgeMetaFromComments(group.comments ?? ""));
     setTestAge(initialSelectedTestAge(group));
+    setDesignStrength(group.minAcceptable ?? "");
   }, [group.id]);
 
   const castingIso = distCastingDate
@@ -289,12 +289,12 @@ function GroupPanel({ group, distributionId, onRefresh, castingDate: distCasting
       setCubes(mapped);
       const firstDate = mapped.find(c => c.dateTested)?.dateTested;
       if (firstDate) setTestDate(firstDate);
-    } else if (!planLocked) {
+    } else if (!cubeOrderFlow) {
       setCubes([emptyRow(1, defaultEdge)]);
     } else {
       setCubes([]);
     }
-  }, [group.id, defaultEdge, planLocked]);
+  }, [group.id, defaultEdge, cubeOrderFlow]);
 
   // Recompute derived fields on change
   const updateCube = (idx: number, field: keyof CubeRow, value: string) => {
@@ -319,7 +319,7 @@ function GroupPanel({ group, distributionId, onRefresh, castingDate: distCasting
   };
 
   const addRow = () => {
-    if (planLocked) return;
+    if (cubeOrderFlow) return;
     setCubes(prev => {
       if (prev.length >= 16) {
         toast.error("Maximum 16 cubes per test group");
@@ -330,7 +330,7 @@ function GroupPanel({ group, distributionId, onRefresh, castingDate: distCasting
   };
 
   const removeRow = async (idx: number) => {
-    if (planLocked) return;
+    if (cubeOrderFlow) return;
     const cube = cubes[idx];
     if (cube.id) {
       await deleteCubeMut.mutateAsync({ id: cube.id });
@@ -346,11 +346,8 @@ function GroupPanel({ group, distributionId, onRefresh, castingDate: distCasting
 
   const isSubmitted = group.status === "submitted" || group.status === "approved";
   const castingStr = getCastingDateStr();
-  const daysUntil = castingStr && planLocked ? daysUntilDue(castingStr, nominalAge) : 0;
-  const groupLocked = planLocked && !isSubmitted && daysUntil > 0;
-  const dueDate = castingStr && planLocked ? dueDateFromCasting(castingStr, nominalAge) : null;
   const panelActualAgeForFactor =
-    castingStr && planLocked ? calcActualAgeDays(castingStr, testDate) : null;
+    castingStr && cubeOrderFlow ? calcActualAgeDays(castingStr, testDate) : null;
   const ageResult =
     panelActualAgeForFactor != null && fcMpa > 0
       ? resolveBs1881AgeFactor(panelActualAgeForFactor, fcMpa)
@@ -358,7 +355,7 @@ function GroupPanel({ group, distributionId, onRefresh, castingDate: distCasting
 
   const computePanelActualAge = (): number | null => {
     const castingDateStr = getCastingDateStr();
-    if (planLocked && castingDateStr) {
+    if (cubeOrderFlow && castingDateStr) {
       return calcActualAgeDays(castingDateStr, testDate);
     }
     const ages = cubes
@@ -393,14 +390,23 @@ function GroupPanel({ group, distributionId, onRefresh, castingDate: distCasting
     });
   };
 
-  const effectiveTestAge = planLocked ? nominalAge : testAge;
+  const effectiveTestAge = cubeOrderFlow ? (panelActualAgeForFactor ?? 0) : testAge;
+
+  const saveDesignStrength = async () => {
+    const fc = parseFloat(designStrength);
+    if (!Number.isFinite(fc) || fc <= 0) return;
+    await updateGroup.mutateAsync({
+      groupId: group.id,
+      minAcceptable: String(fc),
+      classOfConcrete: `C${Math.round(fc)}`,
+    });
+  };
 
   const saveSingleCube = async (idx: number) => {
-    if (!effectiveTestAge) {
+    if (!cubeOrderFlow && !effectiveTestAge) {
       toast.error(lang === "ar" ? "يجب اختيار عمر الاختبار" : "Please select test age");
       return;
     }
-    if (planLocked && groupLocked) return;
     const cube = cubes[idx];
     if (!cube.maxLoadKN) {
       toast.error("Max Load (kN) is required");
@@ -413,8 +419,8 @@ function GroupPanel({ group, distributionId, onRefresh, castingDate: distCasting
         groupId: group.id,
         markNo: cube.markNo,
         cubeId: cube.cubeId || undefined,
-        dateTested: planLocked ? testDate : undefined,
-        length: String(planLocked ? edgeMmNum : defaultEdge),
+        dateTested: cubeOrderFlow ? testDate : undefined,
+        length: String(cubeOrderFlow ? edgeMmNum : defaultEdge),
         width: String(defaultEdge),
         height: String(defaultEdge),
         massKg: cube.massKg || undefined,
@@ -445,18 +451,17 @@ function GroupPanel({ group, distributionId, onRefresh, castingDate: distCasting
   };
 
   const saveAllCubes = async () => {
-    if (!effectiveTestAge) {
+    if (!cubeOrderFlow && !effectiveTestAge) {
       toast.error(lang === "ar" ? "يجب اختيار عمر الاختبار" : "Please select test age");
       return;
     }
-    if (planLocked && groupLocked) return;
     for (let i = 0; i < cubes.length; i++) {
       if (cubes[i].maxLoadKN) await saveSingleCube(i);
     }
   };
 
   const saveHeader = async () => {
-    if (!isSubmitted && !effectiveTestAge) {
+    if (!isSubmitted && !cubeOrderFlow && !effectiveTestAge) {
       toast.error(lang === "ar" ? "يجب اختيار عمر الاختبار" : "Please select test age");
       return;
     }
@@ -489,19 +494,23 @@ function GroupPanel({ group, distributionId, onRefresh, castingDate: distCasting
   };
 
   const handleSubmit = async () => {
-    if (!effectiveTestAge) {
+    if (!cubeOrderFlow && !effectiveTestAge) {
       toast.error(lang === "ar" ? "يجب اختيار عمر الاختبار" : "Please select test age");
       return;
     }
-    if (planLocked && groupLocked) {
-      toast.error(ar ? "لم يحن موعد الاختبار بعد" : "This age group is not yet due for testing");
-      return;
+    if (cubeOrderFlow) {
+      const fc = parseFloat(designStrength);
+      if (!Number.isFinite(fc) || fc <= 0) {
+        toast.error(ar ? "أدخل مقاومة التصميم f'c" : "Enter design strength f'c (N/mm²)");
+        return;
+      }
+      if (ageResult?.status === "invalid") {
+        toast.error(ageResult.message ?? "Too early — result invalid");
+        return;
+      }
+      await saveDesignStrength();
     }
-    if (planLocked && ageResult?.status === "invalid") {
-      toast.error(ageResult.message ?? "Too early — result invalid");
-      return;
-    }
-    if (!planLocked) {
+    if (!cubeOrderFlow) {
       const requiredFields = [
         { label: ar ? "مصدر/مورد الخرسانة" : "Concrete Source/Supplier", value: sourceSupplier },
         { label: ar ? "درجة الخرسانة" : "Class of Concrete", value: classOfConcrete },
@@ -523,7 +532,11 @@ function GroupPanel({ group, distributionId, onRefresh, castingDate: distCasting
     await saveAllCubes();
     try {
       await submitGroup.mutateAsync({ groupId: group.id });
-      toast.success(`${nominalAge}-day results submitted for review`);
+      toast.success(
+        panelActualAge != null
+          ? `${panelActualAge}-day results submitted for review`
+          : "Results submitted for review",
+      );
       onRefresh();
     } catch (e: any) {
       toast.error(e.message);
@@ -534,24 +547,24 @@ function GroupPanel({ group, distributionId, onRefresh, castingDate: distCasting
   const cubeStrengthVals = cubes
     .map(c => parseFloat(c.compressiveStrengthMpa ?? calcStrength(c.maxLoadKN, c.length, c.width)))
     .filter(v => v > 0);
-  const strengthBandMilestone = planLocked ? nominalAge : (testAge ?? group.testAge ?? 28);
-  const targetMpa = planLocked ? fcMpa : (group.minAcceptable ? parseFloat(group.minAcceptable) : null);
+  const strengthBandMilestone = cubeOrderFlow ? (panelActualAgeForFactor ?? 28) : (testAge ?? group.testAge ?? 28);
+  const targetMpa = cubeOrderFlow ? (fcMpa > 0 ? fcMpa : null) : (group.minAcceptable ? parseFloat(group.minAcceptable) : null);
   const testAgeN = strengthBandMilestone;
-  const requiredMpa = planLocked && ageResult
+  const requiredMpa = cubeOrderFlow && ageResult
     ? ageResult.minStrengthMpa
     : targetMpa != null && testAgeN >= 28
       ? targetMpa
       : targetMpa != null
         ? getRequiredStrength(targetMpa, testAgeN)
         : null;
-  const compliance = planLocked && ageResult && ageResult.status !== "invalid"
+  const compliance = cubeOrderFlow && ageResult && ageResult.status !== "invalid"
     ? (cubeStrengthVals.length > 0 && evaluateGroupPass(cubeStrengthVals, ageResult.minStrengthMpa) ? "pass" : cubeStrengthVals.length > 0 ? "fail" : "none")
     : complianceColor(avg, group.minAcceptable, group.maxAcceptable, strengthBandMilestone, cubeStrengthVals);
   const panelActualAge = computePanelActualAge();
-  const inputsDisabled = isSubmitted || groupLocked;
+  const inputsDisabled = isSubmitted;
 
   return (
-    <Card className={`border-2 ${groupLocked ? "opacity-60" : ""}`}>
+    <Card className="border-2">
       {/* Group Header */}
       <CardHeader
         className="cursor-pointer select-none pb-3"
@@ -561,7 +574,11 @@ function GroupPanel({ group, distributionId, onRefresh, castingDate: distCasting
           <div className="flex items-center gap-3">
             <FlaskConical className="w-5 h-5 text-blue-600" />
             <CardTitle className="text-lg font-bold">
-              {group.testAge}-Day Compressive Strength Test
+              {cubeOrderFlow && panelActualAge != null
+                ? `${panelActualAge}-Day Compressive Strength Test`
+                : group.testAge
+                  ? `${group.testAge}-Day Compressive Strength Test`
+                  : "Compressive Strength Test"}
             </CardTitle>
             {group.testedBy && (
               <span className="text-sm text-gray-600 font-normal">
@@ -595,68 +612,73 @@ function GroupPanel({ group, distributionId, onRefresh, castingDate: distCasting
 
       {open && (
         <CardContent className="pt-0">
-          {planLocked && (
-            <div className="mb-4 p-3 rounded-lg border bg-gray-50 space-y-2 text-sm">
-              <div className="flex flex-wrap gap-x-6 gap-y-1">
+          {cubeOrderFlow && (
+            <div className="mb-4 p-3 rounded-lg border bg-gray-50 space-y-3 text-sm">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <span className="text-gray-500">{ar ? "موعد الاستحقاق" : "Due date"}:</span>{" "}
-                  <strong>
-                    {dueDate
-                      ? dueDate.toLocaleDateString("en-GB", { day: "2-digit", month: "2-digit", year: "numeric" })
-                      : "—"}
-                  </strong>
-                  <span className="text-gray-400 ml-1">({nominalAge}-day)</span>
+                  <Label className="text-xs">
+                    {ar ? "مقاومة التصميم f'c (N/mm²)" : "Design Strength f'c (N/mm²)"}
+                    <span className="text-red-600 ml-1">*</span>
+                  </Label>
+                  <Input
+                    type="number"
+                    min={1}
+                    step={0.5}
+                    value={designStrength}
+                    onChange={e => setDesignStrength(e.target.value)}
+                    onBlur={() => { if (!isSubmitted) void saveDesignStrength(); }}
+                    className="h-8 text-sm mt-0.5 bg-yellow-50 border-yellow-300"
+                    placeholder="e.g. 30"
+                    disabled={inputsDisabled}
+                  />
                 </div>
-                {groupLocked ? (
-                  <div className="text-amber-700 font-medium flex items-center gap-1">
-                    <AlertTriangle className="w-4 h-4" />
-                    {ar ? `متبقي ${daysUntil} يوم` : `Due in ${daysUntil} day${daysUntil === 1 ? "" : "s"}`}
-                  </div>
-                ) : (
-                  <div>
-                    <Label className="text-xs text-gray-500">{ar ? "تاريخ الاختبار الفعلي" : "Actual test date"}</Label>
-                    <Input
-                      type="date"
-                      value={testDate}
-                      onChange={e => {
-                        setTestDate(e.target.value);
-                        setCubes(prev => prev.map(c => ({ ...c, dateTested: e.target.value })));
-                      }}
-                      className="h-8 text-sm w-40 mt-0.5"
-                      disabled={inputsDisabled}
-                    />
-                  </div>
-                )}
+                <div>
+                  <Label className="text-xs text-gray-500">{ar ? "تاريخ الاختبار" : "Test date"}</Label>
+                  <Input
+                    type="date"
+                    value={testDate}
+                    onChange={e => {
+                      setTestDate(e.target.value);
+                      setCubes(prev => prev.map(c => ({ ...c, dateTested: e.target.value })));
+                    }}
+                    className="h-8 text-sm w-full mt-0.5"
+                    disabled={inputsDisabled}
+                  />
+                </div>
               </div>
-              {!groupLocked && panelActualAge != null && ageResult && (
+              {panelActualAge != null && (
                 <div className="space-y-1 text-xs border-t pt-2">
                   <div>
-                    <span className="text-gray-500">{ar ? "العمر الفعلي" : "Actual age"}:</span>{" "}
+                    <span className="text-gray-500">{ar ? "العمر الفعلي (محسوب تلقائياً)" : "Actual age (auto)"}:</span>{" "}
                     <strong>{panelActualAge} {ar ? "يوم" : "days"}</strong>
                   </div>
-                  {ageResult.rangeLabel && (
-                    <div>
-                      <span className="text-gray-500">{ar ? "النطاق" : "Range"}:</span> {ageResult.rangeLabel}
-                    </div>
+                  {fcMpa > 0 && ageResult && (
+                    <>
+                      {ageResult.rangeLabel && (
+                        <div>
+                          <span className="text-gray-500">{ar ? "النطاق" : "Range"}:</span> {ageResult.rangeLabel}
+                        </div>
+                      )}
+                      <div>
+                        <span className="text-gray-500">{ar ? "عامل القوة" : "Strength factor"}:</span>{" "}
+                        <strong>{ageResult.factorPct}%</strong>
+                        {ageResult.interpolated && (
+                          <span className="text-amber-600 ml-1">({ageResult.message})</span>
+                        )}
+                      </div>
+                      <div>
+                        <span className="text-gray-500">{ar ? "الحد الأدنى المطلوب" : "Min required"}:</span>{" "}
+                        <strong>{ageResult.minStrengthMpa.toFixed(1)} N/mm²</strong>
+                      </div>
+                    </>
                   )}
-                  <div>
-                    <span className="text-gray-500">{ar ? "عامل القوة" : "Strength factor"}:</span>{" "}
-                    <strong>{ageResult.factorPct}%</strong>
-                    {ageResult.interpolated && (
-                      <span className="text-amber-600 ml-1">({ageResult.message})</span>
-                    )}
-                  </div>
-                  <div>
-                    <span className="text-gray-500">{ar ? "الحد الأدنى المطلوب" : "Min required"}:</span>{" "}
-                    <strong>{ageResult.minStrengthMpa.toFixed(1)} N/mm²</strong>
-                  </div>
-                  {ageResult.status === "invalid" && (
+                  {ageResult?.status === "invalid" && (
                     <div className="text-red-600 font-semibold flex items-center gap-1">
                       <XCircle className="w-4 h-4" />
                       {ageResult.message}
                     </div>
                   )}
-                  {ageResult.status === "beyond90" && (
+                  {ageResult?.status === "beyond90" && (
                     <div className="text-amber-700 flex items-center gap-1">
                       <AlertTriangle className="w-4 h-4" />
                       {ageResult.message}
@@ -668,7 +690,7 @@ function GroupPanel({ group, distributionId, onRefresh, castingDate: distCasting
           )}
 
           {/* Expandable header info — legacy orders only */}
-          {!planLocked && <div className="mb-4">
+          {!cubeOrderFlow && <div className="mb-4">
             <button
               className="text-sm text-blue-600 underline flex items-center gap-1"
               onClick={() => setHeaderExpanded(h => !h)}
@@ -740,7 +762,7 @@ function GroupPanel({ group, distributionId, onRefresh, castingDate: distCasting
           </div>}
 
           {/* Calculation Details */}
-          {!planLocked && group.minAcceptable && (
+          {!cubeOrderFlow && group.minAcceptable && (
             <div className="mb-3 text-sm bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 space-y-1">
               <div className="flex items-center gap-2 font-semibold text-blue-800 mb-2">
                 <Info className="w-4 h-4 shrink-0" />
@@ -771,7 +793,7 @@ function GroupPanel({ group, distributionId, onRefresh, castingDate: distCasting
             </div>
           )}
 
-          {!planLocked && (
+          {!cubeOrderFlow && (
             <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded">
               <label className="block text-sm font-semibold mb-2">
                 {lang === "ar" ? "عمر الاختبار *" : "Test Age *"}
@@ -801,17 +823,16 @@ function GroupPanel({ group, distributionId, onRefresh, castingDate: distCasting
             </div>
           )}
 
-          {planLocked && fcMpa > 0 && (
+          {cubeOrderFlow && (
             <div className="mb-3 text-sm bg-blue-50 border border-blue-200 rounded-lg px-4 py-3">
               <div className="flex items-center gap-2 font-semibold text-blue-800 mb-1">
                 <Info className="w-4 h-4" />
-                BS 1881 — {nominalAge}-Day Group
+                BS 1881 — {panelActualAge != null ? `${panelActualAge}-Day Test` : "Auto Age Test"}
               </div>
               <div className="text-xs text-gray-700 grid grid-cols-2 gap-x-4">
-                <div><LockedLabel>{ar ? "مقاومة التصميم" : "Design strength"}</LockedLabel> <strong>{fcMpa} N/mm²</strong></div>
                 <div><LockedLabel>{ar ? "حجم المكعب" : "Cube size"}</LockedLabel> <strong>{edgeMmNum} mm</strong></div>
                 <div><span className="text-gray-500">{ar ? "مساحة الوجه" : "Face area"}:</span> <strong>{cubeAreaMm2(edgeMmNum).toLocaleString()} mm²</strong></div>
-                <div><span className="text-gray-500">{ar ? "عدد المكعبات" : "Cube count"}:</span> <strong>{cubes.length}</strong> <LockedLabel>{ar ? "محدد عند الاستقبال" : "Set at reception"}</LockedLabel></div>
+                <div><span className="text-gray-500">{ar ? "عدد المكعبات" : "Cube count"}:</span> <strong>{cubes.length}</strong></div>
               </div>
             </div>
           )}
@@ -822,17 +843,17 @@ function GroupPanel({ group, distributionId, onRefresh, castingDate: distCasting
               <thead>
                 <tr className="bg-gray-100">
                   <th className="border px-2 py-1 text-center w-8">Mark</th>
-                  {!planLocked && <th className="border px-2 py-1 text-center">Cube ID</th>}
-                  {!planLocked && <th className="border px-2 py-1 text-center bg-orange-50">Age (days)</th>}
-                  {!planLocked && <th className="border px-2 py-1 text-center">L × W × H (mm)</th>}
-                  {!planLocked && <th className="border px-2 py-1 text-center">Mass (kg)</th>}
+                  {!cubeOrderFlow && <th className="border px-2 py-1 text-center">Cube ID</th>}
+                  {!cubeOrderFlow && <th className="border px-2 py-1 text-center bg-orange-50">Age (days)</th>}
+                  {!cubeOrderFlow && <th className="border px-2 py-1 text-center">L × W × H (mm)</th>}
+                  {!cubeOrderFlow && <th className="border px-2 py-1 text-center">Mass (kg)</th>}
                   <th className="border px-2 py-1 text-center bg-yellow-50">Load (kN) *</th>
                   <th className="border px-2 py-1 text-center bg-blue-50">Strength (N/mm²)</th>
                   <th className="border px-2 py-1 text-center">Fracture</th>
-                  {planLocked && <th className="border px-2 py-1 text-center w-16">Pass</th>}
-                  {!planLocked && <th className="border px-2 py-1 text-center bg-blue-50">Density (kg/m³)</th>}
-                  {!planLocked && <th className="border px-2 py-1 text-center w-20 bg-green-50">Within Spec ✓</th>}
-                  {!planLocked && <th className="border px-2 py-1 text-center w-16">Action</th>}
+                  {cubeOrderFlow && <th className="border px-2 py-1 text-center w-16">Pass</th>}
+                  {!cubeOrderFlow && <th className="border px-2 py-1 text-center bg-blue-50">Density (kg/m³)</th>}
+                  {!cubeOrderFlow && <th className="border px-2 py-1 text-center w-20 bg-green-50">Within Spec ✓</th>}
+                  {!cubeOrderFlow && <th className="border px-2 py-1 text-center w-16">Action</th>}
                 </tr>
               </thead>
               <tbody>
@@ -840,21 +861,21 @@ function GroupPanel({ group, distributionId, onRefresh, castingDate: distCasting
                   const strength = cube.compressiveStrengthMpa || calcStrength(cube.maxLoadKN, cube.length, cube.width);
                   const density = cube.densityKgM3 || calcDensity(cube.massKg, cube.length, cube.width, cube.height);
                   const strengthVal = parseFloat(strength);
-                  const minV = planLocked && ageResult ? ageResult.minStrengthMpa : (group.minAcceptable ? parseFloat(group.minAcceptable) : null);
+                  const minV = cubeOrderFlow && ageResult ? ageResult.minStrengthMpa : (group.minAcceptable ? parseFloat(group.minAcceptable) : null);
                   const castingDateStr = distCastingDate
                     ? (distCastingDate instanceof Date ? distCastingDate.toISOString() : String(distCastingDate))
                     : (group.batchDateTime ? group.batchDateTime.split(' ')[0] : null);
-                  const actualAge = planLocked ? panelActualAge : calcCubeAge(castingDateStr, cube.dateTested);
+                  const actualAge = cubeOrderFlow ? panelActualAge : calcCubeAge(castingDateStr, cube.dateTested);
                   const effectiveAge =
-                    actualAge !== null && !planLocked
+                    actualAge !== null && !cubeOrderFlow
                       ? getEffectiveAge(actualAge, strengthBandMilestone)
                       : strengthBandMilestone;
-                  const requiredV = planLocked && ageResult
+                  const requiredV = cubeOrderFlow && ageResult
                     ? ageResult.minStrengthMpa
                     : minV ? getRequiredStrength(minV, effectiveAge) : null;
                   const rowFail = (() => {
-                    if (!strength || (!planLocked && cube.withinSpec === true)) return false;
-                    if (planLocked && ageResult) {
+                    if (!strength || (!cubeOrderFlow && cube.withinSpec === true)) return false;
+                    if (cubeOrderFlow && ageResult) {
                       return !evaluateCubePass(strengthVal, ageResult.minStrengthMpa);
                     }
                     if (strengthBandMilestone >= 28 && minV != null) return strengthVal < minV - 4;
@@ -866,25 +887,25 @@ function GroupPanel({ group, distributionId, onRefresh, castingDate: distCasting
                   return (
                     <tr key={idx} className={rowFail ? "bg-red-50" : ""}>
                       <td className="border px-1 py-1 text-center font-bold text-gray-600">{cube.markNo}</td>
-                      {!planLocked && (
+                      {!cubeOrderFlow && (
                         <td className="border px-1 py-1">
                           <Input value={cube.cubeId} onChange={e => updateCube(idx, "cubeId", e.target.value)}
                             className="h-7 text-xs w-20" disabled={inputsDisabled} />
                         </td>
                       )}
-                      {!planLocked && (
+                      {!cubeOrderFlow && (
                         <td className="border px-1 py-1 bg-orange-50 text-center text-xs font-mono font-semibold text-gray-700">
                           {actualAge !== null ? `${actualAge} ${ar ? "يوم" : "days"}` : "—"}
                         </td>
                       )}
-                      {!planLocked && (
+                      {!cubeOrderFlow && (
                         <td className="border px-1 py-1">
                           <div className="h-7 text-xs flex items-center justify-center font-mono text-gray-700 bg-gray-50 border rounded">
                             {defaultEdge} × {defaultEdge} × {defaultEdge}
                           </div>
                         </td>
                       )}
-                      {!planLocked && (
+                      {!cubeOrderFlow && (
                         <td className="border px-1 py-1">
                           <Input value={cube.massKg} onChange={e => updateCube(idx, "massKg", e.target.value)}
                             className="h-7 text-xs w-20" placeholder="kg" disabled={inputsDisabled} />
@@ -903,13 +924,13 @@ function GroupPanel({ group, distributionId, onRefresh, castingDate: distCasting
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
-                            {(planLocked ? FRACTURE_TYPE_OPTIONS : ["SF", "USF"]).map(ft => (
+                            {(cubeOrderFlow ? FRACTURE_TYPE_OPTIONS : ["SF", "USF"]).map(ft => (
                               <SelectItem key={ft} value={ft}>{ft}</SelectItem>
                             ))}
                           </SelectContent>
                         </Select>
                       </td>
-                      {planLocked && (
+                      {cubeOrderFlow && (
                         <td className="border px-1 py-1 text-center text-xs">
                           {strengthVal > 0 && (
                             rowPass
@@ -918,12 +939,12 @@ function GroupPanel({ group, distributionId, onRefresh, castingDate: distCasting
                           )}
                         </td>
                       )}
-                      {!planLocked && (
+                      {!cubeOrderFlow && (
                         <td className="border px-1 py-1 bg-blue-50 text-center text-xs text-gray-600 font-mono">
                           {density || "—"}
                         </td>
                       )}
-                      {!planLocked && (
+                      {!cubeOrderFlow && (
                         <td className="border px-1 py-1 text-center bg-green-50">
                           <button
                             type="button"
@@ -946,7 +967,7 @@ function GroupPanel({ group, distributionId, onRefresh, castingDate: distCasting
                           </button>
                         </td>
                       )}
-                      {!planLocked && (
+                      {!cubeOrderFlow && (
                         <td className="border px-1 py-1 text-center">
                           {!isSubmitted && (
                             <div className="flex gap-1 justify-center">
@@ -970,11 +991,11 @@ function GroupPanel({ group, distributionId, onRefresh, castingDate: distCasting
               {avg > 0 && (
                 <tfoot>
                   <tr className="bg-gray-100 font-bold">
-                    <td colSpan={planLocked ? 3 : 10} className="border px-2 py-1 text-right text-sm">Average Compressive Strength:</td>
+                    <td colSpan={cubeOrderFlow ? 3 : 10} className="border px-2 py-1 text-right text-sm">Average Compressive Strength:</td>
                     <td className={`border px-2 py-1 text-center text-sm font-mono ${compliance === "fail" ? "text-red-600" : "text-green-700"}`}>
                       {avg.toFixed(2)} N/mm²
                     </td>
-                    <td colSpan={planLocked ? 2 : 3} className="border px-2 py-1 text-center">
+                    <td colSpan={cubeOrderFlow ? 2 : 3} className="border px-2 py-1 text-center">
                       {compliance === "pass" && <span className="text-green-600 text-xs font-bold">✓ PASS</span>}
                       {compliance === "fail" && (
                         <div className="text-red-600 text-xs font-bold">
@@ -1003,14 +1024,14 @@ function GroupPanel({ group, distributionId, onRefresh, castingDate: distCasting
           </div>
 
           {/* Actions */}
-          {!isSubmitted && !groupLocked && (
+          {!isSubmitted && (
             <div className="mt-4 flex flex-wrap gap-2 justify-between items-center">
-              {!planLocked && (
+              {!cubeOrderFlow && (
                 <Button variant="outline" size="sm" onClick={addRow}>
                   <Plus className="w-4 h-4 mr-1" /> Add Cube
                 </Button>
               )}
-              <div className={`flex gap-2 ${planLocked ? "ml-auto" : ""}`}>
+              <div className={`flex gap-2 ${cubeOrderFlow ? "ml-auto" : ""}`}>
                 <Button variant="outline" size="sm" onClick={saveAllCubes}>
                   <Save className="w-4 h-4 mr-1" /> Save All
                 </Button>
@@ -1018,7 +1039,7 @@ function GroupPanel({ group, distributionId, onRefresh, castingDate: distCasting
                   disabled={
                     submitGroup.isPending
                     || cubes.filter(c => c.maxLoadKN).length === 0
-                    || (planLocked && ageResult?.status === "invalid")
+                    || (cubeOrderFlow && ageResult?.status === "invalid")
                   }>
                   <Send className="w-4 h-4 mr-1" />
                   {submitGroup.isPending ? "Submitting..." : "Submit for Review"}
@@ -1048,6 +1069,7 @@ export default function ConcreteTest() {
     { enabled: distId > 0 }
   );
 
+  const isConcCubeOrder = distribution?.testType === "CONC_CUBE";
   const receptionPlan = distribution?.testSubType
     ? parseConcCubePlan(distribution.testSubType)
     : null;
@@ -1061,12 +1083,12 @@ export default function ConcreteTest() {
   const ensureGroups = trpc.concrete.ensureReceptionGroups.useMutation();
 
   useEffect(() => {
-    if (!distId || !receptionPlan || ensuredRef.current) return;
+    if (!distId || !isConcCubeOrder || ensuredRef.current) return;
     ensuredRef.current = true;
     ensureGroups.mutateAsync({ distributionId: distId })
       .then(() => refetch())
       .catch(() => { ensuredRef.current = false; });
-  }, [distId, receptionPlan]);
+  }, [distId, isConcCubeOrder]);
 
   const handleAddAge = async () => {
     const age = parseInt(newAge);
@@ -1130,31 +1152,21 @@ export default function ConcreteTest() {
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
                 <div><span className="text-gray-500">Contract No:</span> <strong>{distribution.contractNumber ?? distribution.sampleId}</strong></div>
                 <div><span className="text-gray-500">Priority:</span> <strong className="capitalize">{distribution.priority}</strong></div>
-                <div>
-                  <span className="text-gray-500">Design Strength (f'c):</span>{" "}
-                  <strong>{receptionPlan?.designStrength ?? distribution.minAcceptable ?? "—"} N/mm²</strong>
-                  {receptionPlan && <LockedLabel>Set at reception</LockedLabel>}
-                </div>
-                <div>
-                  <span className="text-gray-500">Cube Size:</span>{" "}
-                  <strong>{receptionPlan ? `${receptionPlan.cubeSizeMm} mm` : (distribution.nominalCubeSize ?? "150mm")}</strong>
-                  {receptionPlan && <LockedLabel>Set at reception</LockedLabel>}
-                </div>
+                {isConcCubeOrder && (
+                  <div>
+                    <span className="text-gray-500">Cube Size:</span>{" "}
+                    <strong>{receptionPlan ? `${receptionPlan.cubeSizeMm} mm` : (distribution.nominalCubeSize ?? "150mm")}</strong>
+                    <LockedLabel>Set at reception</LockedLabel>
+                  </div>
+                )}
                 {distribution.castingDate && (
                   <div className="col-span-2 md:col-span-4 border-t pt-2 mt-1">
                     <span className="text-gray-500">Date of Casting:</span>{" "}
                     <strong className="text-blue-700">
                       {new Date(distribution.castingDate).toLocaleDateString("en-GB", { day: '2-digit', month: '2-digit', year: 'numeric' })}
                     </strong>
-                    {receptionPlan && <LockedLabel>Set at reception</LockedLabel>}
-                    <span className="text-xs text-gray-400 ml-2">(used for age calculation)</span>
-                  </div>
-                )}
-                {receptionPlan && (
-                  <div className="col-span-2 md:col-span-4 text-xs text-gray-600">
-                    <span className="text-gray-500">Age groups:</span>{" "}
-                    {receptionPlan.ageGroups.map(g => `${g.nominalAge}d × ${g.cubeCount}`).join(", ")}
-                    <LockedLabel>Set at reception</LockedLabel>
+                    {isConcCubeOrder && <LockedLabel>Set at reception</LockedLabel>}
+                    <span className="text-xs text-gray-400 ml-2">(test age calculated from casting vs test date)</span>
                   </div>
                 )}
               </div>
@@ -1170,8 +1182,8 @@ export default function ConcreteTest() {
           <Card className="border-dashed border-2 border-gray-300">
             <CardContent className="py-12 text-center">
               <FlaskConical className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-              {receptionPlan ? (
-                <p className="text-gray-500">Loading age groups from reception plan…</p>
+              {isConcCubeOrder ? (
+                <p className="text-gray-500">Preparing test form…</p>
               ) : (
                 <>
                   <p className="text-gray-500 mb-4">No test age groups yet. Add your first age group to start entering results.</p>
@@ -1213,10 +1225,11 @@ export default function ConcreteTest() {
                 castingDate={distribution?.castingDate}
                 distributionNominalCube={distribution?.nominalCubeSize}
                 receptionPlan={receptionPlan}
+                isConcCubeOrder={isConcCubeOrder}
               />
             ))}
 
-            {!receptionPlan && (
+            {!isConcCubeOrder && (
               <Card className="border-dashed border-2 border-gray-200">
                 <CardContent className="py-4">
                   {showAddAge ? (

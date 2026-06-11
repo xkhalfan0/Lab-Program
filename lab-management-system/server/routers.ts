@@ -1847,8 +1847,8 @@ ${testSummaries.length > 0 ? testSummaries.join("\n\n") : "لم تُجرَ اخ�
           { key: "placeOfSampling", label: "Place of Sampling" },
         ];
         const distForPlan = await getDistributionById(group.distributionId);
-        const receptionPlan = parseConcCubePlan(distForPlan?.testSubType);
-        if (!receptionPlan) {
+        const isConcCubeOrder = distForPlan?.testType === "CONC_CUBE";
+        if (!isConcCubeOrder) {
           const missing = requiredHeaderFields
             .filter((f) => !String(group[f.key] ?? "").trim())
             .map((f) => f.label);
@@ -1859,22 +1859,22 @@ ${testSummaries.length > 0 ? testSummaries.join("\n\n") : "لم تُجرَ اخ�
             });
           }
         }
-        await updateConcreteGroupSummary(input.groupId, {
-          status: "submitted",
-          submittedAt: new Date(),
-          testedBy: ctx.user.name ?? ctx.user.username ?? group.testedBy ?? undefined,
-        });
-
-        const submittedGroup = (await getConcreteGroupById(input.groupId))!;
         const cubes = await getCubesByGroup(input.groupId);
-        if (receptionPlan) {
+        if (isConcCubeOrder) {
+          const fc = group.minAcceptable ? parseFloat(String(group.minAcceptable)) : NaN;
+          if (!Number.isFinite(fc) || fc <= 0) {
+            throw new TRPCError({
+              code: "BAD_REQUEST",
+              message: "Design strength (f'c) is required before submit",
+            });
+          }
           const sampleForAge = await getSampleById(group.sampleId);
           const castingRef = sampleForAge?.castingDate ?? group.batchDateTime ?? group.dateSampled;
           const testRef = cubes.find(c => c.dateTested)?.dateTested ?? new Date();
           if (castingRef) {
             const actualAge = calcActualAgeDays(castingRef, testRef);
             if (actualAge != null) {
-              const ageFactor = resolveBs1881AgeFactor(actualAge, receptionPlan.designStrength);
+              const ageFactor = resolveBs1881AgeFactor(actualAge, fc);
               if (ageFactor.status === "invalid") {
                 throw new TRPCError({
                   code: "BAD_REQUEST",
@@ -1884,6 +1884,13 @@ ${testSummaries.length > 0 ? testSummaries.join("\n\n") : "لم تُجرَ اخ�
             }
           }
         }
+        await updateConcreteGroupSummary(input.groupId, {
+          status: "submitted",
+          submittedAt: new Date(),
+          testedBy: ctx.user.name ?? ctx.user.username ?? group.testedBy ?? undefined,
+        });
+
+        const submittedGroup = (await getConcreteGroupById(input.groupId))!;
         const rawValues = cubes
           .map((c) => parseFloat(c.compressiveStrengthMpa ?? "0"))
           .filter((v) => v > 0);
@@ -3015,9 +3022,6 @@ ${testSummaries.length > 0 ? testSummaries.join("\n\n") : "لم تُجرَ اخ�
         const techUser = await getUserById(input.technicianId);
         // Create a distribution for each order item
         for (const item of items) {
-          const cubePlan = item.testTypeCode === "CONC_CUBE"
-            ? parseConcCubePlan(item.testSubType)
-            : null;
           const distCode = await generateDistributionCode();
           const dist = await createDistribution({
             distributionCode: distCode,
@@ -3033,7 +3037,6 @@ ${testSummaries.length > 0 ? testSummaries.join("\n\n") : "لم تُجرَ اخ�
             priority: distPriority,
             notes: input.notes ?? null,
             status: "pending",
-            minAcceptable: cubePlan ? String(cubePlan.designStrength) : undefined,
           });
           await updateLabOrderItemDistribution(item.id, dist.id);
           if (item.testTypeCode === "CONC_CUBE" && dist?.id) {
