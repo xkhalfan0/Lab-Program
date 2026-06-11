@@ -7,6 +7,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { trpc } from "@/lib/trpc";
 import { useLanguage, formatDateForLang } from "@/contexts/LanguageContext";
+import { toast } from "sonner";
 import {
   computeContractReadinessRows,
   computeContractorScores,
@@ -98,9 +99,37 @@ export default function ManagerDashboard() {
   const { data: techStats } = trpc.dashboard.technicianStats.useQuery();
   const { data: clearanceStats } = trpc.dashboard.clearanceStats.useQuery();
 
+  const downloadGeneratedReport = (res: {
+    fileName: string;
+    mimeType: string;
+    dataBase64: string;
+  }) => {
+    const bytes = Uint8Array.from(atob(res.dataBase64), (c) => c.charCodeAt(0));
+    const blob = new Blob([bytes], { type: res.mimeType });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = res.fileName;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+  };
+
   const generateReport = trpc.reports.generate.useMutation({
     onSuccess: (res) => {
-      window.open(res.url, "_blank");
+      downloadGeneratedReport(res);
+      toast.success(lang === "ar" ? "تم إنشاء التقرير" : "Report generated", {
+        description:
+          lang === "ar"
+            ? "تم تنزيل الملف على جهازك"
+            : "The file has been downloaded to your device",
+      });
+    },
+    onError: (err) => {
+      toast.error(lang === "ar" ? "فشل إنشاء التقرير" : "Report generation failed", {
+        description: err.message,
+      });
     },
   });
 

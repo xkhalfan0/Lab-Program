@@ -1,8 +1,8 @@
 /**
- * Boss dashboard report generator — PDF (puppeteer) or Excel (CSV upload).
+ * Boss dashboard report generator — PDF (puppeteer) or Excel (CSV).
+ * Returns base64 inline so reports work without external storage credentials.
  */
 import puppeteer from "puppeteer";
-import { storagePut } from "./storage";
 import {
   computeContractReadinessRows,
   computeContractorScores,
@@ -11,7 +11,6 @@ import {
   getAllSamples,
   getAllLabOrders,
   getAllUsers,
-  getAllClearanceRequests,
   getAllDistributions,
 } from "./db";
 import { SAMPLE_STATUS_GROUPS, isInGroup } from "@shared/statusGroups";
@@ -266,9 +265,15 @@ function buildCsv(data: Record<string, unknown>, sections: ReportSection[]): str
   return lines.join("\n");
 }
 
+export type DashboardReportResult = {
+  fileName: string;
+  mimeType: string;
+  dataBase64: string;
+};
+
 export async function generateDashboardReport(
   input: ReportInput
-): Promise<{ url: string; fileName: string }> {
+): Promise<DashboardReportResult> {
   const { from, to } = resolveRange(input);
   const data = await collectSectionData(input.sections, from, to);
   const stamp = Date.now();
@@ -276,16 +281,22 @@ export async function generateDashboardReport(
   if (input.format === "excel") {
     const csv = buildCsv(data, input.sections);
     const fileName = `dashboard-report-${stamp}.csv`;
-    const key = `dashboard-reports/${fileName}`;
-    const { url } = await storagePut(key, Buffer.from(csv, "utf-8"), "text/csv");
-    return { url, fileName };
+    return {
+      fileName,
+      mimeType: "text/csv",
+      dataBase64: Buffer.from(csv, "utf-8").toString("base64"),
+    };
   }
 
   const html = buildHtml(data, input.sections);
   const browser = await puppeteer.launch({
-    executablePath: process.platform === "win32" ? undefined : "/usr/bin/chromium-browser",
-    args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
     headless: true,
+    args: [
+      "--no-sandbox",
+      "--disable-setuid-sandbox",
+      "--disable-dev-shm-usage",
+      "--disable-gpu",
+    ],
   });
 
   try {
@@ -297,9 +308,11 @@ export async function generateDashboardReport(
       margin: { top: "10mm", bottom: "10mm", left: "10mm", right: "10mm" },
     });
     const fileName = `dashboard-report-${stamp}.pdf`;
-    const key = `dashboard-reports/${fileName}`;
-    const { url } = await storagePut(key, Buffer.from(pdfBuffer), "application/pdf");
-    return { url, fileName };
+    return {
+      fileName,
+      mimeType: "application/pdf",
+      dataBase64: Buffer.from(pdfBuffer).toString("base64"),
+    };
   } finally {
     await browser.close();
   }

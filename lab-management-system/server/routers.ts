@@ -3512,9 +3512,18 @@ ${testSummaries.length > 0 ? testSummaries.join("\n\n") : "لم تُجرَ اخ�
       .mutation(async ({ input, ctx }) => {
         requireRole(ctx.user.role, ["admin", "lab_manager", "supervisor", "sample_manager"]);
         if (input.range === "custom" && (!input.dateFrom || !input.dateTo)) {
-          throw new Error("Custom range requires dateFrom and dateTo");
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Custom range requires dateFrom and dateTo",
+          });
         }
-        return generateDashboardReport(input);
+        try {
+          return await generateDashboardReport(input);
+        } catch (err) {
+          const message =
+            err instanceof Error ? err.message : "Dashboard report generation failed";
+          throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message });
+        }
       }),
     monthly: protectedProcedure
       .input(z.object({
