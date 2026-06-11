@@ -16,7 +16,8 @@ import { trpc } from "@/lib/trpc";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { FlaskConical, Plus, Search, Eye, Printer, FileText, Lock, Building2, Pencil, X, Trash2, Layers, CheckSquare, Package, CalendarIcon, AlertTriangle } from "lucide-react";
+import { FlaskConical, Plus, Search, Eye, Printer, FileText, Lock, Building2, Pencil, X, Trash2, Layers, CheckSquare, Package, CalendarIcon, AlertTriangle, RotateCcw } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { useState, useMemo, useEffect, type ReactElement } from "react";
 import { format } from "date-fns";
 import { toast } from "sonner";
@@ -1014,24 +1015,96 @@ export default function Reception() {
                 </DialogTitle>
               </DialogHeader>
 
-              {/* Mode toggle */}
-              <div className="flex items-center gap-2 px-7 pt-4 flex-shrink-0">
-                {(["new", "retest"] as const).map((m) => (
-                  <button
-                    key={m}
-                    type="button"
-                    onClick={() => setReceptionMode(m)}
-                    className={`px-4 py-1.5 rounded-lg text-sm font-medium border transition-colors ${
-                      receptionMode === m
-                        ? "bg-primary text-primary-foreground border-primary"
-                        : "bg-background text-muted-foreground border-border hover:border-primary/40"
-                    }`}
+              {/* ── MODAL HEADER (both modes) ── */}
+              <div className="flex items-center justify-between gap-4 px-7 py-4 border-b border-border flex-shrink-0 bg-background">
+                <div className="flex items-center gap-4 min-w-0 flex-1">
+                  <div
+                    className="inline-flex shrink-0 items-center rounded-xl border border-border bg-muted/50 p-1 shadow-sm"
+                    role="tablist"
+                    aria-label={lang === "ar" ? "نوع الاستقبال" : "Reception mode"}
                   >
-                    {m === "new"
-                      ? (lang === "ar" ? "عينة جديدة" : "New sample")
-                      : (lang === "ar" ? "إعادة اختبار" : "Retest")}
-                  </button>
-                ))}
+                    {([
+                      {
+                        id: "new" as const,
+                        icon: Plus,
+                        labelAr: "عينة جديدة",
+                        labelEn: "New sample",
+                      },
+                      {
+                        id: "retest" as const,
+                        icon: RotateCcw,
+                        labelAr: "إعادة اختبار",
+                        labelEn: "Retest",
+                      },
+                    ]).map(({ id, icon: Icon, labelAr, labelEn }) => {
+                      const active = receptionMode === id;
+                      return (
+                        <button
+                          key={id}
+                          type="button"
+                          role="tab"
+                          aria-selected={active}
+                          onClick={() => setReceptionMode(id)}
+                          className={cn(
+                            "flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition-all",
+                            active
+                              ? id === "retest"
+                                ? "bg-amber-600 text-white shadow-sm"
+                                : "bg-primary text-primary-foreground shadow-sm"
+                              : "text-muted-foreground hover:bg-background/80 hover:text-foreground"
+                          )}
+                        >
+                          <Icon className="w-4 h-4 shrink-0" />
+                          <span>{lang === "ar" ? labelAr : labelEn}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <div className="hidden sm:flex items-center gap-3 min-w-0">
+                    <div
+                      className={cn(
+                        "w-10 h-10 rounded-xl flex items-center justify-center shrink-0",
+                        receptionMode === "retest" ? "bg-amber-50" : "bg-blue-50"
+                      )}
+                    >
+                      {receptionMode === "retest" ? (
+                        <RotateCcw className="w-5 h-5 text-amber-700" />
+                      ) : (
+                        <FlaskConical className="w-5 h-5 text-blue-600" />
+                      )}
+                    </div>
+                    <div className="min-w-0">
+                      <h2 className="text-lg font-semibold text-foreground truncate">
+                        {receptionMode === "retest"
+                          ? lang === "ar"
+                            ? "تسجيل إعادة اختبار"
+                            : "Register Retest"
+                          : lang === "ar"
+                            ? "أوردر اختبار جديد"
+                            : "New Test Order"}
+                      </h2>
+                      <p className="text-xs text-muted-foreground truncate">
+                        {receptionMode === "retest"
+                          ? lang === "ar"
+                            ? "اختر عينة فاشلة معتمدة من QC وسجّل إعادة الاختبار"
+                            : "Select a QC-signed failed sample and register a retest"
+                          : lang === "ar"
+                            ? "أدخل بيانات الطلب يساراً ثم اختر الاختبارات يميناً"
+                            : "Fill order details on the left, select tests on the right"}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  className="h-9 w-9 shrink-0"
+                  onClick={() => setOpen(false)}
+                  aria-label={lang === "ar" ? "إغلاق" : "Close"}
+                >
+                  <X className="w-4 h-4" />
+                </Button>
               </div>
 
               {receptionMode === "retest" ? (
@@ -1041,28 +1114,6 @@ export default function Reception() {
                 />
               ) : (
               <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0 overflow-hidden">
-
-                {/* ── HEADER ── */}
-                <div className="flex items-center justify-between px-7 py-5 border-b border-border flex-shrink-0">
-                  <div className="flex items-center gap-3.5">
-                    <div className="w-11 h-11 bg-blue-50 rounded-xl flex items-center justify-center">
-                      <FlaskConical className="w-6 h-6 text-blue-600" />
-                    </div>
-                    <div>
-                      <h2 className="text-xl font-semibold text-foreground">
-                        {lang === "ar" ? "أوردر اختبار جديد" : "New Test Order"}
-                      </h2>
-                      <p className="text-sm text-muted-foreground mt-0.5">
-                        {lang === "ar"
-                          ? "أدخل بيانات الطلب يساراً ثم اختر الاختبارات والكميات يميناً"
-                          : "Fill in order details on the left, then select tests and quantities on the right"}
-                      </p>
-                    </div>
-                  </div>
-                  <Button type="button" variant="outline" size="icon" className="h-8 w-8" onClick={() => setOpen(false)}>
-                    <X className="w-4 h-4" />
-                  </Button>
-                </div>
 
                 {/* ── BODY ── */}
                 <div className="flex flex-1 overflow-hidden min-h-0">
