@@ -142,7 +142,7 @@ import {
   getRetestSource,
   retestCreateInputSchema,
   runRetestCreate,
-  searchRetestEligible,
+  listRetestEligibleSamples,
 } from "./retest";
 import { invokeLLM } from "./_core/llm";
 
@@ -482,10 +482,18 @@ export const appRouter = router({
     }),
 
     searchRetestEligible: protectedProcedure
-      .input(z.object({ query: z.string().min(1) }))
+      .input(
+        z.object({
+          query: z.string().optional(),
+          limit: z.number().int().min(1).max(50).optional(),
+        })
+      )
       .query(async ({ ctx, input }) => {
         requireRole(ctx.user.role, ["admin", "reception", "lab_manager"]);
-        return searchRetestEligible(input.query);
+        return listRetestEligibleSamples({
+          query: input.query,
+          limit: input.limit ?? 20,
+        });
       }),
 
     getRetestSource: protectedProcedure

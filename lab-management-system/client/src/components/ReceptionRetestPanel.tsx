@@ -45,15 +45,16 @@ export function ReceptionRetestPanel({ onSuccess, onCancel }: Props) {
   const [retestReasonNotes, setRetestReasonNotes] = useState("");
   const [nominalCubeSize, setNominalCubeSize] = useState("150mm");
 
+  const isSearching = searchQ.trim().length >= 2;
   const {
-    data: searchResults,
-    isFetching: searching,
+    data: eligibleSamples,
+    isFetching: loadingEligible,
     isError: searchError,
     error: searchErrorDetail,
-  } = trpc.samples.searchRetestEligible.useQuery(
-    { query: searchQ },
-    { enabled: searchQ.trim().length >= 2 }
-  );
+  } = trpc.samples.searchRetestEligible.useQuery({
+    query: isSearching ? searchQ.trim() : undefined,
+    limit: 20,
+  });
 
   const { data: source, isLoading: loadingSource } = trpc.samples.getRetestSource.useQuery(
     { rootSampleId: rootId! },
@@ -166,13 +167,22 @@ export function ReceptionRetestPanel({ onSuccess, onCancel }: Props) {
               onChange={(e) => { setSearchQ(e.target.value); setRootId(null); setTests([]); }}
             />
           </div>
-          {searching && <p className="text-xs text-muted-foreground">{isAr ? "جاري البحث..." : "Searching..."}</p>}
+          {!isSearching && (
+            <p className="text-xs text-muted-foreground">
+              {isAr
+                ? "أحدث العينات ذات النتائج الفاشلة (بعد اعتماد QC)"
+                : "Recent failed samples (QC signed off)"}
+            </p>
+          )}
+          {loadingEligible && (
+            <p className="text-xs text-muted-foreground">{isAr ? "جاري التحميل..." : "Loading..."}</p>
+          )}
           {searchError && (
             <p className="text-xs text-destructive">{searchErrorDetail?.message}</p>
           )}
-          {searchResults && searchResults.length > 0 && !rootId && (
-            <div className="border rounded-lg divide-y max-h-40 overflow-y-auto">
-              {searchResults.map((r) => (
+          {eligibleSamples && eligibleSamples.length > 0 && !rootId && (
+            <div className="border rounded-lg divide-y max-h-48 overflow-y-auto">
+              {eligibleSamples.map((r) => (
                 <button
                   key={r.id}
                   type="button"
@@ -181,6 +191,9 @@ export function ReceptionRetestPanel({ onSuccess, onCancel }: Props) {
                 >
                   <span className="font-mono font-semibold text-primary">{r.sampleCode}</span>
                   <span className="text-muted-foreground ms-2">{r.contractorName ?? "—"}</span>
+                  <Badge variant="destructive" className="ms-2 text-[10px]">
+                    {isAr ? "فاشل" : "Failed"}
+                  </Badge>
                   {r.retestCount > 0 && (
                     <Badge variant="outline" className="ms-2 text-[10px]">
                       {r.retestCount} {isAr ? "إعادة سابقة" : "prior retest(s)"}
@@ -190,8 +203,16 @@ export function ReceptionRetestPanel({ onSuccess, onCancel }: Props) {
               ))}
             </div>
           )}
-          {searchQ.length >= 2 && searchResults?.length === 0 && !searching && (
-            <p className="text-xs text-muted-foreground">{isAr ? "لا توجد عينات مؤهلة" : "No eligible samples"}</p>
+          {!loadingEligible && eligibleSamples?.length === 0 && (
+            <p className="text-xs text-muted-foreground">
+              {isSearching
+                ? isAr
+                  ? "لا توجد عينات مطابقة"
+                  : "No matching samples"
+                : isAr
+                  ? "لا توجد عينات فاشلة جاهزة لإعادة الاختبار"
+                  : "No failed samples ready for retest"}
+            </p>
           )}
         </div>
 

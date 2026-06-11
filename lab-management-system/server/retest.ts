@@ -15,6 +15,7 @@ import {
   getNextRetestNumber,
   getAllTestTypes,
   getConcreteGroupsByDistribution,
+  getConcreteGroupsBySample,
   getDb,
   getDistributionsBySample,
   getLabOrderItems,
@@ -32,12 +33,20 @@ import { labOrderReceptionCreateInputSchema } from "./routers/orders";
 
 /** Sample statuses that block retest registration. */
 const EXCLUDED_SAMPLE_STATUSES = ["revision_requested"] as const;
-/** Lab-order statuses that mean work is still open on the original sample. */
+/** Still in the lab — not ready for retest yet. */
+const ACTIVE_TESTING_SAMPLE_STATUSES = [
+  "received",
+  "distributed",
+  "testing_in_progress",
+] as const;
+/** Lab-order statuses that block only while QC has not signed off yet. */
 const BLOCKING_ORDER_STATUSES = ["pending", "distributed", "in_progress"] as const;
-/** QC/manager rejected the workflow — always eligible for retest. */
-const WORKFLOW_FAILED_SAMPLE_STATUSES = ["qc_failed", "rejected"] as const;
-/** QC signed off on the report — eligible only when at least one test failed spec. */
-const FINALIZED_SAMPLE_STATUSES = ["qc_passed", "clearance_issued"] as const;
+/** QC has certified the report (pass or fail spec — compliance is on the result). */
+const QC_COMPLETE_SAMPLE_STATUSES = ["qc_passed", "clearance_issued"] as const;
+
+function isSpecFailure(status: string | null | undefined): boolean {
+  return status === "fail" || status === "partial";
+}
 
 export const retestReasonSchema = z.enum(["failed_spec", "damaged_sample", "client_request"]);
 
@@ -76,25 +85,42 @@ function isRootSample(sample: { originalSampleId?: number | null; sampleCode: st
   return sample.originalSampleId == null && !/-R\d+$/i.test(sample.sampleCode);
 }
 
+async function sampleHasQcSignOff(sampleId: number): Promise<boolean> {
+  const legacy = await getTestResultBySample(sampleId);
+  if (legacy.some((r) => r.qcReviewedAt != null)) return true;
+  const specialized = await getSpecializedTestResultsBySample(sampleId);
+  if (specialized.some((r) => (r as { qcReviewedAt?: Date | null }).qcReviewedAt != null)) {
+    return true;
+  }
+  return false;
+}
+
 async function sampleHasFailedOutcome(sampleId: number): Promise<boolean> {
+  const concreteGroups = await getConcreteGroupsBySample(sampleId);
+  if (concreteGroups.some((g) => isSpecFailure(g.complianceStatus))) return true;
+
   const orders = await getLabOrdersBySampleId(sampleId);
   const latestOrder = orders[0];
   if (latestOrder) {
     const items = await getLabOrderItems(latestOrder.id);
     for (const item of items) {
-      if (await isOrderItemFailed(item)) return true;
+      if (await isOrderItemSpecFailed(sampleId, item)) return true;
     }
   }
 
   const dists = await getDistributionsBySample(sampleId);
   for (const dist of dists) {
-    if (await isOrderItemFailed({ testTypeCode: dist.testType, distributionId: dist.id })) {
+    if (await isOrderItemSpecFailed(sampleId, { testTypeCode: dist.testType, distributionId: dist.id })) {
       return true;
     }
   }
 
   const legacy = await getTestResultBySample(sampleId);
-  if (legacy.some((r) => r.complianceStatus === "fail")) return true;
+  for (const r of legacy) {
+    if (isSpecFailure(r.complianceStatus)) return true;
+    const charts = r.chartsData as { complianceStatus?: string } | null;
+    if (isSpecFailure(charts?.complianceStatus)) return true;
+  }
 
   const specialized = await getSpecializedTestResultsBySample(sampleId);
   if (specialized.some((r) => (r as { overallResult?: string }).overallResult === "fail")) {
@@ -102,6 +128,21 @@ async function sampleHasFailedOutcome(sampleId: number): Promise<boolean> {
   }
 
   return false;
+}
+
+async function sampleHasOpenRetest(sampleId: number): Promise<boolean> {
+  if (!samplesHasRetestColumns()) return false;
+  const db = await getDb();
+  if (!db) return false;
+  const children = await db
+    .select({ status: samples.status })
+    .from(samples)
+    .where(eq(samples.originalSampleId, sampleId));
+  return children.some((c) =>
+    ACTIVE_TESTING_SAMPLE_STATUSES.includes(
+      c.status as (typeof ACTIVE_TESTING_SAMPLE_STATUSES)[number]
+    )
+  );
 }
 
 export async function isRetestEligibleSample(
@@ -120,23 +161,29 @@ export async function isRetestEligibleSample(
   }
   if (root.deletedAt) return false;
   if (
-    orders.some((o) =>
-      BLOCKING_ORDER_STATUSES.includes(o.status as (typeof BLOCKING_ORDER_STATUSES)[number])
+    ACTIVE_TESTING_SAMPLE_STATUSES.includes(
+      root.status as (typeof ACTIVE_TESTING_SAMPLE_STATUSES)[number]
     )
   ) {
     return false;
   }
-  if (
-    WORKFLOW_FAILED_SAMPLE_STATUSES.includes(
-      root.status as (typeof WORKFLOW_FAILED_SAMPLE_STATUSES)[number]
-    )
-  ) {
-    return true;
+  if (await sampleHasOpenRetest(root.id)) return false;
+
+  const qcComplete =
+    QC_COMPLETE_SAMPLE_STATUSES.includes(
+      root.status as (typeof QC_COMPLETE_SAMPLE_STATUSES)[number]
+    ) || (await sampleHasQcSignOff(root.id));
+
+  if (!qcComplete) return false;
+
+  const orderStillOpen = orders.some((o) =>
+    BLOCKING_ORDER_STATUSES.includes(o.status as (typeof BLOCKING_ORDER_STATUSES)[number])
+  );
+  if (orderStillOpen && !qcComplete) {
+    return false;
   }
-  if (FINALIZED_SAMPLE_STATUSES.includes(root.status as (typeof FINALIZED_SAMPLE_STATUSES)[number])) {
-    return sampleHasFailedOutcome(root.id);
-  }
-  return false;
+
+  return sampleHasFailedOutcome(root.id);
 }
 
 export async function assertRetestEligible(
@@ -173,91 +220,129 @@ export async function assertRetestEligible(
     throw new TRPCError({
       code: "BAD_REQUEST",
       message:
-        "Retest requires a finalized sample with a failed test result (QC-approved fail or rejected workflow)",
+        "Retest requires a QC-signed sample whose test result failed specification (not supervisor/QC workflow rejection)",
     });
   }
 }
 
-async function isOrderItemFailed(item: {
-  testTypeCode: string;
-  distributionId: number | null;
-}): Promise<boolean> {
-  if (!item.distributionId) return false;
-  const distId = item.distributionId;
+async function resolveDistributionId(
+  sampleId: number,
+  testTypeCode: string,
+  distributionId: number | null
+): Promise<number | null> {
+  if (distributionId) return distributionId;
+  const dists = await getDistributionsBySample(sampleId);
+  const match = dists.find((d) => d.testType === testTypeCode);
+  return match?.id ?? dists[0]?.id ?? null;
+}
 
-  if (item.testTypeCode === "CONC_CUBE") {
-    const groups = await getConcreteGroupsByDistribution(distId);
-    if (
-      groups.some(
-        (g) => g.complianceStatus === "fail" || g.status === "rejected"
-      )
-    ) {
-      return true;
-    }
-  }
+async function isOrderItemSpecFailed(
+  sampleId: number,
+  item: { testTypeCode: string; distributionId: number | null }
+): Promise<boolean> {
+  const distId = await resolveDistributionId(sampleId, item.testTypeCode, item.distributionId);
+  if (!distId) return false;
+
+  const groups = await getConcreteGroupsByDistribution(distId);
+  if (groups.some((g) => isSpecFailure(g.complianceStatus))) return true;
 
   const spec = await getSpecializedTestResultByDistribution(distId);
-  if (spec) {
-    if ((spec as { overallResult?: string }).overallResult === "fail") return true;
-    if (spec.status === "rejected") return true;
-    return false;
-  }
+  if (spec && (spec as { overallResult?: string }).overallResult === "fail") return true;
 
   const legacy = await getTestResultByDistribution(distId);
   if (legacy) {
-    if (legacy.complianceStatus === "fail") return true;
-    if (legacy.status === "rejected") return true;
+    if (isSpecFailure(legacy.complianceStatus)) return true;
+    const charts = legacy.chartsData as { complianceStatus?: string } | null;
+    if (isSpecFailure(charts?.complianceStatus)) return true;
   }
 
   return false;
 }
 
-export async function searchRetestEligible(query: string) {
+export type RetestEligibleRow = {
+  id: number;
+  sampleCode: string;
+  contractNumber: string | null;
+  contractorName: string | null;
+  sampleType: string;
+  sector: string;
+  status: string;
+  receivedAt: Date | null;
+  updatedAt: Date;
+  retestCount: number;
+};
+
+async function enrichRetestRow(
+  row: typeof samples.$inferSelect,
+  db: NonNullable<Awaited<ReturnType<typeof getDb>>>
+): Promise<RetestEligibleRow | null> {
+  const orders = await getLabOrdersBySampleId(row.id);
+  if (!(await isRetestEligibleSample(row, orders))) return null;
+
+  const retestCount = await db
+    .select({ c: sql<number>`COUNT(*)` })
+    .from(samples)
+    .where(eq(samples.originalSampleId, row.id));
+
+  return {
+    id: row.id,
+    sampleCode: row.sampleCode,
+    contractNumber: row.contractNumber,
+    contractorName: row.contractorName,
+    sampleType: row.sampleType,
+    sector: row.sector,
+    status: row.status,
+    receivedAt: row.receivedAt,
+    updatedAt: row.updatedAt,
+    retestCount: Number((retestCount[0] as { c: number })?.c ?? 0),
+  };
+}
+
+/** Recent failed samples for retest, optionally filtered by search text. */
+export async function listRetestEligibleSamples(opts?: {
+  query?: string;
+  limit?: number;
+}): Promise<RetestEligibleRow[]> {
   requireRetestColumns();
   const db = await getDb();
-  if (!db || !query.trim()) return [];
+  if (!db) return [];
 
-  const q = `%${query.trim()}%`;
+  const limit = opts?.limit ?? 20;
+  const q = opts?.query?.trim();
+  const filters = [
+    isNull(samples.originalSampleId),
+    sql`${samples.sampleCode} NOT REGEXP '-R[0-9]+$'`,
+  ];
+  if (q) {
+    const pattern = `%${q}%`;
+    filters.push(
+      or(
+        like(samples.sampleCode, pattern),
+        like(samples.contractNumber, pattern),
+        like(samples.contractorName, pattern)
+      )!
+    );
+  }
+
   const rows = await db
     .select()
     .from(samples)
-    .where(
-      and(
-        isNull(samples.originalSampleId),
-        sql`${samples.sampleCode} NOT REGEXP '-R[0-9]+$'`,
-        or(
-          like(samples.sampleCode, q),
-          like(samples.contractNumber, q),
-          like(samples.contractorName, q)
-        )
-      )
-    )
-    .orderBy(desc(samples.receivedAt))
-    .limit(50);
+    .where(and(...filters))
+    .orderBy(desc(samples.updatedAt))
+    .limit(q ? 80 : 200);
 
-  const results = [];
+  const results: RetestEligibleRow[] = [];
   for (const row of rows) {
-    const orders = await getLabOrdersBySampleId(row.id);
-    if (!(await isRetestEligibleSample(row, orders))) continue;
-
-    const retestCount = await db
-      .select({ c: sql<number>`COUNT(*)` })
-      .from(samples)
-      .where(eq(samples.originalSampleId, row.id));
-
-    results.push({
-      id: row.id,
-      sampleCode: row.sampleCode,
-      contractNumber: row.contractNumber,
-      contractorName: row.contractorName,
-      sampleType: row.sampleType,
-      sector: row.sector,
-      status: row.status,
-      receivedAt: row.receivedAt,
-      retestCount: Number((retestCount[0] as { c: number })?.c ?? 0),
-    });
+    if (results.length >= limit) break;
+    const enriched = await enrichRetestRow(row, db);
+    if (enriched) results.push(enriched);
   }
   return results;
+}
+
+/** @deprecated Use listRetestEligibleSamples */
+export async function searchRetestEligible(query: string) {
+  return listRetestEligibleSamples({ query, limit: 50 });
 }
 
 export async function getRetestSource(rootSampleId: number) {
@@ -274,7 +359,7 @@ export async function getRetestSource(rootSampleId: number) {
   let defaultPriority: "low" | "normal" | "high" | "urgent" = "normal";
 
   if (latestOrder) {
-    const built = await buildRetestTestsFromOrder(latestOrder.id, allTestTypes);
+    const built = await buildRetestTestsFromOrder(rootSampleId, latestOrder.id, allTestTypes);
     tests = built.tests;
     defaultPriority = (latestOrder.priority as typeof defaultPriority) ?? "normal";
   }
@@ -310,6 +395,7 @@ export async function getRetestSource(rootSampleId: number) {
 }
 
 async function buildRetestTestsFromOrder(
+  sampleId: number,
   orderId: number,
   allTestTypes: Awaited<ReturnType<typeof getAllTestTypes>>
 ) {
@@ -317,7 +403,7 @@ async function buildRetestTestsFromOrder(
   const tests = await Promise.all(
     items.map(async (item) => {
       const tt = allTestTypes.find((t) => t.id === item.testTypeId);
-      const isFailed = await isOrderItemFailed(item);
+      const isFailed = await isOrderItemSpecFailed(sampleId, item);
       return {
         testTypeId: item.testTypeId,
         testTypeCode: item.testTypeCode,
@@ -342,7 +428,7 @@ async function buildRetestTestsFromDistributions(
   const tests = await Promise.all(
     dists.map(async (dist) => {
       const tt = allTestTypes.find((t) => t.code === dist.testType);
-      const isFailed = await isOrderItemFailed({
+      const isFailed = await isOrderItemSpecFailed(sampleId, {
         testTypeCode: dist.testType,
         distributionId: dist.id,
       });
