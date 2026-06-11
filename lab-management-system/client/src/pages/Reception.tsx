@@ -328,7 +328,21 @@ export default function Reception() {
   /** Reception: CONC_CUBE nominal face size (stored on sample) */
   const [nominalCubeSize, setNominalCubeSize] = useState("150mm");
   const [cubeCount, setCubeCount] = useState(String(MIN_CONC_CUBE_COUNT));
+  const resolvedCubeCount = useMemo(() => {
+    const n = parseInt(cubeCount, 10);
+    if (!Number.isFinite(n)) return MIN_CONC_CUBE_COUNT;
+    return Math.min(MAX_CONC_CUBE_COUNT, Math.max(MIN_CONC_CUBE_COUNT, n));
+  }, [cubeCount]);
   const [, setLocation] = useLocation();
+
+  useEffect(() => {
+    setSelectedTests(prev => {
+      if (!prev.some(t => t.testTypeCode === "CONC_CUBE")) return prev;
+      return prev.map(t =>
+        t.testTypeCode === "CONC_CUBE" ? { ...t, quantity: resolvedCubeCount } : t,
+      );
+    });
+  }, [resolvedCubeCount]);
   // Edit order state
   const [editOpen, setEditOpen] = useState(false);
   const [editingOrder, setEditingOrder] = useState<{
@@ -645,6 +659,9 @@ export default function Reception() {
     if (form.sampleType === "asphalt" && asphaltKind === "mix" && asphaltMixCourse) {
       newTest.testSubType = asphaltMixCourse;
     }
+    if (newTest.testTypeCode === "CONC_CUBE") {
+      newTest.quantity = resolvedCubeCount;
+    }
 
     const ids = new Set(selectedTests.map(s => s.testTypeId));
     const additions = [...deps, newTest].filter(t => !ids.has(t.testTypeId));
@@ -676,6 +693,9 @@ export default function Reception() {
     if (deps === null) return;
 
     const newTest = makeSelectedTestFromType(tt);
+    if (newTest.testTypeCode === "CONC_CUBE") {
+      newTest.quantity = resolvedCubeCount;
+    }
     setSelectedTests(prev => {
       const without = prev.filter(s => s.testTypeId !== tt.id);
       const ids = new Set(without.map(s => s.testTypeId));
@@ -949,13 +969,17 @@ export default function Reception() {
     return type;
   };
 
+  const billableQuantity = (t: SelectedTest) =>
+    t.testTypeCode === "CONC_CUBE" ? resolvedCubeCount : t.quantity;
+
   const totalPrice = selectedTests.reduce((sum, t) => {
     if (MULTI_SUBTYPE_TESTS.includes(t.testTypeCode) && t.testSubType === "__multi__") {
       const subtypeMap = multiSubtypes[t.testTypeId] ?? {};
       const subtypeTotal = Object.values(subtypeMap).reduce((s, qty) => s + (qty > 0 ? t.unitPrice * qty : 0), 0);
       return sum + subtypeTotal;
     }
-    return sum + t.unitPrice * t.quantity;
+    const qty = billableQuantity(t);
+    return sum + t.unitPrice * qty;
   }, 0);
 
   return (
@@ -1420,7 +1444,7 @@ export default function Reception() {
                               </div>
                             )}
                             {/* Quantity for selected test — hidden for multi-subtype tests */}
-                            {isSelected && !MULTI_SUBTYPE_TESTS.includes(tt.code) && (
+                            {isSelected && !MULTI_SUBTYPE_TESTS.includes(tt.code) && tt.code !== "CONC_CUBE" && (
                               <div className="mt-3 pt-3 ms-8 border-t border-blue-200 flex items-center justify-between gap-2">
                                 <Label className="flex items-center gap-1.5 text-sm font-medium text-blue-700 whitespace-nowrap">
                                   <Layers className="w-3.5 h-3.5" />
@@ -1654,6 +1678,7 @@ export default function Reception() {
                                 );
                               });
                             }
+                            const qty = billableQuantity(t);
                             return (
                               <div key={t.testTypeId} className="flex items-center justify-between text-xs text-green-700">
                                 <span>
@@ -1663,10 +1688,15 @@ export default function Reception() {
                                       ? ` — عمر ${foamConcreteAge.trim()} يوم`
                                       : ` — age ${foamConcreteAge.trim()} d`
                                     : ""}{" "}
-                                  × {t.quantity}
+                                  × {qty}
+                                  {t.testTypeCode === "CONC_CUBE" && (
+                                    <span className="text-green-600/80">
+                                      {lang === "ar" ? " مكعبات" : " cubes"}
+                                    </span>
+                                  )}
                                 </span>
-                                {t.quantity > 0
-                                  ? <span>{(t.unitPrice * t.quantity).toFixed(0)} {lang === "ar" ? "درهم" : "AED"}</span>
+                                {qty > 0
+                                  ? <span>{(t.unitPrice * qty).toFixed(0)} {lang === "ar" ? "درهم" : "AED"}</span>
                                   : <span className="text-amber-600">{lang === "ar" ? "الكمية مطلوبة" : "Qty required"}</span>}
                               </div>
                             );
