@@ -6,9 +6,20 @@
 import { z } from "zod";
 import { protectedProcedure, router } from "../_core/trpc";
 import {
+  CLEARANCE_IN_PROGRESS,
+  DISTRIBUTION_STATUS_GROUPS,
+  LAB_ORDER_STATUS_GROUPS,
+  SAMPLE_STATUS_GROUPS,
+  isInGroup,
+} from "@shared/statusGroups";
+import {
   getAllSamples,
   getAllUsers,
+  getAllDistributions,
+  getAllLabOrders,
+  getAllClearanceRequests,
   getDistributionsBySample,
+  getLabOrderItems,
   getTestResultBySample,
   getSpecializedTestResultByDistribution,
   getAuditLogs,
@@ -55,28 +66,39 @@ function startOfPrev(period: "today" | "week" | "month", now: Date): { from: Dat
   }
 }
 
-// Status groups
-const IN_PROGRESS_STATUSES = ["distributed", "tested", "processed", "reviewed"];
-const COMPLETED_STATUSES = ["approved", "qc_passed", "clearance_issued"];
-const FAILED_STATUSES = ["rejected", "qc_failed"];
-const PENDING_STATUSES = ["received"];
-const ALL_ACTIVE = [...PENDING_STATUSES, ...IN_PROGRESS_STATUSES];
+const IN_PROGRESS_STATUSES: string[] = [...SAMPLE_STATUS_GROUPS.inProgress];
+const COMPLETED_STATUSES: string[] = [...SAMPLE_STATUS_GROUPS.completed];
+const FAILED_STATUSES: string[] = [...SAMPLE_STATUS_GROUPS.failed];
+const PENDING_STATUSES: string[] = ["received"];
+const ALL_ACTIVE: string[] = [...PENDING_STATUSES, ...IN_PROGRESS_STATUSES];
 
-// SLA threshold in hours (configurable)
 const SLA_HOURS = 72;
 const STUCK_HOURS = 24;
-const DIST_ACTIVE_STATUSES = ["pending", "in_progress"];
-const DIST_DONE_STATUSES = ["completed", "cancelled"];
-const NOT_OVERDUE_SAMPLE_STATUSES = [
-  "completed",
-  "qc_passed",
-  "qc_review",
-  "manager_review",
-  "approved",
-  "clearance_issued",
-  "rejected",
-  "qc_failed",
+const DIST_ACTIVE_STATUSES: string[] = [...DISTRIBUTION_STATUS_GROUPS.open];
+const DIST_DONE_STATUSES: string[] = ["completed", "cancelled"];
+const NOT_OVERDUE_SAMPLE_STATUSES: string[] = [
+  ...COMPLETED_STATUSES,
+  ...FAILED_STATUSES,
+  "deleted",
 ];
+
+function startOfWeek(now: Date): Date {
+  const d = new Date(now);
+  const day = d.getDay();
+  d.setDate(d.getDate() - day);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+function startOfToday(): Date {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+function ageDays(from: Date, now: Date): number {
+  return Math.floor((now.getTime() - from.getTime()) / (1000 * 60 * 60 * 24));
+}
 
 export const dashboardRouter = router({
   /**
@@ -183,14 +205,32 @@ export const dashboardRouter = router({
           ? 100
           : 0;
 
+      const allOrders = await getAllLabOrders();
+      const pendingManagerReview =
+        allOrders.filter((o) =>
+          isInGroup(o.status, LAB_ORDER_STATUS_GROUPS.pendingMgrReview)
+        ).length +
+        allSamples.filter((s) =>
+          isInGroup(s.status, SAMPLE_STATUS_GROUPS.pendingMgrReview)
+        ).length;
+      const pendingQcReview =
+        allOrders.filter((o) =>
+          isInGroup(o.status, LAB_ORDER_STATUS_GROUPS.pendingQcReview)
+        ).length +
+        allSamples.filter((s) =>
+          isInGroup(s.status, SAMPLE_STATUS_GROUPS.pendingQcReview)
+        ).length;
+
       return {
         totalSamples: { value: totalSamples, trend: totalTrend, prev: prevTotal },
         inProgress: { value: inProgress },
         overdue: { value: overdue },
         pendingDistribution: { value: pendingDistribution },
         completed: { value: completed, trend: completedTrend, prev: prevCompleted },
-        avgTAT: { value: avgTAT }, // hours
+        avgTAT: { value: avgTAT },
         failed: { value: failed, trend: failedTrend, prev: prevFailed },
+        pendingManagerReview: { value: pendingManagerReview },
+        pendingQcReview: { value: pendingQcReview },
       };
     }),
 
@@ -356,7 +396,7 @@ export const dashboardRouter = router({
           status: s.status,
           sector: s.sector,
         });
-      } else if (lastUpdateMs > stuckMs && IN_PROGRESS_STATUSES.includes(s.status) && dists.some((d) => DIST_ACTIVE_STATUSES.includes(d.status))) {
+      } else if (lastUpdateMs > stuckMs && IN_PROGRESS_STATUSES.includes(s.status) && dists.some((d) => isInGroup(d.status, DIST_ACTIVE_STATUSES))) {
         // Stuck (no update for 24h)
         alerts.push({
           sampleId: s.id,
@@ -681,4 +721,165 @@ export const dashboardRouter = router({
         .sort((a, b) => b.total - a.total)
         .slice(0, 20);
     }),
+
+  reviewQueue: protectedProcedure.query(async () => {
+    const now = new Date();
+    const orders = (await getAllLabOrders()).filter(
+      (o) =>
+        isInGroup(o.status, LAB_ORDER_STATUS_GROUPS.pendingMgrReview) ||
+        isInGroup(o.status, LAB_ORDER_STATUS_GROUPS.pendingQcReview)
+    );
+
+    const rows = await Promise.all(
+      orders.map(async (o) => {
+        const items = await getLabOrderItems(o.id);
+        const testName = items[0]?.testTypeName ?? items[0]?.testTypeCode ?? "—";
+        const waitHours = Math.round(
+          (now.getTime() - new Date(o.updatedAt).getTime()) / (1000 * 60 * 60)
+        );
+        return {
+          orderCode: o.orderCode,
+          testName,
+          waitHours,
+          priority: o.priority ?? "normal",
+        };
+      })
+    );
+
+    return rows.sort((a, b) => b.waitHours - a.waitHours);
+  }),
+
+  stuckOrders: protectedProcedure.query(async () => {
+    const now = new Date();
+    const stuck: { code: string; reason: string; reasonAr: string; ageDays: number }[] = [];
+
+    const orders = await getAllLabOrders();
+    for (const o of orders) {
+      const created = new Date(o.createdAt);
+      const age = ageDays(created, now);
+      if (
+        isInGroup(o.status, LAB_ORDER_STATUS_GROUPS.inProgress) &&
+        age > 3
+      ) {
+        stuck.push({
+          code: o.orderCode,
+          reason: "in testing",
+          reasonAr: "قيد الفحص",
+          ageDays: age,
+        });
+      } else if (o.status === "completed" && age > 2) {
+        stuck.push({
+          code: o.orderCode,
+          reason: "review wait",
+          reasonAr: "بانتظار المراجعة",
+          ageDays: age,
+        });
+      }
+    }
+
+    const allSamples = await getAllSamples();
+    for (const s of allSamples) {
+      if (s.status === "deleted") continue;
+      const dists = await getDistributionsBySample(s.id);
+      const received = new Date(s.receivedAt ?? s.createdAt);
+      const age = ageDays(received, now);
+
+      if (
+        s.status === "distributed" &&
+        dists.length > 0 &&
+        dists.every((d) => !d.assignedTechnicianId)
+      ) {
+        stuck.push({
+          code: s.sampleCode,
+          reason: "no technician assigned",
+          reasonAr: "لم يُعيَّن فني",
+          ageDays: age,
+        });
+      }
+
+      const pastDue = dists.some((d) => {
+        if (!d.expectedCompletionDate) return false;
+        if (DIST_DONE_STATUSES.includes(d.status)) return false;
+        return now.getTime() > new Date(d.expectedCompletionDate).getTime();
+      });
+      if (pastDue && !NOT_OVERDUE_SAMPLE_STATUSES.includes(s.status)) {
+        stuck.push({
+          code: s.sampleCode,
+          reason: "past expected date",
+          reasonAr: "تجاوز التاريخ المتوقع",
+          ageDays: age,
+        });
+      }
+    }
+
+    return stuck.sort((a, b) => b.ageDays - a.ageDays).slice(0, 30);
+  }),
+
+  technicianStats: protectedProcedure.query(async () => {
+    const weekStart = startOfWeek(new Date());
+    const dists = await getAllDistributions();
+    const activeTechIds = new Set<number>();
+
+    for (const d of dists) {
+      if (!d.assignedTechnicianId) continue;
+      if (
+        isInGroup(d.status, DISTRIBUTION_STATUS_GROUPS.open) ||
+        new Date(d.updatedAt) >= weekStart
+      ) {
+        activeTechIds.add(d.assignedTechnicianId);
+      }
+    }
+
+    const activeCount = activeTechIds.size;
+    const completedThisWeek = dists.filter(
+      (d) =>
+        d.status === "completed" && new Date(d.updatedAt) >= weekStart
+    ).length;
+    const avgTestsPerTech =
+      activeCount > 0
+        ? Math.round((completedThisWeek / activeCount) * 10) / 10
+        : 0;
+
+    return { activeCount, avgTestsPerTech };
+  }),
+
+  technicianDailyWork: protectedProcedure.query(async () => {
+    const todayStart = startOfToday();
+    const dists = await getAllDistributions();
+    const users = await getAllUsers();
+    const techs = users.filter((u) => u.role === "technician" && u.isActive);
+
+    return techs
+      .map((tech) => {
+        const mine = dists.filter((d) => d.assignedTechnicianId === tech.id);
+        const assigned = mine.filter((d) =>
+          isInGroup(d.status, DISTRIBUTION_STATUS_GROUPS.open)
+        ).length;
+        const doneToday = mine.filter(
+          (d) =>
+            d.status === "completed" && new Date(d.updatedAt) >= todayStart
+        ).length;
+        return {
+          id: tech.id,
+          name: tech.name ?? "Unknown",
+          specialty: tech.specialty ?? "",
+          assigned,
+          doneToday,
+        };
+      })
+      .filter((t) => t.assigned > 0 || t.doneToday > 0)
+      .sort((a, b) => b.assigned - a.assigned);
+  }),
+
+  clearanceStats: protectedProcedure.query(async () => {
+    const all = await getAllClearanceRequests();
+    const active = all.filter((c) => c.status !== "rejected");
+    return {
+      totalRequests: active.length,
+      inProgress: active.filter((c) =>
+        isInGroup(c.status, CLEARANCE_IN_PROGRESS)
+      ).length,
+      issued: active.filter((c) => c.status === "issued").length,
+    };
+  }),
 });

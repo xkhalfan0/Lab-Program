@@ -1,6 +1,6 @@
 import { eq, sql } from "drizzle-orm";
 import { samples } from "../../drizzle/schema";
-import { getDb } from "../db";
+import { getDb, getNextRetestNumber } from "../db";
 
 /**
  * Generate a unique sample code.
@@ -62,4 +62,26 @@ export async function generateSampleCode(): Promise<string> {
     console.error("Error generating sample code:", error);
     return `${prefix}-${Date.now().toString().slice(-6)}`;
   }
+}
+
+/** Retest code: {rootCode}-R{n} where n = max existing + 1 (includes soft-deleted). */
+export async function generateRetestSampleCode(
+  rootSampleId: number,
+  rootSampleCode: string
+): Promise<string> {
+  const n = await getNextRetestNumber(rootSampleId);
+  const candidate = `${rootSampleCode}-R${n}`;
+  const db = await getDb();
+  if (!db) return candidate;
+
+  for (let attempt = 0; attempt < 20; attempt++) {
+    const code = attempt === 0 ? candidate : `${rootSampleCode}-R${n + attempt}`;
+    const existing = await db
+      .select({ id: samples.id })
+      .from(samples)
+      .where(eq(samples.sampleCode, code))
+      .limit(1);
+    if (existing.length === 0) return code;
+  }
+  return `${rootSampleCode}-R${n}-${Date.now().toString().slice(-4)}`;
 }

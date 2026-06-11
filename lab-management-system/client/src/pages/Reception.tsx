@@ -1,5 +1,7 @@
 import DashboardLayout from "@/components/DashboardLayout";
 import { DeletionRequestButton } from "@/components/DeletionRequestButton";
+import { ReceptionRetestPanel } from "@/components/ReceptionRetestPanel";
+import { RetestBadge } from "@/components/RetestBadge";
 import { StatusBadge } from "@/components/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -304,6 +306,7 @@ function ReceptionOrderActionsCell({
 export default function Reception() {
   const { t, lang } = useLanguage();
   const [open, setOpen] = useState(false);
+  const [receptionMode, setReceptionMode] = useState<"new" | "retest">("new");
   const { user } = useAuth();
   const canEditSample = ["admin", "lab_manager", "reception"].includes(user?.role ?? "");
   const [search, setSearch] = useState("");
@@ -982,6 +985,7 @@ export default function Reception() {
           <Dialog open={open} onOpenChange={(v) => {
             setOpen(v);
             if (!v) {
+              setReceptionMode("new");
               setForm(emptyForm());
               setSelectedTests([]);
               setSubtypeFor(null);
@@ -1003,8 +1007,39 @@ export default function Reception() {
               className="w-[70vw] max-w-[70vw] sm:max-w-[70vw] h-[88vh] max-h-[88vh] p-0 gap-0 overflow-hidden flex flex-col"
             >
               <DialogHeader className="sr-only">
-                <DialogTitle>{lang === "ar" ? "أوردر اختبار جديد" : "New Test Order"}</DialogTitle>
+                <DialogTitle>
+                  {receptionMode === "retest"
+                    ? (lang === "ar" ? "إعادة اختبار" : "Retest")
+                    : (lang === "ar" ? "أوردر اختبار جديد" : "New Test Order")}
+                </DialogTitle>
               </DialogHeader>
+
+              {/* Mode toggle */}
+              <div className="flex items-center gap-2 px-7 pt-4 flex-shrink-0">
+                {(["new", "retest"] as const).map((m) => (
+                  <button
+                    key={m}
+                    type="button"
+                    onClick={() => setReceptionMode(m)}
+                    className={`px-4 py-1.5 rounded-lg text-sm font-medium border transition-colors ${
+                      receptionMode === m
+                        ? "bg-primary text-primary-foreground border-primary"
+                        : "bg-background text-muted-foreground border-border hover:border-primary/40"
+                    }`}
+                  >
+                    {m === "new"
+                      ? (lang === "ar" ? "عينة جديدة" : "New sample")
+                      : (lang === "ar" ? "إعادة اختبار" : "Retest")}
+                  </button>
+                ))}
+              </div>
+
+              {receptionMode === "retest" ? (
+                <ReceptionRetestPanel
+                  onSuccess={() => { setOpen(false); setReceptionMode("new"); refetch(); }}
+                  onCancel={() => setOpen(false)}
+                />
+              ) : (
               <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0 overflow-hidden">
 
                 {/* ── HEADER ── */}
@@ -1724,6 +1759,7 @@ export default function Reception() {
                   </div>
                 </div>
               </form>
+              )}
             </DialogContent>
           </Dialog>
         </div>
@@ -1815,7 +1851,19 @@ export default function Reception() {
                   <tbody>
                     {filteredOrders.map((order: any) => (
                       <tr key={order.id} className="border-b last:border-0 hover:bg-muted/20 transition-colors">
-                        <td className="px-4 py-2.5 font-mono text-xs font-semibold text-primary">{order.orderCode}</td>
+                        <td className="px-4 py-2.5">
+                          <div className="font-mono text-xs font-semibold text-primary">{order.orderCode}</div>
+                          {order.sampleCode && (
+                            <div className="font-mono text-[10px] text-muted-foreground">{order.sampleCode}</div>
+                          )}
+                          <RetestBadge
+                            retestNumber={order.retestNumber}
+                            originalSampleId={order.originalSampleId}
+                            originalSampleCode={order.originalSampleCode}
+                            retestReason={order.retestReason}
+                            compact
+                          />
+                        </td>
                         <td className="px-4 py-2.5 text-xs font-mono text-muted-foreground">{order.contractNumber ?? "—"}</td>
                         <td className="px-4 py-2.5 text-xs">{order.contractorName ?? "—"}</td>
                         <td className="px-4 py-2.5 text-xs">{typeLabel(order.sampleType ?? "")}</td>

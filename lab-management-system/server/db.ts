@@ -341,6 +341,10 @@ const SAMPLE_ROW_BASE = {
   castingDate: samples.castingDate,
   receivedById: samples.receivedById,
   receivedAt: samples.receivedAt,
+  originalSampleId: samples.originalSampleId,
+  retestNumber: samples.retestNumber,
+  retestReason: samples.retestReason,
+  retestReasonNotes: samples.retestReasonNotes,
   managerReadAt: samples.managerReadAt,
   createdAt: samples.createdAt,
   updatedAt: samples.updatedAt,
@@ -390,6 +394,10 @@ export async function createSample(data: InsertSample) {
     castingDate: data.castingDate ?? null,
     receivedById: data.receivedById,
     receivedAt: data.receivedAt,
+    originalSampleId: data.originalSampleId ?? null,
+    retestNumber: data.retestNumber ?? null,
+    retestReason: data.retestReason ?? null,
+    retestReasonNotes: data.retestReasonNotes ?? null,
     managerReadAt: data.managerReadAt ?? null,
   };
 
@@ -420,6 +428,10 @@ export async function createSample(data: InsertSample) {
       "castingDate",
       "receivedById",
       "receivedAt",
+      "originalSampleId",
+      "retestNumber",
+      "retestReason",
+      "retestReasonNotes",
       "managerReadAt",
     ] as const;
     const values = columns.map((col) => insertValues[col]);
@@ -444,6 +456,26 @@ export async function createSample(data: InsertSample) {
     .where(eq(samples.sampleCode, data.sampleCode))
     .limit(1);
   return result[0];
+}
+
+export async function getNextRetestNumber(rootSampleId: number): Promise<number> {
+  const db = await getDb();
+  if (!db) return 1;
+  const result = await db
+    .select({ maxN: sql<number>`COALESCE(MAX(${samples.retestNumber}), 0)` })
+    .from(samples)
+    .where(eq(samples.originalSampleId, rootSampleId));
+  return Number(result[0]?.maxN ?? 0) + 1;
+}
+
+export async function getRetestsByRootId(rootSampleId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select(sampleRowSelect())
+    .from(samples)
+    .where(eq(samples.originalSampleId, rootSampleId))
+    .orderBy(samples.retestNumber);
 }
 
 export async function getAllSamples(options?: { includeDeleted?: boolean }) {
@@ -782,6 +814,16 @@ export async function createDistribution(data: typeof distributions.$inferInsert
   return result[0];
 }
 
+export async function getAllDistributions() {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select()
+    .from(distributions)
+    .where(isNull(distributions.deletedAt))
+    .orderBy(desc(distributions.updatedAt));
+}
+
 export async function getDistributionsBySample(sampleId: number) {
   const db = await getDb();
   if (!db) return [];
@@ -902,6 +944,9 @@ export async function getDistributionsByTechnician(technicianId: number) {
       sampleCode: samples.sampleCode,
       sampleQuantity: samples.quantity,
       sampleSubType: samples.sampleSubType,
+      retestNumber: samples.retestNumber,
+      originalSampleId: samples.originalSampleId,
+      retestReason: samples.retestReason,
     })
     .from(distributions)
     .leftJoin(testTypes, eq(distributions.testType, testTypes.code))

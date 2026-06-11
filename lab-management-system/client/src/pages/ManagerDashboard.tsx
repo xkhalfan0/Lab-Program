@@ -1,54 +1,21 @@
 import { useState, useMemo } from "react";
 import DashboardLayout from "@/components/DashboardLayout";
-import { StatusBadge } from "@/components/StatusBadge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { trpc } from "@/lib/trpc";
 import { useLanguage, formatDateForLang } from "@/contexts/LanguageContext";
-import { SAMPLE_TYPE_LABELS, STATUS_LABELS, SampleStatus } from "@/lib/labTypes";
 import {
-  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
-  PieChart, Pie, Cell, Legend, LineChart, Line, CartesianGrid, LabelList,
-} from "recharts";
+  computeContractReadinessRows,
+  computeContractorScores,
+} from "@shared/dashboardInsights";
 import {
-  CheckSquare, XCircle, Clock, TrendingUp, FlaskConical,
-  AlertTriangle, CheckCircle2, FileText, BarChart2, Activity,
-  Target, Award, Calendar, CalendarDays, Search, ArrowRight,
-  PackageOpen, Beaker, ShieldCheck, Building2, CheckCircle,
-  TrendingDown, Zap, AlertOctagon,
+  FlaskConical, AlertTriangle, CheckCircle, Activity, Target,
+  Calendar, FileText, Users, Award, TrendingUp, TrendingDown,
+  Loader2, BarChart2,
 } from "lucide-react";
-import { useLocation } from "wouter";
-
-// ─── Color palette ────────────────────────────────────────────────────────────
-const COLORS = {
-  pass: "#22c55e",
-  fail: "#ef4444",
-  pending: "#f59e0b",
-  approved: "#3b82f6",
-  revision: "#f97316",
-  rejected: "#dc2626",
-  concrete: "#3b82f6",
-  soil: "#f59e0b",
-  steel: "#6b7280",
-  asphalt: "#1f2937",
-  aggregates: "#10b981",
-};
-
-const STATUS_COLORS: Record<string, string> = {
-  received: "#3b82f6",
-  distributed: "#8b5cf6",
-  tested: "#f59e0b",
-  processed: "#f97316",
-  reviewed: "#6366f1",
-  approved: "#14b8a6",
-  qc_passed: "#22c55e",
-  qc_failed: "#ef4444",
-  clearance_issued: "#10b981",
-  rejected: "#dc2626",
-  revision_requested: "#d97706",
-};
 
 const CATEGORY_LABELS: Record<string, { ar: string; en: string }> = {
   concrete:   { ar: "خرسانة",  en: "Concrete" },
@@ -58,19 +25,20 @@ const CATEGORY_LABELS: Record<string, { ar: string; en: string }> = {
   aggregates: { ar: "ركام",    en: "Aggregates" },
 };
 
-const SECTORS = [
-  { value: "sector_1", ar: "قطاع/1", en: "Sector 1" },
-  { value: "sector_2", ar: "قطاع/2", en: "Sector 2" },
-  { value: "sector_3", ar: "قطاع/3", en: "Sector 3" },
-  { value: "sector_4", ar: "قطاع/4", en: "Sector 4" },
-  { value: "sector_5", ar: "قطاع/5", en: "Sector 5" },
-];
+const COLORS = { pass: "#22c55e", fail: "#ef4444", pending: "#f59e0b" };
 
-function todayStr() {
-  return new Date().toISOString().split("T")[0];
-}
+const REPORT_SECTIONS = [
+  { value: "overview",   en: "Overview KPIs",            ar: "المؤشرات العامة" },
+  { value: "status",     en: "Samples by status",        ar: "العينات حسب الحالة" },
+  { value: "type",       en: "Samples by type",          ar: "العينات حسب النوع" },
+  { value: "trend",      en: "Monthly trend",            ar: "الاتجاه الشهري" },
+  { value: "passfail",   en: "Pass/fail by category",    ar: "النجاح/الرسوب حسب الفئة" },
+  { value: "readiness",  en: "Contract readiness",       ar: "جاهزية العقود" },
+  { value: "scorecard",  en: "Contractor scorecard",     ar: "بطاقة جودة المقاولين" },
+  { value: "toptests",   en: "Most frequent tests",      ar: "أكثر الاختبارات تكراراً" },
+  { value: "techperf",   en: "Technician performance",   ar: "أداء الفنيين" },
+] as const;
 
-// ─── KPI Card ─────────────────────────────────────────────────────────────────
 function KpiCard({
   icon: Icon,
   label,
@@ -79,7 +47,7 @@ function KpiCard({
   color = "text-foreground",
   borderColor = "border-l-slate-300",
 }: {
-  icon: React.ComponentType<any>;
+  icon: React.ComponentType<{ className?: string }>;
   label: string;
   value: string | number;
   sub?: string;
@@ -102,25 +70,10 @@ function KpiCard({
   );
 }
 
-// ─── Custom Tooltip ───────────────────────────────────────────────────────────
-function CustomTooltip({ active, payload, label }: any) {
-  if (!active || !payload?.length) return null;
-  return (
-    <div className="bg-white border border-slate-200 rounded-lg shadow-lg px-3 py-2 text-xs">
-      <p className="font-semibold text-slate-700 mb-1">{label}</p>
-      {payload.map((p: any, i: number) => (
-        <p key={i} style={{ color: p.color }}>{p.name}: <span className="font-bold">{p.value}</span></p>
-      ))}
-    </div>
-  );
-}
-
-// ─── Main Component ───────────────────────────────────────────────────────────
 export default function ManagerDashboard() {
   const { lang, t, dir } = useLanguage();
-  const [, setLocation] = useLocation();
+  const now = new Date();
 
-  // Date range for analytics (last 3 months)
   const [dateFrom] = useState(() => {
     const d = new Date();
     d.setMonth(d.getMonth() - 3);
@@ -128,264 +81,79 @@ export default function ManagerDashboard() {
   });
   const [dateTo] = useState(() => new Date().toISOString().slice(0, 10));
 
-  // Daily work filter
-  const [fromDate, setFromDate] = useState(todayStr);
-  const [toDate, setToDate] = useState(todayStr);
-  const [appliedFrom, setAppliedFrom] = useState(todayStr);
-  const [appliedTo, setAppliedTo] = useState(todayStr);
-  const [sectorFilter, setSectorFilter] = useState<string>("all");
+  const [reportSections, setReportSections] = useState<string[]>([
+    "overview", "status", "type", "trend", "passfail",
+  ]);
+  const [reportRange, setReportRange] = useState<"month" | "quarter" | "year" | "custom">("month");
+  const [reportFrom, setReportFrom] = useState("");
+  const [reportTo, setReportTo] = useState("");
+  const [reportFormat, setReportFormat] = useState<"pdf" | "excel">("pdf");
 
   const queryInput = useMemo(() => ({ dateFrom, dateTo }), [dateFrom, dateTo]);
 
-  const { data: stats, isLoading: statsLoading } = trpc.analytics.testStats.useQuery(queryInput);
-  const { data: samples, isLoading: samplesLoading } = trpc.samples.list.useQuery();
+  const { data: stats } = trpc.analytics.testStats.useQuery(queryInput);
+  const { data: samples } = trpc.samples.list.useQuery();
   const { data: sampleStats } = trpc.samples.stats.useQuery();
   const { data: rawOrdersData = [] } = trpc.orders.list.useQuery();
-  const orders = (rawOrdersData as any[]).map((o: any) => ({
+  const { data: techStats } = trpc.dashboard.technicianStats.useQuery();
+  const { data: clearanceStats } = trpc.dashboard.clearanceStats.useQuery();
+
+  const generateReport = trpc.reports.generate.useMutation({
+    onSuccess: (res) => {
+      window.open(res.url, "_blank");
+    },
+  });
+
+  const orders = (rawOrdersData as Array<Record<string, unknown>>).map((o) => ({
     ...o,
     contractNumber: o.contractNumber != null ? String(o.contractNumber) : null,
     contractorName: o.contractorName != null ? String(o.contractorName) : null,
-    sampleType: o.sampleType != null ? String(o.sampleType) : null,
-    orderCode: o.orderCode != null ? String(o.orderCode) : null,
-    items: Array.isArray(o.items) ? o.items.map((item: any) => ({
-      ...item,
-      testName: item.testName != null && typeof item.testName !== "object" ? String(item.testName) : (item.testTypeCode ?? "—"),
-      testTypeCode: item.testTypeCode != null ? String(item.testTypeCode) : "—",
-    })) : [],
+    status: o.status != null ? String(o.status) : null,
   }));
-  const { data: dailyData, isLoading: dailyLoading } = trpc.samples.dailyWork.useQuery({
-    fromDate: appliedFrom,
-    toDate: appliedTo,
-  });
 
-  const now = new Date();
-
-  // ─── Summary KPIs (old dashboard) ─────────────────────────────────────────
   const total = sampleStats?.total ?? 0;
   const active = samples?.filter(
     (s) => !["clearance_issued", "rejected", "qc_failed"].includes(s.status)
   ).length ?? 0;
   const completed = samples?.filter((s) => s.status === "clearance_issued").length ?? 0;
   const needsAction = samples?.filter(
-    (s) => ["received", "processed", "approved", "revision_requested"].includes(s.status)
+    (s) => ["received", "processed", "approved", "revision_requested", "awaiting_review"].includes(s.status)
   ).length ?? 0;
 
-  // ─── Supervisor KPIs ───────────────────────────────────────────────────────
-  const pendingReviews = useMemo(() => {
-    if (!samples) return 0;
-    return samples.filter(s => s.status === "approved").length;
-  }, [samples]);
-
-  const pendingQC = useMemo(() => {
-    if (!samples) return 0;
-    return samples.filter(s => s.status === "qc_passed").length;
-  }, [samples]);
-
-  const awaitingApproval = useMemo(() => {
-    if (!samples) return 0;
-    return samples.filter(s => ["distributed", "testing"].includes(s.status)).length;
-  }, [samples]);
-
-  const passRate = stats?.summary
-    ? Math.round((stats.summary.passed / Math.max(stats.summary.total, 1)) * 100)
-    : 0;
-
-  // ─── Chart data ────────────────────────────────────────────────────────────
-  const statusChartData = sampleStats?.byStatus?.map((s) => ({
-    name: t(`status.${s.status}`) !== `status.${s.status}` ? t(`status.${s.status}`) : (STATUS_LABELS[s.status as SampleStatus] ?? s.status),
-    value: Number(s.count),
-    fill: STATUS_COLORS[s.status] ?? "#94a3b8",
-  })) ?? [];
-
-  const typeChartData = sampleStats?.byType?.map((t2) => ({
-    name: SAMPLE_TYPE_LABELS[t2.sampleType] ?? t2.sampleType,
-    count: Number(t2.count),
-  })) ?? [];
-
-  const categoryPieData = useMemo(() => {
-    return (stats?.byCategory ?? []).map(c => ({
-      name: lang === "ar" ? (CATEGORY_LABELS[c.category]?.ar ?? c.category) : (CATEGORY_LABELS[c.category]?.en ?? c.category),
-      value: c.count,
-      pass: c.passed,
-      fail: c.failed,
-      color: COLORS[c.category as keyof typeof COLORS] ?? "#94a3b8",
-    }));
-  }, [stats?.byCategory, lang]);
-
-  const monthlyData = useMemo(() => {
-    return (stats?.byMonth ?? []).map(m => ({
-      name: m.month.slice(5),
-      count: m.count,
-    }));
-  }, [stats?.byMonth]);
-
+  const contractReadinessRows = useMemo(
+    () => computeContractReadinessRows(orders),
+    [orders]
+  );
+  const contractorScores = useMemo(
+    () => computeContractorScores(orders),
+    [orders]
+  );
   const topTests = useMemo(() => (stats?.byTestType ?? []).slice(0, 6), [stats?.byTestType]);
 
-  const contractReadinessRows = useMemo(() => {
-    try {
-      const grouped = new Map<string, {
-        contractNo: string;
-        contractor: string;
-        total: number;
-        completed: number;
-        inProgress: number;
-        pending: number;
-      }>();
-      for (const o of orders as any[]) {
-        const contractNo = o.contractNumber ?? "—";
-        const contractor = o.contractorName ?? "—";
-        const key = `${contractNo}::${contractor}`;
-        if (!grouped.has(key)) {
-          grouped.set(key, { contractNo, contractor, total: 0, completed: 0, inProgress: 0, pending: 0 });
-        }
-        const row = grouped.get(key)!;
-        row.total++;
-        if (["completed", "qc_passed"].includes(o.status)) row.completed++;
-        else if (["distributed", "in_progress", "reviewed"].includes(o.status)) row.inProgress++;
-        else row.pending++;
-      }
-      return Array.from(grouped.values())
-        .map((r) => ({ ...r, readiness: r.total > 0 ? Math.round((r.completed / r.total) * 100) : 0 }))
-        .sort((a, b) => a.readiness - b.readiness);
-    } catch {
-      return [] as Array<any>;
-    }
-  }, [orders]);
+  const toggleSection = (value: string) => {
+    setReportSections((prev) =>
+      prev.includes(value) ? prev.filter((s) => s !== value) : [...prev, value]
+    );
+  };
 
-  const contractorScores = useMemo(() => {
-    try {
-      const grouped = new Map<string, {
-        contractor: string;
-        totalOrders: number;
-        completedOrders: number;
-        failedOrders: number;
-      }>();
-      for (const o of orders as any[]) {
-        const contractor = o.contractorName ?? (lang === "ar" ? "غير محدد" : "Unknown");
-        if (!grouped.has(contractor)) {
-          grouped.set(contractor, { contractor, totalOrders: 0, completedOrders: 0, failedOrders: 0 });
-        }
-        const g = grouped.get(contractor)!;
-        g.totalOrders++;
-        if (["completed", "qc_passed"].includes(o.status)) g.completedOrders++;
-        if (o.status === "rejected") g.failedOrders++;
-      }
-
-      const riskOrder: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3 };
-      return Array.from(grouped.values())
-        .map((g) => {
-          const passRate = g.totalOrders > 0
-            ? Math.round((g.completedOrders / g.totalOrders) * 100)
-            : 0;
-          let riskLevel: "low" | "medium" | "high" | "critical" = "low";
-          if (passRate >= 80) riskLevel = "low";
-          else if (passRate >= 60) riskLevel = "medium";
-          else if (passRate >= 40) riskLevel = "high";
-          else riskLevel = "critical";
-          if (g.failedOrders >= 3) riskLevel = "critical";
-          return { ...g, passRate, riskLevel };
-        })
-        .sort((a, b) => riskOrder[a.riskLevel] - riskOrder[b.riskLevel]);
-    } catch {
-      return [] as Array<any>;
-    }
-  }, [orders, stats, lang]);
-
-  const slaWarnings = useMemo(() => {
-    try {
-      const now0 = new Date();
-      const tomorrow = new Date(now0.getTime() + 24 * 60 * 60 * 1000);
-      return (orders as any[])
-        .filter((o) => {
-          if (!["distributed", "in_progress"].includes(o.status)) return false;
-          if (!o.createdAt) return false;
-          const dueDate = new Date(o.createdAt);
-          dueDate.setDate(dueDate.getDate() + 7);
-          return dueDate <= tomorrow;
-        })
-        .map((o) => {
-          const dueDate = new Date(o.createdAt);
-          dueDate.setDate(dueDate.getDate() + 7);
-          const hoursLeft = Math.round((dueDate.getTime() - now0.getTime()) / (1000 * 60 * 60));
-          return { ...o, dueDate, hoursLeft };
-        })
-        .sort((a, b) => a.hoursLeft - b.hoursLeft);
-    } catch {
-      return [] as Array<any>;
-    }
-  }, [orders]);
-
-  const failureHeatmap = useMemo(() => {
-    try {
-      return (stats?.byTestType ?? [])
-        .filter((t2: any) => Number(t2.count) >= 3)
-        .map((t2: any) => {
-          const failRate = Number(t2.count) > 0 ? Math.round((Number(t2.failed ?? 0) / Number(t2.count)) * 100) : 0;
-          return {
-            name: lang === "ar" ? (t2.nameAr || t2.nameEn) : t2.nameEn,
-            failRate,
-            count: Number(t2.count),
-          };
-        })
-        .sort((a: any, b: any) => b.failRate - a.failRate);
-    } catch {
-      return [] as Array<any>;
-    }
-  }, [stats?.byTestType, lang]);
-
-  const todayActivity = useMemo(() => {
-    try {
-      const td = todayStr();
-      const todaySamples = (samples ?? []).filter((s: any) => {
-        if (!s.receivedAt) return false;
-        return new Date(s.receivedAt).toISOString().slice(0, 10) === td;
-      });
-      return {
-        received: todaySamples.length,
-        inTesting: (samples ?? []).filter((s: any) => ["distributed", "tested"].includes(s.status)).length,
-        awaitingReview: (samples ?? []).filter((s: any) => s.status === "processed").length,
-        qcQueue: (samples ?? []).filter((s: any) => s.status === "approved").length,
-        completedToday: todaySamples.filter((s: any) => ["qc_passed", "clearance_issued"].includes(s.status)).length,
-      };
-    } catch {
-      return { received: 0, inTesting: 0, awaitingReview: 0, qcQueue: 0, completedToday: 0 };
-    }
-  }, [samples]);
-
-  // ─── Daily work ────────────────────────────────────────────────────────────
-  function sectorLabel(val: string | null | undefined) {
-    if (!val) return "—";
-    const s = SECTORS.find(x => x.value === val);
-    return s ? (lang === "ar" ? s.ar : s.en) : val;
-  }
-
-  const dailySamples = (sectorFilter === "all"
-    ? dailyData?.samples
-    : dailyData?.samples?.filter(s => (s as any).sector === sectorFilter)) ?? [];
-  const dailySummary = dailyData?.summary;
-  const isSingleDay = appliedFrom === appliedTo;
-
-  const recentSamples = (sectorFilter === "all"
-    ? samples?.slice(0, 8)
-    : samples?.filter(s => (s as any).sector === sectorFilter).slice(0, 8)) ?? [];
-
-  const periodLabel = isSingleDay && appliedFrom === todayStr()
-    ? t("dashboard.todayWork")
-    : isSingleDay
-    ? `${t("dashboard.workOn")} ${new Date(appliedFrom).toLocaleDateString(lang === "ar" ? "ar-AE" : "en-AE", { day: "numeric", month: "short", year: "numeric" })}`
-    : `${t("dashboard.workFrom")} ${new Date(appliedFrom).toLocaleDateString(lang === "ar" ? "ar-AE" : "en-AE", { day: "numeric", month: "short" })} ${lang === "ar" ? "إلى" : "to"} ${new Date(appliedTo).toLocaleDateString(lang === "ar" ? "ar-AE" : "en-AE", { day: "numeric", month: "short", year: "numeric" })}`;
-
-  const handleApplyFilter = () => { setAppliedFrom(fromDate); setAppliedTo(toDate); };
-  const handleTodayFilter = () => {
-    const td = todayStr();
-    setFromDate(td); setToDate(td); setAppliedFrom(td); setAppliedTo(td);
+  const handleGenerate = () => {
+    if (reportSections.length === 0) return;
+    generateReport.mutate({
+      sections: reportSections as Array<
+        "overview" | "status" | "type" | "trend" | "passfail" |
+        "readiness" | "scorecard" | "toptests" | "techperf"
+      >,
+      range: reportRange,
+      dateFrom: reportRange === "custom" ? reportFrom : undefined,
+      dateTo: reportRange === "custom" ? reportTo : undefined,
+      format: reportFormat,
+    });
   };
 
   return (
     <DashboardLayout>
       <div className="space-y-6" dir={dir}>
-
-        {/* ── Header ─────────────────────────────────────────────────────── */}
+        {/* Header */}
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div>
             <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
@@ -394,96 +162,21 @@ export default function ManagerDashboard() {
             </h1>
             <p className="text-muted-foreground text-sm mt-0.5">{t("app.subtitle")}</p>
           </div>
-          {/* Date/Time Card */}
-          <div className="flex flex-col items-end gap-1">
-            <div className="flex items-center gap-3 bg-primary/10 border border-primary/20 rounded-2xl px-5 py-3 shadow-sm">
-              <Calendar className="w-6 h-6 text-primary shrink-0" />
-              <div className={dir === "rtl" ? "text-right" : "text-left"}>
-                <p className="text-lg font-bold text-foreground leading-tight">
-                  {formatDateForLang(now, lang)}
-                </p>
-                <p className="text-3xl font-extrabold text-primary tabular-nums mt-1 tracking-tight">
-                  {now.toLocaleTimeString(lang === "ar" ? "ar-AE" : "en-AE", { hour: "2-digit", minute: "2-digit" })}
-                </p>
-                <p className="text-xs text-muted-foreground mt-0.5">{t("dashboard.uaeTime")}</p>
-              </div>
+          <div className="flex items-center gap-3 bg-primary/10 border border-primary/20 rounded-2xl px-5 py-3 shadow-sm">
+            <Calendar className="w-6 h-6 text-primary shrink-0" />
+            <div className={dir === "rtl" ? "text-right" : "text-left"}>
+              <p className="text-lg font-bold text-foreground leading-tight">
+                {formatDateForLang(now, lang)}
+              </p>
+              <p className="text-3xl font-extrabold text-primary tabular-nums mt-1 tracking-tight">
+                {now.toLocaleTimeString(lang === "ar" ? "ar-AE" : "en-AE", { hour: "2-digit", minute: "2-digit" })}
+              </p>
+              <p className="text-xs text-muted-foreground mt-0.5">{t("dashboard.uaeTime")}</p>
             </div>
           </div>
         </div>
 
-        {/* ── Today's Lab Activity Summary ───────────────────────────────── */}
-        <div className="rounded-xl border bg-gradient-to-r from-blue-50 to-white p-3">
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
-            {[
-              { label: lang === "ar" ? "وارد اليوم" : "Today's Received", value: todayActivity.received, icon: PackageOpen, color: "text-blue-600" },
-              { label: lang === "ar" ? "قيد الفحص" : "In Testing", value: todayActivity.inTesting, icon: Beaker, color: "text-amber-600" },
-              { label: lang === "ar" ? "بانتظار المراجعة" : "Awaiting Review", value: todayActivity.awaitingReview, icon: CheckSquare, color: "text-purple-600" },
-              { label: lang === "ar" ? "طابور الجودة" : "QC Queue", value: todayActivity.qcQueue, icon: ShieldCheck, color: "text-indigo-600" },
-              { label: lang === "ar" ? "مكتمل اليوم" : "Completed Today", value: todayActivity.completedToday, icon: CheckCircle2, color: "text-green-600" },
-            ].map((it) => (
-              <div key={it.label} className="rounded-lg border bg-white/80 px-3 py-2 flex items-center gap-2">
-                <it.icon className={`w-4 h-4 ${it.color}`} />
-                <div>
-                  <p className="text-[10px] text-muted-foreground">{it.label}</p>
-                  <p className={`text-base font-bold ${it.color}`}>{it.value}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* ── Action Alerts ───────────────────────────────────────────────── */}
-        {(pendingReviews > 0 || pendingQC > 0 || awaitingApproval > 0) && (
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            {pendingReviews > 0 && (
-              <button
-                onClick={() => setLocation("/manager-review")}
-                className="flex items-center gap-3 p-3 rounded-xl border-2 border-amber-300 bg-amber-50 hover:bg-amber-100 transition-colors text-start"
-              >
-                <div className="p-2 bg-amber-100 rounded-lg">
-                  <AlertTriangle className="w-5 h-5 text-amber-600" />
-                </div>
-                <div>
-                  <p className="text-sm font-bold text-amber-800">
-                    {pendingReviews} {lang === "ar" ? "نتيجة بانتظار مراجعتك" : "results awaiting review"}
-                  </p>
-                  <p className="text-xs text-amber-600">{lang === "ar" ? "انقر للمراجعة" : "Click to review"}</p>
-                </div>
-              </button>
-            )}
-            {pendingQC > 0 && (
-              <button
-                onClick={() => setLocation("/qc-review")}
-                className="flex items-center gap-3 p-3 rounded-xl border-2 border-blue-300 bg-blue-50 hover:bg-blue-100 transition-colors text-start"
-              >
-                <div className="p-2 bg-blue-100 rounded-lg">
-                  <FlaskConical className="w-5 h-5 text-blue-600" />
-                </div>
-                <div>
-                  <p className="text-sm font-bold text-blue-800">
-                    {pendingQC} {lang === "ar" ? "عينة بانتظار ضبط الجودة" : "samples awaiting QC"}
-                  </p>
-                  <p className="text-xs text-blue-600">{lang === "ar" ? "انقر لضبط الجودة" : "Click for QC"}</p>
-                </div>
-              </button>
-            )}
-            {awaitingApproval > 0 && (
-              <div className="flex items-center gap-3 p-3 rounded-xl border-2 border-slate-200 bg-slate-50">
-                <div className="p-2 bg-slate-100 rounded-lg">
-                  <Clock className="w-5 h-5 text-slate-500" />
-                </div>
-                <div>
-                  <p className="text-sm font-bold text-slate-700">
-                    {awaitingApproval} {lang === "ar" ? "عينة قيد الفحص" : "samples under testing"}
-                  </p>
-                  <p className="text-xs text-slate-500">{lang === "ar" ? "موزعة على الفنيين" : "Distributed to technicians"}</p>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* ── Main KPI Cards ──────────────────────────────────────────────── */}
+        {/* Overview KPIs */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <KpiCard label={t("dashboard.totalSamples")} value={total} icon={FlaskConical} color="text-blue-500" borderColor="border-l-blue-500" />
           <KpiCard label={t("dashboard.active")} value={active} icon={Activity} color="text-orange-500" borderColor="border-l-orange-500" />
@@ -491,70 +184,43 @@ export default function ManagerDashboard() {
           <KpiCard label={t("dashboard.needsAction")} value={needsAction} icon={AlertTriangle} color="text-amber-500" borderColor="border-l-amber-500" />
         </div>
 
-        {/* ── Supervisor KPIs ─────────────────────────────────────────────── */}
-        {!statsLoading && (
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <KpiCard
-              label={lang === "ar" ? "إجمالي الاختبارات (3 أشهر)" : "Total Tests (3 months)"}
-              value={stats?.summary.total ?? 0}
-              icon={BarChart2}
-              color="text-blue-600"
-              borderColor="border-l-blue-400"
-            />
-            <KpiCard
-              label={lang === "ar" ? "نجح" : "Passed"}
-              value={stats?.summary.passed ?? 0}
-              sub={`${passRate}% ${lang === "ar" ? "نسبة النجاح" : "pass rate"}`}
-              icon={CheckCircle2}
-              color="text-green-600"
-              borderColor="border-l-green-400"
-            />
-            <KpiCard
-              label={lang === "ar" ? "رسب" : "Failed"}
-              value={stats?.summary.failed ?? 0}
-              icon={XCircle}
-              color="text-red-600"
-              borderColor="border-l-red-400"
-            />
-            <KpiCard
-              label={lang === "ar" ? "نسبة النجاح" : "Pass Rate"}
-              value={`${passRate}%`}
-              icon={Target}
-              color={passRate >= 80 ? "text-green-600" : passRate >= 60 ? "text-amber-600" : "text-red-600"}
-              borderColor={passRate >= 80 ? "border-l-green-500" : passRate >= 60 ? "border-l-amber-500" : "border-l-red-500"}
-            />
-          </div>
-        )}
-
-        {/* ── Quick Actions ───────────────────────────────────────────────── */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          {[
-            { icon: CheckSquare, label: lang === "ar" ? "مراجعة النتائج" : "Review Results", sub: `${pendingReviews} ${lang === "ar" ? "بانتظار" : "pending"}`, path: "/manager-review", color: "text-blue-600", urgent: pendingReviews > 0 },
-            { icon: ShieldCheck, label: lang === "ar" ? "ضبط الجودة" : "Quality Control", sub: `${pendingQC} ${lang === "ar" ? "بانتظار" : "pending"}`, path: "/qc-review", color: "text-purple-600", urgent: pendingQC > 0 },
-            { icon: FileText, label: lang === "ar" ? "الإحصائيات" : "Analytics", sub: lang === "ar" ? "تقارير مفصلة" : "Detailed reports", path: "/analytics", color: "text-green-600", urgent: false },
-            { icon: Award, label: lang === "ar" ? "شهادات براءة الذمة" : "Clearance Certs", sub: lang === "ar" ? "إصدار الشهادات" : "Issue certificates", path: "/clearance", color: "text-amber-600", urgent: false },
-          ].map((action, i) => (
-            <button
-              key={i}
-              onClick={() => setLocation(action.path)}
-              className={`flex flex-col items-start gap-2 p-4 rounded-xl border-2 transition-all hover:shadow-md ${
-                action.urgent
-                  ? "border-amber-300 bg-amber-50 hover:bg-amber-100"
-                  : "border-border bg-card hover:border-primary/30 hover:bg-accent/30"
-              }`}
-            >
-              <div className={`p-2 rounded-lg ${action.urgent ? "bg-amber-100" : "bg-muted/50"}`}>
-                <action.icon className={`w-5 h-5 ${action.color}`} />
-              </div>
-              <div className="text-start">
-                <p className="text-sm font-semibold">{action.label}</p>
-                <p className={`text-xs ${action.urgent ? "text-amber-700 font-medium" : "text-muted-foreground"}`}>{action.sub}</p>
-              </div>
-            </button>
-          ))}
+        {/* Technicians & Clearances KPIs */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <KpiCard
+            label={lang === "ar" ? "الفنيون النشطون" : "Active technicians"}
+            value={techStats?.activeCount ?? 0}
+            sub={lang === "ar" ? "في الوردية" : "on shift"}
+            icon={Users}
+            color="text-indigo-600"
+            borderColor="border-l-indigo-400"
+          />
+          <KpiCard
+            label={lang === "ar" ? "اختبارات / فني" : "Tests / technician"}
+            value={techStats?.avgTestsPerTech ?? 0}
+            sub={lang === "ar" ? "متوسط هذا الأسبوع" : "avg this week"}
+            icon={BarChart2}
+            color="text-violet-600"
+            borderColor="border-l-violet-400"
+          />
+          <KpiCard
+            label={lang === "ar" ? "طلبات براءة الذمة" : "Clearance requests"}
+            value={clearanceStats?.totalRequests ?? 0}
+            sub={`${clearanceStats?.inProgress ?? 0} ${lang === "ar" ? "قيد الإجراء" : "in progress"}`}
+            icon={FileText}
+            color="text-amber-600"
+            borderColor="border-l-amber-400"
+          />
+          <KpiCard
+            label={lang === "ar" ? "براءات صادرة" : "Clearances done"}
+            value={clearanceStats?.issued ?? 0}
+            sub={lang === "ar" ? "شهادات صادرة" : "certificates issued"}
+            icon={Award}
+            color="text-emerald-600"
+            borderColor="border-l-emerald-400"
+          />
         </div>
 
-        {/* ── Quality Intelligence ───────────────────────────────────────── */}
+        {/* Contract Closure Readiness */}
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-semibold flex items-center gap-2">
@@ -566,57 +232,51 @@ export default function ManagerDashboard() {
             {contractReadinessRows.length === 0 ? (
               <div className="text-sm text-muted-foreground">{lang === "ar" ? "لا توجد عقود نشطة" : "No active contracts"}</div>
             ) : (
-              <>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-xs">
-                    <thead>
-                      <tr className="border-b bg-muted/30">
-                        <th className="text-start px-3 py-2">{lang === "ar" ? "رقم العقد" : "Contract No."}</th>
-                        <th className="text-start px-3 py-2">{lang === "ar" ? "المقاول" : "Contractor"}</th>
-                        <th className="text-center px-3 py-2">{lang === "ar" ? "إجمالي" : "Total Orders"}</th>
-                        <th className="text-center px-3 py-2">{lang === "ar" ? "مكتمل" : "Completed"}</th>
-                        <th className="text-center px-3 py-2">{lang === "ar" ? "قيد التنفيذ" : "In Progress"}</th>
-                        <th className="text-center px-3 py-2">{lang === "ar" ? "معلق" : "Pending"}</th>
-                        <th className="text-end px-3 py-2">{lang === "ar" ? "الجاهزية %" : "Readiness %"}</th>
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="border-b bg-muted/30">
+                      <th className="text-start px-3 py-2">{lang === "ar" ? "رقم العقد" : "Contract No."}</th>
+                      <th className="text-start px-3 py-2">{lang === "ar" ? "المقاول" : "Contractor"}</th>
+                      <th className="text-center px-3 py-2">{lang === "ar" ? "إجمالي" : "Total"}</th>
+                      <th className="text-center px-3 py-2">{lang === "ar" ? "مكتمل" : "Completed"}</th>
+                      <th className="text-center px-3 py-2">{lang === "ar" ? "قيد التنفيذ" : "In Progress"}</th>
+                      <th className="text-center px-3 py-2">{lang === "ar" ? "معلق" : "Pending"}</th>
+                      <th className="text-end px-3 py-2">{lang === "ar" ? "الجاهزية %" : "Readiness %"}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {contractReadinessRows.slice(0, 8).map((r) => (
+                      <tr key={`${r.contractNo}-${r.contractor}`} className="border-b last:border-0">
+                        <td className="px-3 py-2 font-mono">{r.contractNo}</td>
+                        <td className="px-3 py-2">{r.contractor}</td>
+                        <td className="px-3 py-2 text-center font-semibold">{r.total}</td>
+                        <td className="px-3 py-2 text-center text-green-700 font-semibold">{r.completed}</td>
+                        <td className="px-3 py-2 text-center text-amber-700 font-semibold">{r.inProgress}</td>
+                        <td className="px-3 py-2 text-center text-slate-700 font-semibold">{r.pending}</td>
+                        <td className="px-3 py-2 text-end">
+                          <span className={`px-2 py-1 rounded font-bold ${
+                            r.readiness >= 80 ? "bg-green-100 text-green-700" :
+                            r.readiness >= 50 ? "bg-amber-100 text-amber-700" :
+                            "bg-red-100 text-red-700"
+                          }`}>
+                            {r.readiness}%
+                          </span>
+                        </td>
                       </tr>
-                    </thead>
-                    <tbody>
-                      {contractReadinessRows.slice(0, 8).map((r: any) => (
-                        <tr key={`${r.contractNo}-${r.contractor}`} className="border-b last:border-0">
-                          <td className="px-3 py-2 font-mono">{r.contractNo}</td>
-                          <td className="px-3 py-2">{r.contractor}</td>
-                          <td className="px-3 py-2 text-center font-semibold">{r.total}</td>
-                          <td className="px-3 py-2 text-center text-green-700 font-semibold">{r.completed}</td>
-                          <td className="px-3 py-2 text-center text-amber-700 font-semibold">{r.inProgress}</td>
-                          <td className="px-3 py-2 text-center text-slate-700 font-semibold">{r.pending}</td>
-                          <td className="px-3 py-2 text-end">
-                            <span className={`px-2 py-1 rounded font-bold ${
-                              r.readiness >= 80 ? "bg-green-100 text-green-700" :
-                              r.readiness >= 50 ? "bg-amber-100 text-amber-700" :
-                              "bg-red-100 text-red-700"
-                            }`}>
-                              {r.readiness}%
-                            </span>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-                <div className="mt-2 text-end">
-                  <button onClick={() => setLocation("/distribution")} className="text-xs text-primary hover:underline">
-                    {lang === "ar" ? "عرض الكل" : "View all"}
-                  </button>
-                </div>
-              </>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
           </CardContent>
         </Card>
 
+        {/* Contractor Quality Scorecard */}
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-semibold flex items-center gap-2">
-              <AlertOctagon className="w-4 h-4 text-rose-600" />
+              <Award className="w-4 h-4 text-rose-600" />
               {lang === "ar" ? "بطاقة جودة المقاولين" : "Contractor Quality Scorecard"}
             </CardTitle>
           </CardHeader>
@@ -625,23 +285,17 @@ export default function ManagerDashboard() {
               <div className="text-sm text-muted-foreground">{lang === "ar" ? "لا توجد بيانات" : "No data"}</div>
             ) : (
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-                {contractorScores.slice(0, 8).map((c: any) => {
+                {contractorScores.slice(0, 8).map((c) => {
                   const riskCls =
-                    c.riskLevel === "low"
-                      ? "bg-green-100 text-green-700"
-                      : c.riskLevel === "medium"
-                      ? "bg-amber-100 text-amber-700"
-                      : c.riskLevel === "high"
-                      ? "bg-orange-100 text-orange-700"
-                      : "bg-red-100 text-red-700 animate-pulse";
+                    c.riskLevel === "low" ? "bg-green-100 text-green-700" :
+                    c.riskLevel === "medium" ? "bg-amber-100 text-amber-700" :
+                    c.riskLevel === "high" ? "bg-orange-100 text-orange-700" :
+                    "bg-red-100 text-red-700 animate-pulse";
                   const riskLabel =
-                    c.riskLevel === "low"
-                      ? (lang === "ar" ? "مخاطر منخفضة" : "Low Risk")
-                      : c.riskLevel === "medium"
-                      ? (lang === "ar" ? "مخاطر متوسطة" : "Medium Risk")
-                      : c.riskLevel === "high"
-                      ? (lang === "ar" ? "مخاطر عالية" : "High Risk")
-                      : (lang === "ar" ? "حرجة" : "Critical");
+                    c.riskLevel === "low" ? (lang === "ar" ? "مخاطر منخفضة" : "Low Risk") :
+                    c.riskLevel === "medium" ? (lang === "ar" ? "مخاطر متوسطة" : "Medium Risk") :
+                    c.riskLevel === "high" ? (lang === "ar" ? "مخاطر عالية" : "High Risk") :
+                    (lang === "ar" ? "حرجة" : "Critical");
                   return (
                     <div key={c.contractor} className="border rounded-lg p-3 space-y-2 bg-card">
                       <div className="flex items-center justify-between gap-2">
@@ -669,315 +323,7 @@ export default function ManagerDashboard() {
           </CardContent>
         </Card>
 
-        {slaWarnings.length > 0 && (
-          <Card className="border-amber-300 bg-amber-50/60">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-semibold flex items-center gap-2 text-amber-800">
-                <Zap className="w-4 h-4" />
-                {lang === "ar"
-                  ? `${slaWarnings.length} أوردر يقترب من مهلة SLA`
-                  : `${slaWarnings.length} orders approaching SLA deadline`}
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-2">
-                {slaWarnings.slice(0, 8).map((o: any) => (
-                  <div key={o.id} className="grid grid-cols-1 md:grid-cols-4 gap-2 text-xs border rounded-lg bg-white p-2">
-                    <div className="font-mono font-semibold">{o.orderCode}</div>
-                    <div>{o.contractorName ?? "—"}</div>
-                    <div>{o.sampleType ?? "—"}</div>
-                    <div className={`font-semibold ${
-                      o.hoursLeft < 0 ? "text-red-700" : o.hoursLeft < 12 ? "text-amber-700" : "text-yellow-700"
-                    }`}>
-                      {lang === "ar" ? "متبقي:" : "Remaining:"} {o.hoursLeft}h
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-semibold flex items-center gap-2">
-              <BarChart2 className="w-4 h-4 text-red-600" />
-              {lang === "ar" ? "معدل فشل أنواع الاختبارات" : "Test Type Failure Rate"}
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {failureHeatmap.length === 0 ? (
-              <div className="text-sm text-muted-foreground">{lang === "ar" ? "لا توجد بيانات كافية" : "Insufficient test data"}</div>
-            ) : (
-              <div className="flex flex-wrap gap-2">
-                {failureHeatmap.map((t2: any) => (
-                  <span
-                    key={t2.name}
-                    className={`text-xs px-2.5 py-1 rounded-full border font-medium ${
-                      t2.failRate >= 30
-                        ? "bg-red-100 border-red-300 text-red-700"
-                        : t2.failRate >= 15
-                        ? "bg-orange-100 border-orange-300 text-orange-700"
-                        : t2.failRate >= 5
-                        ? "bg-amber-100 border-amber-300 text-amber-700"
-                        : "bg-green-100 border-green-300 text-green-700"
-                    }`}
-                  >
-                    {t2.name} • {t2.failRate}%
-                  </span>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* ── Sector Filter ─────────────────────────────────────────────── */}
-        <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-xs text-muted-foreground flex items-center gap-1.5">
-            <Building2 className="w-4 h-4" />
-            <span className="font-medium">{lang === "ar" ? "فلتر القطاع:" : "Filter by Sector:"}</span>
-          </span>
-          <button
-            onClick={() => setSectorFilter("all")}
-            className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all border ${
-              sectorFilter === "all"
-                ? "bg-primary text-primary-foreground border-primary shadow-sm"
-                : "bg-background text-muted-foreground border-border hover:border-primary/50"
-            }`}
-          >
-            {lang === "ar" ? "الكل" : "All Sectors"}
-          </button>
-          {SECTORS.map(sec => (
-            <button
-              key={sec.value}
-              onClick={() => setSectorFilter(sec.value)}
-              className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all border ${
-                sectorFilter === sec.value
-                  ? "bg-blue-600 text-white border-blue-600 shadow-sm"
-                  : "bg-background text-muted-foreground border-border hover:border-blue-400"
-              }`}
-            >
-              {lang === "ar" ? sec.ar : sec.en}
-            </button>
-          ))}
-        </div>
-
-        {/* ── Daily Work Section ────────────────────────────────────────── */}
-        <Card>
-          <CardHeader className="pb-3">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <CardTitle className="text-base font-semibold flex items-center gap-2">
-                <CalendarDays className="w-5 h-5 text-primary" />
-                {periodLabel}
-              </CardTitle>
-              <div className="flex items-center gap-2 flex-wrap">
-                <Button size="sm" variant="outline" onClick={handleTodayFilter} className="text-xs h-8 px-3">
-                  {t("dashboard.today")}
-                </Button>
-                <div className="flex items-center gap-1.5">
-                  <span className="text-xs text-muted-foreground">{t("dashboard.from")}</span>
-                  <Input type="date" value={fromDate} onChange={e => setFromDate(e.target.value)} className="h-8 text-xs w-36" />
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <span className="text-xs text-muted-foreground">{t("dashboard.to")}</span>
-                  <Input type="date" value={toDate} onChange={e => setToDate(e.target.value)} className="h-8 text-xs w-36" />
-                </div>
-                <Button size="sm" onClick={handleApplyFilter} className="h-8 px-3 text-xs gap-1">
-                  <Search className="w-3.5 h-3.5" />
-                  {t("dashboard.apply")}
-                </Button>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              {[
-                { label: t("dashboard.received"), value: dailySummary?.received ?? 0, icon: PackageOpen, color: "text-blue-600", bg: "bg-blue-50 dark:bg-blue-950/30" },
-                { label: t("dashboard.distributed"), value: dailySummary?.distributed ?? 0, icon: ArrowRight, color: "text-purple-600", bg: "bg-purple-50 dark:bg-purple-950/30" },
-                { label: t("dashboard.processed"), value: dailySummary?.processed ?? 0, icon: Beaker, color: "text-orange-600", bg: "bg-orange-50 dark:bg-orange-950/30" },
-                { label: t("dashboard.approvedIssued"), value: dailySummary?.approved ?? 0, icon: ShieldCheck, color: "text-green-600", bg: "bg-green-50 dark:bg-green-950/30" },
-              ].map(({ label, value, icon: Icon, color, bg }) => (
-                <div key={label} className={`rounded-lg p-3 ${bg} flex items-center gap-3`}>
-                  <div className="p-2 rounded-lg bg-white/60 dark:bg-black/20">
-                    <Icon className={`w-5 h-5 ${color}`} />
-                  </div>
-                  <div>
-                    <p className="text-xs text-muted-foreground">{label}</p>
-                    <p className={`text-2xl font-bold ${color}`}>{value}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            {dailyLoading ? (
-              <div className="py-8 text-center text-sm text-muted-foreground">{t("dashboard.loading")}</div>
-            ) : dailySamples.length === 0 ? (
-              <div className="py-10 text-center">
-                <Clock className="w-10 h-10 mx-auto mb-3 text-muted-foreground opacity-30" />
-                <p className="text-sm text-muted-foreground">{t("dashboard.noPeriodSamples")}</p>
-              </div>
-            ) : (
-              <div className="overflow-x-auto rounded-lg border">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b bg-muted/30">
-                      {[t("table.num"), t("table.sampleId"), t("table.contractNo"), t("table.contractor"), t("table.type"), lang === "ar" ? "القطاع" : "Sector", t("table.qty"), t("table.status"), t("table.receivedAt")].map(h => (
-                        <th key={h} className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground">{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {dailySamples.map((sample, idx) => (
-                      <tr key={sample.id} className="border-b last:border-0 hover:bg-muted/20 cursor-pointer transition-colors" onClick={() => setLocation(`/sample/${sample.id}`)}>
-                        <td className="px-4 py-2.5 text-xs text-muted-foreground">{idx + 1}</td>
-                        <td className="px-4 py-2.5 font-mono text-xs font-semibold text-primary">{sample.sampleCode}</td>
-                        <td className="px-4 py-2.5 text-xs font-mono text-muted-foreground">{sample.contractNumber ?? "—"}</td>
-                        <td className="px-4 py-2.5 text-xs">{sample.contractorName ?? "—"}</td>
-                        <td className="px-4 py-2.5 text-xs capitalize">{SAMPLE_TYPE_LABELS[sample.sampleType]}</td>
-                        <td className="px-4 py-2.5 text-xs">
-                          {(sample as any).sector ? (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200">
-                              <Building2 className="w-3 h-3" />
-                              {sectorLabel((sample as any).sector)}
-                            </span>
-                          ) : "—"}
-                        </td>
-                        <td className="px-4 py-2.5 text-xs">{sample.quantity}</td>
-                        <td className="px-4 py-2.5"><StatusBadge status={sample.status} /></td>
-                        <td className="px-4 py-2.5 text-xs text-muted-foreground">
-                          {new Date(sample.receivedAt).toLocaleString(lang === "ar" ? "ar-AE" : "en-AE", { hour: "2-digit", minute: "2-digit", day: "2-digit", month: "short" })}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* ── Charts Row ──────────────────────────────────────────────────── */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          {/* Donut Chart - Samples by Status */}
-          <Card className="overflow-hidden">
-            <CardHeader className="pb-2 border-b">
-              <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                <TrendingUp className="w-4 h-4 text-primary" />
-                {t("dashboard.samplesByStatus")}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="pt-4">
-              {statusChartData.length > 0 ? (
-                <ResponsiveContainer width="100%" height={260}>
-                  <PieChart>
-                    <Pie data={statusChartData} cx="50%" cy="46%" innerRadius={60} outerRadius={90} paddingAngle={3} dataKey="value" stroke="none">
-                      {statusChartData.map((_: any, index: number) => (
-                        <Cell key={index} fill={statusChartData[index].fill} />
-                      ))}
-                    </Pie>
-                    <Tooltip contentStyle={{ borderRadius: 10, border: "none", boxShadow: "0 4px 20px rgba(0,0,0,0.12)", fontSize: 12 }} />
-                    <Legend verticalAlign="bottom" height={40} iconType="circle" iconSize={9} formatter={(value: any) => <span style={{ fontSize: 11, color: "#475569" }}>{value}</span>} />
-                  </PieChart>
-                </ResponsiveContainer>
-              ) : (
-                <div className="h-[260px] flex items-center justify-center text-muted-foreground text-sm">{t("dashboard.noData")}</div>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Bar Chart - Samples by Type */}
-          <Card className="overflow-hidden">
-            <CardHeader className="pb-2 border-b">
-              <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                <BarChart2 className="w-4 h-4 text-primary" />
-                {t("dashboard.samplesByType")}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="pt-4">
-              {typeChartData.length > 0 ? (
-                <ResponsiveContainer width="100%" height={260}>
-                  <BarChart data={typeChartData} margin={{ top: 20, right: 10, left: -10, bottom: 8 }} barCategoryGap="35%">
-                    <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
-                    <XAxis dataKey="name" tick={{ fontSize: 11, fill: "#64748b" }} axisLine={false} tickLine={false} />
-                    <YAxis tick={{ fontSize: 11, fill: "#94a3b8" }} axisLine={false} tickLine={false} allowDecimals={false} />
-                    <Tooltip contentStyle={{ borderRadius: 10, border: "none", boxShadow: "0 4px 20px rgba(0,0,0,0.12)", fontSize: 12 }} />
-                    <Bar dataKey="count" radius={[6, 6, 0, 0]} maxBarSize={64}>
-                      {typeChartData.map((_: any, index: number) => (
-                        <Cell key={index} fill={["#3b82f6","#10b981","#f59e0b","#ef4444","#8b5cf6","#06b6d4"][index % 6]} />
-                      ))}
-                      <LabelList dataKey="count" position="top" style={{ fontSize: 12, fontWeight: 600, fill: "#475569" }} />
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-              ) : (
-                <div className="h-[260px] flex items-center justify-center text-muted-foreground text-sm">{t("dashboard.noData")}</div>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Monthly Trend */}
-          <Card>
-            <CardHeader className="pb-2 border-b">
-              <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                <Activity className="w-4 h-4 text-primary" />
-                {lang === "ar" ? "الاتجاه الشهري (3 أشهر)" : "Monthly Trend (3 months)"}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="pt-4">
-              {monthlyData.length > 0 ? (
-                <ResponsiveContainer width="100%" height={260}>
-                  <LineChart data={monthlyData}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                    <XAxis dataKey="name" tick={{ fontSize: 11 }} />
-                    <YAxis tick={{ fontSize: 11 }} />
-                    <Tooltip content={<CustomTooltip />} />
-                    <Line type="monotone" dataKey="count" name={lang === "ar" ? "اختبارات" : "Tests"} stroke="#3b82f6" strokeWidth={2} dot={{ r: 4, fill: "#3b82f6" }} />
-                  </LineChart>
-                </ResponsiveContainer>
-              ) : (
-                <div className="h-[260px] flex items-center justify-center text-sm text-muted-foreground">
-                  {lang === "ar" ? "لا توجد بيانات" : "No data"}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* ── Pass/Fail by Category ───────────────────────────────────────── */}
-        {categoryPieData.length > 0 && (
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-semibold">
-                {lang === "ar" ? "نسبة النجاح/الرسوب حسب الفئة" : "Pass/Fail Rate by Category"}
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-                {categoryPieData.map((cat, i) => {
-                  const passR = cat.value > 0 ? Math.round((cat.pass / cat.value) * 100) : 0;
-                  return (
-                    <div key={i} className="border rounded-lg p-3 text-center space-y-2">
-                      <div className="flex items-center justify-center gap-1.5">
-                        <span className="w-3 h-3 rounded-full" style={{ backgroundColor: cat.color }} />
-                        <p className="text-xs font-semibold">{cat.name}</p>
-                      </div>
-                      <p className="text-xl font-bold" style={{ color: cat.color }}>{cat.value}</p>
-                      <div className="w-full bg-muted rounded-full h-1.5 overflow-hidden">
-                        <div className="h-full rounded-full transition-all" style={{ width: `${passR}%`, backgroundColor: COLORS.pass }} />
-                      </div>
-                      <div className="flex justify-between text-[10px] text-muted-foreground">
-                        <span className="text-green-600 font-medium">{cat.pass} ✓</span>
-                        <span className="text-red-600 font-medium">{cat.fail} ✗</span>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* ── Top Test Types ──────────────────────────────────────────────── */}
+        {/* Most Frequent Tests */}
         {topTests.length > 0 && (
           <Card>
             <CardHeader className="pb-2">
@@ -1031,58 +377,71 @@ export default function ManagerDashboard() {
           </Card>
         )}
 
-        {/* ── Recent Samples Table ──────────────────────────────────────── */}
+        {/* Report Generator */}
         <Card>
-          <CardHeader className="pb-2 flex flex-row items-center justify-between">
-            <CardTitle className="text-sm font-semibold">{t("dashboard.recentSamples")}</CardTitle>
-            <button onClick={() => setLocation("/reception")} className="text-xs text-primary hover:underline">
-              {t("dashboard.viewAll")}
-            </button>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-semibold flex items-center gap-2">
+              <FileText className="w-4 h-4 text-primary" />
+              {lang === "ar" ? "إنشاء تقرير" : "Generate report"}
+            </CardTitle>
           </CardHeader>
-          <CardContent className="p-0">
-            {samplesLoading ? (
-              <div className="p-6 text-center text-sm text-muted-foreground">{t("dashboard.loading")}</div>
-            ) : recentSamples.length === 0 ? (
-              <div className="p-8 text-center">
-                <FlaskConical className="w-10 h-10 text-muted-foreground mx-auto mb-3 opacity-40" />
-                <p className="text-sm text-muted-foreground">{t("dashboard.noSamples")}</p>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+              {REPORT_SECTIONS.map((sec) => (
+                <label key={sec.value} className="flex items-center gap-2 text-sm cursor-pointer">
+                  <Checkbox
+                    checked={reportSections.includes(sec.value)}
+                    onCheckedChange={() => toggleSection(sec.value)}
+                  />
+                  <span>{lang === "ar" ? sec.ar : sec.en}</span>
+                </label>
+              ))}
+            </div>
+
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground">{lang === "ar" ? "الفترة" : "Range"}</span>
+                <select
+                  className="h-8 text-xs border rounded-md px-2 bg-background"
+                  value={reportRange}
+                  onChange={(e) => setReportRange(e.target.value as typeof reportRange)}
+                >
+                  <option value="month">{lang === "ar" ? "هذا الشهر" : "This month"}</option>
+                  <option value="quarter">{lang === "ar" ? "هذا الربع" : "This quarter"}</option>
+                  <option value="year">{lang === "ar" ? "هذا العام" : "This year"}</option>
+                  <option value="custom">{lang === "ar" ? "نطاق مخصص" : "Custom range"}</option>
+                </select>
               </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b bg-muted/30">
-                      {[t("table.sampleId"), t("table.contractor"), t("table.type"), lang === "ar" ? "القطاع" : "Sector", t("table.contractNo"), t("table.status"), t("table.date")].map(h => (
-                        <th key={h} className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground">{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {recentSamples.map((sample) => (
-                      <tr key={sample.id} className="border-b last:border-0 hover:bg-muted/20 cursor-pointer transition-colors" onClick={() => setLocation(`/sample/${sample.id}`)}>
-                        <td className="px-4 py-2.5 font-mono text-xs font-semibold text-primary">{sample.sampleCode}</td>
-                        <td className="px-4 py-2.5 text-xs">{sample.contractorName ?? "—"}</td>
-                        <td className="px-4 py-2.5 text-xs capitalize">{SAMPLE_TYPE_LABELS[sample.sampleType]}</td>
-                        <td className="px-4 py-2.5 text-xs">
-                          {(sample as any).sector ? (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200">
-                              <Building2 className="w-3 h-3" />
-                              {sectorLabel((sample as any).sector)}
-                            </span>
-                          ) : "—"}
-                        </td>
-                        <td className="px-4 py-2.5 text-xs text-muted-foreground">{sample.contractNumber ?? "—"}</td>
-                        <td className="px-4 py-2.5"><StatusBadge status={sample.status} /></td>
-                        <td className="px-4 py-2.5 text-xs text-muted-foreground">{new Date(sample.receivedAt).toLocaleDateString()}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+
+              {reportRange === "custom" && (
+                <>
+                  <Input type="date" value={reportFrom} onChange={(e) => setReportFrom(e.target.value)} className="h-8 text-xs w-36" />
+                  <Input type="date" value={reportTo} onChange={(e) => setReportTo(e.target.value)} className="h-8 text-xs w-36" />
+                </>
+              )}
+
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground">{lang === "ar" ? "الصيغة" : "Format"}</span>
+                <select
+                  className="h-8 text-xs border rounded-md px-2 bg-background"
+                  value={reportFormat}
+                  onChange={(e) => setReportFormat(e.target.value as "pdf" | "excel")}
+                >
+                  <option value="pdf">PDF</option>
+                  <option value="excel">Excel</option>
+                </select>
               </div>
-            )}
+
+              <Button size="sm" onClick={handleGenerate} disabled={generateReport.isPending || reportSections.length === 0}>
+                {generateReport.isPending ? (
+                  <><Loader2 className="w-4 h-4 animate-spin me-1" />{lang === "ar" ? "جاري الإنشاء..." : "Generating..."}</>
+                ) : (
+                  lang === "ar" ? "إنشاء" : "Generate"
+                )}
+              </Button>
+            </div>
           </CardContent>
         </Card>
-
       </div>
     </DashboardLayout>
   );

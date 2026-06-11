@@ -1,5 +1,6 @@
 import DashboardLayout from "@/components/DashboardLayout";
 import { DeletionRequestButton } from "@/components/DeletionRequestButton";
+import { RetestBadge } from "@/components/RetestBadge";
 import { StatusBadge } from "@/components/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -602,7 +603,15 @@ export default function Distribution() {
                   <tbody>
                     {filteredOrders.map((order: any) => (
                         <tr key={order.id} className="border-b last:border-0 hover:bg-muted/20 transition-colors">
-                          <td className="px-4 py-2.5 font-mono text-xs font-semibold text-primary">{toText(order.orderCode)}</td>
+                          <td className="px-4 py-2.5">
+                            <div className="font-mono text-xs font-semibold text-primary">{toText(order.orderCode)}</div>
+                            <RetestBadge
+                              retestNumber={order.retestNumber}
+                              originalSampleId={order.originalSampleId}
+                              originalSampleCode={order.originalSampleCode}
+                              compact
+                            />
+                          </td>
                           <td className="px-4 py-2.5 text-xs">{toText(order.contractorName)}</td>
                           <td className="px-4 py-2.5 text-xs"><TypeCell order={{ ...order, sampleType: String(order.sampleType ?? ""), sampleSubType: toText(order.sampleSubType) }} lang={lang} /></td>
                           <td className="px-4 py-2.5">

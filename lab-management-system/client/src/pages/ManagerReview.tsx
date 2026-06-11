@@ -1,4 +1,5 @@
 import DashboardLayout from "@/components/DashboardLayout";
+import { RetestBadge } from "@/components/RetestBadge";
 import { DeletionRequestButton } from "@/components/DeletionRequestButton";
 import { StatusBadge } from "@/components/StatusBadge";
 import { Button } from "@/components/ui/button";
@@ -138,6 +139,11 @@ function ManagerReviewActiveSampleCard({
         <div className="space-y-1.5 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <p className="font-mono text-sm font-bold text-primary">{sample.sampleCode}</p>
+            <RetestBadge
+              retestNumber={(sample as { retestNumber?: number }).retestNumber}
+              originalSampleId={(sample as { originalSampleId?: number }).originalSampleId}
+              compact
+            />
             <TaskStateBadge state={state} lang={lang} />
             <StatusBadge status={sample.status} />
             {PendingDeletionBadge}

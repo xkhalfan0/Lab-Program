@@ -24,7 +24,7 @@ export default function Login() {
 
   // Role-based redirect map
   const ROLE_HOME: Record<string, string> = {
-    admin: "/admin-dashboard",
+    admin: "/manager-dashboard",
     reception: "/reception",
     lab_manager: "/distribution",
     technician: "/technician",

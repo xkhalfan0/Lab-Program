@@ -1,4 +1,5 @@
 import DashboardLayout from "@/components/DashboardLayout";
+import { RetestBadge } from "@/components/RetestBadge";
 import { DeletionRequestButton } from "@/components/DeletionRequestButton";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -354,6 +355,11 @@ function TechnicianAssignmentCard({
               <div>
                 <p className="text-xs text-muted-foreground">{tx("sampleCode", lang)}</p>
                 <p className="font-mono text-sm font-medium">{sampleCode}</p>
+                <RetestBadge
+                  retestNumber={(dist as { retestNumber?: number }).retestNumber}
+                  originalSampleId={(dist as { originalSampleId?: number }).originalSampleId}
+                  compact
+                />
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">{tx("contractNo", lang)}</p>

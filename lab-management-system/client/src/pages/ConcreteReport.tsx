@@ -382,6 +382,14 @@ function ReportPage({
                 <span className="font-mono font-bold text-gray-900 text-sm">
                   {distribution?.sampleCode ?? "—"}
                 </span>
+                {(distribution as { retestNumber?: number })?.retestNumber != null && (
+                  <span className="block text-[10px] text-amber-700 mt-0.5">
+                    {ar ? `إعادة ${(distribution as { retestNumber?: number }).retestNumber}` : `Retest ${(distribution as { retestNumber?: number }).retestNumber}`}
+                    {(distribution as { originalSampleCode?: string })?.originalSampleCode
+                      ? ` · ${ar ? "الأصل" : "Original"}: ${(distribution as { originalSampleCode?: string }).originalSampleCode}`
+                      : ""}
+                  </span>
+                )}
               </td>
               <td className="border border-gray-200 px-2 py-2 text-center align-top w-1/3">
                 <span className="text-gray-400 text-[10px] uppercase tracking-wide block mb-1">

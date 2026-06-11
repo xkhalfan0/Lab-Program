@@ -27,7 +27,6 @@ import SpecializedTestReport from "./pages/tests/SpecializedTestReport";
 import BatchBlockReport from "./pages/tests/BatchBlockReport";
 import Notifications from "./pages/Notifications";
 import Analytics from "./pages/Analytics";
-import AdminDashboard from "./pages/AdminDashboard";
 import SupervisorDashboard from "./pages/SupervisorDashboard";
 import ManagerDashboard from "./pages/ManagerDashboard";
 import ChangePassword from "./pages/ChangePassword";
@@ -49,19 +48,19 @@ import { useEffect } from "react";
 
 // ─── Role-based redirect map ─────────────────────────────────────────────────
 const ROLE_HOME: Record<string, string> = {
-  admin: "/admin-dashboard",
+  admin: "/manager-dashboard",
   reception: "/reception",
   lab_manager: "/distribution",
   technician: "/technician",
   sample_manager: "/manager-review",
   qc_inspector: "/qc-review",
   accountant: "/clearance",
-  user: "/admin-dashboard",
+  user: "/manager-dashboard",
 };
 
 // Permission key → page path mapping (ordered by priority)
 const PERM_TO_PATH: Array<{ permKey: string; path: string }> = [
-  { permKey: "admin_dashboard",    path: "/admin-dashboard" },
+  { permKey: "admin_dashboard",    path: "/manager-dashboard" },
   { permKey: "supervisor_dashboard", path: "/supervisor-dashboard" },
   { permKey: "samples",            path: "/reception" },
   { permKey: "distribution",       path: "/distribution" },
@@ -76,7 +75,7 @@ const PERM_TO_PATH: Array<{ permKey: string; path: string }> = [
 function resolveHomePage(user: any): string {
   if (!user) return "/login";
   // Admin always goes to admin dashboard
-  if (user.role === "admin") return "/admin-dashboard";
+  if (user.role === "admin") return "/manager-dashboard";
   // Check custom permissions first (user has explicitly granted perms)
   const rawPerms = user?.permissions as Record<string, unknown> | null;
   if (rawPerms && Object.keys(rawPerms).length > 0) {
@@ -283,9 +282,6 @@ function Router() {
         {() => <ProtectedRoute component={MonthlyReport} path="/monthly-report" />}
       </Route>
 
-      <Route path="/admin-dashboard">
-        {() => <ProtectedRoute component={AdminDashboard} path="/admin-dashboard" />}
-      </Route>
 
       <Route path="/supervisor-dashboard">
         {() => <ProtectedRoute component={SupervisorDashboard} path="/supervisor-dashboard" />}

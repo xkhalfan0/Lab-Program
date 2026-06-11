@@ -45,9 +45,8 @@ type AllowedRole =
 
 // Each item has: required permission key + minimum level needed ("view" or "edit")
 const ALL_MENU_ITEMS = [
-  { icon: LayoutDashboard, labelKey: "nav.adminDashboard", path: "/admin-dashboard", permKey: "admin_dashboard", minLevel: "view", allowedRoles: ["admin", "lab_manager", "supervisor", "sample_manager"] as AllowedRole[] },
+  { icon: Target, labelKey: "nav.managerDashboard", path: "/manager-dashboard", permKey: "admin_dashboard", minLevel: "view", allowedRoles: ["admin", "lab_manager", "supervisor", "sample_manager"] as AllowedRole[] },
   { icon: Eye, labelKey: "nav.supervisorDashboard", path: "/supervisor-dashboard", permKey: "supervisor_dashboard", minLevel: "view", allowedRoles: ["admin", "lab_manager", "supervisor", "sample_manager"] as AllowedRole[] },
-  { icon: Target, labelKey: "nav.managerDashboard", path: "/manager-dashboard", permKey: "admin_dashboard", minLevel: "view", allowedRoles: ["admin", "lab_manager", "supervisor"] as AllowedRole[] },
   { icon: FlaskConical, labelKey: "nav.reception", path: "/reception", permKey: "samples", minLevel: "view", allowedRoles: ["admin", "lab_manager", "reception"] as AllowedRole[] },
   { icon: ClipboardList, labelKey: "nav.distribution", path: "/distribution", permKey: "distribution", minLevel: "view", allowedRoles: ["admin", "lab_manager", "supervisor", "sample_manager"] as AllowedRole[] },
   { icon: Microscope, labelKey: "nav.assignments", path: "/technician", permKey: "results", minLevel: "view", allowedRoles: ["admin", "technician"] as AllowedRole[] },
@@ -67,14 +66,14 @@ type PermMap = Record<string, PermLevel>;
 
 // Role-based home page per role
 const ROLE_HOME: Record<string, string> = {
-  admin: "/admin-dashboard",
+  admin: "/manager-dashboard",
   reception: "/reception",
   lab_manager: "/distribution",
   technician: "/technician",
   sample_manager: "/manager-review",
   qc_inspector: "/qc-review",
   accountant: "/clearance",
-  user: "/admin-dashboard",
+  user: "/manager-dashboard",
 };
 
 // Role-based default permissions — each role sees ONLY the pages needed for their job.

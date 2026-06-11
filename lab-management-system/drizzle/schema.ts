@@ -90,6 +90,12 @@ export const samples = mysqlTable("samples", {
   castingDate: timestamp("castingDate"), // date of concrete casting (used to calculate sample age automatically)
   receivedById: int("receivedById").notNull(), // reception staff
   receivedAt: timestamp("receivedAt").defaultNow().notNull(),
+  /** Root sample id for retests (always points to original, never R1) */
+  originalSampleId: int("originalSampleId"),
+  /** Retest chain depth: 1, 2, 3… NULL on root samples */
+  retestNumber: int("retestNumber"),
+  retestReason: mysqlEnum("retestReason", ["failed_spec", "damaged_sample", "client_request"]),
+  retestReasonNotes: text("retestReasonNotes"),
   managerReadAt: timestamp("managerReadAt"),         // when manager first opened the processed sample
   deletedAt: timestamp("deletedAt"),
   deletedBy: int("deletedBy"),

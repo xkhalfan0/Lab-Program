@@ -22,6 +22,7 @@
     "db:check-integrity": "tsx server/scripts/check-integrity.ts",
     "db:clean-orphans": "tsx server/scripts/clean-orphan-data.ts",
     "db:full-migration": "tsx server/scripts/run-full-migration.ts",
+    "db:retest-columns": "tsx server/scripts/add-retest-columns.ts",
     "db:migration:phase1": "npm run db:check-integrity && npm run db:add-fks && npm run db:add-soft-delete",
     "db:rollback-fks": "tsx server/scripts/rollback-fks.ts",
     "db:reset:tests": "tsx server/scripts/reset-test-data.ts",

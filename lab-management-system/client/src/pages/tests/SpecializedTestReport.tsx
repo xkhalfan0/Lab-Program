@@ -4232,6 +4232,14 @@ export default function SpecializedTestReport() {
                   <td className="border border-gray-200 px-2 py-2 text-center align-top w-1/3">
                     <span className="text-gray-400 text-[10px] uppercase tracking-wide block mb-1">{isAr ? "رقم العينة" : "Sample No."}</span>
                     <span className="font-mono font-bold text-gray-900 text-sm">{(dist as any)?.sampleCode ?? "—"}</span>
+                    {(dist as any)?.retestNumber != null && (
+                      <span className="block text-[10px] text-amber-700 mt-0.5">
+                        {isAr ? `إعادة ${(dist as any).retestNumber}` : `Retest ${(dist as any).retestNumber}`}
+                        {(dist as any)?.originalSampleCode
+                          ? ` · ${isAr ? "الأصل" : "Original"}: ${(dist as any).originalSampleCode}`
+                          : ""}
+                      </span>
+                    )}
                   </td>
                   <td className="border border-gray-200 px-2 py-2 text-center align-top w-1/3">
                     <span className="text-gray-400 text-[10px] uppercase tracking-wide block mb-1">{isAr ? "رقم التوزيع" : "Distribution No."}</span>

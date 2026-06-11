@@ -47,6 +47,7 @@ import {
   getNotificationsByUser,
   getReviewsBySample,
   getSampleById,
+  getRetestsByRootId,
   getSampleDetailRow,
   getSampleHistory,
   getSamplesByBatch,
@@ -136,6 +137,13 @@ import {
 } from "./db";
 import { storagePut } from "./storage";
 import { generateMonthlyReportPdf } from "./monthlyReportPdf";
+import { generateDashboardReport } from "./dashboardReportGenerator";
+import {
+  getRetestSource,
+  retestCreateInputSchema,
+  runRetestCreate,
+  searchRetestEligible,
+} from "./retest";
 import { invokeLLM } from "./_core/llm";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -472,6 +480,44 @@ export const appRouter = router({
       }
       return listDeletedSamplesAudit();
     }),
+
+    searchRetestEligible: protectedProcedure
+      .input(z.object({ query: z.string().min(1) }))
+      .query(async ({ ctx, input }) => {
+        requireRole(ctx.user.role, ["admin", "reception", "lab_manager"]);
+        return searchRetestEligible(input.query);
+      }),
+
+    getRetestSource: protectedProcedure
+      .input(z.object({ rootSampleId: z.number().int().positive() }))
+      .query(async ({ ctx, input }) => {
+        requireRole(ctx.user.role, ["admin", "reception", "lab_manager"]);
+        return getRetestSource(input.rootSampleId);
+      }),
+
+    retestChain: protectedProcedure
+      .input(z.object({ sampleId: z.number().int().positive() }))
+      .query(async ({ input }) => {
+        const sample = await getSampleById(input.sampleId);
+        if (!sample) throw new TRPCError({ code: "NOT_FOUND" });
+        const rootId = sample.originalSampleId ?? sample.id;
+        const root = await getSampleById(rootId);
+        const allRetests = await getRetestsByRootId(rootId);
+        return {
+          root: root ? { id: root.id, sampleCode: root.sampleCode, status: root.status } : null,
+          retests: allRetests.map((r) => ({
+            id: r.id,
+            sampleCode: r.sampleCode,
+            retestNumber: r.retestNumber,
+            retestReason: r.retestReason,
+            status: r.status,
+            receivedAt: r.receivedAt,
+          })),
+          isRetest: sample.originalSampleId != null,
+          originalSampleId: sample.originalSampleId,
+          retestNumber: sample.retestNumber,
+        };
+      }),
 
     create: protectedProcedure
       .input(
@@ -1021,7 +1067,21 @@ ${testSummaries.length > 0 ? testSummaries.join("\n\n") : "لم تُجرَ اخ�
           );
           if (item?.testSubType) testSubType = item.testSubType;
         }
-        return { ...dist, testSubType: testSubType ?? null, orderId: orderId ?? undefined };
+        const sample = await getSampleById(dist.sampleId);
+        let originalSampleCode: string | null = null;
+        if (sample?.originalSampleId) {
+          const orig = await getSampleById(sample.originalSampleId);
+          originalSampleCode = orig?.sampleCode ?? null;
+        }
+        return {
+          ...dist,
+          testSubType: testSubType ?? null,
+          orderId: orderId ?? undefined,
+          retestNumber: sample?.retestNumber ?? null,
+          originalSampleId: sample?.originalSampleId ?? null,
+          originalSampleCode,
+          retestReason: sample?.retestReason ?? null,
+        };
       }),
 
     getBatchSiblings: protectedProcedure
@@ -2905,11 +2965,22 @@ ${testSummaries.length > 0 ? testSummaries.join("\n\n") : "لم تُجرَ اخ�
           let sampleSubType: string | null = null;
           let sampleCode: string | null = null;
           let sampleStatus: string | null = o.sampleStatus ?? null;
+          let retestNumber: number | null = null;
+          let originalSampleId: number | null = null;
+          let originalSampleCode: string | null = null;
+          let retestReason: string | null = null;
           if (o.sampleId) {
             const sample = await getSampleById(o.sampleId);
             sampleSubType = sample?.sampleSubType ?? null;
             sampleCode = sample?.sampleCode ?? null;
             sampleStatus = sample?.status ?? sampleStatus;
+            retestNumber = sample?.retestNumber ?? null;
+            originalSampleId = sample?.originalSampleId ?? null;
+            retestReason = sample?.retestReason ?? null;
+            if (originalSampleId) {
+              const orig = await getSampleById(originalSampleId);
+              originalSampleCode = orig?.sampleCode ?? null;
+            }
           }
           const tech = allUsers.find((u: any) => u.id === o.assignedTechnicianId);
           return {
@@ -2925,6 +2996,10 @@ ${testSummaries.length > 0 ? testSummaries.join("\n\n") : "لم تُجرَ اخ�
             sampleSubType,
             sampleCode,
             sampleStatus,
+            retestNumber,
+            originalSampleId,
+            originalSampleCode,
+            retestReason,
             assignedTechnicianName: tech?.name ?? null,
           };
         })
@@ -2968,6 +3043,10 @@ ${testSummaries.length > 0 ? testSummaries.join("\n\n") : "لم تُجرَ اخ�
     createBatch: protectedProcedure
       .input(labOrderReceptionCreateInputSchema)
       .mutation(async ({ ctx, input }) => runLabOrderReceptionCreate(ctx, input)),
+
+    createRetest: protectedProcedure
+      .input(retestCreateInputSchema)
+      .mutation(async ({ ctx, input }) => runRetestCreate(ctx, input)),
 
     update: protectedProcedure
       .input(z.object({
@@ -3410,6 +3489,24 @@ ${testSummaries.length > 0 ? testSummaries.join("\n\n") : "لم تُجرَ اخ�
         };
         const url = await generateMonthlyReportPdf(reportData, lang);
         return { url };
+      }),
+    generate: protectedProcedure
+      .input(z.object({
+        sections: z.array(z.enum([
+          "overview", "status", "type", "trend", "passfail",
+          "readiness", "scorecard", "toptests", "techperf",
+        ])),
+        range: z.enum(["month", "quarter", "year", "custom"]),
+        dateFrom: z.string().optional(),
+        dateTo: z.string().optional(),
+        format: z.enum(["pdf", "excel"]),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        requireRole(ctx.user.role, ["admin", "lab_manager", "supervisor", "sample_manager"]);
+        if (input.range === "custom" && (!input.dateFrom || !input.dateTo)) {
+          throw new Error("Custom range requires dateFrom and dateTo");
+        }
+        return generateDashboardReport(input);
       }),
     monthly: protectedProcedure
       .input(z.object({

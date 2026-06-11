@@ -2,6 +2,7 @@ import { useState } from "react";
 import DashboardLayout from "@/components/DashboardLayout";
 import PrintHeader from "@/components/PrintHeader";
 import { StatusBadge } from "@/components/StatusBadge";
+import { RetestBadge } from "@/components/RetestBadge";
 import { WorkflowProgress } from "@/components/WorkflowProgress";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -352,6 +353,7 @@ export default function SampleDetail() {
     { enabled: !!sampleId }
   );
   const { data: history, refetch: refetchHistory } = trpc.samples.history.useQuery({ sampleId }, { enabled: !!sampleId });
+  const { data: retestChain } = trpc.samples.retestChain.useQuery({ sampleId }, { enabled: !!sampleId });
   const { data: distributions, refetch: refetchDist } = trpc.distributions.bySample.useQuery({ sampleId }, { enabled: !!sampleId });
   const { data: results } = trpc.testResults.bySample.useQuery({ sampleId }, { enabled: !!sampleId });
   const { data: reviews } = trpc.reviews.bySample.useQuery({ sampleId }, { enabled: !!sampleId });
@@ -502,6 +504,12 @@ export default function SampleDetail() {
             <div>
               <div className="flex items-center gap-2">
                 <h1 className="text-xl font-bold font-mono">{sample.sampleCode}</h1>
+                <RetestBadge
+                  retestNumber={(sample as { retestNumber?: number }).retestNumber}
+                  originalSampleId={(sample as { originalSampleId?: number }).originalSampleId}
+                  originalSampleCode={retestChain?.root?.sampleCode}
+                  retestReason={(sample as { retestReason?: string }).retestReason}
+                />
                 <StatusBadge status={sample.status} />
                 {/* Sector badge */}
                 {(sample as any).sector && (
@@ -567,7 +575,7 @@ export default function SampleDetail() {
   </div>
   <div class="receipt-title">${lang === "ar" ? "وصل استلام عينة" : "Sample Receipt"}</div>
   <table>
-    <tr><td>${lang === "ar" ? "رقم العينة" : "Sample Code"}</td><td><strong>${sample.sampleCode}</strong></td></tr>
+    <tr><td>${lang === "ar" ? "رقم العينة" : "Sample Code"}</td><td><strong>${sample.sampleCode}</strong>${(sample as any).retestNumber ? ` <span style="color:#b45309">(${lang === "ar" ? "إعادة" : "Retest"} ${(sample as any).retestNumber}${retestChain?.root?.sampleCode ? ` — ${lang === "ar" ? "الأصل" : "Original"}: ${retestChain.root.sampleCode}` : ""})</span>` : ""}</td></tr>
     <tr><td>${lang === "ar" ? "رقم العقد" : "Contract No."}</td><td>${(sample as any).contractNumber ?? "—"}</td></tr>
     <tr><td>${lang === "ar" ? "اسم المشروع" : "Project Name"}</td><td>${sample.contractName ?? "—"}</td></tr>
     <tr><td>${lang === "ar" ? "المقاول" : "Contractor"}</td><td>${sample.contractorName ?? "—"}</td></tr>
@@ -630,6 +638,35 @@ export default function SampleDetail() {
             <WorkflowProgress status={sample.status as any} />
           </CardContent>
         </Card>
+
+        {retestChain && (retestChain.isRetest || (retestChain.retests?.length ?? 0) > 0) && (
+          <Card className="print:hidden border-amber-200 bg-amber-50/40">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-semibold">
+                {lang === "ar" ? "سلسلة إعادة الاختبار" : "Retest chain"}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="text-sm space-y-2">
+              {retestChain.root && (
+                <p>
+                  {lang === "ar" ? "الأصل:" : "Root:"}{" "}
+                  <button className="font-mono text-primary hover:underline" onClick={() => setLocation(`/sample/${retestChain.root!.id}`)}>
+                    {retestChain.root.sampleCode}
+                  </button>
+                </p>
+              )}
+              {retestChain.retests?.map((r) => (
+                <p key={r.id}>
+                  R{r.retestNumber}:{" "}
+                  <button className="font-mono text-primary hover:underline" onClick={() => setLocation(`/sample/${r.id}`)}>
+                    {r.sampleCode}
+                  </button>
+                  <span className="text-muted-foreground ms-2">({r.status})</span>
+                </p>
+              ))}
+            </CardContent>
+          </Card>
+        )}
 
         {/* Sample Info */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
