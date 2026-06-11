@@ -25,7 +25,11 @@ import {
   FRACTURE_TYPE_OPTIONS,
   resolveBs1881AgeFactor,
 } from "@shared/concreteCubeBs1881";
-import { parseConcCubePlan, type ConcCubeReceptionPlan } from "@shared/concreteCubeReception";
+import {
+  parseConcCubePlan,
+  MIN_CONC_CUBE_COUNT,
+  type ConcCubeReceptionPlan,
+} from "@shared/concreteCubeReception";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface CubeRow {
@@ -832,7 +836,11 @@ function GroupPanel({ group, distributionId, onRefresh, castingDate: distCasting
               <div className="text-xs text-gray-700 grid grid-cols-2 gap-x-4">
                 <div><LockedLabel>{ar ? "حجم المكعب" : "Cube size"}</LockedLabel> <strong>{edgeMmNum} mm</strong></div>
                 <div><span className="text-gray-500">{ar ? "مساحة الوجه" : "Face area"}:</span> <strong>{cubeAreaMm2(edgeMmNum).toLocaleString()} mm²</strong></div>
-                <div><span className="text-gray-500">{ar ? "عدد المكعبات" : "Cube count"}:</span> <strong>{cubes.length}</strong></div>
+                <div>
+                  <span className="text-gray-500">{ar ? "عدد المكعبات" : "Cube count"}:</span>{" "}
+                  <strong>{receptionPlan?.cubeCount ?? cubes.length}</strong>
+                  <LockedLabel>{ar ? "محدد عند الاستقبال" : "Set at reception"}</LockedLabel>
+                </div>
               </div>
             </div>
           )}
@@ -843,7 +851,7 @@ function GroupPanel({ group, distributionId, onRefresh, castingDate: distCasting
               <thead>
                 <tr className="bg-gray-100">
                   <th className="border px-2 py-1 text-center w-8">Mark</th>
-                  {!cubeOrderFlow && <th className="border px-2 py-1 text-center">Cube ID</th>}
+                  <th className={`border px-2 py-1 text-center ${cubeOrderFlow ? "bg-yellow-50" : ""}`}>Cube ID</th>
                   {!cubeOrderFlow && <th className="border px-2 py-1 text-center bg-orange-50">Age (days)</th>}
                   {!cubeOrderFlow && <th className="border px-2 py-1 text-center">L × W × H (mm)</th>}
                   {!cubeOrderFlow && <th className="border px-2 py-1 text-center">Mass (kg)</th>}
@@ -887,12 +895,15 @@ function GroupPanel({ group, distributionId, onRefresh, castingDate: distCasting
                   return (
                     <tr key={idx} className={rowFail ? "bg-red-50" : ""}>
                       <td className="border px-1 py-1 text-center font-bold text-gray-600">{cube.markNo}</td>
-                      {!cubeOrderFlow && (
-                        <td className="border px-1 py-1">
-                          <Input value={cube.cubeId} onChange={e => updateCube(idx, "cubeId", e.target.value)}
-                            className="h-7 text-xs w-20" disabled={inputsDisabled} />
-                        </td>
-                      )}
+                      <td className={`border px-1 py-1 ${cubeOrderFlow ? "bg-yellow-50" : ""}`}>
+                        <Input
+                          value={cube.cubeId}
+                          onChange={e => updateCube(idx, "cubeId", e.target.value)}
+                          className={`h-7 text-xs ${cubeOrderFlow ? "w-28 border-yellow-400" : "w-20"}`}
+                          placeholder={cubeOrderFlow ? (ar ? "مثال: 354" : "e.g. 354") : undefined}
+                          disabled={inputsDisabled}
+                        />
+                      </td>
                       {!cubeOrderFlow && (
                         <td className="border px-1 py-1 bg-orange-50 text-center text-xs font-mono font-semibold text-gray-700">
                           {actualAge !== null ? `${actualAge} ${ar ? "يوم" : "days"}` : "—"}
@@ -1153,11 +1164,18 @@ export default function ConcreteTest() {
                 <div><span className="text-gray-500">Contract No:</span> <strong>{distribution.contractNumber ?? distribution.sampleId}</strong></div>
                 <div><span className="text-gray-500">Priority:</span> <strong className="capitalize">{distribution.priority}</strong></div>
                 {isConcCubeOrder && (
-                  <div>
-                    <span className="text-gray-500">Cube Size:</span>{" "}
-                    <strong>{receptionPlan ? `${receptionPlan.cubeSizeMm} mm` : (distribution.nominalCubeSize ?? "150mm")}</strong>
-                    <LockedLabel>Set at reception</LockedLabel>
-                  </div>
+                  <>
+                    <div>
+                      <span className="text-gray-500">Cube Size:</span>{" "}
+                      <strong>{receptionPlan ? `${receptionPlan.cubeSizeMm} mm` : (distribution.nominalCubeSize ?? "150mm")}</strong>
+                      <LockedLabel>Set at reception</LockedLabel>
+                    </div>
+                    <div>
+                      <span className="text-gray-500">Cubes:</span>{" "}
+                      <strong>{receptionPlan?.cubeCount ?? MIN_CONC_CUBE_COUNT}</strong>
+                      <LockedLabel>Set at reception</LockedLabel>
+                    </div>
+                  </>
                 )}
                 {distribution.castingDate && (
                   <div className="col-span-2 md:col-span-4 border-t pt-2 mt-1">

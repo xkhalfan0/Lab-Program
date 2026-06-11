@@ -35,6 +35,9 @@ import { resolveOfficialTestLabel } from "@/lib/officialTestCatalog";
 import {
   serializeConcCubePlan,
   buildConcCubePlanFromNominalSize,
+  validateConcCubeReceptionPlan,
+  MIN_CONC_CUBE_COUNT,
+  MAX_CONC_CUBE_COUNT,
 } from "@shared/concreteCubeReception";
 import {
   getCbrDependencyHint,
@@ -324,6 +327,7 @@ export default function Reception() {
   const [foamConcreteAge, setFoamConcreteAge] = useState("");
   /** Reception: CONC_CUBE nominal face size (stored on sample) */
   const [nominalCubeSize, setNominalCubeSize] = useState("150mm");
+  const [cubeCount, setCubeCount] = useState(String(MIN_CONC_CUBE_COUNT));
   const [, setLocation] = useLocation();
   // Edit order state
   const [editOpen, setEditOpen] = useState(false);
@@ -821,7 +825,16 @@ export default function Reception() {
       }
     }
     const hasCubeOrder = selectedTests.some(t => t.testTypeCode === "CONC_CUBE");
-    const cubePlan = hasCubeOrder ? buildConcCubePlanFromNominalSize(nominalCubeSize) : null;
+    const cubePlan = hasCubeOrder
+      ? buildConcCubePlanFromNominalSize(nominalCubeSize, parseInt(cubeCount, 10) || MIN_CONC_CUBE_COUNT)
+      : null;
+    if (hasCubeOrder) {
+      const cubeErr = validateConcCubeReceptionPlan(cubePlan, lang);
+      if (cubeErr) {
+        toast.error(cubeErr);
+        return;
+      }
+    }
     const soilErr = validateSoilTestOrder(selectedTests, lang);
     if (soilErr) {
       toast.error(soilErr);
@@ -890,7 +903,7 @@ export default function Reception() {
             testTypeName: t.testTypeName,
             formTemplate: t.formTemplate,
             testSubType: serializeConcCubePlan(cubePlan),
-            quantity: t.quantity,
+            quantity: cubePlan.cubeCount,
             unitPrice: t.unitPrice,
           };
         }
@@ -1546,20 +1559,42 @@ export default function Reception() {
                 )}
 
                 {selectedTests.some(t => t.testTypeCode === "CONC_CUBE") && (
-                  <div className="space-y-1.5">
-                    <Label>{lang === "ar" ? "الحجم الاسمي للمكعب" : "Nominal Cube Size"}</Label>
-                    <Select value={nominalCubeSize} onValueChange={setNominalCubeSize}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="150mm">150 mm</SelectItem>
-                        <SelectItem value="100mm">100 mm</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <p className="text-xs text-muted-foreground">
+                  <div className="space-y-3 p-3 border border-blue-200 rounded-lg bg-blue-50/40">
+                    <p className="text-xs font-semibold text-blue-800 flex items-center gap-1">
+                      <Lock className="w-3 h-3" />
                       {lang === "ar"
-                        ? "يُستخدم لحساب مساحة الوجه وقوة الضغط. عمر الاختبار يُحسب تلقائياً من تاريخ الصب وتاريخ الاختبار."
-                        : "Used for bearing area and strength. Test age is calculated automatically from casting and test dates."}
+                        ? "يُحدد عند الاستقبال — الفني لا يستطيع التعديل"
+                        : "Set at reception — technician cannot change"}
                     </p>
+                    <div className="space-y-1.5">
+                      <Label>{lang === "ar" ? "الحجم الاسمي للمكعب" : "Nominal Cube Size"}</Label>
+                      <Select value={nominalCubeSize} onValueChange={setNominalCubeSize}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="150mm">150 mm</SelectItem>
+                          <SelectItem value="100mm">100 mm</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label>
+                        {lang === "ar" ? "عدد المكعبات" : "Number of Cubes"}
+                        <span className="text-red-500 ml-1">*</span>
+                      </Label>
+                      <Input
+                        type="number"
+                        min={MIN_CONC_CUBE_COUNT}
+                        max={MAX_CONC_CUBE_COUNT}
+                        value={cubeCount}
+                        onChange={e => setCubeCount(e.target.value)}
+                        className="w-24"
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        {lang === "ar"
+                          ? `الحد الأدنى ${MIN_CONC_CUBE_COUNT} مكعبات لكل عينة (BS 1881)`
+                          : `Minimum ${MIN_CONC_CUBE_COUNT} cubes per sample (BS 1881)`}
+                      </p>
+                    </div>
                   </div>
                 )}
 

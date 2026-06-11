@@ -14,7 +14,7 @@ import {
   parseConcCubePlan,
   mmToNominalCubeSize,
   nominalCubeSizeToMm,
-  DEFAULT_CONC_CUBE_COUNT,
+  MIN_CONC_CUBE_COUNT,
   type ConcCubeReceptionPlan,
 } from "@shared/concreteCubeReception";
 
@@ -49,6 +49,7 @@ export async function ensureConcreteGroupsFromReceptionPlan(
   const plan = parseConcCubePlan(dist.testSubType) ?? {
     v: 2,
     cubeSizeMm: nominalCubeSizeToMm(sample.nominalCubeSize),
+    cubeCount: MIN_CONC_CUBE_COUNT,
   };
 
   const existing = await getConcreteGroupsByDistribution(distributionId);
@@ -78,7 +79,7 @@ export async function ensureConcreteGroupsFromReceptionPlan(
   }
 
   const cubes = await getCubesByGroup(group.id);
-  const targetCount = DEFAULT_CONC_CUBE_COUNT;
+  const targetCount = plan.cubeCount;
   if (cubes.length < targetCount) {
     for (let mark = cubes.length + 1; mark <= targetCount; mark++) {
       await upsertConcreteCube({
