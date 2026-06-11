@@ -197,7 +197,6 @@ async function fetchRetestCandidateIds(
           isNotNull(testResults.qcReviewedAt)
         )
       )
-      .orderBy(desc(samples.updatedAt))
       .limit(scanLimit),
     db
       .selectDistinct({ id: samples.id })
@@ -210,7 +209,6 @@ async function fetchRetestCandidateIds(
           inArray(samples.status, [...QC_COMPLETE_SAMPLE_STATUSES])
         )
       )
-      .orderBy(desc(samples.updatedAt))
       .limit(scanLimit),
     db
       .selectDistinct({ id: samples.id })
@@ -223,7 +221,6 @@ async function fetchRetestCandidateIds(
           isNotNull(specializedTestResults.qcReviewedAt)
         )
       )
-      .orderBy(desc(samples.updatedAt))
       .limit(scanLimit),
   ]);
 
