@@ -327,22 +327,10 @@ export default function Reception() {
   const [foamConcreteAge, setFoamConcreteAge] = useState("");
   /** Reception: CONC_CUBE nominal face size (stored on sample) */
   const [nominalCubeSize, setNominalCubeSize] = useState("150mm");
-  const [cubeCount, setCubeCount] = useState(String(MIN_CONC_CUBE_COUNT));
-  const resolvedCubeCount = useMemo(() => {
-    const n = parseInt(cubeCount, 10);
-    if (!Number.isFinite(n)) return MIN_CONC_CUBE_COUNT;
-    return Math.min(MAX_CONC_CUBE_COUNT, Math.max(MIN_CONC_CUBE_COUNT, n));
-  }, [cubeCount]);
   const [, setLocation] = useLocation();
 
-  useEffect(() => {
-    setSelectedTests(prev => {
-      if (!prev.some(t => t.testTypeCode === "CONC_CUBE")) return prev;
-      return prev.map(t =>
-        t.testTypeCode === "CONC_CUBE" ? { ...t, quantity: resolvedCubeCount } : t,
-      );
-    });
-  }, [resolvedCubeCount]);
+  const minQtyForTest = (code: string) => (code === "CONC_CUBE" ? MIN_CONC_CUBE_COUNT : 1);
+  const maxQtyForTest = (code: string) => (code === "CONC_CUBE" ? MAX_CONC_CUBE_COUNT : 999);
   // Edit order state
   const [editOpen, setEditOpen] = useState(false);
   const [editingOrder, setEditingOrder] = useState<{
@@ -660,7 +648,7 @@ export default function Reception() {
       newTest.testSubType = asphaltMixCourse;
     }
     if (newTest.testTypeCode === "CONC_CUBE") {
-      newTest.quantity = resolvedCubeCount;
+      newTest.quantity = MIN_CONC_CUBE_COUNT;
     }
 
     const ids = new Set(selectedTests.map(s => s.testTypeId));
@@ -694,7 +682,7 @@ export default function Reception() {
 
     const newTest = makeSelectedTestFromType(tt);
     if (newTest.testTypeCode === "CONC_CUBE") {
-      newTest.quantity = resolvedCubeCount;
+      newTest.quantity = MIN_CONC_CUBE_COUNT;
     }
     setSelectedTests(prev => {
       const without = prev.filter(s => s.testTypeId !== tt.id);
@@ -784,15 +772,14 @@ export default function Reception() {
   const hasMultipleGroups = selectedGroups.size > 1;
   const hasMixTests = selectedTests.some(t => ASPHALT_MIX_TEST_CODES.includes(t.testTypeCode));
 
-  /** True when any selected test still has an unset (0) quantity — multi-subtype tests must
-   *  have at least one subtype with quantity > 0; all other tests must have quantity >= 1. */
-  const hasZeroQtyTests = selectedTests.some(t => {
+  /** Multi-subtype: at least one subtype qty > 0; others: qty >= min (3 for cubes, 1 otherwise). */
+  const hasInvalidQtyTests = selectedTests.some(t => {
     if (MULTI_SUBTYPE_TESTS.includes(t.testTypeCode) && t.testSubType === "__multi__") {
       const map = multiSubtypes[t.testTypeId] ?? {};
       const vals = Object.values(map);
       return vals.length === 0 || vals.some(q => !q);
     }
-    return !t.quantity;
+    return (t.quantity ?? 0) < minQtyForTest(t.testTypeCode);
   });
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -813,8 +800,12 @@ export default function Reception() {
       toast.error(lang === "ar" ? "يرجى اختيار اختبار واحد على الأقل" : "Please select at least one test");
       return;
     }
-    if (hasZeroQtyTests) {
-      toast.error(lang === "ar" ? "يجب أن تكون كمية كل اختبار محدد 1 على الأقل" : "Each selected test must have a quantity of at least 1");
+    if (hasInvalidQtyTests) {
+      toast.error(
+        lang === "ar"
+          ? `يجب أن تكون كمية كل اختبار صالحة (مكعبات: ${MIN_CONC_CUBE_COUNT} على الأقل، غير ذلك: 1 على الأقل)`
+          : `Each selected test needs a valid quantity (cubes: min ${MIN_CONC_CUBE_COUNT}, others: min 1)`,
+      );
       return;
     }
     if (hasMultipleGroups) {
@@ -844,9 +835,10 @@ export default function Reception() {
         return;
       }
     }
-    const hasCubeOrder = selectedTests.some(t => t.testTypeCode === "CONC_CUBE");
+    const cubeItem = selectedTests.find(t => t.testTypeCode === "CONC_CUBE");
+    const hasCubeOrder = !!cubeItem;
     const cubePlan = hasCubeOrder
-      ? buildConcCubePlanFromNominalSize(nominalCubeSize, parseInt(cubeCount, 10) || MIN_CONC_CUBE_COUNT)
+      ? buildConcCubePlanFromNominalSize(nominalCubeSize, cubeItem.quantity)
       : null;
     if (hasCubeOrder) {
       const cubeErr = validateConcCubeReceptionPlan(cubePlan, lang);
@@ -969,17 +961,13 @@ export default function Reception() {
     return type;
   };
 
-  const billableQuantity = (t: SelectedTest) =>
-    t.testTypeCode === "CONC_CUBE" ? resolvedCubeCount : t.quantity;
-
   const totalPrice = selectedTests.reduce((sum, t) => {
     if (MULTI_SUBTYPE_TESTS.includes(t.testTypeCode) && t.testSubType === "__multi__") {
       const subtypeMap = multiSubtypes[t.testTypeId] ?? {};
       const subtypeTotal = Object.values(subtypeMap).reduce((s, qty) => s + (qty > 0 ? t.unitPrice * qty : 0), 0);
       return sum + subtypeTotal;
     }
-    const qty = billableQuantity(t);
-    return sum + t.unitPrice * qty;
+    return sum + t.unitPrice * t.quantity;
   }, 0);
 
   return (
@@ -1363,9 +1351,34 @@ export default function Reception() {
                                       <span className="mt-0.5 block text-xs text-muted-foreground font-mono">{tt.code}</span>
                                     )}
                                   </div>
-                                  <span className="flex-shrink-0 rounded-lg bg-green-50 px-2.5 py-1 text-sm font-semibold text-green-700">
-                                    {Number(isSelected && selectedItem ? selectedItem.unitPrice : tt.unitPrice).toFixed(0)} {lang === "ar" ? "درهم" : "AED"}
-                                  </span>
+                                  <div className="flex items-center gap-2 flex-shrink-0">
+                                    {isSelected && !MULTI_SUBTYPE_TESTS.includes(tt.code) && (
+                                      <div className="flex items-center gap-1.5">
+                                        {(selectedItem?.quantity ?? 0) < minQtyForTest(tt.code) && (
+                                          <span className="inline-flex items-center gap-1 rounded-md border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[10px] text-amber-700 whitespace-nowrap">
+                                            <AlertTriangle className="w-3 h-3" />
+                                            {lang === "ar"
+                                              ? `الحد الأدنى ${minQtyForTest(tt.code)}`
+                                              : `Min ${minQtyForTest(tt.code)}`}
+                                          </span>
+                                        )}
+                                        <Input
+                                          type="number"
+                                          min={minQtyForTest(tt.code)}
+                                          max={maxQtyForTest(tt.code)}
+                                          value={selectedItem?.quantity ? selectedItem.quantity : ""}
+                                          placeholder="—"
+                                          onFocus={e => e.currentTarget.select()}
+                                          onChange={e => setTestQuantity(tt.id, parseInt(e.target.value, 10) || 0)}
+                                          onClick={e => e.stopPropagation()}
+                                          className={`h-8 w-16 text-center text-sm ${(selectedItem?.quantity ?? 0) < minQtyForTest(tt.code) ? "border-amber-400 text-amber-700" : ""}`}
+                                        />
+                                      </div>
+                                    )}
+                                    <span className="rounded-lg bg-green-50 px-2.5 py-1 text-sm font-semibold text-green-700 whitespace-nowrap">
+                                      {Number(isSelected && selectedItem ? selectedItem.unitPrice : tt.unitPrice).toFixed(0)} {lang === "ar" ? "درهم" : "AED"}
+                                    </span>
+                                  </div>
                                 </div>
                                 {renderTestDependencyHint(tt.code, selectedItem)}
                               </label>
@@ -1441,34 +1454,6 @@ export default function Reception() {
                                     </button>
                                   </div>
                                 )}
-                              </div>
-                            )}
-                            {/* Quantity for selected test — hidden for multi-subtype tests */}
-                            {isSelected && !MULTI_SUBTYPE_TESTS.includes(tt.code) && tt.code !== "CONC_CUBE" && (
-                              <div className="mt-3 pt-3 ms-8 border-t border-blue-200 flex items-center justify-between gap-2">
-                                <Label className="flex items-center gap-1.5 text-sm font-medium text-blue-700 whitespace-nowrap">
-                                  <Layers className="w-3.5 h-3.5" />
-                                  {tt.code === "CONC_INTERLOCK"
-                                    ? (lang === "ar" ? "عدد البلاطات للفحص" : "No. of blocks to test")
-                                    : (lang === "ar" ? "الكمية" : "Quantity")}
-                                  <span className="text-red-500">*</span>
-                                </Label>
-                                <div className="flex items-center gap-2">
-                                  {(selectedItem?.quantity ?? 0) === 0 && (
-                                    <span className="inline-flex items-center gap-1 rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-xs text-amber-700">
-                                      <AlertTriangle className="w-3 h-3" />
-                                      {lang === "ar" ? "1 على الأقل" : "Min 1"}
-                                    </span>
-                                  )}
-                                  <Input
-                                    type="number" min={0} max={999}
-                                    value={selectedItem?.quantity ? selectedItem.quantity : ""}
-                                    placeholder="—"
-                                    onFocus={e => e.currentTarget.select()}
-                                    onChange={e => setTestQuantity(tt.id, parseInt(e.target.value) || 0)}
-                                    className={`h-8 w-20 text-center text-sm ${(selectedItem?.quantity ?? 0) === 0 ? "border-amber-400 text-amber-700" : ""}`}
-                                  />
-                                </div>
                               </div>
                             )}
                             {/* Hot Bin optional add-on tests (AGG_SG, AGG_FLAKINESS_ELONGATION) */}
@@ -1600,25 +1585,6 @@ export default function Reception() {
                         </SelectContent>
                       </Select>
                     </div>
-                    <div className="space-y-1.5">
-                      <Label>
-                        {lang === "ar" ? "عدد المكعبات" : "Number of Cubes"}
-                        <span className="text-red-500 ml-1">*</span>
-                      </Label>
-                      <Input
-                        type="number"
-                        min={MIN_CONC_CUBE_COUNT}
-                        max={MAX_CONC_CUBE_COUNT}
-                        value={cubeCount}
-                        onChange={e => setCubeCount(e.target.value)}
-                        className="w-24"
-                      />
-                      <p className="text-xs text-muted-foreground">
-                        {lang === "ar"
-                          ? `الحد الأدنى ${MIN_CONC_CUBE_COUNT} مكعبات لكل عينة (BS 1881)`
-                          : `Minimum ${MIN_CONC_CUBE_COUNT} cubes per sample (BS 1881)`}
-                      </p>
-                    </div>
                   </div>
                 )}
 
@@ -1678,7 +1644,6 @@ export default function Reception() {
                                 );
                               });
                             }
-                            const qty = billableQuantity(t);
                             return (
                               <div key={t.testTypeId} className="flex items-center justify-between text-xs text-green-700">
                                 <span>
@@ -1688,15 +1653,10 @@ export default function Reception() {
                                       ? ` — عمر ${foamConcreteAge.trim()} يوم`
                                       : ` — age ${foamConcreteAge.trim()} d`
                                     : ""}{" "}
-                                  × {qty}
-                                  {t.testTypeCode === "CONC_CUBE" && (
-                                    <span className="text-green-600/80">
-                                      {lang === "ar" ? " مكعبات" : " cubes"}
-                                    </span>
-                                  )}
+                                  × {t.quantity}
                                 </span>
-                                {qty > 0
-                                  ? <span>{(t.unitPrice * qty).toFixed(0)} {lang === "ar" ? "درهم" : "AED"}</span>
+                                {t.quantity > 0
+                                  ? <span>{(t.unitPrice * t.quantity).toFixed(0)} {lang === "ar" ? "درهم" : "AED"}</span>
                                   : <span className="text-amber-600">{lang === "ar" ? "الكمية مطلوبة" : "Qty required"}</span>}
                               </div>
                             );
@@ -1746,14 +1706,14 @@ export default function Reception() {
                     <Button
                       type="submit"
                       className="px-6 gap-2"
-                      disabled={createOrder.isPending || selectedTests.length === 0 || hasZeroQtyTests}
+                      disabled={createOrder.isPending || selectedTests.length === 0 || hasInvalidQtyTests}
                     >
                       <FlaskConical className="w-4 h-4" />
                       {createOrder.isPending
                         ? (lang === "ar" ? "جاري الإنشاء..." : "Creating...")
                         : selectedTests.length === 0
                           ? (lang === "ar" ? "اختر اختباراً أولاً" : "Select a test first")
-                          : hasZeroQtyTests
+                          : hasInvalidQtyTests
                             ? (lang === "ar" ? "أصلح الكميات للمتابعة" : "Fix quantities to continue")
                             : selectedTests.length > 1
                               ? (lang === "ar"
