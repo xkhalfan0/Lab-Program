@@ -3,8 +3,14 @@
  */
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
-import { and, desc, eq, isNull, like, or, sql } from "drizzle-orm";
-import { labOrders, samples } from "../drizzle/schema";
+import { and, desc, eq, inArray, isNotNull, isNull, like, notInArray, or, sql } from "drizzle-orm";
+import {
+  concreteTestGroups,
+  labOrders,
+  samples,
+  specializedTestResults,
+  testResults,
+} from "../drizzle/schema";
 import type { RetestReason } from "@shared/retestReasons";
 import {
   addSampleHistory,
@@ -108,25 +114,6 @@ async function sampleHasQcSignOff(sampleId: number): Promise<boolean> {
 }
 
 async function sampleHasFailedOutcome(sampleId: number): Promise<boolean> {
-  const concreteGroups = await getConcreteGroupsBySample(sampleId);
-  if (concreteGroups.some((g) => isSpecFailure(g.complianceStatus))) return true;
-
-  const orders = await getLabOrdersBySampleId(sampleId);
-  const latestOrder = orders[0];
-  if (latestOrder) {
-    const items = await getLabOrderItems(latestOrder.id);
-    for (const item of items) {
-      if (await isOrderItemSpecFailed(sampleId, item)) return true;
-    }
-  }
-
-  const dists = await getDistributionsBySample(sampleId);
-  for (const dist of dists) {
-    if (await isOrderItemSpecFailed(sampleId, { testTypeCode: dist.testType, distributionId: dist.id })) {
-      return true;
-    }
-  }
-
   const legacy = await getTestResultBySample(sampleId);
   for (const r of legacy) {
     if (isSpecFailure(r.complianceStatus)) return true;
@@ -134,9 +121,19 @@ async function sampleHasFailedOutcome(sampleId: number): Promise<boolean> {
     if (isSpecFailure(charts?.complianceStatus)) return true;
   }
 
+  const concreteGroups = await getConcreteGroupsBySample(sampleId);
+  if (concreteGroups.some((g) => isSpecFailure(g.complianceStatus))) return true;
+
   const specialized = await getSpecializedTestResultsBySample(sampleId);
   if (specialized.some((r) => (r as { overallResult?: string }).overallResult === "fail")) {
     return true;
+  }
+
+  const dists = await getDistributionsBySample(sampleId);
+  for (const dist of dists) {
+    if (await isOrderItemSpecFailed(sampleId, { testTypeCode: dist.testType, distributionId: dist.id })) {
+      return true;
+    }
   }
 
   return false;
@@ -157,6 +154,86 @@ async function sampleHasOpenRetest(sampleId: number): Promise<boolean> {
   );
 }
 
+function rootSampleBaseFilters() {
+  return [
+    isNull(samples.originalSampleId),
+    sql`${samples.sampleCode} NOT REGEXP '-R[0-9]+$'`,
+    notInArray(samples.status, [
+      ...EXCLUDED_SAMPLE_STATUSES,
+      ...ACTIVE_TESTING_SAMPLE_STATUSES,
+    ]),
+  ];
+}
+
+function searchSampleFilter(query: string) {
+  const pattern = `%${query}%`;
+  return or(
+    like(samples.sampleCode, pattern),
+    like(samples.contractNumber, pattern),
+    like(samples.contractorName, pattern)
+  );
+}
+
+/** SQL pre-filter: samples with QC-signed spec failures (fast path for list). */
+async function fetchRetestCandidateIds(
+  db: NonNullable<Awaited<ReturnType<typeof getDb>>>,
+  query?: string,
+  scanLimit = 40
+): Promise<number[]> {
+  const base = and(
+    ...rootSampleBaseFilters(),
+    query ? searchSampleFilter(query) : undefined
+  );
+
+  const [legacyRows, concreteRows, specRows] = await Promise.all([
+    db
+      .selectDistinct({ id: samples.id })
+      .from(samples)
+      .innerJoin(testResults, eq(testResults.sampleId, samples.id))
+      .where(
+        and(
+          base,
+          inArray(testResults.complianceStatus, ["fail", "partial"]),
+          isNotNull(testResults.qcReviewedAt)
+        )
+      )
+      .orderBy(desc(samples.updatedAt))
+      .limit(scanLimit),
+    db
+      .selectDistinct({ id: samples.id })
+      .from(samples)
+      .innerJoin(concreteTestGroups, eq(concreteTestGroups.sampleId, samples.id))
+      .where(
+        and(
+          base,
+          inArray(concreteTestGroups.complianceStatus, ["fail", "partial"]),
+          inArray(samples.status, [...QC_COMPLETE_SAMPLE_STATUSES])
+        )
+      )
+      .orderBy(desc(samples.updatedAt))
+      .limit(scanLimit),
+    db
+      .selectDistinct({ id: samples.id })
+      .from(samples)
+      .innerJoin(specializedTestResults, eq(specializedTestResults.sampleId, samples.id))
+      .where(
+        and(
+          base,
+          eq(specializedTestResults.overallResult, "fail"),
+          isNotNull(specializedTestResults.qcReviewedAt)
+        )
+      )
+      .orderBy(desc(samples.updatedAt))
+      .limit(scanLimit),
+  ]);
+
+  const ids = new Set<number>();
+  for (const row of [...legacyRows, ...concreteRows, ...specRows]) {
+    ids.add(row.id);
+  }
+  return [...ids];
+}
+
 export async function isRetestEligibleSample(
   root: {
     id: number;
@@ -165,7 +242,8 @@ export async function isRetestEligibleSample(
     sampleCode: string;
     deletedAt?: Date | null;
   },
-  orders: { status: string }[]
+  orders: { status: string }[],
+  opts?: { assumeSpecFailed?: boolean }
 ): Promise<boolean> {
   if (!isRootSample(root)) return false;
   if (EXCLUDED_SAMPLE_STATUSES.includes(root.status as (typeof EXCLUDED_SAMPLE_STATUSES)[number])) {
@@ -195,6 +273,7 @@ export async function isRetestEligibleSample(
     return false;
   }
 
+  if (opts?.assumeSpecFailed) return true;
   return sampleHasFailedOutcome(root.id);
 }
 
@@ -286,10 +365,11 @@ export type RetestEligibleRow = {
 
 async function enrichRetestRow(
   row: typeof samples.$inferSelect,
-  db: NonNullable<Awaited<ReturnType<typeof getDb>>>
+  db: NonNullable<Awaited<ReturnType<typeof getDb>>>,
+  assumeSpecFailed = true
 ): Promise<RetestEligibleRow | null> {
   const orders = await getLabOrdersBySampleId(row.id);
-  if (!(await isRetestEligibleSample(row, orders))) return null;
+  if (!(await isRetestEligibleSample(row, orders, { assumeSpecFailed }))) return null;
 
   const retestCount = await db
     .select({ c: sql<number>`COUNT(*)` })
@@ -321,32 +401,20 @@ export async function listRetestEligibleSamples(opts?: {
 
   const limit = opts?.limit ?? 20;
   const q = opts?.query?.trim();
-  const filters = [
-    isNull(samples.originalSampleId),
-    sql`${samples.sampleCode} NOT REGEXP '-R[0-9]+$'`,
-  ];
-  if (q) {
-    const pattern = `%${q}%`;
-    filters.push(
-      or(
-        like(samples.sampleCode, pattern),
-        like(samples.contractNumber, pattern),
-        like(samples.contractorName, pattern)
-      )!
-    );
-  }
+
+  const candidateIds = await fetchRetestCandidateIds(db, q, Math.max(limit * 3, 30));
+  if (candidateIds.length === 0) return [];
 
   const rows = await db
     .select()
     .from(samples)
-    .where(and(...filters))
-    .orderBy(desc(samples.updatedAt))
-    .limit(q ? 80 : 200);
+    .where(inArray(samples.id, candidateIds))
+    .orderBy(desc(samples.updatedAt));
 
   const results: RetestEligibleRow[] = [];
   for (const row of rows) {
     if (results.length >= limit) break;
-    const enriched = await enrichRetestRow(row, db);
+    const enriched = await enrichRetestRow(row, db, true);
     if (enriched) results.push(enriched);
   }
   return results;
@@ -419,12 +487,19 @@ async function buildRetestTestsFromOrder(
   allTestTypes: Awaited<ReturnType<typeof getAllTestTypes>>
 ) {
   const items = await getLabOrderItems(orderId);
-  const tests = await Promise.all(
-    items.map(async (item) => {
+  const legacyResults = await getTestResultBySample(sampleId);
+  const tests = items
+    .map((item) => {
       const tt =
         allTestTypes.find((t) => t.id === item.testTypeId) ??
         resolveCatalogTestType(item.testTypeCode, allTestTypes);
-      const isFailed = await isOrderItemSpecFailed(sampleId, item);
+      const linkedResult = item.distributionId
+        ? legacyResults.find((r) => r.distributionId === item.distributionId)
+        : legacyResults[0];
+      const charts = linkedResult?.chartsData as { complianceStatus?: string } | null;
+      const isFailed =
+        isSpecFailure(linkedResult?.complianceStatus) ||
+        isSpecFailure(charts?.complianceStatus);
       return {
         testTypeId: tt?.id ?? item.testTypeId,
         testTypeCode: item.testTypeCode,
@@ -437,8 +512,8 @@ async function buildRetestTestsFromOrder(
         sourceOrderItemId: item.id,
       };
     })
-  );
-  return { tests: tests.filter((t) => t.testTypeId > 0) };
+    .filter((t) => t.testTypeId > 0);
+  return { tests };
 }
 
 async function buildRetestTestsFromDistributions(
@@ -446,13 +521,18 @@ async function buildRetestTestsFromDistributions(
   allTestTypes: Awaited<ReturnType<typeof getAllTestTypes>>
 ) {
   const dists = await getDistributionsBySample(sampleId);
-  const tests = await Promise.all(
-    dists.map(async (dist) => {
+  const legacyResults = await getTestResultBySample(sampleId);
+  const concreteGroups = await getConcreteGroupsBySample(sampleId);
+  const tests = dists
+    .map((dist) => {
       const tt = resolveCatalogTestType(dist.testType, allTestTypes);
-      const isFailed = await isOrderItemSpecFailed(sampleId, {
-        testTypeCode: dist.testType,
-        distributionId: dist.id,
-      });
+      const linkedResult = legacyResults.find((r) => r.distributionId === dist.id);
+      const charts = linkedResult?.chartsData as { complianceStatus?: string } | null;
+      const group = concreteGroups.find((g) => g.distributionId === dist.id);
+      const isFailed =
+        isSpecFailure(linkedResult?.complianceStatus) ||
+        isSpecFailure(charts?.complianceStatus) ||
+        isSpecFailure(group?.complianceStatus);
       return {
         testTypeId: tt?.id ?? 0,
         testTypeCode: dist.testType,
@@ -465,8 +545,8 @@ async function buildRetestTestsFromDistributions(
         sourceOrderItemId: null as number | null,
       };
     })
-  );
-  return { tests: tests.filter((t) => t.testTypeId > 0) };
+    .filter((t) => t.testTypeId > 0);
+  return { tests };
 }
 
 export async function runRetestCreate(

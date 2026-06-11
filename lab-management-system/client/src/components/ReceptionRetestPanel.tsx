@@ -53,26 +53,34 @@ export function ReceptionRetestPanel({ onSuccess, onCancel }: Props) {
   const isSearching = searchQ.trim().length >= 2;
   const {
     data: eligibleSamples,
-    isFetching: loadingEligible,
+    isLoading: loadingEligibleInitial,
+    isFetching: fetchingEligible,
     isError: searchError,
     error: searchErrorDetail,
-  } = trpc.samples.searchRetestEligible.useQuery({
-    query: isSearching ? searchQ.trim() : undefined,
-    limit: 20,
-  });
+  } = trpc.samples.searchRetestEligible.useQuery(
+    {
+      query: isSearching ? searchQ.trim() : undefined,
+      limit: 20,
+    },
+    { staleTime: 30_000, retry: 1 }
+  );
+  const loadingEligible = loadingEligibleInitial || (fetchingEligible && !eligibleSamples);
 
   const selectedSample =
     selectedMeta ?? eligibleSamples?.find((s) => s.id === rootId) ?? null;
 
   const {
     data: source,
-    isFetching: loadingSource,
+    isLoading: loadingSourceInitial,
+    isFetching: fetchingSource,
     isError: sourceError,
     error: sourceErrorDetail,
   } = trpc.samples.getRetestSource.useQuery(
     { rootSampleId: rootId! },
-    { enabled: rootId != null, retry: 1 }
+    { enabled: rootId != null, retry: 1, staleTime: 30_000 }
   );
+  const loadingSource =
+    !!rootId && !source && !sourceError && (loadingSourceInitial || fetchingSource);
 
   useEffect(() => {
     if (sourceError && sourceErrorDetail?.message) {
