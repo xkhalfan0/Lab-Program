@@ -176,6 +176,7 @@ export default function ManagerDashboard() {
       dateFrom: reportRange === "custom" ? reportFrom : undefined,
       dateTo: reportRange === "custom" ? reportTo : undefined,
       format: reportFormat,
+      lang: lang as "ar" | "en",
     });
   };
 
