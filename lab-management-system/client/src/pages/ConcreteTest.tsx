@@ -183,6 +183,14 @@ function edgeMmFromNominal(nom: string | null | undefined): "100" | "150" {
   return s.startsWith("100") ? "100" : "150";
 }
 
+/** Treat DB placeholder zeros as blank for technician entry fields. */
+function emptyIfZero(val: string | null | undefined): string {
+  if (val == null || val === "") return "";
+  const n = parseFloat(String(val));
+  if (Number.isFinite(n) && n === 0) return "";
+  return String(val);
+}
+
 function emptyRow(markNo: number, edgeMm: "100" | "150" = "150"): CubeRow {
   return {
     markNo,
@@ -283,8 +291,8 @@ function GroupPanel({ group, distributionId, onRefresh, castingDate: distCasting
         length: c.length ?? String(defaultEdge),
         width: c.width ?? String(defaultEdge),
         height: c.height ?? String(defaultEdge),
-        massKg: c.massKg ?? "",
-        maxLoadKN: c.maxLoadKN && c.maxLoadKN !== "0" ? c.maxLoadKN : "",
+        massKg: emptyIfZero(c.massKg),
+        maxLoadKN: emptyIfZero(c.maxLoadKN),
         fractureType: c.fractureType ?? "SF",
         withinSpec: c.withinSpec ?? null,
         densityKgM3: c.densityKgM3 ?? "",
@@ -854,12 +862,20 @@ function GroupPanel({ group, distributionId, onRefresh, castingDate: distCasting
                   <th className={`border px-2 py-1 text-center ${cubeOrderFlow ? "bg-yellow-50" : ""}`}>Cube ID</th>
                   {!cubeOrderFlow && <th className="border px-2 py-1 text-center bg-orange-50">Age (days)</th>}
                   {!cubeOrderFlow && <th className="border px-2 py-1 text-center">L × W × H (mm)</th>}
-                  {!cubeOrderFlow && <th className="border px-2 py-1 text-center">Mass (kg)</th>}
-                  <th className="border px-2 py-1 text-center bg-yellow-50">Load (kN) *</th>
-                  <th className="border px-2 py-1 text-center bg-blue-50">Strength (N/mm²)</th>
-                  <th className="border px-2 py-1 text-center">Fracture</th>
+                  <th className="border px-2 py-1 text-center bg-yellow-50">
+                    {cubeOrderFlow ? "Mass, Saturated (kg)" : "Mass (kg)"}
+                  </th>
+                  <th className="border px-2 py-1 text-center bg-blue-50">Density (kg/m³)</th>
+                  <th className="border px-2 py-1 text-center bg-yellow-50">
+                    {cubeOrderFlow ? "Max. Load at Failure (kN) *" : "Load (kN) *"}
+                  </th>
+                  <th className="border px-2 py-1 text-center bg-blue-50">
+                    {cubeOrderFlow ? "Compressive Strength (N/mm²)" : "Strength (N/mm²)"}
+                  </th>
+                  <th className="border px-2 py-1 text-center">
+                    {cubeOrderFlow ? "Type of Fracture" : "Fracture"}
+                  </th>
                   {cubeOrderFlow && <th className="border px-2 py-1 text-center w-16">Pass</th>}
-                  {!cubeOrderFlow && <th className="border px-2 py-1 text-center bg-blue-50">Density (kg/m³)</th>}
                   {!cubeOrderFlow && <th className="border px-2 py-1 text-center w-20 bg-green-50">Within Spec ✓</th>}
                   {!cubeOrderFlow && <th className="border px-2 py-1 text-center w-16">Action</th>}
                 </tr>
@@ -916,15 +932,28 @@ function GroupPanel({ group, distributionId, onRefresh, castingDate: distCasting
                           </div>
                         </td>
                       )}
-                      {!cubeOrderFlow && (
-                        <td className="border px-1 py-1">
-                          <Input value={cube.massKg} onChange={e => updateCube(idx, "massKg", e.target.value)}
-                            className="h-7 text-xs w-20" placeholder="kg" disabled={inputsDisabled} />
-                        </td>
-                      )}
                       <td className="border px-1 py-1 bg-yellow-50">
-                        <Input value={cube.maxLoadKN} onChange={e => updateCube(idx, "maxLoadKN", e.target.value)}
-                          className="h-7 text-xs w-24 font-semibold border-yellow-400" placeholder="kN" disabled={inputsDisabled} />
+                        <Input
+                          value={cube.massKg}
+                          onChange={e => updateCube(idx, "massKg", e.target.value)}
+                          className="h-7 text-xs w-20 border-yellow-400"
+                          placeholder="kg"
+                          disabled={inputsDisabled}
+                        />
+                      </td>
+                      <td className="border px-1 py-1 bg-blue-50 text-center text-xs text-gray-600 font-mono">
+                        {density || "—"}
+                      </td>
+                      <td className="border px-1 py-1 bg-yellow-50">
+                        <Input
+                          type="text"
+                          inputMode="decimal"
+                          value={cube.maxLoadKN}
+                          onChange={e => updateCube(idx, "maxLoadKN", e.target.value)}
+                          className="h-7 text-xs w-24 font-semibold border-yellow-400"
+                          placeholder="kN"
+                          disabled={inputsDisabled}
+                        />
                       </td>
                       <td className={`border px-1 py-1 bg-blue-50 text-center text-xs font-mono font-bold ${rowFail ? "text-red-600" : strength ? "text-green-700" : ""}`}>
                         {strength || "—"}
@@ -948,11 +977,6 @@ function GroupPanel({ group, distributionId, onRefresh, castingDate: distCasting
                               ? <span className="text-green-600 font-bold">✓</span>
                               : <span className="text-red-600 font-bold">✗</span>
                           )}
-                        </td>
-                      )}
-                      {!cubeOrderFlow && (
-                        <td className="border px-1 py-1 bg-blue-50 text-center text-xs text-gray-600 font-mono">
-                          {density || "—"}
                         </td>
                       )}
                       {!cubeOrderFlow && (
@@ -1002,7 +1026,9 @@ function GroupPanel({ group, distributionId, onRefresh, castingDate: distCasting
               {avg > 0 && (
                 <tfoot>
                   <tr className="bg-gray-100 font-bold">
-                    <td colSpan={cubeOrderFlow ? 3 : 10} className="border px-2 py-1 text-right text-sm">Average Compressive Strength:</td>
+                    <td colSpan={cubeOrderFlow ? 5 : 10} className="border px-2 py-1 text-right text-sm">
+                      {cubeOrderFlow ? "Avg. Compressive Strength:" : "Average Compressive Strength:"}
+                    </td>
                     <td className={`border px-2 py-1 text-center text-sm font-mono ${compliance === "fail" ? "text-red-600" : "text-green-700"}`}>
                       {avg.toFixed(2)} N/mm²
                     </td>

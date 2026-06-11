@@ -82,15 +82,14 @@ export async function ensureConcreteGroupsFromReceptionPlan(
   const targetCount = plan.cubeCount;
   if (cubes.length < targetCount) {
     for (let mark = cubes.length + 1; mark <= targetCount; mark++) {
-      await upsertConcreteCube({
-        groupId: group.id,
-        markNo: mark,
-        length: edge,
-        width: edge,
-        height: edge,
-        maxLoadKN: "0",
-        fractureType: "SF",
-      });
+        await upsertConcreteCube({
+          groupId: group.id,
+          markNo: mark,
+          length: edge,
+          width: edge,
+          height: edge,
+          fractureType: "SF",
+        });
     }
   }
 
