@@ -6,6 +6,12 @@ import { Printer, X, Download, Loader2 } from "lucide-react";
 import { generatePdfFromElement } from "@/lib/pdf";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { FlexibleResultsTable, type Column } from "@/components/reports/FlexibleResultsTable";
+import {
+  calcActualAgeDays,
+  resolveBs1881AgeFactor,
+  evaluateCubePass,
+  evaluateGroupPass,
+} from "@shared/concreteCubeBs1881";
 
 // --- Lab print branding (override via Vite env for deployment-specific details) ---
 const LAB_PRINT_BRANDING = {
@@ -116,16 +122,6 @@ function getEffectiveAgeReport(actualAge: number, groupAge: number): number {
   return actualAge;
 }
 
-function calcCubeAgeReport(castingDateStr: string | null | undefined, testDateStr: string | null | undefined): number | null {
-  if (!castingDateStr || !testDateStr) return null;
-  const casting = new Date(castingDateStr);
-  const tested = new Date(testDateStr);
-  if (isNaN(casting.getTime()) || isNaN(tested.getTime())) return null;
-  const diffMs = tested.getTime() - casting.getTime();
-  if (diffMs < 0) return null;
-  return Math.round(diffMs / (1000 * 60 * 60 * 24));
-}
-
 function getAgePctReport(age: number): number {
   if (age <= 1)  return 16;
   if (age <= 3)  return 40;
@@ -141,54 +137,54 @@ function extractTargetFromClass(classStr: string | null | undefined): number | n
   return m ? parseFloat(m[1]) : null;
 }
 
-function LabReportHeader({ lang }: { lang: "en" | "ar" }) {
+function LabReportHeader({
+  lang,
+  refNo,
+  reportDateStr,
+}: {
+  lang: "en" | "ar";
+  refNo: string;
+  reportDateStr: string;
+}) {
   const ar = lang === "ar";
-  const displayName =
-    ar && LAB_PRINT_BRANDING.nameAr ? LAB_PRINT_BRANDING.nameAr : LAB_PRINT_BRANDING.nameEn;
-  const [logoOk, setLogoOk] = useState(!!LAB_PRINT_BRANDING.logoUrl);
+  const labNameAr = LAB_PRINT_BRANDING.nameAr || "مختبر الإنشاءات والمواد الهندسية";
+  const labNameEn = LAB_PRINT_BRANDING.nameEn;
 
   return (
-    <header className="mb-4 pb-3 border-b-2 border-slate-800 print:mb-3">
-      <div className="flex items-start gap-3 justify-between">
-        <div className="flex gap-3 items-start min-w-0 flex-1">
-          {LAB_PRINT_BRANDING.logoUrl && logoOk ? (
-            <img
-              src={LAB_PRINT_BRANDING.logoUrl}
-              alt=""
-              className="h-12 w-auto max-w-[100px] object-contain shrink-0"
-              onError={() => setLogoOk(false)}
-            />
-          ) : null}
-          <div className="min-w-0">
-            <h1 className="text-[13px] font-bold text-slate-900 leading-snug">{displayName}</h1>
-            <div className="mt-1 text-[10px] text-slate-700 space-y-0.5 leading-snug">
-              {LAB_PRINT_BRANDING.address ? <p>{LAB_PRINT_BRANDING.address}</p> : null}
-              {(LAB_PRINT_BRANDING.phone || LAB_PRINT_BRANDING.email) && (
-                <p>
-                  {LAB_PRINT_BRANDING.phone ? (
-                    <span>
-                      {ar ? "هاتف: " : "Tel: "}
-                      {LAB_PRINT_BRANDING.phone}
-                    </span>
-                  ) : null}
-                  {LAB_PRINT_BRANDING.phone && LAB_PRINT_BRANDING.email ? " · " : null}
-                  {LAB_PRINT_BRANDING.email ? (
-                    <span>
-                      {ar ? "البريد: " : "Email: "}
-                      {LAB_PRINT_BRANDING.email}
-                    </span>
-                  ) : null}
-                </p>
-              )}
-              {LAB_PRINT_BRANDING.accreditation ? (
-                <p className="font-medium text-slate-800">
-                  {ar ? "اعتماد: " : "Accreditation: "}
-                  {LAB_PRINT_BRANDING.accreditation}
-                </p>
-              ) : null}
-            </div>
+    <header className="mb-5">
+      <div className="border-t-4 border-gray-900 pt-3 flex justify-between items-center">
+        <div>
+          <h1 className="text-[16px] font-extrabold text-gray-900 leading-snug">
+            {ar ? labNameAr : labNameEn}
+          </h1>
+          <p className="text-[11px] text-gray-500 mt-0.5">
+            {ar ? labNameEn : labNameAr}
+          </p>
+        </div>
+        <div className="flex flex-col items-center px-4 border-x border-gray-300">
+          <div className="w-11 h-11 rounded-full border-2 border-gray-800 flex items-center justify-center text-lg font-black">
+            م
+          </div>
+          <span className="text-[9px] text-gray-400 mt-0.5 tracking-widest">LAB</span>
+        </div>
+        <div className="text-[11px] text-gray-600 space-y-0.5">
+          <div className="flex gap-1">
+            <span className="text-gray-500">{ar ? ":رقم الوثيقة" : "Doc No.:"}</span>
+            <span className="font-mono font-bold text-gray-800">{refNo}</span>
+          </div>
+          <div className="flex gap-1">
+            <span className="text-gray-500">{ar ? ":التاريخ" : "Date:"}</span>
+            <span>{reportDateStr}</span>
           </div>
         </div>
+      </div>
+      <div className="bg-gray-900 text-white text-center py-2 mt-3 mb-1">
+        <p className="text-[14px] font-bold">
+          {ar ? "تقرير فحص ضغط المكعبات الخرسانية" : "Laboratory Test Report"}
+        </p>
+        <p className="text-[10px] text-gray-300 mt-0.5 tracking-wider uppercase">
+          {ar ? "Laboratory Test Report" : "تقرير فحص ضغط المكعبات الخرسانية"}
+        </p>
       </div>
     </header>
   );
@@ -257,41 +253,72 @@ function ReportPage({
     ? parseFloat(group.minAcceptable)
     : extractTargetFromClass(group.classOfConcrete);
   const testAge = group.testAge ?? 28;
+  const isAutoAgeFlow = testAge === 0;
   // Casting date: prefer distribution-level castingDate (from sample), fallback to group batchDateTime
   const castingDate = distCastingDate
-    ? (distCastingDate instanceof Date ? distCastingDate.toISOString() : String(distCastingDate))
-    : (group.batchDateTime ? group.batchDateTime.split(' ')[0] : null);
-  // Group-level:28d+ uses f_ck on average; earlier ages use % of f_ck
-  const requiredMpa =
-    targetMpa != null && testAge >= 28 ? targetMpa : targetMpa != null ? getRequiredStrengthReport(targetMpa, testAge) : null;
-  const agePct = getAgePctReport(testAge);
+    ? (distCastingDate instanceof Date ? distCastingDate : String(distCastingDate))
+    : (group.batchDateTime ? group.batchDateTime.split(" ")[0] : null);
   // Per-cube compliance
   const cubesWithAge = cubes.map(c => {
-    const actualAge = calcCubeAgeReport(castingDate, c.dateTested);
-    const effectiveAge = actualAge !== null ? getEffectiveAgeReport(actualAge, testAge) : testAge;
-    const cubeRequiredEarly = targetMpa && testAge < 28 ? getRequiredStrengthReport(targetMpa, effectiveAge) : null;
+    const actualAge =
+      castingDate && c.dateTested ? calcActualAgeDays(castingDate, c.dateTested) : null;
     const s = parseFloat(c.compressiveStrengthMpa ?? "0");
+
+    if (isAutoAgeFlow && targetMpa != null && actualAge != null) {
+      const ageFactor = resolveBs1881AgeFactor(actualAge, targetMpa);
+      const cubeRequired = ageFactor.minStrengthMpa;
+      const isPass =
+        c.withinSpec === true
+          ? true
+          : c.withinSpec === false
+            ? false
+            : s > 0 && evaluateCubePass(s, cubeRequired);
+      const isFail = c.withinSpec === true ? false : s > 0 && !isPass;
+      return { ...c, actualAge, ageFactor, cubeRequired, isFail, isPass };
+    }
+
+    const effectiveAge = actualAge !== null ? getEffectiveAgeReport(actualAge, testAge) : testAge;
+    const cubeRequiredEarly =
+      targetMpa && testAge < 28 ? getRequiredStrengthReport(targetMpa, effectiveAge) : null;
     let autoFail = false;
     if (s > 0 && c.withinSpec !== true) {
       if (testAge >= 28 && targetMpa != null) autoFail = s < targetMpa - 4;
       else if (cubeRequiredEarly != null) autoFail = s < cubeRequiredEarly;
     }
     const isFail = c.withinSpec === true ? false : autoFail;
-    const isPass = c.withinSpec === true
-      ? true
-      : s > 0 && (
-          (testAge >= 28 && targetMpa != null && s >= targetMpa - 4)
-          || (testAge < 28 && cubeRequiredEarly != null && s >= cubeRequiredEarly)
-        );
+    const isPass =
+      c.withinSpec === true
+        ? true
+        : s > 0
+          && ((testAge >= 28 && targetMpa != null && s >= targetMpa - 4)
+            || (testAge < 28 && cubeRequiredEarly != null && s >= cubeRequiredEarly));
     return { ...c, actualAge, effectiveAge, cubeRequired: cubeRequiredEarly, isFail, isPass };
   });
+
+  const reportActualAge =
+    cubesWithAge.map(c => c.actualAge).find((a): a is number => a != null) ?? null;
+  const bs1881Summary =
+    isAutoAgeFlow && targetMpa != null && reportActualAge != null
+      ? resolveBs1881AgeFactor(reportActualAge, targetMpa)
+      : null;
+  const requiredMpa = isAutoAgeFlow && bs1881Summary
+    ? bs1881Summary.minStrengthMpa
+    : targetMpa != null && testAge >= 28
+      ? targetMpa
+      : targetMpa != null
+        ? getRequiredStrengthReport(targetMpa, testAge)
+        : null;
+  const agePct = isAutoAgeFlow && bs1881Summary
+    ? bs1881Summary.factorPct
+    : getAgePctReport(testAge);
 
   const withinSpec = cubesWithAge.filter(c => c.isPass && parseFloat(c.compressiveStrengthMpa ?? "0") > 0);
   const outsideSpec = cubesWithAge.filter(c => c.isFail && parseFloat(c.compressiveStrengthMpa ?? "0") > 0);
   const strengthsForAvg = cubes.map(c => parseFloat(c.compressiveStrengthMpa ?? "0")).filter(v => v > 0);
   const minCubeStr = strengthsForAvg.length ? Math.min(...strengthsForAvg) : null;
-  const avgPass =
-    avg !== null && targetMpa != null && testAge >= 28
+  const avgPass = isAutoAgeFlow && avg !== null && requiredMpa != null
+    ? evaluateGroupPass(strengthsForAvg, requiredMpa)
+    : avg !== null && targetMpa != null && testAge >= 28
       ? avg >= targetMpa && (minCubeStr == null || minCubeStr >= targetMpa - 4)
       : avg !== null && requiredMpa !== null
         ? avg >= requiredMpa
@@ -312,7 +339,6 @@ function ReportPage({
       cubeId: "",
       dateTested: "",
       actualAge: null,
-      effectiveAge: null,
       length: "",
       width: "",
       height: "",
@@ -344,20 +370,9 @@ function ReportPage({
       render: (_, row) => {
         if (row._padded) return "";
         const actualAge = row.actualAge as number | null;
-        const effectiveAge = row.effectiveAge as number;
+        if (actualAge !== null && actualAge !== undefined) return String(actualAge);
         const tf = row.testAgeFallback as number;
-        if (actualAge !== null && actualAge !== undefined) {
-          return (
-            <span
-              title={effectiveAge !== actualAge ? `Evaluated as ${effectiveAge}-day band` : undefined}
-              style={effectiveAge !== actualAge ? { color: "#c2410c" } : {}}
-            >
-              {actualAge}
-              {effectiveAge !== actualAge ? `→${effectiveAge}` : ""}
-            </span>
-          );
-        }
-        return String(tf);
+        return tf > 0 ? String(tf) : "—";
       },
     },
     { header: "Length (mm)", field: "length", type: "number", decimals: 0, align: "right" },
@@ -429,38 +444,10 @@ function ReportPage({
         width: "210mm",
       }}
     >
-      <LabReportHeader lang={lang} />
+      <LabReportHeader lang={lang} refNo={refNo} reportDateStr={reportDateStr} />
 
-      {/* Top Reference Box */}
-      <div className="flex justify-end mb-3">
-        <table
-          className="report-ref-table border-collapse border border-black text-center"
-          style={{ minWidth: "160px" }}
-        >
-          <tbody>
-            <tr>
-              <td className="border border-black px-3 py-1 font-bold text-xs">{sig.ref}</td>
-            </tr>
-            <tr>
-              <td className="border border-black px-3 py-2 font-bold text-sm">{refNo}</td>
-            </tr>
-            <tr>
-              <td className="border border-black px-3 py-1 font-bold text-xs">{sig.dateLbl}</td>
-            </tr>
-            <tr>
-              <td className="border border-black px-3 py-1 text-xs">{reportDateStr}</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-
-      {/* Title */}
-      <div className="text-center font-bold text-base border-2 border-slate-900 py-2.5 mb-2 bg-slate-100">
-        {sig.labTitle}
-      </div>
-
-      {/* Subtitle — same band style as main title for print/screen parity */}
-      <div className="text-center font-bold text-[11px] border border-slate-900 py-1.5 mb-4 bg-slate-100">
+      {/* Test subtitle */}
+      <div className="text-center font-bold text-[11px] border border-gray-300 py-1.5 mb-4 bg-gray-50 text-gray-800">
         COMPRESSIVE STRENGTH OF CONCRETE CUBES TO BS 1881; PART 114 &amp; 116: 1983
       </div>
 
@@ -653,7 +640,12 @@ function ReportPage({
       <div className="text-xs border border-slate-400 rounded-sm p-2.5 mb-3 bg-slate-50/70 space-y-1.5">
         {requiredMpa !== null && targetMpa !== null && (
           <div className="font-semibold text-slate-800">
-            {testAge >= 28 ? (
+            {isAutoAgeFlow && reportActualAge != null ? (
+              <>
+                Required Strength at {reportActualAge} days ({agePct}% of {targetMpa} N/mm²):
+                <span className="text-blue-800 ml-1">{requiredMpa.toFixed(1)} N/mm²</span>
+              </>
+            ) : testAge >= 28 ? (
               <>
                 Acceptance (BS EN 12390-3 / 206): average ≥ {targetMpa.toFixed(1)} N/mm²; each cube ≥
                 {" "}{(targetMpa - 4).toFixed(1)} N/mm²
