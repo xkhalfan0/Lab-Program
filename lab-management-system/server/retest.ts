@@ -16,10 +16,13 @@ import {
   getAllTestTypes,
   getConcreteGroupsByDistribution,
   getDb,
+  getDistributionsBySample,
   getLabOrderItems,
   getSampleById,
   getSpecializedTestResultByDistribution,
+  getSpecializedTestResultsBySample,
   getTestResultByDistribution,
+  getTestResultBySample,
   notifyUsersByRole,
   samplesHasRetestColumns,
 } from "./db";
@@ -27,8 +30,14 @@ import { generateRetestSampleCode } from "./utils/codeGenerator";
 import { requireRole } from "./_core/requireRole";
 import { labOrderReceptionCreateInputSchema } from "./routers/orders";
 
-const ELIGIBLE_SAMPLE_STATUSES = ["qc_failed", "rejected"] as const;
-const ACTIVE_ORDER_STATUSES = ["pending", "distributed", "in_progress", "completed", "reviewed"] as const;
+/** Sample statuses that block retest registration. */
+const EXCLUDED_SAMPLE_STATUSES = ["revision_requested"] as const;
+/** Lab-order statuses that mean work is still open on the original sample. */
+const BLOCKING_ORDER_STATUSES = ["pending", "distributed", "in_progress"] as const;
+/** QC/manager rejected the workflow — always eligible for retest. */
+const WORKFLOW_FAILED_SAMPLE_STATUSES = ["qc_failed", "rejected"] as const;
+/** QC signed off on the report — eligible only when at least one test failed spec. */
+const FINALIZED_SAMPLE_STATUSES = ["qc_passed", "clearance_issued"] as const;
 
 export const retestReasonSchema = z.enum(["failed_spec", "damaged_sample", "client_request"]);
 
@@ -67,26 +76,104 @@ function isRootSample(sample: { originalSampleId?: number | null; sampleCode: st
   return sample.originalSampleId == null && !/-R\d+$/i.test(sample.sampleCode);
 }
 
-export function assertRetestEligible(
-  root: { status: string; originalSampleId?: number | null; sampleCode: string },
+async function sampleHasFailedOutcome(sampleId: number): Promise<boolean> {
+  const orders = await getLabOrdersBySampleId(sampleId);
+  const latestOrder = orders[0];
+  if (latestOrder) {
+    const items = await getLabOrderItems(latestOrder.id);
+    for (const item of items) {
+      if (await isOrderItemFailed(item)) return true;
+    }
+  }
+
+  const dists = await getDistributionsBySample(sampleId);
+  for (const dist of dists) {
+    if (await isOrderItemFailed({ testTypeCode: dist.testType, distributionId: dist.id })) {
+      return true;
+    }
+  }
+
+  const legacy = await getTestResultBySample(sampleId);
+  if (legacy.some((r) => r.complianceStatus === "fail")) return true;
+
+  const specialized = await getSpecializedTestResultsBySample(sampleId);
+  if (specialized.some((r) => (r as { overallResult?: string }).overallResult === "fail")) {
+    return true;
+  }
+
+  return false;
+}
+
+export async function isRetestEligibleSample(
+  root: {
+    id: number;
+    status: string;
+    originalSampleId?: number | null;
+    sampleCode: string;
+    deletedAt?: Date | null;
+  },
+  orders: { status: string }[]
+): Promise<boolean> {
+  if (!isRootSample(root)) return false;
+  if (EXCLUDED_SAMPLE_STATUSES.includes(root.status as (typeof EXCLUDED_SAMPLE_STATUSES)[number])) {
+    return false;
+  }
+  if (root.deletedAt) return false;
+  if (
+    orders.some((o) =>
+      BLOCKING_ORDER_STATUSES.includes(o.status as (typeof BLOCKING_ORDER_STATUSES)[number])
+    )
+  ) {
+    return false;
+  }
+  if (
+    WORKFLOW_FAILED_SAMPLE_STATUSES.includes(
+      root.status as (typeof WORKFLOW_FAILED_SAMPLE_STATUSES)[number]
+    )
+  ) {
+    return true;
+  }
+  if (FINALIZED_SAMPLE_STATUSES.includes(root.status as (typeof FINALIZED_SAMPLE_STATUSES)[number])) {
+    return sampleHasFailedOutcome(root.id);
+  }
+  return false;
+}
+
+export async function assertRetestEligible(
+  root: {
+    id: number;
+    status: string;
+    originalSampleId?: number | null;
+    sampleCode: string;
+    deletedAt?: Date | null;
+  },
   orders: { status: string }[]
 ) {
   if (!isRootSample(root)) {
     throw new TRPCError({ code: "BAD_REQUEST", message: "Only root samples can be retested" });
   }
-  if (!ELIGIBLE_SAMPLE_STATUSES.includes(root.status as (typeof ELIGIBLE_SAMPLE_STATUSES)[number])) {
+  if (EXCLUDED_SAMPLE_STATUSES.includes(root.status as (typeof EXCLUDED_SAMPLE_STATUSES)[number])) {
     throw new TRPCError({
       code: "BAD_REQUEST",
-      message: "Retest requires a finally failed sample (qc_failed or rejected)",
+      message: "Cannot retest while a revision is in progress",
     });
   }
-  const active = orders.some((o) =>
-    ACTIVE_ORDER_STATUSES.includes(o.status as (typeof ACTIVE_ORDER_STATUSES)[number])
-  );
-  if (active) {
+  if (
+    orders.some((o) =>
+      BLOCKING_ORDER_STATUSES.includes(o.status as (typeof BLOCKING_ORDER_STATUSES)[number])
+    )
+  ) {
     throw new TRPCError({
       code: "BAD_REQUEST",
-      message: "Cannot retest while an order is still active on this sample",
+      message: "Cannot retest while an order is still in progress on this sample",
+    });
+  }
+  const eligible = await isRetestEligibleSample(root, orders);
+  if (!eligible) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message:
+        "Retest requires a finalized sample with a failed test result (QC-approved fail or rejected workflow)",
     });
   }
 }
@@ -150,14 +237,8 @@ export async function searchRetestEligible(query: string) {
 
   const results = [];
   for (const row of rows) {
-    if (!ELIGIBLE_SAMPLE_STATUSES.includes(row.status as (typeof ELIGIBLE_SAMPLE_STATUSES)[number])) {
-      continue;
-    }
     const orders = await getLabOrdersBySampleId(row.id);
-    if (orders.some((o) => ACTIVE_ORDER_STATUSES.includes(o.status as (typeof ACTIVE_ORDER_STATUSES)[number]))) {
-      continue;
-    }
-    if (row.deletedAt) continue;
+    if (!(await isRetestEligibleSample(row, orders))) continue;
 
     const retestCount = await db
       .select({ c: sql<number>`COUNT(*)` })
@@ -185,33 +266,27 @@ export async function getRetestSource(rootSampleId: number) {
   if (!root) throw new TRPCError({ code: "NOT_FOUND", message: "Sample not found" });
 
   const orders = await getLabOrdersBySampleId(rootSampleId);
-  assertRetestEligible(root, orders);
+  await assertRetestEligible(root, orders);
 
   const latestOrder = orders[0];
-  if (!latestOrder) {
-    throw new TRPCError({ code: "BAD_REQUEST", message: "No lab order found for this sample" });
+  const allTestTypes = await getAllTestTypes();
+  let tests: Awaited<ReturnType<typeof buildRetestTestsFromOrder>>["tests"] = [];
+  let defaultPriority: "low" | "normal" | "high" | "urgent" = "normal";
+
+  if (latestOrder) {
+    const built = await buildRetestTestsFromOrder(latestOrder.id, allTestTypes);
+    tests = built.tests;
+    defaultPriority = (latestOrder.priority as typeof defaultPriority) ?? "normal";
   }
 
-  const items = await getLabOrderItems(latestOrder.id);
-  const allTestTypes = await getAllTestTypes();
+  if (tests.length === 0) {
+    const built = await buildRetestTestsFromDistributions(rootSampleId, allTestTypes);
+    tests = built.tests;
+  }
 
-  const tests = await Promise.all(
-    items.map(async (item) => {
-      const tt = allTestTypes.find((t) => t.id === item.testTypeId);
-      const isFailed = await isOrderItemFailed(item);
-      return {
-        testTypeId: item.testTypeId,
-        testTypeCode: item.testTypeCode,
-        testTypeName: item.testTypeName,
-        formTemplate: item.formTemplate ?? tt?.formTemplate ?? null,
-        testSubType: item.testSubType,
-        quantity: item.quantity,
-        unitPrice: Number(tt?.unitPrice ?? item.unitPrice ?? 0),
-        isFailed,
-        sourceOrderItemId: item.id,
-      };
-    })
-  );
+  if (tests.length === 0) {
+    throw new TRPCError({ code: "BAD_REQUEST", message: "No tests found on the original sample" });
+  }
 
   return {
     rootSampleId: root.id,
@@ -229,9 +304,62 @@ export async function getRetestSource(rootSampleId: number) {
       castingDate: root.castingDate,
       nominalCubeSize: root.nominalCubeSize,
     },
-    defaultPriority: latestOrder.priority ?? "normal",
+    defaultPriority,
     tests,
   };
+}
+
+async function buildRetestTestsFromOrder(
+  orderId: number,
+  allTestTypes: Awaited<ReturnType<typeof getAllTestTypes>>
+) {
+  const items = await getLabOrderItems(orderId);
+  const tests = await Promise.all(
+    items.map(async (item) => {
+      const tt = allTestTypes.find((t) => t.id === item.testTypeId);
+      const isFailed = await isOrderItemFailed(item);
+      return {
+        testTypeId: item.testTypeId,
+        testTypeCode: item.testTypeCode,
+        testTypeName: item.testTypeName,
+        formTemplate: item.formTemplate ?? tt?.formTemplate ?? null,
+        testSubType: item.testSubType,
+        quantity: item.quantity,
+        unitPrice: Number(tt?.unitPrice ?? item.unitPrice ?? 0),
+        isFailed,
+        sourceOrderItemId: item.id,
+      };
+    })
+  );
+  return { tests };
+}
+
+async function buildRetestTestsFromDistributions(
+  sampleId: number,
+  allTestTypes: Awaited<ReturnType<typeof getAllTestTypes>>
+) {
+  const dists = await getDistributionsBySample(sampleId);
+  const tests = await Promise.all(
+    dists.map(async (dist) => {
+      const tt = allTestTypes.find((t) => t.code === dist.testType);
+      const isFailed = await isOrderItemFailed({
+        testTypeCode: dist.testType,
+        distributionId: dist.id,
+      });
+      return {
+        testTypeId: tt?.id ?? 0,
+        testTypeCode: dist.testType,
+        testTypeName: dist.testName ?? dist.testType,
+        formTemplate: tt?.formTemplate ?? null,
+        testSubType: null as string | null,
+        quantity: dist.quantity ?? 1,
+        unitPrice: Number(tt?.unitPrice ?? dist.unitPrice ?? 0),
+        isFailed,
+        sourceOrderItemId: null as number | null,
+      };
+    })
+  );
+  return { tests: tests.filter((t) => t.testTypeId > 0) };
 }
 
 export async function runRetestCreate(
@@ -245,7 +373,7 @@ export async function runRetestCreate(
   if (!root) throw new TRPCError({ code: "NOT_FOUND", message: "Root sample not found" });
 
   const orders = await getLabOrdersBySampleId(input.rootSampleId);
-  assertRetestEligible(root, orders);
+  await assertRetestEligible(root, orders);
 
   if (!input.retestReason) {
     throw new TRPCError({ code: "BAD_REQUEST", message: "Retest reason is required" });

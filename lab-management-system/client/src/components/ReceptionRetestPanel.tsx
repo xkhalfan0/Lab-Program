@@ -45,7 +45,12 @@ export function ReceptionRetestPanel({ onSuccess, onCancel }: Props) {
   const [retestReasonNotes, setRetestReasonNotes] = useState("");
   const [nominalCubeSize, setNominalCubeSize] = useState("150mm");
 
-  const { data: searchResults, isFetching: searching } = trpc.samples.searchRetestEligible.useQuery(
+  const {
+    data: searchResults,
+    isFetching: searching,
+    isError: searchError,
+    error: searchErrorDetail,
+  } = trpc.samples.searchRetestEligible.useQuery(
     { query: searchQ },
     { enabled: searchQ.trim().length >= 2 }
   );
@@ -162,6 +167,9 @@ export function ReceptionRetestPanel({ onSuccess, onCancel }: Props) {
             />
           </div>
           {searching && <p className="text-xs text-muted-foreground">{isAr ? "جاري البحث..." : "Searching..."}</p>}
+          {searchError && (
+            <p className="text-xs text-destructive">{searchErrorDetail?.message}</p>
+          )}
           {searchResults && searchResults.length > 0 && !rootId && (
             <div className="border rounded-lg divide-y max-h-40 overflow-y-auto">
               {searchResults.map((r) => (
