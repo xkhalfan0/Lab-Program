@@ -1,0 +1,456 @@
+# =============================================================================
+# LAB MANAGEMENT SYSTEM — WEBSITE TREE & FLOW
+# File: website-tree-flow.csi
+# Format: CSI (Context / Structure / Interaction)
+# Generated: 2026-06-04
+# Project: lab-management-system
+# Stack: React 19 + Vite + Tailwind + Express + tRPC + Drizzle + MySQL
+# =============================================================================
+
+
+# =============================================================================
+# SECTION 1 — PROJECT DIRECTORY TREE (high level)
+# =============================================================================
+
+Lab-Program/
+└── lab-management-system/
+    ├── client/                          # Frontend (React SPA)
+    │   ├── src/
+    │   │   ├── App.tsx                  # All routes + role guards
+    │   │   ├── _core/                   # Auth hooks, session
+    │   │   ├── components/
+    │   │   │   ├── DashboardLayout.tsx  # Sidebar nav (role/permission based)
+    │   │   │   ├── PrintHeader.tsx      # Standard print header
+    │   │   │   ├── reports/             # FlexibleResultsTable, etc.
+    │   │   │   └── ui/                  # shadcn components
+    │   │   ├── contexts/                # Language, Theme
+    │   │   ├── lib/                     # PDF, batch helpers, specs
+    │   │   └── pages/
+    │   │       ├── Login.tsx
+    │   │       ├── Reception.tsx        # Step 1: create sample + order
+    │   │       ├── Distribution.tsx     # Step 2: assign technician
+    │   │       ├── Technician.tsx       # Step 3: run tests
+    │   │       ├── ManagerReview.tsx    # Step 4: supervisor review
+    │   │       ├── QCReview.tsx         # Step 5: QC approval
+    │   │       ├── ClearancePage.tsx    # Step 6: payment + certificate
+    │   │       ├── ConcreteTest.tsx     # CONC_CUBE tech form (BS 1881)
+    │   │       ├── ConcreteReport.tsx   # CONC_CUBE print report
+    │   │       ├── BatchOverview.tsx    # Multi-test batch hub
+    │   │       ├── BatchReport.tsx      # Batch combined report
+    │   │       ├── OrderReport.tsx      # Unified order report
+    │   │       ├── SampleDetail.tsx
+    │   │       ├── AdminDashboard.tsx
+    │   │       ├── Analytics.tsx
+    │   │       ├── tests/
+    │   │       │   ├── TestRouter.tsx   # Routes dist → correct form
+    │   │       │   ├── SpecializedTestReport.tsx
+    │   │       │   ├── ConcreteCubes.tsx, ConcreteCore.tsx, ...
+    │   │       │   └── [30+ test form pages]
+    │   │       └── sector/              # External sector portal
+    │   │           ├── SectorLogin.tsx
+    │   │           ├── SectorInbox.tsx
+    │   │           ├── SectorSamples.tsx
+    │   │           ├── SectorResults.tsx
+    │   │           └── SectorClearances.tsx
+    │   └── index.html
+    │
+    ├── server/                          # Backend (Express + tRPC)
+    │   ├── routers.ts                   # Main appRouter (all API namespaces)
+    │   ├── routers/
+    │   │   ├── orders.ts                # Reception order create
+    │   │   ├── sector.ts                # Sector portal API
+    │   │   ├── dashboard.ts
+    │   │   └── deletion.ts
+    │   ├── concreteCubeGroups.ts        # Auto-create cube groups at distribute
+    │   ├── db.ts                        # Drizzle queries
+    │   └── _core/                       # Auth, cookies, trpc setup
+    │
+    ├── shared/                          # Shared client + server logic
+    │   ├── concreteCubeBs1881.ts        # Age factors, strength calc
+    │   └── concreteCubeReception.ts     # Reception plan (cube size/count)
+    │
+    └── drizzle/
+        └── schema.ts                    # MySQL schema
+
+
+# =============================================================================
+# SECTION 2 — ROUTE TREE (URL → Page → Access)
+# =============================================================================
+
+ROUTES
+│
+├── PUBLIC
+│   ├── /login                           → Login
+│   └── /sector/login                    → SectorLogin
+│
+├── AUTH REDIRECT
+│   └── /                                  → SmartHomeRedirect (role-based landing)
+│
+├── LAB STAFF (authenticated; some role-restricted)
+│   │
+│   ├── DASHBOARDS
+│   │   ├── /admin-dashboard               → AdminDashboard
+│   │   ├── /supervisor-dashboard          → SupervisorDashboard
+│   │   └── /manager-dashboard             → ManagerDashboard
+│   │
+│   ├── WORKFLOW (main pipeline)
+│   │   ├── /reception                     → Reception          [admin, reception, lab_manager]
+│   │   ├── /distribution                  → Distribution       [admin, lab_manager]
+│   │   ├── /technician                    → Technician         [admin, technician, lab_manager]
+│   │   ├── /manager-review                → ManagerReview      [admin, sample_manager, lab_manager]
+│   │   ├── /qc-review                     → QCReview           [admin, qc_inspector, lab_manager]
+│   │   └── /clearance                     → ClearancePage      [admin, lab_manager, sample_manager, accountant]
+│   │
+│   ├── SAMPLES & ORDERS
+│   │   ├── /sample/:id                    → SampleDetail
+│   │   ├── /samples/:id                   → SampleDetail (alias)
+│   │   ├── /order/:id                     → OrderReport
+│   │   └── /order-report/:orderId         → OrderReport
+│   │
+│   ├── TECHNICIAN TEST FORMS
+│   │   ├── /test/:distributionId          → TestRouter (generic → form by test code)
+│   │   ├── /concrete-test/:distributionId → ConcreteTest (CONC_CUBE BS 1881 flow)
+│   │   └── /batch/:sampleId/:orderId      → BatchOverview (multi-test batch)
+│   │
+│   ├── REPORTS (often opened in new tab)
+│   │   ├── /test-report/:distributionId   → SpecializedTestReport (most tests)
+│   │   ├── /concrete-report/:distributionId → ConcreteReport (CONC_CUBE only)
+│   │   ├── /batch-report/:sampleId/:orderId → BatchReport
+│   │   ├── /batch-report/:batchId         → BatchBlockReport
+│   │   ├── /print-receipt/:id             → PrintReceipt
+│   │   └── /print-certificate/:id         → PrintCertificate
+│   │
+│   ├── ADMIN & SETTINGS
+│   │   ├── /users                         → UserManagement       [admin]
+│   │   ├── /tests-management              → TestTypesManagement  [admin]
+│   │   ├── /admin/deletion-requests       → AdminDeletionRequests
+│   │   └── /admin/deletion-log            → DeletionLog
+│   │
+│   └── UTILITIES
+│       ├── /notifications                 → Notifications
+│       ├── /analytics                     → Analytics
+│       ├── /monthly-report                → MonthlyReport
+│       ├── /clearance-archive             → ClearanceArchive
+│       └── /change-password               → ChangePassword
+│
+└── SECTOR PORTAL (separate token: sector_token)
+    ├── /sector                            → redirect → /sector/inbox or /sector/login
+    ├── /sector/inbox                      → SectorInbox
+    ├── /sector/dashboard                  → SectorDashboard
+    ├── /sector/samples                    → SectorSamples
+    ├── /sector/results                    → SectorResults
+    ├── /sector/clearances                 → SectorClearances
+    └── /sector/notifications              → SectorNotifications
+
+
+# =============================================================================
+# SECTION 3 — ROLE → DEFAULT HOME PAGE
+# =============================================================================
+
+ROLE_HOME
+  admin           → /admin-dashboard
+  reception       → /reception
+  lab_manager     → /distribution
+  technician      → /technician
+  sample_manager  → /manager-review
+  qc_inspector    → /qc-review
+  accountant      → /clearance
+  user            → /admin-dashboard
+
+SIDEBAR_MENU (DashboardLayout — permission-gated)
+  Admin Dashboard      /admin-dashboard
+  Supervisor Dashboard /supervisor-dashboard
+  Manager Dashboard    /manager-dashboard
+  Reception            /reception
+  Distribution         /distribution
+  My Assignments       /technician
+  Manager Review       /manager-review
+  QC Review            /qc-review
+  Clearance            /clearance
+  Clearance Archive    /clearance-archive
+  Users                /users
+  Deletion Requests    /admin/deletion-requests
+  Test Types           /tests-management
+  Analytics            /analytics
+  Monthly Report       /monthly-report
+
+
+# =============================================================================
+# SECTION 4 — MAIN BUSINESS FLOW (sample lifecycle)
+# =============================================================================
+
+FLOW: SAMPLE_LIFECYCLE
+──────────────────────────────────────────────────────────────────────────────
+
+  [CONTRACTOR brings sample]
+           │
+           ▼
+  ┌─────────────────────┐
+  │ 1. RECEPTION        │  /reception
+  │ Role: reception     │
+  │ Actions:            │
+  │  • Register sample  │
+  │  • Select tests     │
+  │  • Set qty, dates   │
+  │  • CONC_CUBE: size  │
+  │    + min 3 cubes    │
+  │  • Create LabOrder  │
+  └─────────┬───────────┘
+            │ status: received → pending
+            ▼
+  ┌─────────────────────┐
+  │ 2. DISTRIBUTION     │  /distribution
+  │ Role: lab_manager   │
+  │ Actions:            │
+  │  • Assign technician│
+  │  • Creates          │
+  │    Distribution per │
+  │    test in order    │
+  │  • CONC_CUBE: auto  │
+  │    cube groups      │
+  └─────────┬───────────┘
+            │ status: pending → distributed
+            ▼
+  ┌─────────────────────┐
+  │ 3. TECHNICIAN       │  /technician
+  │ Role: technician    │
+  │ Actions:            │
+  │  • Open assignment  │
+  │  • Enter results    │
+  │  • Submit test      │
+  └─────────┬───────────┘
+            │
+            ├─ Single test ──► /test/:distId  OR  /concrete-test/:distId (CONC_CUBE)
+            ├─ Batch order ──► /batch/:sampleId/:orderId
+            │
+            │ status: distributed → in_progress → completed
+            ▼
+  ┌─────────────────────┐
+  │ 4. MANAGER REVIEW   │  /manager-review
+  │ Role: sample_manager│
+  │ Actions:            │
+  │  • Review order     │
+  │  • Approve / reject │
+  │  • Open report      │
+  └─────────┬───────────┘
+            │ status: completed → reviewed
+            ▼
+  ┌─────────────────────┐
+  │ 5. QC REVIEW        │  /qc-review
+  │ Role: qc_inspector  │
+  │ Actions:            │
+  │  • Final QC check   │
+  │  • Sign off         │
+  └─────────┬───────────┘
+            │ status: reviewed → qc_passed / qc_failed
+            ▼
+  ┌─────────────────────┐
+  │ 6. CLEARANCE        │  /clearance
+  │ Role: accountant    │
+  │ Actions:            │
+  │  • Payment order    │
+  │  • Issue certificate│
+  │  • Print PDF        │
+  └─────────┬───────────┘
+            │ status: cleared
+            ▼
+  [Certificate to contractor]
+            │
+            ▼
+  ┌─────────────────────┐
+  │ SECTOR PORTAL       │  /sector/*
+  │ Role: sector user   │
+  │ Actions:            │
+  │  • View samples     │
+  │  • Download certs   │
+  │  • Notifications    │
+  └─────────────────────┘
+
+
+# =============================================================================
+# SECTION 5 — TECHNICIAN ROUTING (distribution → test form)
+# =============================================================================
+
+TECHNICIAN_START_TEST
+  Technician clicks "Start Test" on assignment card
+           │
+           ├── testType === CONC_CUBE
+           │       └── /concrete-test/:distributionId  → ConcreteTest.tsx
+           │           (BS 1881: f'c, test date, load, cube ID, mass)
+           │
+           ├── batch (multiple tests same order)
+           │       └── /batch/:sampleId/:orderId  → BatchOverview.tsx
+           │           └── each test → /test/:distributionId
+           │
+           └── all other tests
+                   └── /test/:distributionId  → TestRouter.tsx
+                       └── resolves by testType code → form component
+
+
+TEST_CODE_TO_FORM (TestRouter CODE_TO_COMPONENT — selected)
+  CONC_CUBE          → ConcreteCubes (legacy) | ConcreteTest (new flow via Technician)
+  CONC_CORE          → ConcreteCore
+  CONC_BLOCK         → ConcreteBlocks
+  CONC_FOAM          → ConcreteFoam
+  CONC_BEAM          → ConcreteBeam
+  SOIL_PROCTOR       → SoilProctor
+  SOIL_CBR           → SoilCBR
+  SOIL_ATTERBERG     → SoilAtterberg
+  STEEL_REBAR        → SteelRebar
+  ASPH_MARSHALL      → AsphaltMarshall
+  ASPH_HOTBIN        → AsphaltHotBin
+  AGG_SIEVE          → SieveAggBlend
+  AGG_LA             → AggLAAbrasion
+  ... (32+ official test codes in TestRouter.tsx)
+
+
+# =============================================================================
+# SECTION 6 — REPORT ROUTING (after test complete)
+# =============================================================================
+
+REPORT_ROUTING
+  Manager / Technician clicks "View Report"
+           │
+           ├── CONC_CUBE
+           │       └── /concrete-report/:distributionId  → ConcreteReport.tsx
+           │
+           ├── specialized test (formData in specializedTestResults)
+           │       └── /test-report/:distributionId  → SpecializedTestReport.tsx
+           │
+           ├── batch order
+           │       └── /batch-report/:sampleId/:orderId  → BatchReport.tsx
+           │
+           └── full order summary
+                   └── /order-report/:orderId  → OrderReport.tsx
+
+
+# =============================================================================
+# SECTION 7 — CONC_CUBE SPECIAL FLOW (current implementation)
+# =============================================================================
+
+CONC_CUBE_FLOW
+  RECEPTION
+    • Select CONC_CUBE test
+    • Quantity inline (min 3 cubes)
+    • Nominal cube size: 100mm / 150mm
+    • Casting date on sample
+    • Plan stored: testSubType = CONC_CUBE_PLAN:{"v":2,"cubeSizeMm":150,"cubeCount":N}
+           │
+           ▼
+  DISTRIBUTION
+    • ensureConcreteGroupsFromReceptionPlan()
+    • Creates 1 concrete_test_group (testAge=0)
+    • Creates N placeholder concrete_cubes
+           │
+           ▼
+  TECHNICIAN  /concrete-test/:distributionId
+    • Locked: casting date, cube size, cube count
+    • Enters: f'c (design strength), test date, per-cube load/mass/ID/fracture
+    • Age auto-calculated: test date − casting date
+    • BS 1881 factor applied for pass/fail
+    • Submit group → manager review
+           │
+           ▼
+  REPORT  /concrete-report/:distributionId
+    • BS 1881 formatted table
+    • Exact test age (days) in results table
+    • Required strength from actual age factor
+
+
+# =============================================================================
+# SECTION 8 — API TREE (tRPC appRouter namespaces)
+# =============================================================================
+
+API_TRPC
+  auth                 login, logout, me, changePassword
+  users                CRUD, permissions
+  samples              create, list, detail, history, status
+  distributions        create, assign, get, list by tech/sample/batch
+  orders               reception create (multi-test orders)
+  testResults          submit, get, approve
+  specializedTests     save formData, submit, get
+  concrete             groups, cubes, saveCube, submitGroup
+  reviews              manager + QC decisions
+  clearance            requests, payment, certificate
+  certificates         issue, PDF
+  testTypes            catalog CRUD
+  contractors          CRUD
+  contracts            CRUD
+  analytics            stats, charts
+  reports              monthly, export
+  notifications        list, mark read
+  sectors              sector admin
+  testDependencies     prerequisite rules
+  deletion             soft-delete requests
+  dashboard            KPIs
+  audit                audit log
+  sector               sector portal (separate auth)
+
+
+# =============================================================================
+# SECTION 9 — DATA ENTITY RELATIONSHIPS (simplified)
+# =============================================================================
+
+ENTITIES
+  Contract
+    └── Sample (sampleCode: LAB-2026-XXXX)
+          ├── LabOrder (orderCode: ORD-2026-XXXX)
+          │     └── LabOrderItem[] (one per selected test)
+          │
+          ├── Distribution[] (one per test after distribute)
+          │     ├── specializedTestResult (most tests)
+          │     ├── concreteTestGroup + concreteCubes (CONC_CUBE)
+          │     └── testResult (legacy bridge)
+          │
+          ├── Reviews[] (manager, QC)
+          ├── ClearanceRequest
+          ├── Certificate
+          └── SampleHistory[]
+
+
+# =============================================================================
+# SECTION 10 — NAVIGATION FLOW DIAGRAM (ASCII)
+# =============================================================================
+
+                    ┌──────────┐
+                    │  /login  │
+                    └────┬─────┘
+                         │ auth OK
+                         ▼
+              ┌──────────────────────┐
+              │  /  (role redirect)    │
+              └──────────┬───────────┘
+                         │
+     ┌───────────────────┼───────────────────┐
+     │                   │                   │
+     ▼                   ▼                   ▼
+/reception        /distribution        /technician
+     │                   │                   │
+     │ create order      │ assign tech       │ enter results
+     └─────────┬─────────┘                   │
+               │                               │
+               └──────────► distributions ◄───┘
+                                    │
+                    ┌───────────────┼───────────────┐
+                    ▼               ▼               ▼
+            /concrete-test    /test/:id      /batch/:sid/:oid
+                    │               │               │
+                    └───────────────┴───────────────┘
+                                    │ submit
+                                    ▼
+                            /manager-review
+                                    │ approve
+                                    ▼
+                              /qc-review
+                                    │ pass
+                                    ▼
+                               /clearance
+                                    │
+                    ┌───────────────┴───────────────┐
+                    ▼                               ▼
+          /print-certificate/:id          /sector/clearances
+
+
+# =============================================================================
+# END OF FILE
+# =============================================================================

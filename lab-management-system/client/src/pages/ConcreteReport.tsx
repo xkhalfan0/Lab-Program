@@ -2,10 +2,10 @@ import { useParams } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { useRef, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Printer, X, Download, Loader2 } from "lucide-react";
+import { Printer, X, Download, Loader2, CheckCircle, XCircle } from "lucide-react";
 import { generatePdfFromElement } from "@/lib/pdf";
+import { formatCalendarDate } from "@/lib/dateFormat";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { FlexibleResultsTable, type Column } from "@/components/reports/FlexibleResultsTable";
 import {
   calcActualAgeDays,
   resolveBs1881AgeFactor,
@@ -81,26 +81,27 @@ function fmtDensity(val: string | null | undefined): string {
 }
 
 function fmtDate(d: Date | string | null | undefined): string {
-  if (!d) return "";
-  const dt = new Date(d);
-  if (isNaN(dt.getTime())) return String(d);
-  const day = String(dt.getDate()).padStart(2, '0');
-  const month = String(dt.getMonth() + 1).padStart(2, '0');
-  const year = dt.getFullYear();
-  return `${day}/${month}/${year}`;
+  return formatCalendarDate(d) === "—" ? "" : formatCalendarDate(d);
 }
 
-function fmtDateTime(d: Date | string | null | undefined, lang: "en" | "ar"): string {
-  if (!d) return "";
-  const dt = new Date(d);
-  if (isNaN(dt.getTime())) return "";
-  return dt.toLocaleString(lang === "ar" ? "ar-AE" : "en-GB", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+function SignatureBox({
+  label,
+  name,
+  date,
+}: {
+  label: string;
+  name?: string | null;
+  date?: string;
+}) {
+  return (
+    <td className="signature-column align-top text-center border border-gray-300 px-2 py-2 text-xs">
+      <p className="text-[10px] font-bold text-gray-700 uppercase mb-1">{label}</p>
+      <div className="signature-line border-b border-gray-800 min-h-[28px] mb-1 mx-1 flex items-end justify-center pb-0.5">
+        {name ? <span className="text-gray-700 text-xs font-semibold">{name}</span> : null}
+      </div>
+      {date ? <p className="text-gray-400 text-[9px] mt-1">{date}</p> : null}
+    </td>
+  );
 }
 
 // ─── Concrete compliance helpers (age-based) ────────────────────────────────────────────
@@ -178,12 +179,12 @@ function LabReportHeader({
           </div>
         </div>
       </div>
-      <div className="bg-gray-900 text-white text-center py-2 mt-3 mb-1">
+      <div className="bg-gray-900 text-white text-center py-2 mt-3 mb-4">
         <p className="text-[14px] font-bold">
-          {ar ? "تقرير فحص ضغط المكعبات الخرسانية" : "Laboratory Test Report"}
+          {ar ? "تقرير نتيجة الفحص" : "Laboratory Test Report"}
         </p>
         <p className="text-[10px] text-gray-300 mt-0.5 tracking-wider uppercase">
-          {ar ? "Laboratory Test Report" : "تقرير فحص ضغط المكعبات الخرسانية"}
+          {ar ? "Laboratory Test Report" : "تقرير نتيجة الفحص"}
         </p>
       </div>
     </header>
@@ -194,6 +195,7 @@ function LabReportHeader({
 function ReportPage({
   group,
   refNo,
+  distribution,
   castingDate: distCastingDate,
   testedByName,
   managerReviewedByName,
@@ -207,6 +209,7 @@ function ReportPage({
 }: {
   group: any;
   refNo: string;
+  distribution?: any;
   castingDate?: Date | string | null;
   testedByName?: string | null;
   managerReviewedByName?: string | null;
@@ -221,31 +224,6 @@ function ReportPage({
   const ar = lang === "ar";
   const userRemarks = getUserRemarksForReport(group.comments);
   const remarksDisplay = userRemarks || (ar ? "لا توجد ملاحظات إضافية" : "No additional remarks");
-  const sig = ar
-    ? {
-        tested: "أعدّ التقرير / الفحص",
-        reviewed: "راجع",
-        approved: "اعتمد",
-        roleT: "فني مختبر",
-        roleM: "مدير المختبر",
-        roleQ: "مسؤول الجودة",
-        dig: "تم التوقيع إلكترونياً في",
-        ref: "المرجع",
-        dateLbl: "التاريخ",
-        labTitle: "تقرير اختبار مختبري",
-      }
-    : {
-        tested: "Prepared / Tested By",
-        reviewed: "Reviewed By",
-        approved: "Approved By",
-        roleT: "Laboratory Technician",
-        roleM: "Laboratory Manager",
-        roleQ: "Quality Officer",
-        dig: "Digitally signed on",
-        ref: "Reference",
-        dateLbl: "Date",
-        labTitle: "LABORATORY TEST REPORT",
-      };
   const cubes: any[] = group.cubes ?? [];
   const avg = group.avgCompressiveStrength ? parseFloat(group.avgCompressiveStrength) : null;
   // Use minAcceptable from DB; fallback to extracting from classOfConcrete
@@ -312,8 +290,6 @@ function ReportPage({
     ? bs1881Summary.factorPct
     : getAgePctReport(testAge);
 
-  const withinSpec = cubesWithAge.filter(c => c.isPass && parseFloat(c.compressiveStrengthMpa ?? "0") > 0);
-  const outsideSpec = cubesWithAge.filter(c => c.isFail && parseFloat(c.compressiveStrengthMpa ?? "0") > 0);
   const strengthsForAvg = cubes.map(c => parseFloat(c.compressiveStrengthMpa ?? "0")).filter(v => v > 0);
   const minCubeStr = strengthsForAvg.length ? Math.min(...strengthsForAvg) : null;
   const avgPass = isAutoAgeFlow && avg !== null && requiredMpa != null
@@ -324,374 +300,337 @@ function ReportPage({
         ? avg >= requiredMpa
         : null;
 
-  const padCount = Math.max(0, 3 - cubes.length);
-  const concreteResultRows: Record<string, unknown>[] = [
-    ...cubesWithAge.map((cube, idx) => ({
-      ...cube,
-      testAgeFallback: testAge,
-      densityDisplay: fmtDensity(cube.densityKgM3),
-      avgStrengthCell:
-        idx === cubesWithAge.length - 1 && avg !== null ? (Math.round(avg * 2) / 2).toFixed(1) : "",
-    })),
-    ...Array.from({ length: padCount }, (_, i) => ({
-      _padded: true,
-      markNo: cubes.length + i + 1,
-      cubeId: "",
-      dateTested: "",
-      actualAge: null,
-      length: "",
-      width: "",
-      height: "",
-      massKg: "",
-      densityDisplay: "",
-      maxLoadKN: "",
-      compressiveStrengthMpa: "",
-      avgStrengthCell: "",
-      fractureType: "",
-      isFail: false,
-      isPass: false,
-      testAgeFallback: testAge,
-    })),
+  const isPassed = avgPass ?? group.complianceStatus === "pass";
+  const testDate = cubes.find(c => c.dateTested)?.dateTested ?? null;
+  const reportDateStr = formatCalendarDate(new Date());
+  const testedDisplay = (testedByName ?? group.testedBy ?? "").trim() || undefined;
+  const avgDisplay = avg !== null ? (Math.round(avg * 2) / 2).toFixed(1) : "—";
+  const requiredDisplay = requiredMpa != null ? requiredMpa.toFixed(1) : "—";
+  const ageDisplay =
+    reportActualAge != null
+      ? String(reportActualAge)
+      : testAge > 0
+        ? String(testAge)
+        : "—";
+
+  const summaryPairs: [string, string][] = [
+    [ar ? "متوسط المقاومة" : "Avg. Compressive Strength", avgDisplay !== "—" ? `${avgDisplay} N/mm²` : "—"],
+    [ar ? "المقاومة المطلوبة" : "Required Strength", requiredDisplay !== "—" ? `${requiredDisplay} N/mm²` : "—"],
+    [ar ? "عمر الاختبار" : "Test Age", ageDisplay !== "—" ? `${ageDisplay} ${ar ? "يوم" : "days"}` : "—"],
+    [ar ? "قوة التصميم (f'c)" : "Design Strength (f'c)", targetMpa != null ? `${targetMpa} N/mm²` : "—"],
+    [ar ? "فئة الخرسانة" : "Class of Concrete", group.classOfConcrete ?? "—"],
+    [ar ? "حجم المكعب الاسمي" : "Nominal Cube Size", group.nominalCubeSize ?? "150mm"],
+    [ar ? "تاريخ الصب" : "Date of Casting", fmtDate(distCastingDate ?? group.batchDateTime) || "—"],
+    [ar ? "عدد المكعبات" : "Number of Cubes", String(cubes.length || "—")],
   ];
 
-  const concreteCubeColumns: Column[] = [
-    { header: "Mark No.", field: "markNo", align: "center" },
-    { header: "Cube ID", field: "cubeId", align: "center", render: (v, row) => (row._padded ? "" : String(v ?? "")) },
-    {
-      header: "Date Tested",
-      field: "dateTested",
-      align: "center",
-      render: (v, row) => (row._padded ? "" : fmtDate(v as string)),
-    },
-    {
-      header: "Test Age, Days",
-      field: "actualAge",
-      align: "center",
-      render: (_, row) => {
-        if (row._padded) return "";
-        const actualAge = row.actualAge as number | null;
-        if (actualAge !== null && actualAge !== undefined) return String(actualAge);
-        const tf = row.testAgeFallback as number;
-        return tf > 0 ? String(tf) : "—";
-      },
-    },
-    { header: "Length (mm)", field: "length", type: "number", decimals: 0, align: "right" },
-    { header: "Width (mm)", field: "width", type: "number", decimals: 0, align: "right" },
-    { header: "Height (mm)", field: "height", type: "number", decimals: 0, align: "right" },
-    { header: "Mass (kg) sat.", field: "massKg", type: "number", decimals: 3, align: "right" },
-    { header: "Density (kg/m³) sat.", field: "densityDisplay", align: "right", render: (v, row) => (row._padded ? "" : String(v ?? "")) },
-    {
-      header: "Max. Load (kN)",
-      field: "maxLoadKN",
-      align: "right",
-      render: (v, row) => (row._padded ? "" : <span className="font-semibold">{fmt(v as string, 1)}</span>),
-    },
-    {
-      header: "Compressive Strength (N/mm²)",
-      field: "compressiveStrengthMpa",
-      align: "center",
-      render: (_, row) => {
-        if (row._padded) return "";
-        const strength = fmtStrength(row.compressiveStrengthMpa as string);
-        const isFail = row.isFail as boolean;
-        const isPass = row.isPass as boolean;
-        const s = parseFloat(String(row.compressiveStrengthMpa ?? "0"));
-        const cls = isFail && s > 0 ? "text-red-700" : isPass && s > 0 ? "text-green-700" : "";
-        return <span className={`font-bold ${cls}`}>{strength}</span>;
-      },
-    },
-    {
-      header: "Avg. Strength (N/mm²)",
-      field: "avgStrengthCell",
-      align: "center",
-      render: (v, row) => (row._padded ? "" : <span className="font-bold">{String(v ?? "")}</span>),
-    },
-    { header: "Fracture", field: "fractureType", align: "center", render: (v, row) => (row._padded ? "" : String(v ?? "")) },
+  const detailLeft: [string, string][] = [
+    [ar ? "نوع الفحص" : "Test Type", ar ? "مقاومة ضغط المكعبات الخرسانية" : "Compressive Strength of Concrete Cubes"],
+    [ar ? "المعيار" : "Standard", "BS 1881 Part 114 & 116: 1983"],
+    [ar ? "المقاول" : "Contractor", String(distribution?.contractorName ?? group.contractorName ?? "—")],
+    [ar ? "رقم العقد" : "Contract No.", String(distribution?.contractNumber ?? group.contractNo ?? "—")],
+    [ar ? "المورد" : "Source / Supplier", group.sourceSupplier ?? "—"],
   ];
-
-  const reportDateStr = new Date().toLocaleDateString(ar ? "ar-AE" : "en-GB");
-  const footer = ar
-    ? {
-        repro: "لا يجوز إعادة إنتاج هذا التقرير إلا كاملاً دون أي حذف أو تعديل.",
-        cert: "أجريت الاختبارات وفق إجراءات المختبر الموثقة والمعايير والطرق المعتمدة.",
-        page: "صفحة",
-        of: "من",
-        remarksTitle: "ملاحظات / تعليقات",
-        fractureNote: "نوع الكسر: SF — مقبول، USF — غير مقبول",
-        curingNote: "* أجريت المعالجة قبل تسليم العينات للمختبر خارج نطاق سيطرة المختبر.",
-      }
-    : {
-        repro: "This report may not be reproduced except in full without prior written approval from the laboratory.",
-        cert: "Testing was performed in accordance with the laboratory's documented procedures and applicable recognised methods and standards.",
-        page: "Page",
-        of: "of",
-        remarksTitle: "Comments / Remarks",
-        fractureNote: "Type of fracture: SF — Satisfactory, USF — Unsatisfactory",
-        curingNote: "* Curing before delivery to the laboratory was performed outside the control of the laboratory.",
-      };
-
-  const testedDisplay = (testedByName ?? group.testedBy ?? "").trim() || "—";
-  const managerDisplay = (managerReviewedByName ?? "").trim() || "—";
-  const qcDisplay = (qcReviewedByName ?? "").trim() || "—";
+  const detailRight: [string, string][] = [
+    [ar ? "اسم المشروع" : "Project Name", String(distribution?.contractName ?? group.projectName ?? "—")],
+    [ar ? "القطاع" : "Sector", distribution?.sector ? String(distribution.sector).replace("_", " ").toUpperCase() : "—"],
+    [ar ? "موقع العينة" : "Sample Location", String(distribution?.sampleLocation ?? group.location ?? "—")],
+    [ar ? "تاريخ الفحص" : "Test Date", fmtDate(testDate) || "—"],
+    [ar ? "تاريخ التقرير" : "Report Date", reportDateStr],
+  ];
+  const detailRows = Math.max(detailLeft.length, detailRight.length);
 
   return (
     <div
-      className="report-page bg-white p-8 print:p-6 flex flex-col"
+      className="report-page bg-white flex flex-col"
+      dir={ar ? "rtl" : "ltr"}
       style={{
-        fontFamily: "'IBM Plex Sans Arabic', Arial, Helvetica, sans-serif",
-        fontSize: "11px",
+        fontFamily: "Arial, sans-serif",
+        fontSize: "10px",
         minHeight: "297mm",
         width: "210mm",
+        padding: "15mm 15mm 20mm 15mm",
       }}
     >
-      <LabReportHeader lang={lang} refNo={refNo} reportDateStr={reportDateStr} />
-
-      {/* Test subtitle */}
-      <div className="text-center font-bold text-[11px] border border-gray-300 py-1.5 mb-4 bg-gray-50 text-gray-800">
-        COMPRESSIVE STRENGTH OF CONCRETE CUBES TO BS 1881; PART 114 &amp; 116: 1983
+      <div className="mb-5">
+        <LabReportHeader lang={lang} refNo={refNo} reportDateStr={reportDateStr} />
+        <div className={`flex ${ar ? "justify-start" : "justify-end"}`}>
+          <div
+            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-bold ${
+              isPassed
+                ? "bg-green-100 text-green-800 border border-green-300"
+                : "bg-red-100 text-red-800 border border-red-300"
+            }`}
+          >
+            {isPassed ? <CheckCircle size={14} /> : <XCircle size={14} />}
+            {isPassed
+              ? ar ? "مطابق — PASS" : "PASS — مطابق"
+              : ar ? "غير مطابق — FAIL" : "FAIL — غير مطابق"}
+          </div>
+        </div>
       </div>
 
-      {/* Project Info Grid */}
-      <table className="metadata-table w-full border-collapse border border-black mb-2 text-xs">
-        <tbody>
-          <tr>
-            <td className="border border-black px-2 py-1 w-1/4">CONTRACT NO:</td>
-            <td className="border border-black px-2 py-1 w-1/4 font-semibold">{group.contractNo ?? ""}</td>
-            <td className="border border-black px-2 py-1 w-1/4">REGION :</td>
-            <td className="border border-black px-2 py-1 w-1/4 font-semibold">{group.region ?? ""}</td>
-          </tr>
-          <tr>
-            <td className="border border-black px-2 py-1">PROJECT:</td>
-            <td className="border border-black px-2 py-1 font-semibold">{group.projectName ?? ""}</td>
-            <td className="border border-black px-2 py-1">CONSULTANT:</td>
-            <td className="border border-black px-2 py-1 font-semibold">{group.consultant ?? ""}</td>
-          </tr>
-          <tr>
-            <td className="border border-black px-2 py-1">CONTRACTOR:</td>
-            <td className="border border-black px-2 py-1 font-semibold">{group.contractorName ?? ""}</td>
-            <td className="border border-black px-2 py-1">CSC REF.</td>
-            <td className="border border-black px-2 py-1 font-semibold">{group.cscRef ?? ""}</td>
-          </tr>
-          <tr>
-            <td className="border border-black px-2 py-1">LOCATION:</td>
-            <td className="border border-black px-2 py-1 font-semibold">{group.location ?? ""}</td>
-            <td className="border border-black px-2 py-1">Place of Sampling</td>
-            <td className="border border-black px-2 py-1 font-semibold">{group.placeOfSampling ?? ""}</td>
-          </tr>
-        </tbody>
-      </table>
-
-      {/* Source/Batch/Slump row */}
-      <table className="metadata-table w-full border-collapse border border-black mb-2 text-xs">
-        <tbody>
-          <tr>
-            <td className="border border-black px-2 py-1 w-1/4">SOURCE/SUPPLIER :</td>
-            <td className="border border-black px-2 py-1 w-1/4 font-semibold">{group.sourceSupplier ?? ""}</td>
-            <td className="border border-black px-2 py-1 w-1/4 text-center">Date of Casting</td>
-            <td className="border border-black px-2 py-1 w-1/4 font-semibold">{fmtDate(distCastingDate ?? group.batchDateTime)}</td>
-          </tr>
-        </tbody>
-      </table>
-
-      {/* Class / Slump row */}
-      <table className="metadata-table w-full border-collapse border border-black mb-3 text-xs">
-        <tbody>
-          <tr>
-            <td className="border border-black px-2 py-1 w-2/3">
-              Class of Concrete: <strong>{group.classOfConcrete ?? ""}</strong>
-            </td>
-            <td className="border border-black px-2 py-1 w-1/3">
-              Max Agg. Size Site <strong>{group.maxAggSize ?? ""}</strong>
-            </td>
-          </tr>
-          <tr>
-            <td className="border border-black px-2 py-1">
-              Nominal Size of Cube: <strong>{group.nominalCubeSize ?? "150mm"}</strong>
-            </td>
-            <td className="border border-black px-2 py-1">
-              Method of compaction: <strong>{group.methodOfCompaction ?? "Using Compacting Bar"}</strong>
-            </td>
-          </tr>
-          <tr>
-            <td className="border border-black px-2 py-1">
-              Appearance of sample when received: <strong>{group.appearance ?? "Normal"}</strong>
-            </td>
-            <td className="border border-black px-2 py-1">
-              Date of Casting: <strong>{fmtDate(distCastingDate ?? group.dateSampled ?? group.batchDateTime)}</strong>
-            </td>
-          </tr>
-          <tr>
-            <td className="border border-black px-2 py-1">
-              Moisture condition at testing: <strong>{group.moistureCondition ?? "Saturated"}</strong>
-            </td>
-            <td className="border border-black px-2 py-1">
-              Sampled By: <strong>{group.sampledBy ?? "Contractor"}</strong>
-            </td>
-          </tr>
-          <tr>
-            <td className="border border-black px-2 py-1">
-              Removal of Fins (if present): <strong>{group.removalOfFins ?? "Using Steel File"}</strong>
-            </td>
-            <td className="border border-black px-2 py-1">
-              Curing Method*: <strong>{group.curingMethod ?? "BS 1881 Part 111: 1983"}</strong>
-            </td>
-          </tr>
-          <tr>
-            <td className="border border-black px-2 py-1">
-              Volume Determination: <strong>{group.volumeDetermination ?? "By Calculation"}</strong>
-            </td>
-            <td className="border border-black px-2 py-1">
-              Tested by: <strong>{group.testedBy ?? ""}</strong>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-
-      {/* Results */}
-      <div className="mb-3">
-        <FlexibleResultsTable
-          columns={concreteCubeColumns}
-          rows={concreteResultRows}
-          rowClassName={(row) => {
-            if (row._padded) return "";
-            const s = parseFloat(String(row.compressiveStrengthMpa ?? "0"));
-            if (row.isFail && s > 0) return "bg-red-50";
-            if (row.isPass && s > 0) return "bg-green-50";
-            return "";
-          }}
-        />
+      {/* Sample identification */}
+      <div className="border border-gray-200 rounded mb-5 overflow-hidden">
+        <table className="metadata-table w-full border-collapse text-xs bg-gray-50">
+          <tbody>
+            <tr>
+              <td className="border border-gray-200 px-2 py-2 text-center align-top w-1/3">
+                <span className="text-gray-400 text-[10px] uppercase tracking-wide block mb-1">
+                  {ar ? "رقم العينة" : "Sample No."}
+                </span>
+                <span className="font-mono font-bold text-gray-900 text-sm">
+                  {distribution?.sampleCode ?? "—"}
+                </span>
+              </td>
+              <td className="border border-gray-200 px-2 py-2 text-center align-top w-1/3">
+                <span className="text-gray-400 text-[10px] uppercase tracking-wide block mb-1">
+                  {ar ? "رقم التوزيع" : "Distribution No."}
+                </span>
+                <span className="font-mono font-bold text-blue-700 text-sm">{refNo}</span>
+              </td>
+              <td className="border border-gray-200 px-2 py-2 text-center align-top w-1/3">
+                <span className="text-gray-400 text-[10px] uppercase tracking-wide block mb-1">
+                  {ar ? "تاريخ الاستلام" : "Received Date"}
+                </span>
+                <span className="font-semibold text-gray-900">
+                  {formatCalendarDate(distribution?.receivedAt)}
+                </span>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+        <table className="metadata-table w-full border-collapse text-xs">
+          <tbody>
+            {Array.from({ length: detailRows }, (_, i) => {
+              const L = detailLeft[i];
+              const R = detailRight[i];
+              return (
+                <tr key={i}>
+                  <td className="border border-gray-200 px-2 py-1 text-gray-500 w-[18%]">{L?.[0] ?? ""}</td>
+                  <td className="border border-gray-200 px-2 py-1 font-medium text-gray-900 w-[32%]">{L?.[1] ?? ""}</td>
+                  <td className="border border-gray-200 px-2 py-1 text-gray-500 w-[18%]">{R?.[0] ?? ""}</td>
+                  <td className="border border-gray-200 px-2 py-1 font-medium text-gray-900 w-[32%]">{R?.[1] ?? ""}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
       </div>
 
-      {/* Comments — user notes from test form only (no hidden metadata / auto system notes) */}
-      <div className="border border-slate-400 rounded-sm p-3 mb-3 min-h-[4.5rem] bg-slate-50/90">
-        <div className="font-bold text-slate-900 text-xs mb-1.5">{footer.remarksTitle}</div>
+      {/* Summary Results */}
+      <div className="mb-5">
+        <h3 className="text-xs font-bold text-gray-700 uppercase border-b border-gray-300 pb-1 mb-3">
+          {ar ? "ملخص النتائج" : "Summary Results"}
+        </h3>
+        <table className="metadata-table w-full border-collapse text-xs">
+          <tbody>
+            {Array.from({ length: Math.ceil(summaryPairs.length / 2) }, (_, ri) => {
+              const a = summaryPairs[ri * 2];
+              const b = summaryPairs[ri * 2 + 1];
+              return (
+                <tr key={ri}>
+                  <td className="border border-gray-200 px-2 py-1 text-gray-500 w-[22%]">{a[0]}</td>
+                  <td className="border border-gray-200 px-2 py-1 font-bold text-gray-900 w-[28%]">{a[1]}</td>
+                  {b ? (
+                    <>
+                      <td className="border border-gray-200 px-2 py-1 text-gray-500 w-[22%]">{b[0]}</td>
+                      <td className="border border-gray-200 px-2 py-1 font-bold text-gray-900 w-[28%]">{b[1]}</td>
+                    </>
+                  ) : (
+                    <td className="border border-gray-200 px-2 py-1" colSpan={2} />
+                  )}
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Detailed Results */}
+      <div className="mb-5">
+        <h3 className="text-xs font-bold text-gray-700 uppercase border-b border-gray-300 pb-1 mb-3">
+          {ar ? "النتائج التفصيلية" : "Detailed Results"}
+        </h3>
+
+        <div className="grid grid-cols-3 gap-2 mb-4">
+          <div
+            className={`border rounded p-3 text-center ${
+              isPassed ? "bg-emerald-50 border-emerald-200" : avg !== null ? "bg-red-50 border-red-200" : "bg-gray-50 border-gray-200"
+            }`}
+          >
+            <p className={`font-semibold ${isPassed ? "text-emerald-700" : avg !== null ? "text-red-700" : "text-gray-600"}`}>
+              {ar ? "متوسط المقاومة" : "Avg. Strength"}
+            </p>
+            <p className={`text-xl font-bold ${isPassed ? "text-emerald-800" : avg !== null ? "text-red-800" : "text-gray-800"}`}>
+              {avgDisplay !== "—" ? `${avgDisplay} N/mm²` : "—"}
+            </p>
+            {requiredMpa != null && (
+              <p className="text-[10px] text-slate-500">
+                {ar ? "المطلوب" : "Min. required"}: {requiredDisplay} N/mm²
+              </p>
+            )}
+          </div>
+          <div className="border rounded p-3 text-center bg-blue-50 border-blue-200">
+            <p className="font-semibold text-blue-700">{ar ? "المقاومة المطلوبة" : "Required Strength"}</p>
+            <p className="text-xl font-bold text-blue-800">{requiredDisplay !== "—" ? `${requiredDisplay} N/mm²` : "—"}</p>
+            {targetMpa != null && (
+              <p className="text-[10px] text-slate-500">
+                {agePct}% {ar ? "من" : "of"} {targetMpa} N/mm²
+              </p>
+            )}
+          </div>
+          <div className="border rounded p-3 text-center bg-gray-50 border-gray-200">
+            <p className="font-semibold text-gray-600">{ar ? "عمر الاختبار" : "Test Age"}</p>
+            <p className="text-xl font-bold text-gray-800">
+              {ageDisplay !== "—" ? `${ageDisplay} ${ar ? "يوم" : "days"}` : "—"}
+            </p>
+            <p className="text-[10px] text-slate-500">
+              {ar ? "الفرق بين الصب والفحص" : "Cast date → test date"}
+            </p>
+          </div>
+        </div>
+
+        <p className="text-xs font-semibold text-slate-700 mb-1">
+          {ar ? "نتائج المكعبات" : "Cube Test Results"}
+        </p>
+        <table className="w-full text-xs border-collapse mb-2">
+          <thead>
+            <tr className="bg-slate-50">
+              {[
+                ar ? "رقم" : "Mark",
+                ar ? "معرف المكعب" : "Cube ID",
+                ar ? "تاريخ الفحص" : "Date Tested",
+                ar ? "العمر (يوم)" : "Age (days)",
+                ar ? "الحمل (kN)" : "Load (kN)",
+                ar ? "المقاومة (N/mm²)" : "Strength (N/mm²)",
+                ar ? "النتيجة" : "Result",
+                ar ? "الكسر" : "Fracture",
+              ].map(h => (
+                <th key={h} className="border border-slate-300 px-2 py-1 text-center font-semibold text-slate-600">
+                  {h}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {cubesWithAge.map((cube, i) => {
+              const strength = fmtStrength(cube.compressiveStrengthMpa);
+              const s = parseFloat(String(cube.compressiveStrengthMpa ?? "0"));
+              const pass = cube.isPass && s > 0;
+              const fail = cube.isFail && s > 0;
+              return (
+                <tr key={cube.id ?? i} className={i % 2 === 0 ? "bg-white" : "bg-slate-50/50"}>
+                  <td className="border border-slate-300 px-2 py-1 text-center font-mono">{cube.markNo}</td>
+                  <td className="border border-slate-300 px-2 py-1 text-center">{cube.cubeId ?? "—"}</td>
+                  <td className="border border-slate-300 px-2 py-1 text-center">{fmtDate(cube.dateTested) || "—"}</td>
+                  <td className="border border-slate-300 px-2 py-1 text-center font-semibold">
+                    {cube.actualAge != null ? cube.actualAge : "—"}
+                  </td>
+                  <td className="border border-slate-300 px-2 py-1 text-right font-mono">{fmt(cube.maxLoadKN, 1) || "—"}</td>
+                  <td
+                    className={`border border-slate-300 px-2 py-1 text-center font-bold ${
+                      fail ? "text-red-800" : pass ? "text-emerald-800" : ""
+                    }`}
+                  >
+                    {strength || "—"}
+                  </td>
+                  <td className="border border-slate-300 px-2 py-1 text-center font-semibold">
+                    {pass ? (
+                      <span className="text-emerald-800">{ar ? "مطابق" : "PASS"}</span>
+                    ) : fail ? (
+                      <span className="text-red-800">{ar ? "غير مطابق" : "FAIL"}</span>
+                    ) : (
+                      "—"
+                    )}
+                  </td>
+                  <td className="border border-slate-300 px-2 py-1 text-center">{cube.fractureType ?? "—"}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+
+        <table className="w-full text-xs border-collapse">
+          <thead>
+            <tr className="bg-slate-50">
+              {[
+                ar ? "الطول (مم)" : "Length (mm)",
+                ar ? "العرض (مم)" : "Width (mm)",
+                ar ? "الارتفاع (مم)" : "Height (mm)",
+                ar ? "الكتلة (كغ)" : "Mass (kg)",
+                ar ? "الكثافة (kg/m³)" : "Density (kg/m³)",
+              ].map(h => (
+                <th key={h} className="border border-slate-300 px-2 py-1 text-center font-semibold text-slate-600">
+                  {h}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {cubesWithAge.map((cube, i) => (
+              <tr key={`dim-${cube.id ?? i}`} className={i % 2 === 0 ? "bg-white" : "bg-slate-50/50"}>
+                <td className="border border-slate-300 px-2 py-1 text-center font-mono">{fmt(cube.length, 0) || "—"}</td>
+                <td className="border border-slate-300 px-2 py-1 text-center font-mono">{fmt(cube.width, 0) || "—"}</td>
+                <td className="border border-slate-300 px-2 py-1 text-center font-mono">{fmt(cube.height, 0) || "—"}</td>
+                <td className="border border-slate-300 px-2 py-1 text-right font-mono">{fmt(cube.massKg, 3) || "—"}</td>
+                <td className="border border-slate-300 px-2 py-1 text-right font-mono">{fmtDensity(cube.densityKgM3) || "—"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <p className="text-[10px] text-slate-500 mt-1">
+          {ar
+            ? "نوع الكسر: SF — مقبول، USF — غير مقبول. المقاومة محسوبة وفق BS 1881 الجزء 116."
+            : "Fracture: SF — Satisfactory, USF — Unsatisfactory. Strength per BS 1881 Part 116."}
+        </p>
+      </div>
+
+      {/* Notes */}
+      <div className="mb-5">
+        <h3 className="text-xs font-bold text-gray-700 uppercase border-b border-gray-300 pb-1 mb-2">
+          {ar ? "ملاحظات" : "Notes"}
+        </h3>
         <p
-          className={`text-xs leading-relaxed whitespace-pre-wrap ${
-            userRemarks ? "text-slate-900" : "text-slate-500 italic"
+          className={`text-xs border rounded p-3 ${
+            userRemarks ? "text-gray-700 bg-gray-50" : "text-gray-500 bg-gray-50 italic"
           }`}
         >
           {remarksDisplay}
         </p>
       </div>
 
-      <div className="text-[10px] text-slate-500 border border-slate-200 rounded-sm px-2 py-1.5 mb-3 bg-slate-50/60 italic">
-        <p>{footer.fractureNote}</p>
-        <p className="mt-0.5">{footer.curingNote}</p>
-      </div>
-
       {/* Signatures */}
-      <table className="signatures-table w-full border-collapse text-[10px] mb-3 print:mb-2">
-        <tbody>
-          <tr>
-            {[
-              {
-                label: sig.tested,
-                role: sig.roleT,
-                name: testedDisplay,
-                signedAt: testedSignedAt,
-              },
-              {
-                label: sig.reviewed,
-                role: sig.roleM,
-                name: managerDisplay,
-                signedAt: managerSignedAt,
-              },
-              {
-                label: sig.approved,
-                role: sig.roleQ,
-                name: qcDisplay,
-                signedAt: qcSignedAt,
-              },
-            ].map((col, i) => (
-              <td key={i} className="signature-column align-top text-center border border-slate-300 px-1 py-2 bg-white">
-                <p className="font-bold text-slate-900">{col.label}</p>
-                <p className="text-slate-600 text-[9px] mt-0.5">{col.role}</p>
-                <div className="signature-line border-b border-slate-900 h-9 mb-1.5 mt-2 mx-1" aria-hidden />
-                <p className="font-semibold text-slate-900 text-[11px]">{col.name}</p>
-                {col.signedAt ? (
-                  <p className="text-slate-500 italic mt-1 leading-tight">
-                    {sig.dig} {fmtDateTime(col.signedAt, lang)}
-                  </p>
-                ) : null}
-              </td>
-            ))}
-          </tr>
-        </tbody>
-      </table>
-
-      {/* Auto-note when technician manually overrides withinSpec for cubes below auto threshold */}
-      {(() => {
-        const manualOverrides = cubes.filter(c => {
-          if (c.withinSpec !== true) return false;
-          const s = parseFloat(c.compressiveStrengthMpa ?? "");
-          if (!s || targetMpa === null) return false;
-          const thresh = testAge >= 28 ? targetMpa - 4 : (requiredMpa ?? targetMpa);
-          return s < thresh;
-        });
-        if (manualOverrides.length === 0) return null;
-        const strengths = manualOverrides.map(c => fmtStrength(c.compressiveStrengthMpa)).join(", ");
-        return (
-          <div className="text-xs italic text-gray-700 border border-amber-200 bg-amber-50/80 p-2 mb-3 rounded-sm">
-            ** Results {strengths} N/mm² accepted within specification limits based on technician assessment.
-          </div>
-        );
-      })()}
-      {/* Spec Limits Summary */}
-      <div className="text-xs border border-slate-400 rounded-sm p-2.5 mb-3 bg-slate-50/70 space-y-1.5">
-        {requiredMpa !== null && targetMpa !== null && (
-          <div className="font-semibold text-slate-800">
-            {isAutoAgeFlow && reportActualAge != null ? (
-              <>
-                Required Strength at {reportActualAge} days ({agePct}% of {targetMpa} N/mm²):
-                <span className="text-blue-800 ml-1">{requiredMpa.toFixed(1)} N/mm²</span>
-              </>
-            ) : testAge >= 28 ? (
-              <>
-                Acceptance (BS EN 12390-3 / 206): average ≥ {targetMpa.toFixed(1)} N/mm²; each cube ≥
-                {" "}{(targetMpa - 4).toFixed(1)} N/mm²
-              </>
-            ) : (
-              <>
-                Required Strength at {testAge} days ({agePct}% of {targetMpa} N/mm²):
-                <span className="text-blue-800 ml-1">{requiredMpa.toFixed(1)} N/mm²</span>
-              </>
-            )}
-            {avgPass !== null && (
-              <span
-                className={`ml-3 font-bold inline-block rounded px-2 py-0.5 ${
-                  avgPass ? "text-emerald-800 bg-emerald-100/90" : "text-red-800 bg-red-100/90"
-                }`}
-              >
-                {avgPass ? "✓ PASS" : "✗ FAIL"}
-              </span>
-            )}
-          </div>
-        )}
-        <div className="flex justify-between gap-2 border-t border-slate-300 pt-2">
-          <div>
-            <span className="font-semibold text-slate-800">Within specification: </span>
-            <span className="font-bold text-emerald-800">
-              {withinSpec.map(c => fmtStrength(c.compressiveStrengthMpa)).join(", ")}
-              {withinSpec.length > 0 ? " N/mm²" : "—"}
-            </span>
-          </div>
-          <div className="text-right">
-            <span className="font-semibold text-slate-800">Outside specification: </span>
-            <span className="font-bold text-red-800">
-              {outsideSpec.map(c => fmtStrength(c.compressiveStrengthMpa)).join(", ")}
-              {outsideSpec.length > 0 ? " N/mm²" : "—"}
-            </span>
-          </div>
-        </div>
+      <div className="mt-8 pt-4 border-t border-gray-300">
+        <table className="signatures-table w-full border-collapse text-xs">
+          <tbody>
+            <tr>
+              <SignatureBox label={ar ? "الفاحص" : "Tested By"} name={testedDisplay} />
+              <SignatureBox
+                label={ar ? "المراجع" : "Reviewed By"}
+                name={managerReviewedByName ?? undefined}
+                date={managerSignedAt ? formatCalendarDate(managerSignedAt) : undefined}
+              />
+              <SignatureBox
+                label={ar ? "المعتمد" : "Approved By"}
+                name={qcReviewedByName ?? undefined}
+                date={qcSignedAt ? formatCalendarDate(qcSignedAt) : undefined}
+              />
+            </tr>
+          </tbody>
+        </table>
       </div>
 
-      <footer className="mt-auto pt-3 border-t border-slate-400 text-[9px] text-slate-600 leading-snug space-y-1">
-        <p className="text-center font-medium">{footer.repro}</p>
-        <p className="text-center">{footer.cert}</p>
-        <p className="text-center pt-1 font-semibold text-slate-800">
-          {footer.page} {pageIndex + 1} {footer.of} {totalPages}
-        </p>
-      </footer>
+      <div className="mt-6 pt-3 border-t border-gray-200 flex justify-between text-gray-400" style={{ fontSize: "8px" }}>
+        <span>
+          Construction Materials &amp; Engineering Laboratory — مختبر الإنشاءات والمواد الهندسية
+        </span>
+        <span>
+          {ar ? "تاريخ الإنشاء:" : "Generated:"}{" "}
+          {new Date().toLocaleString(ar ? "ar-AE" : "en-GB")}
+          {totalPages > 1 ? ` · ${ar ? "صفحة" : "Page"} ${pageIndex + 1}/${totalPages}` : ""}
+        </span>
+      </div>
     </div>
   );
 }
@@ -797,18 +736,20 @@ export default function ConcreteReport() {
       </div>
 
       {/* Report Content */}
-      <div ref={printRef} className="lab-print-root bg-gray-200 print:bg-white min-h-screen py-6 print:py-0">
+      <div className="bg-gray-200 print:bg-white min-h-screen py-6 print:py-0" dir={lang === "ar" ? "rtl" : "ltr"}>
+        <div ref={printRef} className="lab-print-root">
         {(groups as any[]).length === 0 ? (
           <div className="text-center py-20 text-gray-500">
             No test results found. Please enter results first.
           </div>
         ) : (
           (groups as any[]).map((group: any, idx: number, arr: any[]) => (
-            <div key={group.id} className={`mx-auto mb-6 shadow-lg print:shadow-none print:mb-0 ${idx > 0 ? "print:page-break-before" : ""}`}
+            <div key={group.id} className={`mx-auto mb-6 bg-white shadow-lg print:shadow-none print:mb-0 ${idx > 0 ? "print:page-break-before" : ""}`}
               style={{ width: "210mm" }}>
               <ReportPage
                 group={group}
                 refNo={refNo}
+                distribution={distributionAny}
                 castingDate={distribution?.castingDate}
                 testedByName={distributionAny?.technicianName ?? testResultAny?.testedBy ?? group?.testedBy}
                 managerReviewedByName={testResultAny?.managerReviewedByName ?? null}
@@ -823,13 +764,18 @@ export default function ConcreteReport() {
             </div>
           ))
         )}
+        </div>
       </div>
 
       {/* Print Styles */}
       <style>{`
         @media print {
-          @page { size: A4 portrait; margin: 10mm; }
-          body { background: white !important; }
+          @page { size: A4; margin: 0; }
+          body { margin: 0; background: white !important; }
+          .print\\:hidden { display: none !important; }
+          .print\\:bg-white { background: white !important; }
+          .print\\:shadow-none { box-shadow: none !important; }
+          .print\\:py-0 { padding-top: 0 !important; padding-bottom: 0 !important; }
           .print\\:page-break-before { page-break-before: always; }
           .report-page { page-break-inside: avoid; }
         }
