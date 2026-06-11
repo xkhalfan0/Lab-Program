@@ -293,16 +293,21 @@ export async function assertRetestEligible(
       message: "Cannot retest while a revision is in progress",
     });
   }
-  if (
-    orders.some((o) =>
-      BLOCKING_ORDER_STATUSES.includes(o.status as (typeof BLOCKING_ORDER_STATUSES)[number])
-    )
-  ) {
+
+  const qcComplete =
+    QC_COMPLETE_SAMPLE_STATUSES.includes(
+      root.status as (typeof QC_COMPLETE_SAMPLE_STATUSES)[number]
+    ) || (await sampleHasQcSignOff(root.id));
+  const orderStillOpen = orders.some((o) =>
+    BLOCKING_ORDER_STATUSES.includes(o.status as (typeof BLOCKING_ORDER_STATUSES)[number])
+  );
+  if (orderStillOpen && !qcComplete) {
     throw new TRPCError({
       code: "BAD_REQUEST",
       message: "Cannot retest while an order is still in progress on this sample",
     });
   }
+
   const eligible = await isRetestEligibleSample(root, orders);
   if (!eligible) {
     throw new TRPCError({
