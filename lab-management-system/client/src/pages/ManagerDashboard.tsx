@@ -1,5 +1,8 @@
 import { useState, useMemo } from "react";
 import DashboardLayout from "@/components/DashboardLayout";
+import DashboardReportPreviewDialog, {
+  type ReportPreviewPayload,
+} from "@/components/DashboardReportPreviewDialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -15,7 +18,7 @@ import {
 import {
   FlaskConical, AlertTriangle, CheckCircle, Activity, Target,
   Calendar, FileText, Users, Award, TrendingUp, TrendingDown,
-  Loader2, BarChart2,
+  Loader2, BarChart2, Eye,
 } from "lucide-react";
 
 const CATEGORY_LABELS: Record<string, { ar: string; en: string }> = {
@@ -89,6 +92,9 @@ export default function ManagerDashboard() {
   const [reportFrom, setReportFrom] = useState("");
   const [reportTo, setReportTo] = useState("");
   const [reportFormat, setReportFormat] = useState<"pdf" | "excel">("pdf");
+  const [reportLang, setReportLang] = useState<"ar" | "en" | "both">("both");
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewPayload, setPreviewPayload] = useState<ReportPreviewPayload | null>(null);
 
   const queryInput = useMemo(() => ({ dateFrom, dateTo }), [dateFrom, dateTo]);
 
@@ -99,31 +105,15 @@ export default function ManagerDashboard() {
   const { data: techStats } = trpc.dashboard.technicianStats.useQuery();
   const { data: clearanceStats } = trpc.dashboard.clearanceStats.useQuery();
 
-  const downloadGeneratedReport = (res: {
-    fileName: string;
-    mimeType: string;
-    dataBase64: string;
-  }) => {
-    const bytes = Uint8Array.from(atob(res.dataBase64), (c) => c.charCodeAt(0));
-    const blob = new Blob([bytes], { type: res.mimeType });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = res.fileName;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    setTimeout(() => URL.revokeObjectURL(url), 10000);
-  };
-
   const generateReport = trpc.reports.generate.useMutation({
     onSuccess: (res) => {
-      downloadGeneratedReport(res);
-      toast.success(lang === "ar" ? "تم إنشاء التقرير" : "Report generated", {
+      setPreviewPayload(res);
+      setPreviewOpen(true);
+      toast.success(lang === "ar" ? "تم إنشاء التقرير" : "Report ready", {
         description:
           lang === "ar"
-            ? "تم تنزيل الملف على جهازك"
-            : "The file has been downloaded to your device",
+            ? "يمكنك المعاينة والطباعة أو التنزيل"
+            : "You can preview, print, or download",
       });
     },
     onError: (err) => {
@@ -176,7 +166,7 @@ export default function ManagerDashboard() {
       dateFrom: reportRange === "custom" ? reportFrom : undefined,
       dateTo: reportRange === "custom" ? reportTo : undefined,
       format: reportFormat,
-      lang: lang as "ar" | "en",
+      lang: reportLang,
     });
   };
 
@@ -462,16 +452,47 @@ export default function ManagerDashboard() {
                 </select>
               </div>
 
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground">{lang === "ar" ? "لغة التقرير" : "Report language"}</span>
+                <div className="flex items-center gap-0.5 border rounded-md overflow-hidden text-xs h-8">
+                  {([
+                    { value: "ar" as const, label: "AR" },
+                    { value: "en" as const, label: "EN" },
+                    { value: "both" as const, label: lang === "ar" ? "ثنائي" : "Both" },
+                  ]).map((opt) => (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => setReportLang(opt.value)}
+                      className={`px-2.5 h-full font-medium transition-colors ${
+                        reportLang === opt.value
+                          ? "bg-primary text-primary-foreground"
+                          : "bg-background text-muted-foreground hover:bg-muted"
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               <Button size="sm" onClick={handleGenerate} disabled={generateReport.isPending || reportSections.length === 0}>
                 {generateReport.isPending ? (
                   <><Loader2 className="w-4 h-4 animate-spin me-1" />{lang === "ar" ? "جاري الإنشاء..." : "Generating..."}</>
                 ) : (
-                  lang === "ar" ? "إنشاء" : "Generate"
+                  <><Eye className="w-4 h-4 me-1" />{lang === "ar" ? "معاينة التقرير" : "Preview report"}</>
                 )}
               </Button>
             </div>
           </CardContent>
         </Card>
+
+        <DashboardReportPreviewDialog
+          open={previewOpen}
+          onOpenChange={setPreviewOpen}
+          payload={previewPayload}
+          uiLang={lang as "ar" | "en"}
+        />
       </div>
     </DashboardLayout>
   );

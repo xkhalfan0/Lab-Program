@@ -32,8 +32,10 @@ export type ReportInput = {
   dateFrom?: string;
   dateTo?: string;
   format: "pdf" | "excel";
-  lang?: "ar" | "en";
+  lang?: ReportLang;
 };
+
+export type ReportLang = "ar" | "en" | "both";
 
 const CATEGORY_LABELS: Record<string, { ar: string; en: string }> = {
   concrete: { ar: "خرسانة", en: "Concrete" },
@@ -79,37 +81,83 @@ function escapeHtml(value: string): string {
     .replace(/"/g, "&quot;");
 }
 
-function formatStatus(status: string, lang: "ar" | "en"): string {
-  return STATUS_LABELS[status]?.[lang] ?? status.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+function bi(ar: string, en: string, lang: ReportLang): string {
+  if (lang === "ar") return escapeHtml(ar);
+  if (lang === "en") return escapeHtml(en);
+  return `<span>${escapeHtml(en)}</span> <span dir="rtl" style="color:#475569;font-size:0.9em">/ ${escapeHtml(ar)}</span>`;
 }
 
-function formatCategory(category: string, lang: "ar" | "en"): string {
-  return CATEGORY_LABELS[category]?.[lang] ?? category.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+function biBlock(ar: string, en: string, lang: ReportLang): string {
+  if (lang === "ar") return `<span dir="rtl">${escapeHtml(ar)}</span>`;
+  if (lang === "en") return escapeHtml(en);
+  return `<div>${escapeHtml(en)}</div><div dir="rtl" style="font-size:0.88em;color:#64748b;margin-top:3px;line-height:1.35">${escapeHtml(ar)}</div>`;
 }
 
-function formatMonth(ym: string, lang: "ar" | "en"): string {
+function biSection(ar: string, en: string, lang: ReportLang): string {
+  if (lang === "both") {
+    return `${escapeHtml(en)}<span style="color:#cbd5e1;margin:0 8px">|</span><span dir="rtl">${escapeHtml(ar)}</span>`;
+  }
+  return lang === "ar" ? escapeHtml(ar) : escapeHtml(en);
+}
+
+function statusText(status: string): { ar: string; en: string } {
+  const en =
+    STATUS_LABELS[status]?.en ??
+    status.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+  const ar = STATUS_LABELS[status]?.ar ?? en;
+  return { ar, en };
+}
+
+function categoryText(category: string): { ar: string; en: string } {
+  const en =
+    CATEGORY_LABELS[category]?.en ??
+    category.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+  const ar = CATEGORY_LABELS[category]?.ar ?? en;
+  return { ar, en };
+}
+
+function formatStatusCell(status: string, lang: ReportLang): string {
+  const { ar, en } = statusText(status);
+  return biBlock(ar, en, lang);
+}
+
+function formatCategoryCell(category: string, lang: ReportLang): string {
+  const { ar, en } = categoryText(category);
+  return biBlock(ar, en, lang);
+}
+
+function formatMonth(ym: string, lang: ReportLang): string {
   const [year, month] = ym.split("-").map(Number);
-  if (!year || !month) return ym;
+  if (!year || !month) return escapeHtml(ym);
   const date = new Date(year, month - 1, 1);
-  return date.toLocaleDateString(lang === "ar" ? "ar-AE" : "en-GB", { month: "long", year: "numeric" });
+  const en = date.toLocaleDateString("en-GB", { month: "long", year: "numeric" });
+  const ar = date.toLocaleDateString("ar-AE", { month: "long", year: "numeric" });
+  return biBlock(ar, en, lang);
 }
 
-function formatRangeLabel(input: ReportInput, lang: "ar" | "en"): string {
+function formatRangeLabel(input: ReportInput, lang: ReportLang): string {
   const { from, to } = resolveRange(input);
-  const fmt = (d: Date) =>
-    d.toLocaleDateString(lang === "ar" ? "ar-AE" : "en-GB", {
-      day: "numeric",
-      month: "long",
-      year: "numeric",
-    });
+  const fmtEn = (d: Date) =>
+    d.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
+  const fmtAr = (d: Date) =>
+    d.toLocaleDateString("ar-AE", { day: "numeric", month: "long", year: "numeric" });
   const presets: Record<ReportInput["range"], { ar: string; en: string }> = {
     month: { ar: "هذا الشهر", en: "Current Month" },
     quarter: { ar: "هذا الربع", en: "Current Quarter" },
     year: { ar: "هذا العام", en: "Current Year" },
     custom: { ar: "نطاق مخصص", en: "Custom Period" },
   };
-  const preset = presets[input.range][lang];
-  return `${preset} (${fmt(from)} — ${fmt(to)})`;
+  const preset = presets[input.range];
+  const en = `${preset.en} (${fmtEn(from)} — ${fmtEn(to)})`;
+  const ar = `${preset.ar} (${fmtAr(from)} — ${fmtAr(to)})`;
+  return biBlock(ar, en, lang);
+}
+
+function formatRiskCell(riskLevel: string, lang: ReportLang): string {
+  const riskKey = riskLevel.toLowerCase();
+  const ar = RISK_LABELS[riskKey]?.ar ?? riskLevel;
+  const en = RISK_LABELS[riskKey]?.en ?? riskLevel;
+  return biBlock(ar, en, lang);
 }
 
 function resolveRange(input: ReportInput): { from: Date; to: Date } {
@@ -283,61 +331,76 @@ function buildHtml(
   sections: ReportSection[],
   input: ReportInput
 ): string {
-  const lang = input.lang ?? "en";
+  const lang: ReportLang = input.lang ?? "both";
   const isAr = lang === "ar";
-  const dir = isAr ? "rtl" : "ltr";
+  const dir = lang === "ar" ? "rtl" : "ltr";
   const textAlign = isAr ? "right" : "left";
   const rangeLabel = formatRangeLabel(input, lang);
-  const generatedAt = new Date().toLocaleString(isAr ? "ar-AE" : "en-GB", {
+  const generatedEn = new Date().toLocaleString("en-GB", {
     dateStyle: "long",
     timeStyle: "short",
   });
+  const generatedAr = new Date().toLocaleString("ar-AE", {
+    dateStyle: "long",
+    timeStyle: "short",
+  });
+  const generatedAt = biBlock(generatedAr, generatedEn, lang);
 
   const t = {
-    orgName: isAr
-      ? "مختبر الإنشاءات والمواد الهندسية"
-      : "Construction & Engineering Materials Laboratory",
-    reportTitle: isAr ? "تقرير ذكاء الجودة" : "Quality Intelligence Dashboard Report",
-    reportingPeriod: isAr ? "فترة التقرير" : "Reporting Period",
-    generated: isAr ? "تاريخ الإصدار" : "Date of Issue",
-    confidential: isAr
-      ? "سري — للاستخدام الرسمي فقط"
-      : "Confidential — For Official Use Only",
-    footer: isAr
-      ? "تم إنشاء هذا التقرير تلقائياً بواسطة نظام إدارة المختبر"
-      : "This report was auto-generated by the Laboratory Management System",
-    noData: isAr ? "لا توجد بيانات للعرض في هذه الفترة." : "No data available for this reporting period.",
-    overview: isAr ? "ملخص تنفيذي" : "Executive Summary",
-    status: isAr ? "العينات حسب الحالة" : "Samples by Status",
-    type: isAr ? "العينات حسب النوع" : "Samples by Material Type",
-    trend: isAr ? "الاتجاه الشهري للاستقبال" : "Monthly Sample Receipt Trend",
-    passfail: isAr ? "النتائج حسب فئة المادة" : "Pass / Fail by Material Category",
-    readiness: isAr ? "جاهزية إغلاق العقود" : "Contract Closure Readiness",
-    scorecard: isAr ? "بطاقة جودة المقاولين" : "Contractor Quality Scorecard",
-    toptests: isAr ? "أكثر الاختبارات تكراراً" : "Most Frequent Tests",
-    techperf: isAr ? "أداء الفنيين" : "Technician Performance",
-    total: isAr ? "إجمالي العينات المسجلة" : "Total Registered Samples",
-    active: isAr ? "عينات نشطة (قيد المعالجة)" : "Active Samples (In Pipeline)",
-    completed: isAr ? "براءات ذمة صادرة" : "Clearances Issued",
-    needsAction: isAr ? "تتطلب إجراء" : "Requiring Action",
-    periodReceived: isAr ? "مستلمة خلال فترة التقرير" : "Received in Reporting Period",
-    statusCol: isAr ? "الحالة" : "Status",
-    typeCol: isAr ? "نوع المادة" : "Material Type",
-    monthCol: isAr ? "الشهر" : "Month",
-    countCol: isAr ? "العدد" : "Count",
-    shareCol: isAr ? "النسبة" : "Share",
-    categoryCol: isAr ? "الفئة" : "Category",
-    passCol: isAr ? "ناجح" : "Passed",
-    failCol: isAr ? "راسب" : "Failed",
-    rateCol: isAr ? "نسبة النجاح" : "Pass Rate",
-    contractCol: isAr ? "رقم العقد" : "Contract No.",
-    contractorCol: isAr ? "المقاول" : "Contractor",
-    readinessCol: isAr ? "نسبة الجاهزية" : "Readiness",
-    riskCol: isAr ? "مستوى المخاطر" : "Risk Level",
-    testCol: isAr ? "نوع الاختبار" : "Test Type",
-    techCol: isAr ? "اسم الفني" : "Technician",
-    openCol: isAr ? "قيد التنفيذ" : "Open Assignments",
-    doneCol: isAr ? "مكتملة" : "Completed",
+    orgName: biBlock(
+      "مختبر الإنشاءات والمواد الهندسية",
+      "Construction & Engineering Materials Laboratory",
+      lang
+    ),
+    reportTitle: biBlock("تقرير ذكاء الجودة", "Quality Intelligence Dashboard Report", lang),
+    reportingPeriod: bi("فترة التقرير", "Reporting Period", lang),
+    generated: bi("تاريخ الإصدار", "Date of Issue", lang),
+    confidential: biBlock(
+      "سري — للاستخدام الرسمي فقط",
+      "Confidential — For Official Use Only",
+      lang
+    ),
+    footer: biBlock(
+      "تم إنشاء هذا التقرير تلقائياً بواسطة نظام إدارة المختبر",
+      "This report was auto-generated by the Laboratory Management System",
+      lang
+    ),
+    noData: bi(
+      "لا توجد بيانات للعرض في هذه الفترة.",
+      "No data available for this reporting period.",
+      lang
+    ),
+    overview: biSection("ملخص تنفيذي", "Executive Summary", lang),
+    status: biSection("العينات حسب الحالة", "Samples by Status", lang),
+    type: biSection("العينات حسب النوع", "Samples by Material Type", lang),
+    trend: biSection("الاتجاه الشهري للاستقبال", "Monthly Sample Receipt Trend", lang),
+    passfail: biSection("النتائج حسب فئة المادة", "Pass / Fail by Material Category", lang),
+    readiness: biSection("جاهزية إغلاق العقود", "Contract Closure Readiness", lang),
+    scorecard: biSection("بطاقة جودة المقاولين", "Contractor Quality Scorecard", lang),
+    toptests: biSection("أكثر الاختبارات تكراراً", "Most Frequent Tests", lang),
+    techperf: biSection("أداء الفنيين", "Technician Performance", lang),
+    total: biBlock("إجمالي العينات المسجلة", "Total Registered Samples", lang),
+    active: biBlock("عينات نشطة (قيد المعالجة)", "Active Samples (In Pipeline)", lang),
+    completed: biBlock("براءات ذمة صادرة", "Clearances Issued", lang),
+    needsAction: biBlock("تتطلب إجراء", "Requiring Action", lang),
+    periodReceived: biBlock("مستلمة خلال فترة التقرير", "Received in Reporting Period", lang),
+    statusCol: bi("الحالة", "Status", lang),
+    typeCol: bi("نوع المادة", "Material Type", lang),
+    monthCol: bi("الشهر", "Month", lang),
+    countCol: bi("العدد", "Count", lang),
+    shareCol: bi("النسبة", "Share", lang),
+    categoryCol: bi("الفئة", "Category", lang),
+    passCol: bi("ناجح", "Passed", lang),
+    failCol: bi("راسب", "Failed", lang),
+    rateCol: bi("نسبة النجاح", "Pass Rate", lang),
+    contractCol: bi("رقم العقد", "Contract No.", lang),
+    contractorCol: bi("المقاول", "Contractor", lang),
+    readinessCol: bi("نسبة الجاهزية", "Readiness", lang),
+    riskCol: bi("مستوى المخاطر", "Risk Level", lang),
+    testCol: bi("نوع الاختبار", "Test Type", lang),
+    techCol: bi("اسم الفني", "Technician", lang),
+    openCol: bi("قيد التنفيذ", "Open Assignments", lang),
+    doneCol: bi("مكتملة", "Completed", lang),
   };
 
   const sectionBlocks: string[] = [];
@@ -386,7 +449,7 @@ function buildHtml(
             const share = total > 0 ? `${Math.round((row.count / total) * 100)}%` : "—";
             return [
               String(i + 1),
-              escapeHtml(formatStatus(row.status, lang)),
+              formatStatusCell(row.status, lang),
               `<span style="font-weight:600">${row.count}</span>`,
               share,
             ];
@@ -415,7 +478,7 @@ function buildHtml(
             const share = total > 0 ? `${Math.round((row.count / total) * 100)}%` : "—";
             return [
               String(i + 1),
-              escapeHtml(formatCategory(row.type, lang)),
+              formatCategoryCell(row.type, lang),
               `<span style="font-weight:600">${row.count}</span>`,
               share,
             ];
@@ -436,7 +499,7 @@ function buildHtml(
             { label: t.countCol, align: "center" },
           ],
           rows.map((row) => [
-            escapeHtml(formatMonth(row.month, lang)),
+            formatMonth(row.month, lang),
             `<span style="font-weight:600">${row.count}</span>`,
           ]),
           t.noData
@@ -464,7 +527,7 @@ function buildHtml(
             const rateColor =
               rate === null ? "#64748b" : rate >= 80 ? "#047857" : rate >= 60 ? "#b45309" : "#b91c1c";
             return [
-              escapeHtml(formatCategory(row.category, lang)),
+              formatCategoryCell(row.category, lang),
               `<span style="color:#047857;font-weight:600">${row.pass}</span>`,
               `<span style="color:#b91c1c;font-weight:600">${row.fail}</span>`,
               `<span style="color:${rateColor};font-weight:700">${rate !== null ? `${rate}%` : "—"}</span>`,
@@ -513,7 +576,6 @@ function buildHtml(
           ],
           rows.map((row) => {
             const riskKey = row.riskLevel.toLowerCase();
-            const riskLabel = RISK_LABELS[riskKey]?.[lang] ?? escapeHtml(row.riskLevel);
             const riskColor =
               riskKey === "critical" || riskKey === "high"
                 ? "#b91c1c"
@@ -525,7 +587,7 @@ function buildHtml(
             return [
               escapeHtml(row.contractor),
               `<span style="color:${passColor};font-weight:700">${row.passRate}%</span>`,
-              `<span style="color:${riskColor};font-weight:600">${riskLabel}</span>`,
+              `<span style="color:${riskColor};font-weight:600">${formatRiskCell(row.riskLevel, lang)}</span>`,
             ];
           }),
           t.noData
@@ -585,17 +647,30 @@ function buildHtml(
       </section>`);
   }
 
+  const pageTitle =
+    lang === "ar"
+      ? "تقرير ذكاء الجودة"
+      : lang === "en"
+        ? "Quality Intelligence Dashboard Report"
+        : "Quality Intelligence Dashboard Report | تقرير ذكاء الجودة";
+  const bodyFont =
+    lang === "ar"
+      ? "'IBM Plex Sans Arabic', sans-serif"
+      : lang === "en"
+        ? "'Inter', sans-serif"
+        : "'Inter', 'IBM Plex Sans Arabic', sans-serif";
+
   return `<!DOCTYPE html>
-<html dir="${dir}" lang="${lang}">
+<html dir="${dir}" lang="${lang === "ar" ? "ar" : "en"}">
 <head>
   <meta charset="UTF-8"/>
-  <title>${escapeHtml(t.reportTitle)}</title>
+  <title>${escapeHtml(pageTitle)}</title>
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet"/>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     @page { size: A4; margin: 12mm; }
     body {
-      font-family: ${isAr ? "'IBM Plex Sans Arabic', sans-serif" : "'Inter', sans-serif"};
+      font-family: ${bodyFont};
       direction: ${dir};
       color: #1e293b;
       background: #fff;
@@ -612,27 +687,25 @@ function buildHtml(
   <header style="border-bottom:3px solid #1e293b;padding-bottom:18px;margin-bottom:24px">
     <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:24px">
       <div style="text-align:${textAlign}">
-        <div style="font-size:11px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:#64748b;margin-bottom:6px">
-          ${escapeHtml(t.orgName)}
-        </div>
-        <h1 style="font-size:22px;font-weight:700;color:#1e293b;line-height:1.3">
-          ${escapeHtml(t.reportTitle)}
+        <div style="margin-bottom:10px;line-height:1.4">${t.orgName}</div>
+        <h1 style="font-size:22px;font-weight:700;color:#1e293b;line-height:1.35">
+          ${t.reportTitle}
         </h1>
         <p style="font-size:11px;color:#94a3b8;margin-top:8px;font-weight:500">
-          ${escapeHtml(t.confidential)}
+          ${t.confidential}
         </p>
       </div>
-      <div style="text-align:${isAr ? "left" : "right"};min-width:220px">
+      <div style="text-align:${isAr ? "left" : "right"};min-width:240px">
         <div style="font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:0.06em;font-weight:600">
-          ${escapeHtml(t.reportingPeriod)}
+          ${t.reportingPeriod}
         </div>
-        <div style="font-size:13px;font-weight:600;color:#1e293b;margin-top:4px;line-height:1.4">
-          ${escapeHtml(rangeLabel)}
+        <div style="font-size:13px;font-weight:600;color:#1e293b;margin-top:4px;line-height:1.45">
+          ${rangeLabel}
         </div>
         <div style="font-size:11px;color:#64748b;margin-top:12px;text-transform:uppercase;letter-spacing:0.06em;font-weight:600">
-          ${escapeHtml(t.generated)}
+          ${t.generated}
         </div>
-        <div style="font-size:12px;color:#475569;margin-top:4px">${escapeHtml(generatedAt)}</div>
+        <div style="font-size:12px;color:#475569;margin-top:4px;line-height:1.45">${generatedAt}</div>
       </div>
     </div>
   </header>
@@ -640,8 +713,8 @@ function buildHtml(
   <main>${sectionBlocks.join("")}</main>
 
   <footer style="margin-top:36px;padding-top:14px;border-top:1px solid #e2e8f0;text-align:center">
-    <p style="font-size:10px;color:#94a3b8;line-height:1.6">${escapeHtml(t.footer)}</p>
-    <p style="font-size:10px;color:#cbd5e1;margin-top:4px">${escapeHtml(generatedAt)}</p>
+    <p style="font-size:10px;color:#94a3b8;line-height:1.6">${t.footer}</p>
+    <p style="font-size:10px;color:#cbd5e1;margin-top:4px;line-height:1.45">${generatedAt}</p>
   </footer>
 </body>
 </html>`;
@@ -669,6 +742,7 @@ export type DashboardReportResult = {
   fileName: string;
   mimeType: string;
   dataBase64: string;
+  html?: string;
 };
 
 export async function generateDashboardReport(
@@ -705,6 +779,7 @@ export async function generateDashboardReport(
       fileName,
       mimeType: "application/pdf",
       dataBase64: Buffer.from(pdfBuffer).toString("base64"),
+      html,
     };
   } finally {
     await browser.close();
