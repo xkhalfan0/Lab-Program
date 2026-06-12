@@ -410,7 +410,16 @@ function GroupPanel({ group, distributionId, onRefresh, castingDate: distCasting
     await updateGroup.mutateAsync({
       groupId: group.id,
       minAcceptable: String(fc),
-      classOfConcrete: `C${Math.round(fc)}`,
+    });
+  };
+
+  const saveMixProperties = async () => {
+    if (isSubmitted) return;
+    await updateGroup.mutateAsync({
+      groupId: group.id,
+      classOfConcrete: classOfConcrete.trim() || undefined,
+      maxAggSize: maxAggSize.trim() || undefined,
+      slump: slump.trim() || undefined,
     });
   };
 
@@ -520,14 +529,29 @@ function GroupPanel({ group, distributionId, onRefresh, castingDate: distCasting
         toast.error(ageResult.message ?? "Too early — result invalid");
         return;
       }
+      const mixRequired = [
+        { label: ar ? "درجة الخرسانة" : "Class of Concrete", value: classOfConcrete },
+        { label: ar ? "أقصى حجم للركام (مم)" : "Maximum Aggregate Size (mm)", value: maxAggSize },
+        { label: ar ? "الهبوط (مم)" : "Slump (mm)", value: slump },
+      ];
+      const mixMissing = mixRequired.filter((f) => !String(f.value ?? "").trim()).map((f) => f.label);
+      if (mixMissing.length > 0) {
+        toast.error(
+          ar
+            ? `الرجاء تعبئة الحقول المطلوبة: ${mixMissing.join("، ")}`
+            : `Please fill required fields: ${mixMissing.join(", ")}`
+        );
+        return;
+      }
       await saveDesignStrength();
+      await saveMixProperties();
     }
     if (!cubeOrderFlow) {
       const requiredFields = [
         { label: ar ? "مصدر/مورد الخرسانة" : "Concrete Source/Supplier", value: sourceSupplier },
         { label: ar ? "درجة الخرسانة" : "Class of Concrete", value: classOfConcrete },
         { label: ar ? "أقصى حجم للركام (مم)" : "Maximum Aggregate Size (mm)", value: maxAggSize },
-        { label: ar ? "الهطول (مم)" : "Slump (mm)", value: slump },
+        { label: ar ? "الهبوط (مم)" : "Slump (mm)", value: slump },
         { label: ar ? "مكان أخذ العينة" : "Place of Sampling", value: placeOfSampling },
       ];
       const missing = requiredFields.filter((f) => !String(f.value ?? "").trim()).map((f) => f.label);
@@ -626,7 +650,7 @@ function GroupPanel({ group, distributionId, onRefresh, castingDate: distCasting
         <CardContent className="pt-0">
           {cubeOrderFlow && (
             <div className="mb-4 p-3 rounded-lg border bg-gray-50 space-y-3 text-sm">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                 <div>
                   <Label className="text-xs">
                     {ar ? "مقاومة التصميم f'c (N/mm²)" : "Design Strength f'c (N/mm²)"}
@@ -654,6 +678,48 @@ function GroupPanel({ group, distributionId, onRefresh, castingDate: distCasting
                       setCubes(prev => prev.map(c => ({ ...c, dateTested: e.target.value })));
                     }}
                     className="h-8 text-sm w-full mt-0.5"
+                    disabled={inputsDisabled}
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs">
+                    {ar ? "درجة الخرسانة" : "Class of Concrete"}
+                    <span className="text-red-600 ml-1">*</span>
+                  </Label>
+                  <Input
+                    value={classOfConcrete}
+                    onChange={e => setClassOfConcrete(e.target.value)}
+                    onBlur={() => { if (!isSubmitted) void saveMixProperties(); }}
+                    className="h-8 text-sm mt-0.5 bg-yellow-50 border-yellow-300"
+                    placeholder={ar ? "مثال: C30 / C40" : "e.g. C30 / C40"}
+                    disabled={inputsDisabled}
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs">
+                    {ar ? "أقصى حجم للركام (مم)" : "Maximum Aggregate Size (mm)"}
+                    <span className="text-red-600 ml-1">*</span>
+                  </Label>
+                  <Input
+                    value={maxAggSize}
+                    onChange={e => setMaxAggSize(e.target.value)}
+                    onBlur={() => { if (!isSubmitted) void saveMixProperties(); }}
+                    className="h-8 text-sm mt-0.5 bg-yellow-50 border-yellow-300"
+                    placeholder={ar ? "مثال: 20" : "e.g. 20"}
+                    disabled={inputsDisabled}
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs">
+                    {ar ? "الهبوط (مم)" : "Slump (mm)"}
+                    <span className="text-red-600 ml-1">*</span>
+                  </Label>
+                  <Input
+                    value={slump}
+                    onChange={e => setSlump(e.target.value)}
+                    onBlur={() => { if (!isSubmitted) void saveMixProperties(); }}
+                    className="h-8 text-sm mt-0.5 bg-yellow-50 border-yellow-300"
+                    placeholder={ar ? "مثال: 120" : "e.g. 120"}
                     disabled={inputsDisabled}
                   />
                 </div>
@@ -734,15 +800,15 @@ function GroupPanel({ group, distributionId, onRefresh, castingDate: distCasting
                 </div>
                 <div>
                   <Label className="text-xs">{ar ? "درجة الخرسانة" : "Class of Concrete"} <span className="text-red-600">*</span></Label>
-                  <Input value={classOfConcrete} onChange={e => setClassOfConcrete(e.target.value)} className="h-8 text-sm" placeholder="e.g. C30 / C40" disabled={isSubmitted} />
+                  <Input value={classOfConcrete} onChange={e => setClassOfConcrete(e.target.value)} className="h-8 text-sm bg-yellow-50 border-yellow-300" placeholder={ar ? "مثال: C30 / C40" : "e.g. C30 / C40"} disabled={isSubmitted} />
                 </div>
                 <div>
-                  <Label className="text-xs">{ar ? "الهطول (مم)" : "Slump (mm)"} <span className="text-red-600">*</span></Label>
-                  <Input value={slump} onChange={e => setSlump(e.target.value)} className="h-8 text-sm" placeholder="e.g. 120" disabled={isSubmitted} />
+                  <Label className="text-xs">{ar ? "الهبوط (مم)" : "Slump (mm)"} <span className="text-red-600">*</span></Label>
+                  <Input value={slump} onChange={e => setSlump(e.target.value)} className="h-8 text-sm bg-yellow-50 border-yellow-300" placeholder={ar ? "مثال: 120" : "e.g. 120"} disabled={isSubmitted} />
                 </div>
                 <div>
                   <Label className="text-xs">{ar ? "أقصى حجم للركام (مم)" : "Maximum Aggregate Size (mm)"} <span className="text-red-600">*</span></Label>
-                  <Input value={maxAggSize} onChange={e => setMaxAggSize(e.target.value)} className="h-8 text-sm" placeholder="e.g. 20" disabled={isSubmitted} />
+                  <Input value={maxAggSize} onChange={e => setMaxAggSize(e.target.value)} className="h-8 text-sm bg-yellow-50 border-yellow-300" placeholder={ar ? "مثال: 20" : "e.g. 20"} disabled={isSubmitted} />
                 </div>
                 <div>
                   <Label className="text-xs">Region</Label>

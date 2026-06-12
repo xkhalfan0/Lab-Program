@@ -319,6 +319,8 @@ function ReportPage({
     [ar ? "عمر الاختبار" : "Test Age", ageDisplay !== "—" ? `${ageDisplay} ${ar ? "يوم" : "days"}` : "—"],
     [ar ? "قوة التصميم (f'c)" : "Design Strength (f'c)", targetMpa != null ? `${targetMpa} N/mm²` : "—"],
     [ar ? "فئة الخرسانة" : "Class of Concrete", group.classOfConcrete ?? "—"],
+    [ar ? "أقصى حجم للركام" : "Max. Aggregate Size", group.maxAggSize ? `${group.maxAggSize} mm` : "—"],
+    [ar ? "الهبوط" : "Slump", group.slump ? `${group.slump} mm` : "—"],
     [ar ? "حجم المكعب الاسمي" : "Nominal Cube Size", group.nominalCubeSize ?? "150mm"],
     [ar ? "تاريخ الصب" : "Date of Casting", fmtDate(distCastingDate ?? group.batchDateTime) || "—"],
     [ar ? "عدد المكعبات" : "Number of Cubes", String(cubes.length || "—")],
