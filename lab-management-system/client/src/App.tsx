@@ -38,7 +38,6 @@ import MonthlyReport from "./pages/MonthlyReport";
 import SectorLogin from "./pages/sector/SectorLogin";
 import { SectorLangProvider } from "./pages/sector/SectorLayout";
 import SectorDashboard from "./pages/sector/SectorDashboard";
-import SectorInbox from "./pages/sector/SectorInbox";
 import SectorSamples from "./pages/sector/SectorSamples";
 import SectorResults from "./pages/sector/SectorResults";
 import SectorClearances from "./pages/sector/SectorClearances";
@@ -151,6 +150,18 @@ function SectorPage({ component: Component }: { component: React.ComponentType }
     <SectorLangProvider>
       <SectorGuard component={Component} />
     </SectorLangProvider>
+  );
+}
+
+function SectorInboxRedirect() {
+  const [, setLocation] = useLocation();
+  useEffect(() => {
+    setLocation("/sector/dashboard");
+  }, [setLocation]);
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-slate-50">
+      <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+    </div>
   );
 }
 
@@ -311,7 +322,7 @@ function Router() {
       {/* Sector Portal — separate from lab staff (flat routes for reliable matching) */}
       <Route path="/sector/login" component={SectorLogin} />
       <Route path="/sector" component={SectorRootRedirect} />
-      <Route path="/sector/inbox">{() => <SectorPage component={SectorInbox} />}</Route>
+      <Route path="/sector/inbox">{() => <SectorPage component={SectorInboxRedirect} />}</Route>
       <Route path="/sector/dashboard">{() => <SectorPage component={SectorDashboard} />}</Route>
       <Route path="/sector/samples">{() => <SectorPage component={SectorSamples} />}</Route>
       <Route path="/sector/results">{() => <SectorPage component={SectorResults} />}</Route>

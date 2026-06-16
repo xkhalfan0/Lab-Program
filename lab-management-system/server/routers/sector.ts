@@ -561,10 +561,11 @@ export const sectorRouter = router({
     const sampleIds = sectorSamples.map((s: { id: number }) => s.id);
     let unreadResults = 0;
     let unreadClearances = 0;
+    let failedResults = 0;
 
     if (sampleIds.length > 0) {
       const approvedRows = await db
-        .select({ id: specializedTestResults.id })
+        .select({ id: specializedTestResults.id, overallResult: specializedTestResults.overallResult })
         .from(specializedTestResults)
         .where(and(
           inArray(specializedTestResults.sampleId, sampleIds),
@@ -580,6 +581,7 @@ export const sectorRouter = router({
         ));
       const readResultIds = new Set(readResults.map((r: { reportId: number }) => r.reportId));
       unreadResults = approvedRows.filter((r: { id: number }) => !readResultIds.has(r.id)).length;
+      failedResults = approvedRows.filter((r: { overallResult: string | null }) => r.overallResult === "fail").length;
 
       const contractIds = Array.from(new Set(
         sectorSamples
@@ -604,7 +606,7 @@ export const sectorRouter = router({
       }
     }
 
-    return { results: unreadResults, clearances: unreadClearances, total: unreadResults + unreadClearances };
+    return { results: unreadResults, clearances: unreadClearances, failedResults, total: unreadResults + unreadClearances };
   }),
 
   // ── Mark clearance as read ────────────────────────────────────────────────────────

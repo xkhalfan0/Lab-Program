@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useEffect, useRef } from "react";
 import { useLocation, Link } from "wouter";
-import { FlaskConical, Inbox, TestTube2, FileCheck2, LogOut, Bell, Globe, Menu, X, LayoutDashboard } from "lucide-react";
+import { FlaskConical, TestTube2, FileCheck2, LogOut, Bell, Globe, Menu, X, LayoutDashboard, AlertTriangle } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { toast, Toaster } from "sonner";
 import { useSSESectorNotifications } from "@/hooks/useSSESectorNotifications";
@@ -49,10 +49,10 @@ const t = {
     title: "مختبر الإنشاءات",
     subtitle: "بوابة القطاعات",
     home: "الرئيسية",
-    inbox: "صندوق الوارد",
     samples: "طلبات الفحص",
     results: "نتائج الاختبارات",
     clearances: "طلبات براءة الذمة",
+    failedShort: "راسبة",
     logout: "خروج",
     lang: "English",
   },
@@ -60,10 +60,10 @@ const t = {
     title: "Construction Lab",
     subtitle: "Sector Portal",
     home: "Home",
-    inbox: "Inbox",
     samples: "Test Requests",
     results: "Test Results",
     clearances: "Clearance Requests",
+    failedShort: "Failed",
     logout: "Sign Out",
     lang: "عربي",
   },
@@ -115,13 +115,25 @@ export function SectorLayout({ children }: { children: React.ReactNode }) {
     },
   });
 
-  const inboxUnread = (unreadCount?.total ?? 0) + (notifCount?.unread ?? 0);
+  const homeUnread = (unreadCount?.total ?? 0) + (notifCount?.unread ?? 0);
+  const failedCount = unreadCount?.failedResults ?? 0;
 
-  const navItems = [
-    { path: "/sector/dashboard", label: T.home, icon: LayoutDashboard },
-    { path: "/sector/inbox", label: T.inbox, icon: Inbox, badge: inboxUnread },
+  const navItems: {
+    path: string;
+    label: string;
+    icon: typeof LayoutDashboard;
+    badge?: number;
+    badgeDanger?: boolean;
+  }[] = [
+    { path: "/sector/dashboard", label: T.home, icon: LayoutDashboard, badge: homeUnread > 0 ? homeUnread : undefined },
     { path: "/sector/samples", label: T.samples, icon: TestTube2 },
-    { path: "/sector/results", label: T.results, icon: FlaskConical, badge: unreadCount?.results },
+    {
+      path: "/sector/results",
+      label: T.results,
+      icon: FlaskConical,
+      badge: failedCount > 0 ? failedCount : unreadCount?.results,
+      badgeDanger: failedCount > 0,
+    },
     { path: "/sector/clearances", label: T.clearances, icon: FileCheck2, badge: unreadCount?.clearances },
   ];
 
@@ -156,7 +168,7 @@ export function SectorLayout({ children }: { children: React.ReactNode }) {
           </div>
 
           <nav className="hidden items-center gap-1 lg:flex">
-            {navItems.map(({ path, label, icon: Icon, badge }) => {
+            {navItems.map(({ path, label, icon: Icon, badge, badgeDanger }) => {
               const active = location === path;
               return (
                 <Link
@@ -171,7 +183,11 @@ export function SectorLayout({ children }: { children: React.ReactNode }) {
                   <Icon className="h-4 w-4" />
                   {label}
                   {badge && badge > 0 ? (
-                    <span className="absolute -top-1 -end-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">
+                    <span
+                      className={`absolute -top-1 -end-1 flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-[10px] font-bold text-white ${
+                        badgeDanger ? "animate-pulse bg-red-600 ring-2 ring-red-300" : "bg-red-500"
+                      }`}
+                    >
                       {badge > 9 ? "9+" : badge}
                     </span>
                   ) : null}
@@ -181,6 +197,15 @@ export function SectorLayout({ children }: { children: React.ReactNode }) {
           </nav>
 
           <div className="flex items-center gap-2">
+            {failedCount > 0 && (
+              <Link
+                href="/sector/results?filter=fail"
+                className="hidden items-center gap-1.5 rounded-lg border border-red-400 bg-red-600 px-3 py-1.5 text-xs font-bold text-white shadow-lg shadow-red-900/30 transition hover:bg-red-700 sm:flex animate-pulse"
+              >
+                <AlertTriangle className="h-4 w-4" />
+                {failedCount} {T.failedShort}
+              </Link>
+            )}
             {sector && (
               <div className="hidden items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-1.5 sm:flex">
                 <span className="h-2 w-2 rounded-full bg-emerald-400" />
@@ -229,7 +254,7 @@ export function SectorLayout({ children }: { children: React.ReactNode }) {
             className="h-full w-72 space-y-1 border-e border-white/10 bg-slate-900 p-4"
             onClick={(e) => e.stopPropagation()}
           >
-            {navItems.map(({ path, label, icon: Icon, badge }) => {
+            {navItems.map(({ path, label, icon: Icon, badge, badgeDanger }) => {
               const active = location === path;
               return (
                 <Link
@@ -243,7 +268,11 @@ export function SectorLayout({ children }: { children: React.ReactNode }) {
                   <Icon className="h-4 w-4" />
                   {label}
                   {badge && badge > 0 ? (
-                    <span className="ms-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1 text-xs font-bold text-white">
+                    <span
+                      className={`ms-auto flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-xs font-bold text-white ${
+                        badgeDanger ? "animate-pulse bg-red-600 ring-2 ring-red-300" : "bg-red-500"
+                      }`}
+                    >
                       {badge > 9 ? "9+" : badge}
                     </span>
                   ) : null}

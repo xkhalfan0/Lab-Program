@@ -45,6 +45,9 @@ const t = {
     yesterday: "أمس",
     outsideLimits: "خارج الحدود المسموحة",
     strengthBelow: "مقاومة أقل من المطلوب",
+    tapToReview: "اضغط لمراجعة جميع النتائج الراسبة",
+    showMore: "عرض المزيد",
+    showLess: "عرض أقل",
   },
   en: {
     failedTitle: "Failed Result",
@@ -75,6 +78,9 @@ const t = {
     yesterday: "Yesterday",
     outsideLimits: "Outside acceptable limits",
     strengthBelow: "Strength below required value",
+    tapToReview: "Tap to review all failed results",
+    showMore: "Show more",
+    showLess: "Show less",
   },
 };
 
@@ -126,11 +132,13 @@ function activityLabel(item: InboxItem, lang: "ar" | "en"): string {
   return title;
 }
 
-function FailedAlert({
+function FailedCriticalSection({
+  totalFailed,
   items,
   lang,
   onViewReport,
 }: {
+  totalFailed: number;
   items: Array<{
     id: number;
     sampleCode: string;
@@ -144,68 +152,78 @@ function FailedAlert({
 }) {
   const T = t[lang];
   const isRtl = lang === "ar";
-  const count = items.length;
-  if (count === 0) return null;
+  if (totalFailed <= 0) return null;
 
   const title =
     lang === "ar"
-      ? count === 1
+      ? totalFailed === 1
         ? "نتيجة راسبة واحدة"
-        : count === 2
+        : totalFailed === 2
           ? T.failedTitlePlural
-          : `${count} نتائج راسبة`
-      : count === 1
+          : `${totalFailed} نتائج راسبة`
+      : totalFailed === 1
         ? "1 Failed Result"
-        : `${count} Failed Results`;
+        : `${totalFailed} Failed Results`;
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-red-300 bg-gradient-to-br from-red-50 to-rose-50 shadow-sm">
-      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-red-200/80 px-5 py-4">
-        <div className="flex items-start gap-3">
-          <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-red-100">
-            <AlertTriangle className="h-5 w-5 text-red-600" />
-          </div>
-          <div>
-            <h2 className="text-lg font-bold text-red-800">{title}</h2>
-            <p className="mt-0.5 text-sm text-red-600/90">
-              {count === 1 ? T.failedSubtitleOne : T.failedSubtitle}
-            </p>
-          </div>
-        </div>
+    <div className="sticky top-16 z-30">
+      <div className="overflow-hidden rounded-2xl border-2 border-red-500 bg-gradient-to-br from-red-100 via-red-50 to-rose-50 shadow-xl ring-4 ring-red-300/50">
         <Link
           href="/sector/results?filter=fail"
-          className="rounded-lg border border-red-300 bg-white px-4 py-2 text-sm font-semibold text-red-700 transition hover:bg-red-50"
+          className="flex flex-wrap items-center gap-5 border-b border-red-200/80 p-6 transition hover:bg-red-100/40"
         >
-          {T.viewAll}
+          <div className="flex h-24 w-24 flex-shrink-0 items-center justify-center rounded-2xl border-2 border-red-400 bg-red-200 shadow-inner">
+            <AlertTriangle className="h-12 w-12 text-red-700" strokeWidth={2.5} />
+          </div>
+          <div className="min-w-0 flex-1">
+            <h2 className="text-2xl font-extrabold text-red-900">{title}</h2>
+            <p className="mt-1 text-base font-medium text-red-700">
+              {totalFailed === 1 ? T.failedSubtitleOne : T.failedSubtitle}
+            </p>
+            <p className="mt-2 text-sm font-semibold text-red-600 underline-offset-2 hover:underline">
+              {T.tapToReview} →
+            </p>
+          </div>
+          <span className="rounded-xl bg-red-600 px-5 py-3 text-lg font-bold tabular-nums text-white shadow-md">
+            {totalFailed}
+          </span>
         </Link>
-      </div>
-      <div className="divide-y divide-red-100">
-        {items.map((item) => {
-          const testLabel = isRtl ? item.testTypeNameAr : item.testTypeNameEn;
-          const desc =
-            item.hint && /^\d/.test(item.hint)
-              ? `${testLabel} — ${T.outsideLimits}`
-              : `${testLabel} — ${T.strengthBelow}`;
-          return (
-            <div key={item.id} className="flex flex-wrap items-center justify-between gap-3 px-5 py-3.5">
-              <div className="min-w-0 flex-1">
-                <p className="font-mono text-sm font-bold text-red-900">{item.sampleCode}</p>
-                <p className="mt-0.5 truncate text-xs text-red-700/80">{desc}</p>
-              </div>
-              <div className="flex items-center gap-3">
-                <span className="text-xs text-red-500">{timeAgo(item.createdAt, lang)}</span>
-                <button
-                  type="button"
-                  onClick={() => onViewReport(item.id, testLabel)}
-                  className="inline-flex items-center gap-1.5 rounded-lg bg-red-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-red-700"
-                >
-                  <Eye className="h-3.5 w-3.5" />
-                  {T.viewReport}
-                </button>
-              </div>
-            </div>
-          );
-        })}
+
+        {items.length > 0 && (
+          <div className="divide-y divide-red-200/80 bg-white/40">
+            {items.map((item) => {
+              const testLabel = isRtl ? item.testTypeNameAr : item.testTypeNameEn;
+              const desc =
+                item.hint && /^\d/.test(item.hint)
+                  ? `${testLabel} — ${T.outsideLimits}`
+                  : `${testLabel} — ${T.strengthBelow}`;
+              return (
+                <div key={item.id} className="flex flex-wrap items-center justify-between gap-4 px-6 py-4">
+                  <div className="flex min-w-0 flex-1 items-center gap-4">
+                    <div className="flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-xl border border-red-300 bg-red-100">
+                      <AlertTriangle className="h-7 w-7 text-red-600" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="font-mono text-base font-bold text-red-900">{item.sampleCode}</p>
+                      <p className="mt-0.5 truncate text-sm text-red-700/90">{desc}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="text-sm text-red-500">{timeAgo(item.createdAt, lang)}</span>
+                    <button
+                      type="button"
+                      onClick={() => onViewReport(item.id, testLabel)}
+                      className="inline-flex items-center gap-2 rounded-xl bg-red-600 px-4 py-2.5 text-sm font-bold text-white shadow-md transition hover:bg-red-700"
+                    >
+                      <Eye className="h-4 w-4" />
+                      {T.viewReport}
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -215,24 +233,43 @@ function KpiCard({
   label,
   value,
   tone,
+  href,
+  critical,
 }: {
   label: string;
   value: number;
   tone: "red" | "green" | "amber" | "slate";
+  href?: string;
+  critical?: boolean;
 }) {
   const tones = {
-    red: { value: "text-red-600", border: "border-red-100", bg: "bg-red-50/50" },
+    red: { value: "text-red-600", border: "border-red-200", bg: "bg-red-50" },
     green: { value: "text-emerald-600", border: "border-emerald-100", bg: "bg-emerald-50/50" },
     amber: { value: "text-amber-600", border: "border-amber-100", bg: "bg-amber-50/50" },
     slate: { value: "text-slate-800", border: "border-slate-200", bg: "bg-white" },
   };
   const c = tones[tone];
-  return (
-    <div className={`rounded-2xl border p-5 shadow-sm ${c.border} ${c.bg}`}>
-      <p className={`text-4xl font-bold tabular-nums ${c.value}`}>{value}</p>
-      <p className="mt-1 text-sm font-medium text-slate-600">{label}</p>
-    </div>
+  const inner = (
+    <>
+      {critical && value > 0 && (
+        <AlertTriangle className="mb-2 h-8 w-8 text-red-500" strokeWidth={2.5} />
+      )}
+      <p className={`font-bold tabular-nums ${critical && value > 0 ? "text-5xl" : "text-4xl"} ${c.value}`}>{value}</p>
+      <p className={`mt-1 font-medium text-slate-600 ${critical && value > 0 ? "text-base" : "text-sm"}`}>{label}</p>
+    </>
   );
+  const cls = `rounded-2xl border p-5 shadow-sm transition ${c.border} ${c.bg} ${
+    critical && value > 0 ? "col-span-2 ring-2 ring-red-300 hover:bg-red-100/80 lg:col-span-1" : ""
+  } ${href && value > 0 ? "cursor-pointer hover:shadow-md" : ""}`;
+
+  if (href && value > 0) {
+    return (
+      <Link href={href} className={`block ${cls}`}>
+        {inner}
+      </Link>
+    );
+  }
+  return <div className={cls}>{inner}</div>;
 }
 
 function ActivityRow({
@@ -307,6 +344,7 @@ export default function SectorDashboard() {
   const [, setLocation] = useLocation();
 
   const [feedTab, setFeedTab] = useState<"all" | "result" | "clearance">("all");
+  const [showAllFeed, setShowAllFeed] = useState(false);
   const [selectedResultId, setSelectedResultId] = useState<number | null>(null);
   const [selectedTestLabel, setSelectedTestLabel] = useState("");
 
@@ -329,8 +367,8 @@ export default function SectorDashboard() {
       const bFail = isResultFail(b) ? 0 : 1;
       if (aFail !== bFail) return aFail - bFail;
       return new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime();
-    }).slice(0, 12);
-  }, [items, feedTab]);
+    }).slice(0, showAllFeed ? 100 : 12);
+  }, [items, feedTab, showAllFeed]);
 
   const openResult = (id: number, label = "") => {
     setSelectedResultId(id);
@@ -342,8 +380,6 @@ export default function SectorDashboard() {
       openResult(item.refId, item.subtitle?.split(" — ").slice(1).join(" — ") ?? "");
     } else if (item.type === "clearance") {
       setLocation("/sector/clearances");
-    } else {
-      setLocation("/sector/inbox");
     }
   };
 
@@ -369,14 +405,21 @@ export default function SectorDashboard() {
           <SectorLoading />
         ) : (
           <>
-            <FailedAlert
+            <FailedCriticalSection
+              totalFailed={stats?.failedResults ?? 0}
               items={stats?.recentFailedResults ?? []}
               lang={lang}
               onViewReport={openResult}
             />
 
             <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4">
-              <KpiCard label={T.failedResults} value={stats?.failedResults ?? 0} tone="red" />
+              <KpiCard
+                label={T.failedResults}
+                value={stats?.failedResults ?? 0}
+                tone="red"
+                href="/sector/results?filter=fail"
+                critical
+              />
               <KpiCard label={T.readyResults} value={stats?.readyResults ?? 0} tone="green" />
               <KpiCard label={T.underInspection} value={stats?.pendingSamples ?? 0} tone="amber" />
               <KpiCard label={T.totalSamples} value={stats?.totalSamples ?? 0} tone="slate" />
@@ -410,9 +453,13 @@ export default function SectorDashboard() {
 
               {items.length > 12 && (
                 <div className="border-t border-slate-100 px-4 py-3 text-center">
-                  <Link href="/sector/inbox" className="text-sm font-semibold text-blue-600 hover:text-blue-700">
-                    {T.viewAll}
-                  </Link>
+                  <button
+                    type="button"
+                    onClick={() => setShowAllFeed((v) => !v)}
+                    className="text-sm font-semibold text-blue-600 hover:text-blue-700"
+                  >
+                    {showAllFeed ? T.showLess : T.showMore}
+                  </button>
                 </div>
               )}
             </div>
