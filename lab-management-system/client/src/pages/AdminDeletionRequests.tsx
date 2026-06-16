@@ -284,19 +284,14 @@ export default function AdminDeletionRequests() {
     <DashboardLayout>
       <div className="p-6 space-y-6">
         {/* Header */}
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <h1 className="text-xl font-bold flex items-center gap-2">
-              <ShieldCheck className="w-5 h-5 text-primary" />
-              {lang === "ar" ? "طلبات الحذف" : "Deletion Requests"}
-            </h1>
-            <p className="text-sm text-muted-foreground mt-1">
-              {lang === "ar" ? "مراجعة وإدارة طلبات الحذف المقدمة من المستخدمين" : "Review and manage deletion requests submitted by users"}
-            </p>
-          </div>
-          <Button variant="outline" size="sm" onClick={() => setLocation("/admin/deletion-log")}>
-            {lang === "ar" ? "سجل الحذف" : "Deletion log"}
-          </Button>
+        <div>
+          <h1 className="text-xl font-bold flex items-center gap-2">
+            <ShieldCheck className="w-5 h-5 text-primary" />
+            {lang === "ar" ? "طلبات الحذف" : "Deletion Requests"}
+          </h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            {lang === "ar" ? "مراجعة وإدارة طلبات الحذف المقدمة من المستخدمين" : "Review and manage deletion requests submitted by users"}
+          </p>
         </div>
 
         {/* Filters - matching Reception page style */}
