@@ -128,23 +128,23 @@ export default function PrintTestCatalog() {
                 </h2>
               </div>
 
-              <table className="w-full border-collapse text-[11px] print:text-[10px]">
+              <table className="w-full border-collapse text-[11px] print:text-[10px] table-fixed">
+                <colgroup>
+                  <col className="w-[2.5rem]" />
+                  <col />
+                  <col className="w-[5.5rem]" />
+                  <col className="w-[9rem]" />
+                </colgroup>
                 <thead>
                   <tr className="bg-gray-100">
-                    <th className="border border-gray-300 px-2 py-1.5 text-start w-8">#</th>
-                    <th className="border border-gray-300 px-2 py-1.5 text-start">
+                    <th className="border border-gray-300 px-2 py-1.5 text-center font-semibold">#</th>
+                    <th className="border border-gray-300 px-2 py-1.5 text-start font-semibold">
                       {lang === "ar" ? "اسم الاختبار" : "Test Name"}
                     </th>
-                    <th className="border border-gray-300 px-2 py-1.5 text-start w-28">
-                      {lang === "ar" ? "الرمز" : "Code"}
-                    </th>
-                    <th className="border border-gray-300 px-2 py-1.5 text-end w-24">
+                    <th className="border border-gray-300 px-2 py-1.5 text-end font-semibold whitespace-nowrap">
                       {lang === "ar" ? "السعر (AED)" : "Price (AED)"}
                     </th>
-                    <th className="border border-gray-300 px-2 py-1.5 text-start w-20">
-                      {lang === "ar" ? "الوحدة" : "Unit"}
-                    </th>
-                    <th className="border border-gray-300 px-2 py-1.5 text-start">
+                    <th className="border border-gray-300 px-2 py-1.5 text-start font-semibold">
                       {lang === "ar" ? "المعيار" : "Standard"}
                     </th>
                   </tr>
@@ -152,21 +152,21 @@ export default function PrintTestCatalog() {
                 <tbody>
                   {category.tests.map((test, idx) => (
                     <tr key={test.code} className="even:bg-gray-50/80">
-                      <td className="border border-gray-200 px-2 py-1.5 text-gray-500 tabular-nums">{idx + 1}</td>
-                      <td className="border border-gray-200 px-2 py-1.5">
-                        <div className="font-medium text-gray-900">{test.nameEn}</div>
+                      <td className="border border-gray-200 px-2 py-1.5 text-center text-gray-500 tabular-nums align-middle">
+                        {idx + 1}
+                      </td>
+                      <td className="border border-gray-200 px-2 py-1.5 align-top">
+                        <div className="font-medium text-gray-900 leading-snug">{test.nameEn}</div>
                         {test.nameAr && (
-                          <div className="text-gray-600 mt-0.5" dir="rtl">
+                          <div className="text-gray-600 mt-0.5 leading-snug" dir="rtl">
                             {test.nameAr}
                           </div>
                         )}
                       </td>
-                      <td className="border border-gray-200 px-2 py-1.5 font-mono text-[10px]">{test.code}</td>
-                      <td className="border border-gray-200 px-2 py-1.5 text-end font-mono font-semibold tabular-nums">
+                      <td className="border border-gray-200 px-2 py-1.5 text-end font-mono font-semibold tabular-nums align-middle whitespace-nowrap">
                         {formatPrice(test.unitPrice)}
                       </td>
-                      <td className="border border-gray-200 px-2 py-1.5 text-gray-600">{test.unit || "—"}</td>
-                      <td className="border border-gray-200 px-2 py-1.5 text-gray-600 text-[10px]">
+                      <td className="border border-gray-200 px-2 py-1.5 text-start text-gray-600 text-[10px] align-middle leading-snug">
                         {test.standardRef || "—"}
                       </td>
                     </tr>
