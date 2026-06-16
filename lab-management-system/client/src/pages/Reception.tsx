@@ -1825,6 +1825,7 @@ export default function Reception() {
               )}
             </DialogContent>
           </Dialog>
+          </div>
         </div>
 
         {/* Task Filter Buttons */}
