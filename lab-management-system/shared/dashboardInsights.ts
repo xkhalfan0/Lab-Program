@@ -3,7 +3,66 @@
  * Used by ManagerDashboard and report generator.
  */
 
-import { LAB_ORDER_STATUS_GROUPS } from "./statusGroups";
+import { LAB_ORDER_STATUS_GROUPS, SAMPLE_STATUS_GROUPS, isInGroup } from "./statusGroups";
+
+export type SampleKpis = {
+  total: number;
+  active: number;
+  completed: number;
+  needsAction: number;
+  failed: number;
+};
+
+/** Aggregate sample KPIs from status histogram (matches DB groupBy). */
+export function computeSampleKpisFromStatusCounts(
+  byStatus: Array<{ status: string; count: number | string }>
+): SampleKpis {
+  let total = 0;
+  let active = 0;
+  let completed = 0;
+  let needsAction = 0;
+  let failed = 0;
+
+  for (const row of byStatus) {
+    const n = Number(row.count);
+    if (!Number.isFinite(n) || n <= 0) continue;
+    const status = row.status;
+    if (status === "deleted") continue;
+
+    total += n;
+
+    if (isInGroup(status, SAMPLE_STATUS_GROUPS.completed)) {
+      completed += n;
+      continue;
+    }
+    if (isInGroup(status, SAMPLE_STATUS_GROUPS.failed)) {
+      failed += n;
+      continue;
+    }
+
+    active += n;
+    if (isInGroup(status, SAMPLE_STATUS_GROUPS.needsAction)) {
+      needsAction += n;
+    }
+  }
+
+  return { total, active, completed, needsAction, failed };
+}
+
+/** Aggregate sample KPIs from individual sample rows. */
+export function computeSampleKpis(
+  samples: Array<{ status: string | null | undefined }>
+): SampleKpis {
+  const counts = new Map<string, number>();
+  for (const s of samples) {
+    const status = s.status ?? "unknown";
+    if (status === "deleted") continue;
+    counts.set(status, (counts.get(status) ?? 0) + 1);
+  }
+  return computeSampleKpisFromStatusCounts(
+    Array.from(counts.entries()).map(([status, count]) => ({ status, count }))
+  );
+}
 
 export type LabOrderRow = {
   id?: number;

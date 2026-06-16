@@ -16,12 +16,20 @@ const redirectToLoginIfUnauthorized = (error: unknown) => {
   if (!(error instanceof TRPCClientError)) return;
   if (typeof window === "undefined") return;
 
-  const isUnauthorized = error.message === UNAUTHED_ERR_MSG;
+  const isSectorPage = window.location.pathname.startsWith("/sector");
+  const onSectorLogin = window.location.pathname.startsWith("/sector/login");
 
+  if (isSectorPage && !onSectorLogin && error.data?.code === "UNAUTHORIZED") {
+    localStorage.removeItem("sector_token");
+    localStorage.removeItem("sector_info");
+    window.location.href = "/sector/login";
+    return;
+  }
+
+  const isUnauthorized = error.message === UNAUTHED_ERR_MSG;
   if (!isUnauthorized) return;
 
   // Don't redirect sector portal users to Manus OAuth
-  const isSectorPage = window.location.pathname.startsWith("/sector");
   if (isSectorPage) return;
 
   window.location.href = getLoginUrl();

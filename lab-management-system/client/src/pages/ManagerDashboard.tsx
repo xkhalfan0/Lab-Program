@@ -99,7 +99,6 @@ export default function ManagerDashboard() {
   const queryInput = useMemo(() => ({ dateFrom, dateTo }), [dateFrom, dateTo]);
 
   const { data: stats } = trpc.analytics.testStats.useQuery(queryInput);
-  const { data: samples } = trpc.samples.list.useQuery();
   const { data: sampleStats } = trpc.samples.stats.useQuery();
   const { data: rawOrdersData = [] } = trpc.orders.list.useQuery();
   const { data: techStats } = trpc.dashboard.technicianStats.useQuery();
@@ -131,13 +130,9 @@ export default function ManagerDashboard() {
   }));
 
   const total = sampleStats?.total ?? 0;
-  const active = samples?.filter(
-    (s) => !["clearance_issued", "rejected", "qc_failed"].includes(s.status)
-  ).length ?? 0;
-  const completed = samples?.filter((s) => s.status === "clearance_issued").length ?? 0;
-  const needsAction = samples?.filter(
-    (s) => ["received", "processed", "approved", "revision_requested", "awaiting_review"].includes(s.status)
-  ).length ?? 0;
+  const active = sampleStats?.active ?? 0;
+  const completed = sampleStats?.completed ?? 0;
+  const needsAction = sampleStats?.needsAction ?? 0;
 
   const contractReadinessRows = useMemo(
     () => computeContractReadinessRows(orders),

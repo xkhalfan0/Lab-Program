@@ -6,6 +6,7 @@ import { launchPuppeteerBrowser } from "./puppeteerBrowser";
 import {
   computeContractReadinessRows,
   computeContractorScores,
+  computeSampleKpis,
 } from "@shared/dashboardInsights";
 import {
   getAllSamples,
@@ -188,18 +189,12 @@ async function collectSectionData(sections: ReportSection[], from: Date, to: Dat
   const data: Record<string, unknown> = {};
 
   if (sections.includes("overview")) {
-    const active = allSamples.filter(
-      (s) => !["clearance_issued", "rejected", "qc_failed", "deleted"].includes(s.status)
-    ).length;
-    const completed = allSamples.filter((s) => s.status === "clearance_issued").length;
-    const needsAction = allSamples.filter((s) =>
-      isInGroup(s.status, SAMPLE_STATUS_GROUPS.needsAction)
-    ).length;
+    const kpis = computeSampleKpis(allSamples);
     data.overview = {
-      total: allSamples.length,
-      active,
-      completed,
-      needsAction,
+      total: kpis.total,
+      active: kpis.active,
+      completed: kpis.completed,
+      needsAction: kpis.needsAction,
       periodReceived: inRange.length,
     };
   }

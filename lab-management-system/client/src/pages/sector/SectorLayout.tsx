@@ -1,11 +1,10 @@
 import { createContext, useContext, useState, useEffect, useRef } from "react";
 import { useLocation, Link } from "wouter";
-import { FlaskConical, Inbox, TestTube2, FileCheck2, LogOut, Bell, Globe, Menu, X, FlaskRound } from "lucide-react";
+import { FlaskConical, Inbox, TestTube2, FileCheck2, LogOut, Bell, Globe, Menu, X } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { useSSESectorNotifications } from "@/hooks/useSSESectorNotifications";
 
-// ─── Shared Language Context ──────────────────────────────────────────────────
 const SectorLangContext = createContext<{
   lang: "ar" | "en";
   setLang: (l: "ar" | "en") => void;
@@ -35,7 +34,6 @@ export function useSectorLang() {
   return useContext(SectorLangContext);
 }
 
-// ─── Auth helper ──────────────────────────────────────────────────────────────
 export function useSectorAuth() {
   const token = localStorage.getItem("sector_token");
   const info = localStorage.getItem("sector_info");
@@ -46,7 +44,6 @@ export function useSectorAuth() {
   };
 }
 
-// ─── Translations ─────────────────────────────────────────────────────────────
 const t = {
   ar: {
     title: "مختبر الإنشاءات",
@@ -70,7 +67,6 @@ const t = {
   },
 };
 
-// ─── Layout ───────────────────────────────────────────────────────────────────
 export function SectorLayout({ children }: { children: React.ReactNode }) {
   const [location, setLocation] = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -84,40 +80,36 @@ export function SectorLayout({ children }: { children: React.ReactNode }) {
     refetchInterval: 30000,
   });
 
-  // Toast notification when new unread items arrive
   useEffect(() => {
     if (unreadCount === undefined) return;
     const total = unreadCount.total ?? 0;
     if (prevUnreadRef.current === null) {
-      // First load — only show toast if there are unread items
       if (total > 0) {
         toast.info(
-          isRtl ? `لديك ${total} ${total === 1 ? 'تقرير جديد' : 'تقارير جديدة'}` : `You have ${total} new ${total === 1 ? 'report' : 'reports'}`,
+          isRtl ? `لديك ${total} ${total === 1 ? "تقرير جديد" : "تقارير جديدة"}` : `You have ${total} new ${total === 1 ? "report" : "reports"}`,
           {
-            description: isRtl ? 'انتقل إلى صندوق الوارد للاطلاع عليها' : 'Check your Inbox to view them',
+            description: isRtl ? "انتقل إلى صندوق الوارد للاطلاع عليها" : "Check your Inbox to view them",
             duration: 6000,
           }
         );
       }
     } else if (total > prevUnreadRef.current) {
-      // New items arrived
       const newCount = total - prevUnreadRef.current;
       toast.success(
-        isRtl ? `${newCount} ${newCount === 1 ? 'تقرير جديد' : 'تقارير جديدة'}` : `${newCount} new ${newCount === 1 ? 'report' : 'reports'}`,
+        isRtl ? `${newCount} ${newCount === 1 ? "تقرير جديد" : "تقارير جديدة"}` : `${newCount} new ${newCount === 1 ? "report" : "reports"}`,
         {
-          description: isRtl ? 'وصلت نتائج جديدة لقطاعك' : 'New results have arrived for your sector',
+          description: isRtl ? "وصلت نتائج جديدة لقطاعك" : "New results have arrived for your sector",
           duration: 5000,
         }
       );
     }
     prevUnreadRef.current = total;
-  }, [unreadCount?.total]);
+  }, [unreadCount?.total, isRtl]);
 
   const { data: notifCount, refetch: refetchNotifCount } = trpc.sector.getNotificationCount.useQuery(undefined, {
-    refetchInterval: 60000, // fallback polling — SSE handles real-time
+    refetchInterval: 60000,
   });
 
-  // Real-time SSE for sector notifications
   useSSESectorNotifications({
     sectorId: sector?.id ?? null,
     onNew: (n) => {
@@ -129,7 +121,6 @@ export function SectorLayout({ children }: { children: React.ReactNode }) {
     },
   });
 
-  // Compute inbox total unread (results + clearances + notifications)
   const inboxUnread = (unreadCount?.total ?? 0) + (notifCount?.unread ?? 0);
 
   const navItems = [
@@ -146,47 +137,43 @@ export function SectorLayout({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <div dir={isRtl ? "rtl" : "ltr"} className="min-h-screen" style={{ background: "#f0f4f8" }}>
-      {/* Top Navigation Bar */}
-      <header className="sticky top-0 z-50 h-14"
-        style={{
-          background: "linear-gradient(135deg, #0a0f1e 0%, #1a2744 100%)",
-          borderBottom: "1px solid rgba(255,255,255,0.08)",
-          boxShadow: "0 2px 20px rgba(0,0,0,0.3)",
-        }}>
-        <div className="h-full flex items-center justify-between px-4 lg:px-6">
-          {/* Logo + Title */}
+    <div dir={isRtl ? "rtl" : "ltr"} className="min-h-screen bg-slate-50">
+      <header className="sticky top-0 z-50 border-b border-white/10 bg-gradient-to-r from-slate-900 via-slate-800 to-blue-950 shadow-lg shadow-slate-900/20">
+        <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-4 px-4 lg:px-6">
           <div className="flex items-center gap-3">
-            <button className="lg:hidden text-white p-1" onClick={() => setMobileOpen(!mobileOpen)}>
-              {mobileOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+            <button
+              type="button"
+              className="rounded-lg p-2 text-white/80 hover:bg-white/10 lg:hidden"
+              onClick={() => setMobileOpen(!mobileOpen)}
+            >
+              {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
             </button>
-            <div className="w-8 h-8 rounded-lg flex items-center justify-center"
-              style={{ background: "linear-gradient(135deg, #1d4ed8, #0891b2)" }}>
-              <FlaskConical className="w-4 h-4 text-white" />
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500 to-cyan-500 shadow-md">
+              <FlaskConical className="h-5 w-5 text-white" />
             </div>
             <div className="hidden sm:block">
-              <div className="text-white font-bold text-sm leading-none">{T.title}</div>
-              <div className="text-xs leading-none mt-0.5" style={{ color: "#60a5fa" }}>{T.subtitle}</div>
+              <div className="text-sm font-bold leading-tight text-white">{T.title}</div>
+              <div className="text-xs text-blue-300">{T.subtitle}</div>
             </div>
           </div>
 
-          {/* Desktop Nav */}
-          <nav className="hidden lg:flex items-center gap-1">
+          <nav className="hidden items-center gap-1 lg:flex">
             {navItems.map(({ path, label, icon: Icon, badge }) => {
               const active = location === path;
               return (
-                <Link key={path} href={path}
-                  className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all relative"
-                  style={{
-                    color: active ? "#fff" : "rgba(148,163,184,0.8)",
-                    background: active ? "rgba(59,130,246,0.2)" : "transparent",
-                    border: active ? "1px solid rgba(59,130,246,0.3)" : "1px solid transparent",
-                  }}>
-                  <Icon className="w-4 h-4" />
+                <Link
+                  key={path}
+                  href={path}
+                  className={`relative flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-medium transition-all ${
+                    active
+                      ? "border border-blue-400/30 bg-blue-500/20 text-white"
+                      : "border border-transparent text-slate-300 hover:bg-white/5 hover:text-white"
+                  }`}
+                >
+                  <Icon className="h-4 w-4" />
                   {label}
                   {badge && badge > 0 ? (
-                    <span className="absolute -top-1 -right-1 w-5 h-5 rounded-full text-xs flex items-center justify-center font-bold"
-                      style={{ background: "#ef4444", color: "#fff" }}>
+                    <span className="absolute -top-1 -end-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">
                       {badge > 9 ? "9+" : badge}
                     </span>
                   ) : null}
@@ -195,80 +182,70 @@ export function SectorLayout({ children }: { children: React.ReactNode }) {
             })}
           </nav>
 
-          {/* Right actions */}
           <div className="flex items-center gap-2">
-            {/* Sector name badge */}
             {sector && (
-              <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg"
-                style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)" }}>
-                <div className="w-2 h-2 rounded-full bg-green-400" />
-                <span className="text-xs font-medium text-white">
-                  {isRtl
-                    ? `قسم المختبر - ${sector.nameAr}`
-                    : `Lab Section - ${sector.nameEn}`}
+              <div className="hidden items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-1.5 sm:flex">
+                <span className="h-2 w-2 rounded-full bg-emerald-400" />
+                <span className="max-w-[200px] truncate text-xs font-medium text-white">
+                  {isRtl ? `قسم المختبر - ${sector.nameAr}` : `Lab Section - ${sector.nameEn}`}
                 </span>
               </div>
             )}
 
-            {/* Unread bell */}
             {(unreadCount?.total ?? 0) > 0 && (
-              <div className="relative">
-                <Bell className="w-5 h-5" style={{ color: "#fbbf24" }} />
-                <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full text-xs flex items-center justify-center font-bold"
-                  style={{ background: "#ef4444", color: "#fff", fontSize: "10px" }}>
+              <div className="relative hidden sm:block">
+                <Bell className="h-5 w-5 text-amber-400" />
+                <span className="absolute -top-1 -end-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white">
                   {unreadCount!.total > 9 ? "9+" : unreadCount!.total}
                 </span>
               </div>
             )}
 
-            {/* Language toggle */}
             <button
+              type="button"
               onClick={() => setLang(lang === "ar" ? "en" : "ar")}
-              className="flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs transition-all"
-              style={{ color: "rgba(148,163,184,0.8)", border: "1px solid rgba(255,255,255,0.1)" }}>
-              <Globe className="w-3.5 h-3.5" />
+              className="flex items-center gap-1 rounded-lg border border-white/10 px-2.5 py-1.5 text-xs text-slate-300 transition hover:bg-white/5 hover:text-white"
+            >
+              <Globe className="h-3.5 w-3.5" />
               {T.lang}
             </button>
 
-            {/* Logout */}
             <button
+              type="button"
               onClick={handleLogout}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
-              style={{
-                color: "#fca5a5",
-                border: "1px solid rgba(239,68,68,0.2)",
-                background: "rgba(239,68,68,0.08)",
-              }}>
-              <LogOut className="w-3.5 h-3.5" />
+              className="flex items-center gap-1.5 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-1.5 text-xs font-medium text-red-300 transition hover:bg-red-500/20"
+            >
+              <LogOut className="h-3.5 w-3.5" />
               <span className="hidden sm:inline">{T.logout}</span>
             </button>
           </div>
         </div>
       </header>
 
-      {/* Mobile Nav Drawer */}
       {mobileOpen && (
-        <div className="lg:hidden fixed inset-0 z-40 pt-14"
-          style={{ background: "rgba(0,0,0,0.5)" }}
-          onClick={() => setMobileOpen(false)}>
-          <div className="w-64 h-full p-4 space-y-1"
-            style={{ background: "#0d1b2a" }}
-            onClick={(e) => e.stopPropagation()}>
+        <div
+          className="fixed inset-0 z-40 bg-black/50 pt-16 lg:hidden"
+          onClick={() => setMobileOpen(false)}
+        >
+          <div
+            className="h-full w-72 space-y-1 border-e border-white/10 bg-slate-900 p-4"
+            onClick={(e) => e.stopPropagation()}
+          >
             {navItems.map(({ path, label, icon: Icon, badge }) => {
               const active = location === path;
               return (
-                <Link key={path} href={path}
-                  className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all relative"
-                  style={{
-                    color: active ? "#fff" : "rgba(148,163,184,0.8)",
-                    background: active ? "rgba(59,130,246,0.2)" : "transparent",
-                  }}
-                  onClick={() => setMobileOpen(false)}>
-                  <Icon className="w-4 h-4" />
+                <Link
+                  key={path}
+                  href={path}
+                  className={`relative flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium ${
+                    active ? "bg-blue-500/20 text-white" : "text-slate-300 hover:bg-white/5"
+                  }`}
+                  onClick={() => setMobileOpen(false)}
+                >
+                  <Icon className="h-4 w-4" />
                   {label}
                   {badge && badge > 0 ? (
-                    <span className="ms-auto w-5 h-5 rounded-full text-xs flex items-center justify-center font-bold"
-                      style={{ background: "#ef4444", color: "#fff" }}>
+                    <span className="ms-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1 text-xs font-bold text-white">
                       {badge > 9 ? "9+" : badge}
                     </span>
                   ) : null}
@@ -279,10 +256,7 @@ export function SectorLayout({ children }: { children: React.ReactNode }) {
         </div>
       )}
 
-      {/* Page content */}
-      <main className="p-4 lg:p-6 max-w-7xl mx-auto">
-        {children}
-      </main>
+      <main className="mx-auto max-w-7xl px-4 py-6 lg:px-6 lg:py-8">{children}</main>
     </div>
   );
 }

@@ -115,13 +115,9 @@ export default function Home() {
   const now = new Date();
 
   const total = stats?.total ?? 0;
-  const active = samples?.filter(
-    (s) => !["clearance_issued", "rejected", "qc_failed"].includes(s.status)
-  ).length ?? 0;
-  const completed = samples?.filter((s) => s.status === "clearance_issued").length ?? 0;
-  const needsAction = samples?.filter(
-    (s) => ["received", "processed", "approved", "revision_requested"].includes(s.status)
-  ).length ?? 0;
+  const active = stats?.active ?? 0;
+  const completed = stats?.completed ?? 0;
+  const needsAction = stats?.needsAction ?? 0;
 
   const statusChartData =
     stats?.byStatus?.map((s) => ({

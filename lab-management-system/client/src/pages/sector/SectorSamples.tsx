@@ -1,8 +1,15 @@
 import { useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { SectorLayout, useSectorLang } from "./SectorLayout";
+import {
+  SectorPageHeader,
+  SectorCard,
+  SectorLoading,
+  SectorError,
+  SectorEmpty,
+  sectorTheme,
+} from "./sectorUi";
 import { TestTube2, Search, ChevronLeft, ChevronRight, Calendar, Hash, Building2, X } from "lucide-react";
-import { Loader2 } from "lucide-react";
 
 const t = {
   ar: {
@@ -26,10 +33,12 @@ const t = {
     from: "من تاريخ",
     to: "إلى تاريخ",
     clearFilters: "مسح الفلاتر",
-    filters: "فلترة",
+    loadError: "تعذّر تحميل العينات. تحقق من الاتصال أو سجّل الدخول مرة أخرى.",
+    retry: "إعادة المحاولة",
     statuses: {
       received: "مستلمة",
       distributed: "موزعة",
+      testing_in_progress: "قيد الفحص",
       in_progress: "قيد الفحص",
       processed: "تم الاختبار",
       supervisor_review: "مراجعة نتائج الاختبارات",
@@ -63,10 +72,12 @@ const t = {
     from: "From Date",
     to: "To Date",
     clearFilters: "Clear Filters",
-    filters: "Filters",
+    loadError: "Could not load samples. Check your connection or sign in again.",
+    retry: "Retry",
     statuses: {
       received: "Received",
       distributed: "Distributed",
+      testing_in_progress: "In Progress",
       in_progress: "In Progress",
       processed: "Tested",
       supervisor_review: "Test Results Review",
@@ -81,20 +92,26 @@ const t = {
   },
 };
 
-const statusColors: Record<string, { bg: string; text: string; border: string }> = {
-  received:          { bg: "rgba(59,130,246,0.1)",   text: "#2563eb",  border: "#bfdbfe" },
-  distributed:       { bg: "rgba(245,158,11,0.1)",   text: "#d97706",  border: "#fde68a" },
-  in_progress:       { bg: "rgba(139,92,246,0.1)",   text: "#7c3aed",  border: "#ddd6fe" },
-  processed:         { bg: "rgba(99,102,241,0.1)",   text: "#4f46e5",  border: "#c7d2fe" },
-  supervisor_review: { bg: "rgba(245,158,11,0.1)",   text: "#d97706",  border: "#fde68a" },
-  approved:          { bg: "rgba(16,185,129,0.1)",   text: "#059669",  border: "#a7f3d0" },
-  needs_revision:    { bg: "rgba(245,158,11,0.15)",  text: "#b45309",  border: "#fde68a" },
-  rejected:          { bg: "rgba(239,68,68,0.1)",    text: "#dc2626",  border: "#fecaca" },
-  qc_review:         { bg: "rgba(245,158,11,0.1)",   text: "#d97706",  border: "#fde68a" },
-  qc_passed:         { bg: "rgba(16,185,129,0.1)",   text: "#059669",  border: "#a7f3d0" },
-  qc_failed:         { bg: "rgba(239,68,68,0.1)",    text: "#dc2626",  border: "#fecaca" },
-  clearance_issued:  { bg: "rgba(16,185,129,0.15)",  text: "#047857",  border: "#6ee7b7" },
+const statusColors: Record<string, string> = {
+  received: "bg-blue-50 text-blue-700 ring-blue-200",
+  distributed: "bg-amber-50 text-amber-700 ring-amber-200",
+  testing_in_progress: "bg-violet-50 text-violet-700 ring-violet-200",
+  in_progress: "bg-violet-50 text-violet-700 ring-violet-200",
+  processed: "bg-indigo-50 text-indigo-700 ring-indigo-200",
+  supervisor_review: "bg-amber-50 text-amber-700 ring-amber-200",
+  approved: "bg-emerald-50 text-emerald-700 ring-emerald-200",
+  needs_revision: "bg-orange-50 text-orange-700 ring-orange-200",
+  rejected: "bg-red-50 text-red-700 ring-red-200",
+  qc_review: "bg-amber-50 text-amber-700 ring-amber-200",
+  qc_passed: "bg-emerald-50 text-emerald-700 ring-emerald-200",
+  qc_failed: "bg-red-50 text-red-700 ring-red-200",
+  clearance_issued: "bg-teal-50 text-teal-700 ring-teal-200",
 };
+
+function statusLabel(status: string | null | undefined, T: typeof t.ar) {
+  const key = status ?? "received";
+  return T.statuses[key] ?? key;
+}
 
 export default function SectorSamples() {
   const { lang } = useSectorLang();
@@ -108,41 +125,20 @@ export default function SectorSamples() {
   const isRtl = lang === "ar";
   const limit = 15;
 
-  const { data, isLoading } = trpc.sector.getSamples.useQuery({ page, limit });
-
-  const allSamples = data?.samples ?? [];
-
-  // Count per status
-  const statusCounts: Record<string, number> = {};
-  for (const s of allSamples) {
-    const st = s.status ?? "received";
-    statusCounts[st] = (statusCounts[st] ?? 0) + 1;
-  }
-  const uniqueStatuses = Array.from(new Set(allSamples.map(s => s.status).filter(Boolean)));
-
-  const filtered = allSamples.filter((s) => {
-    if (search) {
-      const q = search.toLowerCase();
-      const match =
-        s.sampleCode?.toLowerCase().includes(q) ||
-        s.contractNumber?.toLowerCase().includes(q) ||
-        s.contractName?.toLowerCase().includes(q) ||
-        s.contractorName?.toLowerCase().includes(q);
-      if (!match) return false;
-    }
-    if (statusFilter && s.status !== statusFilter) return false;
-    if (dateFrom && s.receivedAt) {
-      if (new Date(s.receivedAt) < new Date(dateFrom)) return false;
-    }
-    if (dateTo && s.receivedAt) {
-      const toDate = new Date(dateTo);
-      toDate.setHours(23, 59, 59, 999);
-      if (new Date(s.receivedAt) > toDate) return false;
-    }
-    return true;
+  const { data, isLoading, isError, refetch } = trpc.sector.getSamples.useQuery({
+    page,
+    limit,
+    search: search.trim() || undefined,
+    status: statusFilter || undefined,
+    dateFrom: dateFrom || undefined,
+    dateTo: dateTo || undefined,
   });
 
-  const totalPages = Math.ceil((data?.total ?? 0) / limit);
+  const samples = data?.samples ?? [];
+  const statusSummary = data?.statusSummary ?? {};
+  const totalAll = Object.values(statusSummary).reduce((a, b) => a + b, 0);
+  const uniqueStatuses = Object.keys(statusSummary).sort();
+  const totalPages = Math.max(1, Math.ceil((data?.total ?? 0) / limit));
   const hasDateFilters = dateFrom || dateTo;
 
   const clearFilters = () => {
@@ -150,186 +146,178 @@ export default function SectorSamples() {
     setDateFrom("");
     setDateTo("");
     setSearch("");
+    setPage(1);
   };
 
   return (
     <SectorLayout>
-      {/* Header */}
-      <div className="mb-4">
-        <div className="mb-4">
-          <h1 className="text-2xl font-bold" style={{ color: "#1e293b" }}>{T.title}</h1>
-          <p className="text-sm mt-1" style={{ color: "#64748b" }}>{T.subtitle}</p>
-        </div>
+      <SectorPageHeader title={T.title} subtitle={T.subtitle} />
 
-        {/* Search bar */}
-        <div className="relative w-full mb-4">
-          <Search className="absolute top-1/2 -translate-y-1/2 w-4 h-4" style={{
-            color: "#94a3b8",
-            [isRtl ? "right" : "left"]: "12px",
-          }} />
+      <div className="mb-4 space-y-3">
+        <div className="relative">
+          <Search
+            className={`pointer-events-none absolute top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400 ${isRtl ? "right-3" : "left-3"}`}
+          />
           <input
             type="text"
             value={search}
-            onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-            placeholder={T.search}
-            className="w-full py-2.5 rounded-xl text-sm outline-none"
-            style={{
-              background: "#fff",
-              border: "1px solid #e2e8f0",
-              paddingInlineStart: "36px",
-              paddingInlineEnd: "12px",
-              color: "#1e293b",
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setPage(1);
             }}
+            placeholder={T.search}
+            className={`${sectorTheme.input} ${isRtl ? "pr-10" : "pl-10"}`}
           />
         </div>
 
-        {/* Status Filter Buttons */}
-        <div className="flex flex-wrap gap-2 mb-3">
+        <div className="flex flex-wrap gap-2">
           <button
-            onClick={() => { setStatusFilter(""); setPage(1); }}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
-            style={{
-              background: statusFilter === "" ? "#3b82f6" : "#fff",
-              border: `1px solid ${statusFilter === "" ? "#3b82f6" : "#e2e8f0"}`,
-              color: statusFilter === "" ? "#fff" : "#475569",
-            }}>
+            type="button"
+            onClick={() => {
+              setStatusFilter("");
+              setPage(1);
+            }}
+            className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition ${
+              statusFilter === "" ? sectorTheme.pillActive : sectorTheme.pillIdle
+            }`}
+          >
             {T.allStatuses}
-            <span className="px-1.5 py-0.5 rounded-full text-xs font-bold"
-              style={{ background: statusFilter === "" ? "rgba(255,255,255,0.25)" : "#f1f5f9", color: statusFilter === "" ? "#fff" : "#64748b" }}>
-              {allSamples.length}
-            </span>
+            <span className="rounded-full bg-black/10 px-1.5 py-0.5 text-[10px] font-bold">{totalAll}</span>
           </button>
-          {uniqueStatuses.map(st => {
-            const sc = statusColors[st ?? "received"] ?? statusColors.received;
+
+          {uniqueStatuses.map((st) => {
             const isActive = statusFilter === st;
-            const count = statusCounts[st ?? ""] ?? 0;
+            const count = statusSummary[st] ?? 0;
+            const color = statusColors[st] ?? statusColors.received;
             return (
               <button
                 key={st}
-                onClick={() => { setStatusFilter(st ?? ""); setPage(1); }}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
-                style={{
-                  background: isActive ? sc.text : "#fff",
-                  border: `1px solid ${isActive ? sc.text : sc.border}`,
-                  color: isActive ? "#fff" : sc.text,
-                }}>
-                {T.statuses[st ?? ""] ?? st}
-                <span className="px-1.5 py-0.5 rounded-full text-xs font-bold"
-                  style={{ background: isActive ? "rgba(255,255,255,0.25)" : sc.bg, color: isActive ? "#fff" : sc.text }}>
+                type="button"
+                onClick={() => {
+                  setStatusFilter(st);
+                  setPage(1);
+                }}
+                className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition ${
+                  isActive ? "border-blue-600 bg-blue-600 text-white" : "border-slate-200 bg-white text-slate-600 hover:border-slate-300"
+                }`}
+              >
+                {statusLabel(st, T)}
+                <span
+                  className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold ${
+                    isActive ? "bg-white/20 text-white" : color
+                  }`}
+                >
                   {count}
                 </span>
               </button>
             );
           })}
 
-          {/* Date filter toggle */}
           <button
-            onClick={() => setShowDateFilters(v => !v)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
-            style={{
-              background: showDateFilters || hasDateFilters ? "#6366f1" : "#fff",
-              border: `1px solid ${showDateFilters || hasDateFilters ? "#6366f1" : "#e2e8f0"}`,
-              color: showDateFilters || hasDateFilters ? "#fff" : "#475569",
-            }}>
-            <Calendar className="w-3.5 h-3.5" />
+            type="button"
+            onClick={() => setShowDateFilters((v) => !v)}
+            className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition ${
+              showDateFilters || hasDateFilters
+                ? "border-indigo-600 bg-indigo-600 text-white"
+                : "border-slate-200 bg-white text-slate-600 hover:border-slate-300"
+            }`}
+          >
+            <Calendar className="h-3.5 w-3.5" />
             {T.from} / {T.to}
-            {hasDateFilters && <span className="w-2 h-2 rounded-full bg-orange-400 inline-block" />}
+            {hasDateFilters && <span className="h-2 w-2 rounded-full bg-orange-400" />}
           </button>
 
-          {/* Clear all filters */}
           {(statusFilter || hasDateFilters || search) && (
             <button
+              type="button"
               onClick={clearFilters}
-              className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium"
-              style={{ background: "#fef3c7", color: "#d97706", border: "1px solid #fde68a" }}>
-              <X className="w-3.5 h-3.5" />
+              className="flex items-center gap-1 rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-medium text-amber-700"
+            >
+              <X className="h-3.5 w-3.5" />
               {T.clearFilters}
             </button>
           )}
         </div>
 
-        {/* Date filter panel */}
         {showDateFilters && (
-          <div className="rounded-xl p-4 mb-3 flex flex-wrap gap-4"
-            style={{ background: "#f8fafc", border: "1px solid #e2e8f0" }}>
-            <div className="flex flex-col gap-1 min-w-[160px]">
-              <label className="text-xs font-medium" style={{ color: "#64748b" }}>{T.from}</label>
+          <div className="flex flex-wrap gap-4 rounded-xl border border-slate-200 bg-slate-50/80 p-4">
+            <div className="flex min-w-[160px] flex-col gap-1">
+              <label className="text-xs font-medium text-slate-500">{T.from}</label>
               <input
                 type="date"
                 value={dateFrom}
-                onChange={(e) => { setDateFrom(e.target.value); setPage(1); }}
-                className="py-2 px-3 rounded-lg text-sm outline-none"
-                style={{ background: "#fff", border: "1px solid #e2e8f0", color: "#1e293b" }}
+                onChange={(e) => {
+                  setDateFrom(e.target.value);
+                  setPage(1);
+                }}
+                className={sectorTheme.input}
               />
             </div>
-            <div className="flex flex-col gap-1 min-w-[160px]">
-              <label className="text-xs font-medium" style={{ color: "#64748b" }}>{T.to}</label>
+            <div className="flex min-w-[160px] flex-col gap-1">
+              <label className="text-xs font-medium text-slate-500">{T.to}</label>
               <input
                 type="date"
                 value={dateTo}
-                onChange={(e) => { setDateTo(e.target.value); setPage(1); }}
-                className="py-2 px-3 rounded-lg text-sm outline-none"
-                style={{ background: "#fff", border: "1px solid #e2e8f0", color: "#1e293b" }}
+                onChange={(e) => {
+                  setDateTo(e.target.value);
+                  setPage(1);
+                }}
+                className={sectorTheme.input}
               />
             </div>
           </div>
         )}
       </div>
 
-      {/* Table Card */}
-      <div className="rounded-2xl overflow-hidden bg-white"
-        style={{ boxShadow: "0 1px 8px rgba(0,0,0,0.06)", border: "1px solid rgba(0,0,0,0.05)" }}>
+      <SectorCard>
         {isLoading ? (
-          <div className="flex items-center justify-center h-40">
-            <Loader2 className="w-8 h-8 animate-spin" style={{ color: "#3b82f6" }} />
-          </div>
-        ) : filtered.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-40 gap-3">
-            <TestTube2 className="w-10 h-10" style={{ color: "#cbd5e1" }} />
-            <p className="text-sm" style={{ color: "#94a3b8" }}>{T.noData}</p>
-          </div>
+          <SectorLoading />
+        ) : isError ? (
+          <SectorError message={T.loadError} onRetry={() => refetch()} retryLabel={T.retry} />
+        ) : samples.length === 0 ? (
+          <SectorEmpty icon={TestTube2} message={T.noData} />
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm" dir={isRtl ? "rtl" : "ltr"}>
               <thead>
-                <tr style={{ background: "#f8fafc", borderBottom: "1px solid #e2e8f0" }}>
-                  {[T.sampleCode, T.contractNumber, T.contractName, T.contractor, T.sampleType, T.status, T.receivedAt].map((h) => (
-                    <th key={h} className="px-4 py-3 font-semibold text-start" style={{ color: "#475569", whiteSpace: "nowrap" }}>
-                      {h}
-                    </th>
-                  ))}
+                <tr className="border-b border-slate-100 bg-slate-50/80">
+                  {[T.sampleCode, T.contractNumber, T.contractName, T.contractor, T.sampleType, T.status, T.receivedAt].map(
+                    (h) => (
+                      <th key={h} className="whitespace-nowrap px-4 py-3 text-start text-xs font-semibold uppercase tracking-wide text-slate-500">
+                        {h}
+                      </th>
+                    )
+                  )}
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((s, i) => {
-                  const sc = statusColors[s.status ?? "received"] ?? statusColors.received;
+                {samples.map((s, i) => {
+                  const color = statusColors[s.status ?? "received"] ?? statusColors.received;
                   return (
-                    <tr key={s.id}
-                      style={{ borderBottom: "1px solid #f1f5f9", background: i % 2 === 0 ? "#fff" : "#fafafa" }}>
-                      <td className="px-4 py-3 font-mono font-medium" style={{ color: "#1e293b" }}>
+                    <tr key={s.id} className={i % 2 === 0 ? "bg-white" : "bg-slate-50/50"}>
+                      <td className="px-4 py-3 font-mono font-medium text-slate-900">
                         <div className="flex items-center gap-2">
-                          <Hash className="w-3.5 h-3.5" style={{ color: "#94a3b8" }} />
+                          <Hash className="h-3.5 w-3.5 text-slate-400" />
                           {s.sampleCode}
                         </div>
                       </td>
-                      <td className="px-4 py-3" style={{ color: "#475569" }}>{s.contractNumber ?? "—"}</td>
-                      <td className="px-4 py-3 max-w-[180px] truncate" style={{ color: "#475569" }}>{s.contractName ?? "—"}</td>
-                      <td className="px-4 py-3" style={{ color: "#475569" }}>
+                      <td className="px-4 py-3 text-slate-600">{s.contractNumber ?? "—"}</td>
+                      <td className="max-w-[180px] truncate px-4 py-3 text-slate-600">{s.contractName ?? "—"}</td>
+                      <td className="px-4 py-3 text-slate-600">
                         <div className="flex items-center gap-1.5">
-                          <Building2 className="w-3.5 h-3.5" style={{ color: "#94a3b8" }} />
+                          <Building2 className="h-3.5 w-3.5 text-slate-400" />
                           {s.contractorName ?? "—"}
                         </div>
                       </td>
-                      <td className="px-4 py-3" style={{ color: "#475569" }}>{s.sampleType ?? "—"}</td>
+                      <td className="px-4 py-3 text-slate-600">{s.sampleType ?? "—"}</td>
                       <td className="px-4 py-3">
-                        <span className="px-2.5 py-1 rounded-full text-xs font-medium"
-                          style={{ background: sc.bg, color: sc.text }}>
-                          {T.statuses[s.status ?? "received"] ?? s.status}
+                        <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ring-1 ring-inset ${color}`}>
+                          {statusLabel(s.status, T)}
                         </span>
                       </td>
-                      <td className="px-4 py-3 whitespace-nowrap" style={{ color: "#64748b" }}>
+                      <td className="whitespace-nowrap px-4 py-3 text-slate-500">
                         <div className="flex items-center gap-1.5">
-                          <Calendar className="w-3.5 h-3.5" style={{ color: "#94a3b8" }} />
+                          <Calendar className="h-3.5 w-3.5 text-slate-400" />
                           {s.receivedAt ? new Date(s.receivedAt).toLocaleDateString("en-US") : "—"}
                         </div>
                       </td>
@@ -341,46 +329,37 @@ export default function SectorSamples() {
           </div>
         )}
 
-        {/* Pagination */}
-        {(data?.total ?? 0) > limit && (
-          <div className="flex items-center justify-between px-4 py-3 border-t" style={{ borderColor: "#e2e8f0" }}>
-            <span className="text-xs" style={{ color: "#64748b" }}>
+        {(data?.total ?? 0) > limit && !isLoading && !isError && (
+          <div className="flex items-center justify-between border-t border-slate-100 px-4 py-3">
+            <span className="text-xs text-slate-500">
               {T.total}: {data?.total}
             </span>
             <div className="flex items-center gap-2">
               <button
-                onClick={() => setPage(p => Math.max(1, p - 1))}
+                type="button"
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
                 disabled={page === 1}
-                className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
-                style={{
-                  background: page === 1 ? "#f1f5f9" : "#fff",
-                  border: "1px solid #e2e8f0",
-                  color: page === 1 ? "#94a3b8" : "#475569",
-                  cursor: page === 1 ? "not-allowed" : "pointer",
-                }}>
-                {isRtl ? <ChevronRight className="w-3.5 h-3.5" /> : <ChevronLeft className="w-3.5 h-3.5" />}
+                className="flex items-center gap-1 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                {isRtl ? <ChevronRight className="h-3.5 w-3.5" /> : <ChevronLeft className="h-3.5 w-3.5" />}
                 {T.prev}
               </button>
-              <span className="text-xs" style={{ color: "#64748b" }}>
+              <span className="text-xs text-slate-500">
                 {T.page} {page} {T.of} {totalPages}
               </span>
               <button
-                onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                type="button"
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                 disabled={page >= totalPages}
-                className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
-                style={{
-                  background: page >= totalPages ? "#f1f5f9" : "#fff",
-                  border: "1px solid #e2e8f0",
-                  color: page >= totalPages ? "#94a3b8" : "#475569",
-                  cursor: page >= totalPages ? "not-allowed" : "pointer",
-                }}>
+                className="flex items-center gap-1 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 disabled:cursor-not-allowed disabled:opacity-40"
+              >
                 {T.next}
-                {isRtl ? <ChevronLeft className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+                {isRtl ? <ChevronLeft className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
               </button>
             </div>
           </div>
         )}
-      </div>
+      </SectorCard>
     </SectorLayout>
   );
 }

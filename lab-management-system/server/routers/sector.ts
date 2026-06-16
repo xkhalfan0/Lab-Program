@@ -19,10 +19,44 @@ import {
   notifications,
   contracts,
 } from "../../drizzle/schema";
-import { eq, and, desc, inArray, sql } from "drizzle-orm";
+import { eq, and, desc, inArray, sql, or, like, gte, lte, isNotNull } from "drizzle-orm";
 import { storagePut } from "../storage";
+import { buildSampleVisibilityCondition } from "../db";
 
 const SECTOR_TOKEN_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+
+function sectorSamplesWhere(
+  sectorKey: string,
+  filters?: { search?: string; status?: string; dateFrom?: string; dateTo?: string }
+) {
+  const conditions = [
+    eq(samples.sector, sectorKey as any),
+    buildSampleVisibilityCondition(),
+  ];
+  if (filters?.status) {
+    conditions.push(eq(samples.status, filters.status as any));
+  }
+  if (filters?.search?.trim()) {
+    const q = `%${filters.search.trim()}%`;
+    conditions.push(
+      or(
+        like(samples.sampleCode, q),
+        like(samples.contractNumber, q),
+        like(samples.contractName, q),
+        like(samples.contractorName, q)
+      )!
+    );
+  }
+  if (filters?.dateFrom) {
+    conditions.push(gte(samples.receivedAt, new Date(filters.dateFrom)));
+  }
+  if (filters?.dateTo) {
+    const end = new Date(filters.dateTo);
+    end.setHours(23, 59, 59, 999);
+    conditions.push(lte(samples.receivedAt, end));
+  }
+  return and(...conditions);
+}
 
 // ── Helper: extract sector from request ──────────────────────────────────────
 async function getSectorFromCtx(ctx: any): Promise<{ sectorKey: string; sectorId: number }> {
@@ -133,65 +167,76 @@ export const sectorRouter = router({
     const db = await getDb();
     if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
 
-    const sectorSamples = await db
-      .select({ id: samples.id, status: samples.status, contractId: samples.contractId })
+    const baseWhere = sectorSamplesWhere(ctx.sectorKey);
+
+    const [countRow] = await db
+      .select({ count: sql<number>`COUNT(*)` })
       .from(samples)
-      .where(eq(samples.sector, ctx.sectorKey as any));
+      .where(baseWhere);
+    const totalSamples = Number(countRow?.count ?? 0);
 
-    const totalSamples = sectorSamples.length;
-    const pendingSamples = sectorSamples.filter(
-      (s: { status: string | null }) => s.status === "received" || s.status === "distributed"
-    ).length;
-    const completedSamples = sectorSamples.filter(
-      (s: { status: string | null }) => s.status === "qc_passed" || s.status === "clearance_issued"
-    ).length;
-    const sampleIds = sectorSamples.map((s: { id: number }) => s.id);
+    const statusRows = await db
+      .select({ status: samples.status, count: sql<number>`COUNT(*)` })
+      .from(samples)
+      .where(baseWhere)
+      .groupBy(samples.status);
 
-    let approvedResults = 0;
-    let unreadResults = 0;
+    let pendingSamples = 0;
+    let completedSamples = 0;
+    for (const row of statusRows) {
+      const st = row.status ?? "";
+      const c = Number(row.count ?? 0);
+      if (st === "received" || st === "distributed") pendingSamples += c;
+      if (st === "qc_passed" || st === "clearance_issued") completedSamples += c;
+    }
+
+    const approvedCountRow = await db
+      .select({ count: sql<number>`COUNT(*)` })
+      .from(specializedTestResults)
+      .innerJoin(samples, eq(specializedTestResults.sampleId, samples.id))
+      .where(and(baseWhere, eq(specializedTestResults.status, "approved")));
+    const approvedResults = Number(approvedCountRow[0]?.count ?? 0);
+
+    const readResults = await db
+      .select({ reportId: sectorReportReads.reportId })
+      .from(sectorReportReads)
+      .where(and(
+        eq(sectorReportReads.sectorKey, ctx.sectorKey as any),
+        eq(sectorReportReads.reportType, "test_result")
+      ));
+    const readResultIds = new Set(readResults.map((r: { reportId: number }) => r.reportId));
+
+    const approvedIds = await db
+      .select({ id: specializedTestResults.id })
+      .from(specializedTestResults)
+      .innerJoin(samples, eq(specializedTestResults.sampleId, samples.id))
+      .where(and(baseWhere, eq(specializedTestResults.status, "approved")));
+    const unreadResults = approvedIds.filter((r: { id: number }) => !readResultIds.has(r.id)).length;
+
+    const contractIdRows = await db
+      .selectDistinct({ contractId: samples.contractId })
+      .from(samples)
+      .where(and(baseWhere, isNotNull(samples.contractId)));
+    const contractIds = contractIdRows
+      .map((r: { contractId: number | null }) => r.contractId)
+      .filter((id: number | null): id is number => id !== null);
+
     let unreadClearances = 0;
+    if (contractIds.length > 0) {
+      const allClearances = await db
+        .select({ id: clearanceRequests.id })
+        .from(clearanceRequests)
+        .where(inArray(clearanceRequests.contractId, contractIds));
 
-    if (sampleIds.length > 0) {
-      const approvedRows = await db
-        .select({ id: specializedTestResults.id })
-        .from(specializedTestResults)
-        .where(and(
-          inArray(specializedTestResults.sampleId, sampleIds),
-          eq(specializedTestResults.status, "approved")
-        ));
-      approvedResults = approvedRows.length;
-
-      const readResults = await db
+      const readClearances = await db
         .select({ reportId: sectorReportReads.reportId })
         .from(sectorReportReads)
         .where(and(
           eq(sectorReportReads.sectorKey, ctx.sectorKey as any),
-          eq(sectorReportReads.reportType, "test_result")
+          eq(sectorReportReads.reportType, "clearance")
         ));
-      const readResultIds = new Set(readResults.map((r: { reportId: number }) => r.reportId));
-      unreadResults = approvedRows.filter((r: { id: number }) => !readResultIds.has(r.id)).length;
-
-      const contractIds = Array.from(new Set(
-        sectorSamples
-          .map((s: { contractId: number | null }) => s.contractId)
-          .filter((id: number | null): id is number => id !== null)
-      ));
-      if (contractIds.length > 0) {
-        const allClearances = await db
-          .select({ id: clearanceRequests.id })
-          .from(clearanceRequests)
-          .where(inArray(clearanceRequests.contractId, contractIds));
-
-        const readClearances = await db
-          .select({ reportId: sectorReportReads.reportId })
-          .from(sectorReportReads)
-          .where(and(
-            eq(sectorReportReads.sectorKey, ctx.sectorKey as any),
-            eq(sectorReportReads.reportType, "clearance")
-          ));
-        const readClearanceIds = new Set(readClearances.map((r: { reportId: number }) => r.reportId));
-        unreadClearances = allClearances.filter((c: { id: number }) => !readClearanceIds.has(c.id)).length;
-      }
+      const readClearanceIds = new Set(readClearances.map((r: { reportId: number }) => r.reportId));
+      unreadClearances = allClearances.filter((c: { id: number }) => !readClearanceIds.has(c.id)).length;
     }
 
     return { totalSamples, pendingSamples, completedSamples, approvedResults, unreadResults, unreadClearances };
@@ -199,24 +244,51 @@ export const sectorRouter = router({
 
   // ── Samples received for this sector ──────────────────────────────────────
   getSamples: sectorProcedure
-    .input(z.object({ page: z.number().default(1), limit: z.number().default(20) }))
+    .input(z.object({
+      page: z.number().default(1),
+      limit: z.number().default(20),
+      search: z.string().optional(),
+      status: z.string().optional(),
+      dateFrom: z.string().optional(),
+      dateTo: z.string().optional(),
+    }))
     .query(async ({ ctx, input }) => {
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
       const offset = (input.page - 1) * input.limit;
+      const filters = {
+        search: input.search,
+        status: input.status,
+        dateFrom: input.dateFrom,
+        dateTo: input.dateTo,
+      };
+      const whereClause = sectorSamplesWhere(ctx.sectorKey, filters);
+      const summaryWhere = sectorSamplesWhere(ctx.sectorKey);
 
-      const rows = await db
-        .select()
-        .from(samples)
-        .where(eq(samples.sector, ctx.sectorKey as any))
-        .orderBy(desc(samples.receivedAt))
-        .limit(input.limit)
-        .offset(offset);
+      const [rows, countRow, statusSummaryRows] = await Promise.all([
+        db
+          .select()
+          .from(samples)
+          .where(whereClause)
+          .orderBy(desc(samples.receivedAt))
+          .limit(input.limit)
+          .offset(offset),
+        db
+          .select({ count: sql<number>`COUNT(*)` })
+          .from(samples)
+          .where(whereClause),
+        db
+          .select({ status: samples.status, count: sql<number>`COUNT(*)` })
+          .from(samples)
+          .where(summaryWhere)
+          .groupBy(samples.status),
+      ]);
 
-      const totalRows = await db
-        .select({ id: samples.id })
-        .from(samples)
-        .where(eq(samples.sector, ctx.sectorKey as any));
+      const statusSummary: Record<string, number> = {};
+      for (const row of statusSummaryRows) {
+        const st = row.status ?? "received";
+        statusSummary[st] = Number(row.count ?? 0);
+      }
 
       return {
         samples: rows.map((s: any) => ({
@@ -231,7 +303,8 @@ export const sectorRouter = router({
           status: s.status,
           receivedAt: s.receivedAt,
         })),
-        total: totalRows.length,
+        total: Number(countRow[0]?.count ?? 0),
+        statusSummary,
       };
     }),
 
@@ -505,13 +578,20 @@ export const sectorRouter = router({
   getNotificationCount: sectorProcedure.query(async ({ ctx }) => {
     const db = await getDb();
     if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
-    const rows = await db
-      .select({ id: notifications.id, isRead: notifications.isRead })
-      .from(notifications)
-      .where(eq(notifications.sectorId, ctx.sectorId));
-    const total = rows.length;
-    const unread = rows.filter((r: { isRead: boolean }) => !r.isRead).length;
-    return { total, unread };
+    const [totalRow, unreadRow] = await Promise.all([
+      db
+        .select({ count: sql<number>`COUNT(*)` })
+        .from(notifications)
+        .where(eq(notifications.sectorId, ctx.sectorId)),
+      db
+        .select({ count: sql<number>`COUNT(*)` })
+        .from(notifications)
+        .where(and(eq(notifications.sectorId, ctx.sectorId), eq(notifications.isRead, false))),
+    ]);
+    return {
+      total: Number(totalRow[0]?.count ?? 0),
+      unread: Number(unreadRow[0]?.count ?? 0),
+    };
   }),
 
   // ── Mark notification as read ───────────────────────────────────────────────

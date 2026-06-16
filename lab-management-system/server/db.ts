@@ -1,4 +1,5 @@
-import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, lte, ne, sql } from "drizzle-orm";
+import { computeSampleKpisFromStatusCounts } from "@shared/dashboardInsights";
+import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import { alias } from "drizzle-orm/mysql-core";
 import { createPool } from "mysql2";
@@ -56,6 +57,10 @@ let _samplesRetestColumnsExist: boolean | null = null;
 
 function samplesHasSoftDeleteColumns(): boolean {
   return _samplesSoftDeleteColumnsExist === true;
+}
+
+export function buildSampleVisibilityCondition() {
+  return samplesHasSoftDeleteColumns() ? isNull(samples.deletedAt) : sql`TRUE`;
 }
 
 export function samplesHasRetestColumns(): boolean {
@@ -807,10 +812,6 @@ export async function getDashboardStats() {
   const db = await getDb();
   if (!db) return null;
   const activeFilter = samplesHasSoftDeleteColumns() ? isNull(samples.deletedAt) : sql`TRUE`;
-  const total = await db
-    .select({ count: sql<number>`COUNT(*)` })
-    .from(samples)
-    .where(activeFilter);
   const byStatus = await db
     .select({ status: samples.status, count: sql<number>`COUNT(*)` })
     .from(samples)
@@ -821,8 +822,15 @@ export async function getDashboardStats() {
     .from(samples)
     .where(activeFilter)
     .groupBy(samples.sampleType);
+
+  const kpis = computeSampleKpisFromStatusCounts(byStatus);
+
   return {
-    total: total[0]?.count ?? 0,
+    total: kpis.total,
+    active: kpis.active,
+    completed: kpis.completed,
+    needsAction: kpis.needsAction,
+    failed: kpis.failed,
     byStatus,
     byType,
   };
