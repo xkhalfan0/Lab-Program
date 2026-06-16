@@ -142,7 +142,12 @@ function rowForMysqlInsert(row: Record<string, unknown>, omitKeys?: Set<string>)
   const out: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(row)) {
     if (omitKeys?.has(k)) continue;
-    if (v !== undefined) out[k] = v;
+    if (v === undefined) continue;
+    if (v !== null && typeof v === "object" && !(v instanceof Date) && !Buffer.isBuffer(v)) {
+      out[k] = JSON.stringify(v);
+    } else {
+      out[k] = v;
+    }
   }
   return out;
 }
@@ -1934,6 +1939,81 @@ export async function getClearanceRequestsByContract(contractId: number) {
   return db.select().from(clearanceRequests)
     .where(eq(clearanceRequests.contractId, contractId))
     .orderBy(desc(clearanceRequests.createdAt));
+}
+
+/** Build test inventory for clearance from active lab order items on a contract. */
+export async function buildClearanceInventoryForContract(contractId: number) {
+  const items = (await getActiveLabOrderItemsForAnalytics()).filter(
+    (i) => i.contractId === contractId
+  );
+  const distIds = [
+    ...new Set(
+      items
+        .map((i) => i.distributionId)
+        .filter((id): id is number => id != null)
+    ),
+  ];
+  const specResults = await getSpecializedResultsByDistributionIds(distIds);
+  const specByDist = new Map(specResults.map((r) => [r.distributionId, r]));
+  const allTT = await getAllTestTypes();
+  const ttByCode = new Map(allTT.map((t) => [t.code ?? "", t]));
+
+  let totalTests = 0;
+  let passedTests = 0;
+  let failedTests = 0;
+  let pendingTests = 0;
+  let totalAmount = 0;
+  const inventoryItems: Array<{
+    sampleCode: string;
+    testName: string;
+    testNameAr: string;
+    testCode: string;
+    category: string;
+    standard: string;
+    price: number;
+    result: string;
+    distributionId: number | null;
+  }> = [];
+
+  for (const item of items) {
+    const units = Math.max(1, Number(item.quantity) || 1);
+    const tt = ttByCode.get(item.testTypeCode) ?? null;
+    const specResult = item.distributionId ? specByDist.get(item.distributionId) : null;
+    let result = "pending";
+    if (specResult?.overallResult === "pass") result = "pass";
+    else if (specResult?.overallResult === "fail") result = "fail";
+    const unitPrice = tt ? Number(tt.unitPrice) : Number(item.unitPrice) || 0;
+    const price = unitPrice * units;
+    totalTests += units;
+    totalAmount += price;
+    if (result === "pass") passedTests += units;
+    else if (result === "fail") failedTests += units;
+    else pendingTests += units;
+    inventoryItems.push({
+      sampleCode: item.sampleCode ?? "",
+      testName: tt?.nameEn ?? item.testTypeName,
+      testNameAr: tt?.nameAr ?? "",
+      testCode: item.testTypeCode,
+      category: tt?.category ?? "concrete",
+      standard: tt?.standardRef ?? "",
+      price,
+      result,
+      distributionId: item.distributionId ?? null,
+    });
+  }
+
+  return { totalTests, passedTests, failedTests, pendingTests, totalAmount, inventoryItems };
+}
+
+/** FK on clearance_requests.requestedById → users.id; sector accounts are not users. */
+export async function getClearanceRequesterUserId(): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  const admin = await db.select({ id: users.id }).from(users).where(eq(users.role, "admin")).limit(1);
+  if (admin[0]?.id) return admin[0].id;
+  const anyUser = await db.select({ id: users.id }).from(users).limit(1);
+  if (!anyUser[0]?.id) throw new Error("No system user available for clearance requests");
+  return anyUser[0].id;
 }
 
 // ─── Audit Log ────────────────────────────────────────────────────────────────

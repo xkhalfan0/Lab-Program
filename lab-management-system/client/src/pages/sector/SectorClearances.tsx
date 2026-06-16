@@ -186,6 +186,10 @@ export default function SectorClearances() {
     onError: (err) => {
       if (err.message?.includes("CONFLICT") || err.message?.includes("already exists")) {
         setSubmitError(T.errorConflict);
+      } else if (err.message?.includes("upload contractor letter")) {
+        setSubmitError(lang === "ar" ? "تعذر رفع كتاب المقاول. تحقق من الإعدادات أو أرسل الطلب بدون ملف." : err.message);
+      } else if (err.message && err.message.length < 120) {
+        setSubmitError(err.message);
       } else {
         setSubmitError(T.errorGeneral);
       }

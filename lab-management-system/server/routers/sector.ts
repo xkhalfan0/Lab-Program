@@ -5,7 +5,7 @@
  * The sector portal sends this token as Authorization: Bearer <token> header.
  */
 import { router, publicProcedure } from "../_core/trpc";
-import { getDb, mysqlRawInsertRow } from "../db";
+import { getDb, mysqlRawInsertRow, getContractById, getContractorById, createClearanceRequest, generateClearanceCode, buildClearanceInventoryForContract, getClearanceRequesterUserId } from "../db";
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import bcrypt from "bcryptjs";
@@ -20,7 +20,7 @@ import {
   contracts,
   labOrders,
 } from "../../drizzle/schema";
-import { eq, and, desc, inArray, sql, or, like, gte, lte, isNotNull, isNull, ne } from "drizzle-orm";
+import { eq, and, desc, inArray, sql, or, like, gte, lte, isNotNull, isNull, ne, notInArray } from "drizzle-orm";
 import { storagePut } from "../storage";
 import { buildSampleVisibilityCondition } from "../db";
 import { getOfficialTestByCode } from "../data/official-test-catalog";
@@ -731,112 +731,106 @@ export const sectorRouter = router({
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
 
-      // Get contract details from samples
-      const contractSamples = await db
-        .select({ contractNumber: samples.contractNumber, contractName: samples.contractName, contractorName: samples.contractorName, contractorId: samples.contractId })
+      const contract = await getContractById(input.contractId);
+      if (!contract) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Contract not found" });
+      }
+
+      // Contract must belong to this sector (via samples or contract.sectorKey)
+      const sectorSample = await db
+        .select({ id: samples.id, contractNumber: samples.contractNumber, contractName: samples.contractName, contractorName: samples.contractorName })
         .from(samples)
         .where(and(sectorSamplesWhere(db, ctx.sectorKey), eq(samples.contractId, input.contractId)))
         .limit(1);
-      if (!contractSamples[0]) throw new TRPCError({ code: "NOT_FOUND", message: "Contract not found for this sector" });
-      const contractInfo = contractSamples[0];
+      if (!sectorSample[0] && contract.sectorKey !== ctx.sectorKey) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Contract not linked to this sector" });
+      }
 
-      // Check no existing pending clearance for this contract
-      const existing = await db
-        .select({ id: clearanceRequests.id, status: clearanceRequests.status })
+      const contractor = await getContractorById(contract.contractorId);
+      const contractorName =
+        contractor?.nameEn ??
+        contractor?.nameAr ??
+        sectorSample[0]?.contractorName ??
+        "Unknown";
+
+      // Block only open clearance requests (allow new after issued/rejected)
+      const openExisting = await db
+        .select({ id: clearanceRequests.id })
         .from(clearanceRequests)
-        .where(eq(clearanceRequests.contractId, input.contractId))
+        .where(
+          and(
+            eq(clearanceRequests.contractId, input.contractId),
+            notInArray(clearanceRequests.status, ["rejected", "issued"])
+          )
+        )
         .limit(1);
-      if (existing[0] && existing[0].status !== "rejected") {
+      if (openExisting[0]) {
         throw new TRPCError({ code: "CONFLICT", message: "Clearance request already exists for this contract" });
       }
 
-      // Upload contractor letter if provided
+      // Upload contractor letter if provided (non-fatal if storage unavailable)
       let contractorLetterUrl: string | undefined;
       if (input.contractorLetterBase64 && input.contractorLetterFileName) {
-        const buffer = Buffer.from(input.contractorLetterBase64, "base64");
-        const ext = input.contractorLetterFileName.split(".").pop() ?? "pdf";
-        const key = `clearance/contractor-letters/sector-${ctx.sectorId}-${Date.now()}.${ext}`;
-        const mime = ext === "pdf" ? "application/pdf" : "application/octet-stream";
-        const uploaded = await storagePut(key, buffer, mime);
-        contractorLetterUrl = uploaded.url;
-      }
-
-      // Generate request code CLR-YYYY-NNN
-      const year = new Date().getFullYear();
-      const countRows = await db.select({ count: sql<number>`COUNT(*)` }).from(clearanceRequests);
-      const count = Number(countRows[0]?.count ?? 0) + 1;
-      const code = `CLR-${year}-${String(count).padStart(3, "0")}`;
-
-      // Compute inventory from samples/distributions
-      const { getAllSamples, getDistributionsBySample, getAllTestTypes, getSpecializedTestResultByDistribution } = await import("../db");
-      const allSamples = await getAllSamples();
-      const allContractSamples = allSamples.filter((s: any) => s.contractId === input.contractId);
-      let totalTests = 0, passedTests = 0, failedTests = 0, pendingTests = 0, totalAmount = 0;
-      const inventoryItems: any[] = [];
-      const allTT = await getAllTestTypes();
-      for (const sample of allContractSamples) {
-        const dists = await getDistributionsBySample(sample.id);
-        for (const dist of dists) {
-          totalTests++;
-          const testType = allTT.find((tt: any) => tt.code === dist.testType) ?? null;
-          const price = testType ? Number(testType.unitPrice) : 0;
-          totalAmount += price;
-          const specResult = await getSpecializedTestResultByDistribution(dist.id);
-          let result = "pending";
-          if ((specResult as any)?.overallResult === "pass") result = "pass";
-          else if ((specResult as any)?.overallResult === "fail") result = "fail";
-          if (result === "pass") passedTests++;
-          else if (result === "fail") failedTests++;
-          else pendingTests++;
-          inventoryItems.push({
-            sampleCode: sample.sampleCode,
-            testName: testType?.nameEn ?? dist.testType,
-            testNameAr: testType?.nameAr ?? "",
-            testCode: testType?.code ?? dist.testType,
-            category: testType?.category ?? "concrete",
-            standard: testType?.standardRef ?? "",
-            price,
-            result,
-            distributionCode: dist.distributionCode,
+        try {
+          const buffer = Buffer.from(input.contractorLetterBase64, "base64");
+          const ext = input.contractorLetterFileName.split(".").pop()?.toLowerCase() ?? "pdf";
+          const key = `clearance/contractor-letters/sector-${ctx.sectorId}-${Date.now()}.${ext}`;
+          const mime =
+            ext === "pdf"
+              ? "application/pdf"
+              : ext === "png"
+                ? "image/png"
+                : ext === "jpg" || ext === "jpeg"
+                  ? "image/jpeg"
+                  : "application/octet-stream";
+          const uploaded = await storagePut(key, buffer, mime);
+          contractorLetterUrl = uploaded.url;
+        } catch (uploadErr) {
+          console.warn("[SectorClearance] Contractor letter upload failed:", uploadErr);
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Could not upload contractor letter. Check storage configuration or try again without a file.",
           });
         }
       }
 
-      await mysqlRawInsertRow(db, "clearance_requests", {
+      const code = await generateClearanceCode(db);
+      const inventory = await buildClearanceInventoryForContract(input.contractId);
+      const requestedById = await getClearanceRequesterUserId();
+
+      await createClearanceRequest({
         requestCode: code,
         contractId: input.contractId,
-        contractorId: input.contractId, // use contractId as fallback
-        contractNumber: contractInfo.contractNumber ?? "",
-        contractName: contractInfo.contractName,
-        contractorName: contractInfo.contractorName ?? "",
-        requestedById: ctx.sectorId, // sector user
-        totalTests,
-        passedTests,
-        failedTests,
-        pendingTests,
-        totalAmount: totalAmount.toFixed(2),
-        inventoryData: inventoryItems,
-        contractorLetterUrl,
+        contractorId: contract.contractorId,
+        contractNumber: contract.contractNumber ?? sectorSample[0]?.contractNumber ?? "",
+        contractName: contract.contractName ?? sectorSample[0]?.contractName ?? null,
+        contractorName,
+        requestedById,
+        totalTests: inventory.totalTests,
+        passedTests: inventory.passedTests,
+        failedTests: inventory.failedTests,
+        pendingTests: inventory.pendingTests,
+        totalAmount: inventory.totalAmount.toFixed(2),
+        inventoryData: inventory.inventoryItems,
+        contractorLetterUrl: contractorLetterUrl ?? null,
         sectorId: ctx.sectorId,
         status: "pending",
-        notes: input.notes,
+        notes: input.notes ?? null,
       });
 
-      // Notify accountant
-      const { notifyUsersByRole, notifySector } = await import("../db");
+      const { notifyUsersByRole } = await import("../db");
       await notifyUsersByRole(
         "accountant",
-        `طلب براءة ذمة جديد من القطاع - عقد ${contractInfo.contractNumber}`,
-        `قدّم القطاع طلب براءة ذمة للمقاول "${contractInfo.contractorName}" - عقد: ${contractInfo.contractNumber}`,
+        `طلب براءة ذمة جديد من القطاع - عقد ${contract.contractNumber}`,
+        `قدّم القطاع طلب براءة ذمة للمقاول "${contractorName}" - عقد: ${contract.contractNumber}`,
         undefined,
         "action_required",
         "clearance_started"
       );
-      // Notify QC
       await notifyUsersByRole(
         "qc_inspector",
-        `جرد اختبارات جاهز للاعتماد - عقد ${contractInfo.contractNumber}`,
-        `يحتاج جرد الاختبارات للعقد "${contractInfo.contractName ?? contractInfo.contractNumber}" اعتمادك قبل إصدار أمر الدفع`,
+        `جرد اختبارات جاهز للاعتماد - عقد ${contract.contractNumber}`,
+        `يحتاج جرد الاختبارات للعقد "${contract.contractName ?? contract.contractNumber}" اعتمادك قبل إصدار أمر الدفع`,
         undefined,
         "action_required",
         "clearance_started"
