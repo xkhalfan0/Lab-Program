@@ -4150,6 +4150,10 @@ export default function SpecializedTestReport({ sectorResultId }: SpecializedTes
   const formData = result.formData as any ?? {};
   const summaryValues = result.summaryValues as any ?? {};
   const isPassed = result.overallResult === "pass";
+  const managerSignedBy = legacyResult?.managerReviewedByName ?? result?.managerReviewedByName;
+  const managerSignedAt = legacyResult?.managerReviewedAt ?? result?.managerReviewedAt;
+  const qcSignedBy = legacyResult?.qcReviewedByName ?? result?.qcReviewedByName;
+  const qcSignedAt = legacyResult?.qcReviewedAt ?? result?.qcReviewedAt;
   const isMarshallDensityReport =
     result.formTemplate === "asphalt_marshall_density" ||
     result.testTypeCode === "ASPH_MARSHALL_DENSITY" ||
@@ -4393,13 +4397,13 @@ export default function SpecializedTestReport({ sectorResultId }: SpecializedTes
                   <SignatureBox label={isAr ? "الفاحص" : "Tested By"} name={result.testedBy} />
                   <SignatureBox
                     label={isAr ? "المراجع" : "Reviewed By"}
-                    name={legacyResult?.managerReviewedByName ?? undefined}
-                    date={legacyResult?.managerReviewedAt ? fmtDate(legacyResult.managerReviewedAt) : undefined}
+                    name={managerSignedBy ?? undefined}
+                    date={managerSignedAt ? fmtDate(managerSignedAt) : undefined}
                   />
                   <SignatureBox
                     label={isAr ? "المعتمد" : "Approved By"}
-                    name={legacyResult?.qcReviewedByName ?? undefined}
-                    date={legacyResult?.qcReviewedAt ? fmtDate(legacyResult.qcReviewedAt) : undefined}
+                    name={qcSignedBy ?? undefined}
+                    date={qcSignedAt ? fmtDate(qcSignedAt) : undefined}
                   />
                 </tr>
               </tbody>

@@ -21,7 +21,7 @@ import { SAMPLE_TYPE_LABELS } from "@/lib/labTypes";
 import {
   ShieldCheck, CheckCircle, XCircle, RotateCcw, ClipboardCheck,
   BadgeCheck, FlaskConical, Clock, DollarSign, CheckCircle2,
-  History, ChevronRight, ExternalLink,
+  History, ChevronRight, ExternalLink, AlertCircle,
 } from "lucide-react";
 import { useState, useEffect, type ReactElement } from "react";
 import { useAuth } from "@/_core/hooks/useAuth";
@@ -614,16 +614,12 @@ function ClearanceQCSection() {
 // ─── Main QC Review Page ───────────────────────────────────────────────────────
 export default function QCReview() {
   const { lang } = useLanguage();
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const [selectedSample, setSelectedSample] = useState<any>(null);
   const [comments, setComments] = useState("");
-  const [signature, setSignature] = useState("");
   const [decision, setDecision] = useState<"approved" | "needs_revision" | "rejected" | null>(null);
 
-  // Auto-fill signature with current user's name
-  useEffect(() => {
-    if (user) setSignature(user.name || user.username || "");
-  }, [user]);
+  const currentUserSignature = user?.name || user?.username || "";
   const [taskFilter, setTaskFilter] = useState<TaskFilter>("new");
   const [showHistory, setShowHistory] = useState(false);
   const [archiveSearch, setArchiveSearch] = useState("");
@@ -648,17 +644,12 @@ export default function QCReview() {
     { sampleId: selectedSampleId },
     { enabled: selectedSampleId > 0 }
   );
-  const { data: sampleOrders, isLoading: isOrdersLoading, refetch: refetchSampleOrders } = trpc.orders.bySample.useQuery(
-    { sampleId: selectedSampleId },
-    { enabled: selectedSampleId > 0 }
-  );
 
   const qcReview = trpc.reviews.qcReview.useMutation({
     onSuccess: () => {
       toast.success(lang === "ar" ? "تم تقديم ضبط الجودة بنجاح" : "QC review submitted successfully");
       setSelectedSample(null);
       setComments("");
-      setSignature("");
       setDecision(null);
       refetch();
     },
@@ -695,10 +686,27 @@ export default function QCReview() {
     isLegacyResultsLoading ||
     isSpecializedResultsLoading ||
     isDistributionsLoading ||
-    isReviewsLoading ||
-    isOrdersLoading
+    isReviewsLoading
   );
   const managerReview = reviews?.find((r) => r.reviewType === "manager_review");
+  const qcExistingReview = reviews?.find((r) => r.reviewType === "qc_review");
+
+  const overallCompliance = specializedResult
+    ? (specializedResult.overallResult ?? "pending")
+    : (result?.complianceStatus ?? "pending");
+  const isPass = overallCompliance === "pass";
+  const isFail = overallCompliance === "fail";
+
+  const lastApprovalSignature =
+    managerReview?.signature ||
+    specializedResult?.managerReviewedByName ||
+    result?.managerReviewedByName ||
+    null;
+  const lastApprovalDate =
+    managerReview?.createdAt ||
+    specializedResult?.managerReviewedAt ||
+    result?.managerReviewedAt ||
+    null;
 
   const chartsData = result?.chartsData as any;
   const rawValues: number[] = chartsData?.values ?? [];
@@ -734,7 +742,6 @@ export default function QCReview() {
     refetchSpecializedResults();
     refetchDistributions();
     refetchReviews();
-    refetchSampleOrders();
   };
 
   const handleReview = () => {
@@ -747,15 +754,19 @@ export default function QCReview() {
       return;
     }
     if (!decision) { toast.error(lang === "ar" ? "يرجى اختيار قرار" : "Please select a decision"); return; }
-    if (!result) { toast.error(lang === "ar" ? "لم يتم العثور على نتيجة" : "No test result found"); return; }
+    if (!result && !specializedResult) {
+      toast.error(lang === "ar" ? "لم يتم العثور على نتيجة" : "No test result found");
+      return;
+    }
     // Enforce mandatory notes on reject/revision
     if ((decision === "rejected" || decision === "needs_revision") && !comments.trim()) {
       toast.error(lang === "ar" ? "يجب كتابة ملاحظات عند الرفض أو طلب المراجعة" : "Notes are required when rejecting or requesting revision");
       return;
     }
-    const autoSignature = user?.name || user?.username || signature || `QC — ${new Date().toISOString()}`;
+    const autoSignature = currentUserSignature || `QC — ${new Date().toISOString()}`;
     qcReview.mutate({
-      testResultId: result.id,
+      testResultId: result?.id,
+      specializedTestResultId: specializedResult?.id,
       sampleId: selectedSample.id,
       decision,
       comments: comments || undefined,
@@ -853,7 +864,6 @@ export default function QCReview() {
                       onOpen={(s) => {
                         setSelectedSample(s);
                         setComments("");
-                        setSignature("");
                         setDecision(null);
                         setLoadTimedOut(false);
                       }}
@@ -901,19 +911,53 @@ export default function QCReview() {
             </div>
           ) : hasAnyResult ? (
             <div className="space-y-5 mt-2">
+              {/* Pass / Fail banner */}
+              {(isPass || isFail) && (
+                <div className={`rounded-xl p-4 flex items-center gap-4 border-2 ${
+                  isPass
+                    ? "bg-green-50 border-green-300 text-green-800"
+                    : "bg-red-50 border-red-300 text-red-800"
+                }`}>
+                  {isPass ? (
+                    <CheckCircle2 className="w-10 h-10 text-green-600 shrink-0" />
+                  ) : (
+                    <AlertCircle className="w-10 h-10 text-red-600 shrink-0" />
+                  )}
+                  <div>
+                    <p className="text-lg font-bold">
+                      {isPass
+                        ? (lang === "ar" ? "✓ النتيجة: ناجح — PASS" : "✓ Result: PASS")
+                        : (lang === "ar" ? "✗ النتيجة: راسب — FAIL" : "✗ Result: FAIL")}
+                    </p>
+                    <p className="text-xs opacity-80 mt-0.5">
+                      {lang === "ar"
+                        ? "الحكم بناءً على نتائج الاختبار المُدخلة"
+                        : "Based on submitted test results"}
+                    </p>
+                  </div>
+                </div>
+              )}
+
               {/* Specialized result summary (for tests like Marshall, soil proctor, etc.) */}
               {specializedResult && (
                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-xs space-y-1">
-                  <p className="font-semibold text-blue-800">
-                    {lang === "ar" ? "نتيجة الاختبار التخصصي" : "Specialized Test Result"}
-                  </p>
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <p className="font-semibold text-blue-800">
+                      {lang === "ar" ? "نتيجة الاختبار التخصصي" : "Specialized Test Result"}
+                    </p>
+                    <span className={`px-3 py-1 rounded-full text-xs font-bold ${
+                      specializedResult.overallResult === "pass" ? "bg-green-100 text-green-700 border border-green-300" :
+                      specializedResult.overallResult === "fail" ? "bg-red-100 text-red-700 border border-red-300" :
+                      "bg-gray-100 text-gray-600 border border-gray-200"
+                    }`}>
+                      {specializedResult.overallResult === "pass" ? (lang === "ar" ? "ناجح — PASS" : "PASS") :
+                       specializedResult.overallResult === "fail" ? (lang === "ar" ? "راسب — FAIL" : "FAIL") :
+                       (lang === "ar" ? "قيد المراجعة" : "Pending")}
+                    </span>
+                  </div>
                   <p>
                     <span className="text-muted-foreground">{lang === "ar" ? "القالب:" : "Template:"}</span>{" "}
                     <span className="font-medium">{specializedResult.formTemplate}</span>
-                  </p>
-                  <p>
-                    <span className="text-muted-foreground">{lang === "ar" ? "النتيجة:" : "Overall Result:"}</span>{" "}
-                    <span className="font-medium capitalize">{specializedResult.overallResult}</span>
                   </p>
                   {specializedResult.testTypeCode && (
                     <p>
@@ -942,9 +986,9 @@ export default function QCReview() {
               )}
 
               {/* Full Report Link */}
-              <div className="flex gap-2">
-                {(dist?.id || (selectedSample as any)?.batchId) &&
-                  wrapDisabledWithTooltip(
+              {(dist?.id || (selectedSample as any)?.batchId) && (
+                <div className="flex gap-2">
+                  {wrapDisabledWithTooltip(
                     dialogSamplePending,
                     dialogSampleDisabledWarning,
                     <Button
@@ -965,22 +1009,8 @@ export default function QCReview() {
                       {lang === "ar" ? "تقرير الاختبار" : "Test Report"}
                     </Button>
                   )}
-                {sampleOrders && sampleOrders.length > 0 &&
-                  wrapDisabledWithTooltip(
-                    dialogSamplePending,
-                    dialogSampleDisabledWarning,
-                    <Button
-                      variant="default"
-                      size="sm"
-                      className="gap-1.5 flex-1 bg-blue-600 hover:bg-blue-700"
-                      disabled={dialogSamplePending}
-                      onClick={() => window.open(`/order-report/${sampleOrders[0].id}`, "_blank")}
-                    >
-                      <ExternalLink className="w-3.5 h-3.5" />
-                      {lang === "ar" ? "التقرير الموحد للطلب" : "Unified Order Report"}
-                    </Button>
-                  )}
-              </div>
+                </div>
+              )}
 
               {/* Charts */}
               {result && rawValues.length > 0 && (
@@ -1021,7 +1051,28 @@ export default function QCReview() {
                   <p className="font-semibold text-teal-800">{lang === "ar" ? "مراجعة المشرف" : "Supervisor Review"}</p>
                   <p><span className="text-muted-foreground">{lang === "ar" ? "القرار:" : "Decision:"}</span> <span className="font-medium capitalize">{managerReview.decision.replace(/_/g, " ")}</span></p>
                   {managerReview.comments && <p><span className="text-muted-foreground">{lang === "ar" ? "التعليقات:" : "Comments:"}</span> {managerReview.comments}</p>}
-                  {managerReview.signature && <p><span className="text-muted-foreground">{lang === "ar" ? "موقع من:" : "Signed by:"}</span> {managerReview.signature}</p>}
+                  {(managerReview.signature || lastApprovalSignature) && (
+                    <p className="pt-1 border-t border-teal-200 mt-1">
+                      <span className="text-muted-foreground">{lang === "ar" ? "موقع من:" : "Signed by:"}</span>{" "}
+                      <span className="font-semibold text-teal-900">{managerReview.signature || lastApprovalSignature}</span>
+                      {lastApprovalDate && (
+                        <span className="text-muted-foreground ms-2">
+                          · {new Date(lastApprovalDate).toLocaleDateString(lang === "ar" ? "ar-AE" : "en-GB")}
+                        </span>
+                      )}
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {/* Prior QC review (if re-opened) */}
+              {qcExistingReview && (
+                <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3 text-xs space-y-1">
+                  <p className="font-semibold text-emerald-800">{lang === "ar" ? "مراجعة ضبط الجودة السابقة" : "Previous QC Review"}</p>
+                  <p><span className="text-muted-foreground">{lang === "ar" ? "القرار:" : "Decision:"}</span> <span className="font-medium capitalize">{qcExistingReview.decision.replace(/_/g, " ")}</span></p>
+                  {qcExistingReview.signature && (
+                    <p><span className="text-muted-foreground">{lang === "ar" ? "موقع من:" : "Signed by:"}</span> <span className="font-semibold">{qcExistingReview.signature}</span></p>
+                  )}
                 </div>
               )}
 
@@ -1119,15 +1170,26 @@ export default function QCReview() {
                 {/* Digital Signature — auto-filled from logged-in user */}
                 <div className="space-y-1.5">
                   <Label>
-                    {lang === "ar" ? "التوقيع الرقمي" : "Digital Signature"}
+                    {lang === "ar" ? "التوقيع الرقمي — ضبط الجودة" : "Digital Signature — QC"}
                     <span className="ms-1.5 text-xs text-muted-foreground font-normal">
                       ({lang === "ar" ? "تلقائي باسم المستخدم الحالي" : "auto-filled from current user"})
                     </span>
                   </Label>
                   <div className="flex items-center gap-2 border rounded px-3 py-2 text-sm bg-muted/30">
-                    <span className="text-primary font-semibold flex-1">{signature || (lang === "ar" ? "جاري التحميل..." : "Loading...")}</span>
+                    <span className="text-primary font-semibold flex-1">
+                      {currentUserSignature || (authLoading ? (lang === "ar" ? "جاري التحميل..." : "Loading...") : "—")}
+                    </span>
                     <span className="text-xs text-muted-foreground">{new Date().toLocaleDateString(lang === "ar" ? "ar-AE" : "en-AE")}</span>
                   </div>
+                  {lastApprovalSignature && (
+                    <p className="text-xs text-muted-foreground">
+                      {lang === "ar" ? "آخر اعتماد:" : "Last approval:"}{" "}
+                      <span className="font-medium text-foreground">{lastApprovalSignature}</span>
+                      {lastApprovalDate && (
+                        <span> · {new Date(lastApprovalDate).toLocaleDateString(lang === "ar" ? "ar-AE" : "en-GB")}</span>
+                      )}
+                    </p>
+                  )}
                 </div>
 
                 <div className="flex gap-2">

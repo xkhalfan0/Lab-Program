@@ -1451,7 +1451,8 @@ ${testSummaries.length > 0 ? testSummaries.join("\n\n") : "لم تُجرَ اخ�
     qcReview: protectedProcedure
       .input(
         z.object({
-          testResultId: z.number(),
+          testResultId: z.number().optional(),
+          specializedTestResultId: z.number().optional(),
           sampleId: z.number(),
           decision: z.enum(["approved", "needs_revision", "rejected"]),
           comments: z.string().optional(),
@@ -1460,12 +1461,16 @@ ${testSummaries.length > 0 ? testSummaries.join("\n\n") : "لم تُجرَ اخ�
       )
       .mutation(async ({ ctx, input }) => {
         requireRole(ctx.user.role, ["admin", "qc_inspector"]);
+        if (!input.testResultId && !input.specializedTestResultId) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "No test result found for QC review" });
+        }
         // Enforce mandatory notes on reject/revision
         if ((input.decision === "rejected" || input.decision === "needs_revision") && !input.comments?.trim()) {
           throw new TRPCError({ code: "BAD_REQUEST", message: "يجب إدخال ملاحظات عند الرفض أو طلب المراجعة | Notes are required when rejecting or requesting revision" });
         }
         const review = await createReview({
-          testResultId: input.testResultId,
+          testResultId: input.testResultId ?? null,
+          specializedTestResultId: input.specializedTestResultId ?? null,
           sampleId: input.sampleId,
           reviewerId: ctx.user.id,
           reviewType: "qc_review",
@@ -1478,12 +1483,22 @@ ${testSummaries.length > 0 ? testSummaries.join("\n\n") : "لم تُجرَ اخ�
         const qcReviewerName = ctx.user.name || ctx.user.username || "";
         const qcReviewedAt = new Date();
         if (input.decision === "approved") {
-          await updateTestResult(input.testResultId, {
-            qcReviewedById: ctx.user.id,
-            qcReviewedByName: qcReviewerName,
-            qcReviewedAt: qcReviewedAt,
-            qcNotes: input.comments,
-          });
+          if (input.testResultId) {
+            await updateTestResult(input.testResultId, {
+              qcReviewedById: ctx.user.id,
+              qcReviewedByName: qcReviewerName,
+              qcReviewedAt: qcReviewedAt,
+              qcNotes: input.comments,
+            });
+          }
+          if (input.specializedTestResultId) {
+            await updateSpecializedTestResult(input.specializedTestResultId, {
+              status: "approved",
+              qcReviewedByName: qcReviewerName,
+              qcReviewedAt: qcReviewedAt,
+              qcNotes: input.comments,
+            });
+          }
           await updateSampleStatus(input.sampleId, "qc_passed");
           await addSampleHistory({
             sampleId: input.sampleId,
@@ -1517,12 +1532,22 @@ ${testSummaries.length > 0 ? testSummaries.join("\n\n") : "لم تُجرَ اخ�
             } catch (_e) { /* non-critical */ }
           }
         } else if (input.decision === "needs_revision") {
-          await updateTestResult(input.testResultId, {
-            qcReviewedById: ctx.user.id,
-            qcReviewedByName: qcReviewerName,
-            qcReviewedAt: qcReviewedAt,
-            qcNotes: input.comments,
-          });
+          if (input.testResultId) {
+            await updateTestResult(input.testResultId, {
+              qcReviewedById: ctx.user.id,
+              qcReviewedByName: qcReviewerName,
+              qcReviewedAt: qcReviewedAt,
+              qcNotes: input.comments,
+            });
+          }
+          if (input.specializedTestResultId) {
+            await updateSpecializedTestResult(input.specializedTestResultId, {
+              status: "revision_requested",
+              qcReviewedByName: qcReviewerName,
+              qcReviewedAt: qcReviewedAt,
+              qcNotes: input.comments,
+            });
+          }
           await updateSampleStatus(input.sampleId, "revision_requested");
           await addSampleHistory({
             sampleId: input.sampleId,
@@ -1543,12 +1568,22 @@ ${testSummaries.length > 0 ? testSummaries.join("\n\n") : "لم تُجرَ اخ�
             });
           }
         } else {
-          await updateTestResult(input.testResultId, {
-            qcReviewedById: ctx.user.id,
-            qcReviewedByName: qcReviewerName,
-            qcReviewedAt: qcReviewedAt,
-            qcNotes: input.comments,
-          });
+          if (input.testResultId) {
+            await updateTestResult(input.testResultId, {
+              qcReviewedById: ctx.user.id,
+              qcReviewedByName: qcReviewerName,
+              qcReviewedAt: qcReviewedAt,
+              qcNotes: input.comments,
+            });
+          }
+          if (input.specializedTestResultId) {
+            await updateSpecializedTestResult(input.specializedTestResultId, {
+              status: "rejected",
+              qcReviewedByName: qcReviewerName,
+              qcReviewedAt: qcReviewedAt,
+              qcNotes: input.comments,
+            });
+          }
           await updateSampleStatus(input.sampleId, "qc_failed");
           await addSampleHistory({
             sampleId: input.sampleId,

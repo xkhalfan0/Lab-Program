@@ -32,7 +32,7 @@ import {
   ChevronRight,
   Loader2,
 } from "lucide-react";
-import { useState, useEffect, useMemo, type ReactElement } from "react";
+import { useState, useMemo, type ReactElement } from "react";
 import { toast } from "sonner";
 import { useAuth } from "@/_core/hooks/useAuth";
 
@@ -339,22 +339,16 @@ function computeManagerReviewReportUrl(opts: {
 
 export default function ManagerReview() {
   const { lang } = useLanguage();
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const [selectedSample, setSelectedSample] = useState<any>(null);
   const [selectedResult, setSelectedResult] = useState<any>(null);
   const [comments, setComments] = useState("");
-  const [signature, setSignature] = useState("");
   const [decision, setDecision] = useState<"approved" | "needs_revision" | "rejected" | null>(null);
   const [taskFilter, setTaskFilter] = useState<TaskFilter>("new");
   const [showHistory, setShowHistory] = useState(false);
   const [archiveSearch, setArchiveSearch] = useState("");
 
-  // Auto-fill signature with current user's name
-  useEffect(() => {
-    if (user) {
-      setSignature(user.name || user.username || "");
-    }
-  }, [user]);
+  const currentUserSignature = user?.name || user?.username || "";
 
   const { data: samples, refetch } = trpc.samples.list.useQuery();
   const { data: results, isLoading: resultsLoading } = trpc.testResults.bySample.useQuery(
@@ -381,7 +375,6 @@ export default function ManagerReview() {
       setSelectedSample(null);
       setSelectedResult(null);
       setComments("");
-      setSignature("");
       setDecision(null);
       refetch();
     },
@@ -425,7 +418,6 @@ export default function ManagerReview() {
   const handleOpenSample = (sample: any) => {
     setSelectedSample(sample);
     setComments("");
-    setSignature("");
     setDecision(null);
     // Mark as read (new → incomplete)
     if (!sample.managerReadAt && (sample.status === "processed" || sample.status === "awaiting_review")) {
@@ -453,7 +445,7 @@ export default function ManagerReview() {
       toast.error(lang === "ar" ? "يرجى كتابة سبب الرفض أو طلب المراجعة" : "Please provide a reason for rejection or revision request");
       return;
     }
-    const autoSignature = user?.name || user?.username || signature || `Supervisor — ${new Date().toLocaleDateString()}`;
+    const autoSignature = currentUserSignature || `Supervisor — ${new Date().toLocaleDateString()}`;
     // Determine which result type to use
     const legacyResult = results?.[0];
     const specResult = specializedResults?.[0];
@@ -936,7 +928,9 @@ export default function ManagerReview() {
                   </span>
                 </Label>
                 <div className="flex items-center gap-2 border rounded px-3 py-2 text-sm bg-muted/30">
-                  <span className="text-primary font-semibold flex-1">{signature || (lang === "ar" ? "جاري التحميل..." : "Loading...")}</span>
+                  <span className="text-primary font-semibold flex-1">
+                    {currentUserSignature || (authLoading ? (lang === "ar" ? "جاري التحميل..." : "Loading...") : "—")}
+                  </span>
                   <span className="text-xs text-muted-foreground">{new Date().toLocaleDateString(lang === "ar" ? "ar-AE" : "en-AE")}</span>
                 </div>
               </div>
