@@ -5,7 +5,7 @@ import { RetestBadge } from "@/components/RetestBadge";
 import { StatusBadge } from "@/components/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -16,9 +16,9 @@ import { trpc } from "@/lib/trpc";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { FlaskConical, Plus, Search, Eye, Printer, FileText, Lock, Building2, Pencil, X, Trash2, Layers, CheckSquare, Package, CalendarIcon, AlertTriangle, RotateCcw } from "lucide-react";
+import { Plus, Search, Eye, Printer, FileText, Lock, Building2, Pencil, X, Trash2, CheckSquare, Package, CalendarIcon, AlertTriangle, RotateCcw } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useState, useMemo, useEffect, type ReactElement } from "react";
+import { useState, useMemo, useEffect, type ReactElement, type ReactNode } from "react";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import { useAuth } from "@/_core/hooks/useAuth";
@@ -200,6 +200,28 @@ const emptyForm = () => ({
   priority: "normal" as "low" | "normal" | "high" | "urgent",
 });
 
+function FormSection({
+  step,
+  title,
+  children,
+}: {
+  step: number;
+  title: string;
+  children: ReactNode;
+}) {
+  return (
+    <section className="rounded-xl border bg-card p-5 space-y-4 shadow-sm">
+      <div className="flex items-center gap-2.5">
+        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
+          {step}
+        </span>
+        <h2 className="text-sm font-semibold text-foreground">{title}</h2>
+      </div>
+      {children}
+    </section>
+  );
+}
+
 function ReceptionOrderActionsCell({
   order,
   lang,
@@ -307,10 +329,10 @@ function ReceptionOrderActionsCell({
 
 export default function Reception() {
   const { t, lang } = useLanguage();
-  const [open, setOpen] = useState(false);
   const [receptionMode, setReceptionMode] = useState<"new" | "retest">("new");
   const { user } = useAuth();
   const canEditSample = ["admin", "lab_manager", "reception"].includes(user?.role ?? "");
+  const [sampleLookup, setSampleLookup] = useState("");
   const [search, setSearch] = useState("");
   const [sectorFilter, setSectorFilter] = useState<string>("all");
   const [taskFilter, setTaskFilter] = useState<"all" | "new" | "incomplete" | "done">("all");
@@ -402,23 +424,27 @@ export default function Reception() {
     return key;
   };
 
+  const resetRegistrationForm = () => {
+    setForm(emptyForm());
+    setSelectedTests([]);
+    setSubtypeFor(null);
+    setMultiSubtypes({});
+    setAsphaltKind("");
+    setHotBinAddons({});
+    setAsphaltMixCourse("");
+    setAsphaltMixSelectionMode("batch");
+    setNominalCubeSize("150mm");
+    setFoamConcreteAge("");
+  };
+
   const createOrder = trpc.orders.create.useMutation({
     onSuccess: (result) => {
       toast.success(lang === "ar"
-        ? `تم إنشاء الأوردر ${result.order.orderCode} بنجاح (${result.items.length} اختبار)`
-        : `Order ${result.order.orderCode} created (${result.items.length} test(s))`);
-      setOpen(false);
-      setForm(emptyForm());
-      setSelectedTests([]);
-      setSubtypeFor(null);
-      setMultiSubtypes({});
-      setAsphaltKind("");
-      setHotBinAddons({});
-      setAsphaltMixCourse("");
-      setAsphaltMixSelectionMode("batch");
-      setNominalCubeSize("150mm");
-      setFoamConcreteAge("");
+        ? `تم تسجيل العينة ${result.sample.sampleCode} (${result.items.length} اختبار)`
+        : `Sample ${result.sample.sampleCode} registered (${result.items.length} test(s))`);
+      resetRegistrationForm();
       refetch();
+      window.open(`/print-receipt/${result.sample.id}`, "_blank");
     },
     onError: (err) => toast.error(err.message),
   });
@@ -975,16 +1001,82 @@ export default function Reception() {
     return sum + t.unitPrice * t.quantity;
   }, 0);
 
+  const totalSpecimens = selectedTests.reduce((sum, t) => {
+    if (MULTI_SUBTYPE_TESTS.includes(t.testTypeCode) && t.testSubType === "__multi__") {
+      const subtypeMap = multiSubtypes[t.testTypeId] ?? {};
+      return sum + Object.values(subtypeMap).reduce((s, qty) => s + (qty > 0 ? qty : 0), 0);
+    }
+    return sum + (t.quantity > 0 ? t.quantity : 0);
+  }, 0);
+
+  const sampleLookupResults = useMemo(() => {
+    const q = sampleLookup.trim().toLowerCase();
+    if (!q || !orders?.length) return [];
+    const seen = new Set<number>();
+    return orders
+      .filter((o: any) =>
+        o.sampleId &&
+        (
+          (o.sampleCode ?? "").toLowerCase().includes(q) ||
+          (o.contractorName ?? "").toLowerCase().includes(q) ||
+          (o.contractNumber ?? "").toLowerCase().includes(q) ||
+          (o.orderCode ?? "").toLowerCase().includes(q)
+        )
+      )
+      .filter((o: any) => {
+        if (seen.has(o.sampleId)) return false;
+        seen.add(o.sampleId);
+        return true;
+      })
+      .slice(0, 6);
+  }, [orders, sampleLookup]);
+
   return (
     <DashboardLayout>
       <div className="space-y-5">
-        {/* Header */}
-        <div className="flex items-center justify-between gap-3 flex-wrap">
+        {/* Page header */}
+        <div className="flex items-start justify-between gap-4 flex-wrap">
           <div>
-            <h1 className="text-xl font-bold">{t("reception.title")}</h1>
-            <p className="text-sm text-muted-foreground">{t("reception.subtitle")}</p>
+            <h1 className="text-xl font-bold">{t("reception.registerSample")}</h1>
+            <p className="text-sm text-muted-foreground">
+              {lang === "ar"
+                ? "تسجيل عينة واردة وطلب الاختبارات"
+                : "Log an incoming sample and request tests"}
+            </p>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
+            <div
+              className="inline-flex items-center rounded-xl border border-border bg-muted/50 p-1 shadow-sm"
+              role="tablist"
+              aria-label={lang === "ar" ? "نوع الاستقبال" : "Reception mode"}
+            >
+              {([
+                { id: "new" as const, icon: Plus, labelAr: "عينة جديدة", labelEn: "New sample" },
+                { id: "retest" as const, icon: RotateCcw, labelAr: "إعادة اختبار", labelEn: "Retest" },
+              ]).map(({ id, icon: Icon, labelAr, labelEn }) => {
+                const active = receptionMode === id;
+                return (
+                  <button
+                    key={id}
+                    type="button"
+                    role="tab"
+                    aria-selected={active}
+                    onClick={() => setReceptionMode(id)}
+                    className={cn(
+                      "flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition-all",
+                      active
+                        ? id === "retest"
+                          ? "bg-amber-600 text-white shadow-sm"
+                          : "bg-primary text-primary-foreground shadow-sm"
+                        : "text-muted-foreground hover:bg-background/80 hover:text-foreground"
+                    )}
+                  >
+                    <Icon className="w-4 h-4 shrink-0" />
+                    <span>{lang === "ar" ? labelAr : labelEn}</span>
+                  </button>
+                );
+              })}
+            </div>
             <Button
               type="button"
               variant="outline"
@@ -993,291 +1085,256 @@ export default function Reception() {
               onClick={() => openTestCatalogPrint()}
             >
               <FileText className="w-4 h-4" />
-              {lang === "ar" ? "قائمة أسعار الاختبارات" : "Test Price List"}
+              {lang === "ar" ? "طباعة قائمة الأسعار" : "Print Price List"}
             </Button>
-            <Dialog open={open} onOpenChange={(v) => {
-            setOpen(v);
-            if (!v) {
-              setReceptionMode("new");
-              setForm(emptyForm());
-              setSelectedTests([]);
-              setSubtypeFor(null);
-              setAsphaltKind("");
-              setHotBinAddons({});
-              setAsphaltMixCourse("");
-              setAsphaltMixSelectionMode("batch");
-              setFoamConcreteAge("");
-            }
-          }}>
-            <DialogTrigger asChild>
-              <Button size="sm" className="gap-1.5">
-                <Plus className="w-4 h-4" />
-                {lang === "ar" ? "إنشاء أوردر جديد" : "New Order"}
-              </Button>
-            </DialogTrigger>
-            <DialogContent
-              showCloseButton={false}
-              className="w-[70vw] max-w-[70vw] sm:max-w-[70vw] h-[88vh] max-h-[88vh] p-0 gap-0 overflow-hidden flex flex-col"
-            >
-              <DialogHeader className="sr-only">
-                <DialogTitle>
-                  {receptionMode === "retest"
-                    ? (lang === "ar" ? "إعادة اختبار" : "Retest")
-                    : (lang === "ar" ? "أوردر اختبار جديد" : "New Test Order")}
-                </DialogTitle>
-              </DialogHeader>
+          </div>
+        </div>
 
-              {/* ── MODAL HEADER (both modes) ── */}
-              <div className="flex items-center justify-between gap-4 px-7 py-4 border-b border-border flex-shrink-0 bg-background">
-                <div className="flex items-center gap-4 min-w-0 flex-1">
-                  <div
-                    className="inline-flex shrink-0 items-center rounded-xl border border-border bg-muted/50 p-1 shadow-sm"
-                    role="tablist"
-                    aria-label={lang === "ar" ? "نوع الاستقبال" : "Reception mode"}
-                  >
-                    {([
-                      {
-                        id: "new" as const,
-                        icon: Plus,
-                        labelAr: "عينة جديدة",
-                        labelEn: "New sample",
-                      },
-                      {
-                        id: "retest" as const,
-                        icon: RotateCcw,
-                        labelAr: "إعادة اختبار",
-                        labelEn: "Retest",
-                      },
-                    ]).map(({ id, icon: Icon, labelAr, labelEn }) => {
-                      const active = receptionMode === id;
-                      return (
-                        <button
-                          key={id}
-                          type="button"
-                          role="tab"
-                          aria-selected={active}
-                          onClick={() => setReceptionMode(id)}
-                          className={cn(
-                            "flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition-all",
-                            active
-                              ? id === "retest"
-                                ? "bg-amber-600 text-white shadow-sm"
-                                : "bg-primary text-primary-foreground shadow-sm"
-                              : "text-muted-foreground hover:bg-background/80 hover:text-foreground"
-                          )}
-                        >
-                          <Icon className="w-4 h-4 shrink-0" />
-                          <span>{lang === "ar" ? labelAr : labelEn}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                  <div className="hidden sm:flex items-center gap-3 min-w-0">
-                    <div
-                      className={cn(
-                        "w-10 h-10 rounded-xl flex items-center justify-center shrink-0",
-                        receptionMode === "retest" ? "bg-amber-50" : "bg-blue-50"
-                      )}
-                    >
-                      {receptionMode === "retest" ? (
-                        <RotateCcw className="w-5 h-5 text-amber-700" />
-                      ) : (
-                        <FlaskConical className="w-5 h-5 text-blue-600" />
-                      )}
+        {/* Sample lookup */}
+        <div className="space-y-2">
+          <div className="relative">
+            <Search className="absolute start-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Input
+              placeholder={t("reception.searchPlaceholder")}
+              className="ps-9 h-11"
+              value={sampleLookup}
+              onChange={(e) => setSampleLookup(e.target.value)}
+            />
+          </div>
+          {sampleLookup.trim() && sampleLookupResults.length > 0 && (
+            <div className="rounded-xl border bg-card divide-y shadow-sm">
+              <p className="px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                {sampleLookupResults.length} {lang === "ar" ? "نتيجة" : "matches"}
+              </p>
+              {sampleLookupResults.map((order: any) => (
+                <div key={order.sampleId} className="flex items-center justify-between gap-3 px-4 py-3">
+                  <div className="min-w-0 space-y-0.5">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-mono text-sm font-bold text-primary">{order.sampleCode}</span>
+                      <RetestBadge
+                        retestNumber={order.retestNumber}
+                        originalSampleId={order.originalSampleId}
+                        originalSampleCode={order.originalSampleCode}
+                        retestReason={order.retestReason}
+                        compact
+                      />
                     </div>
-                    <div className="min-w-0">
-                      <h2 className="text-lg font-semibold text-foreground truncate">
-                        {receptionMode === "retest"
-                          ? lang === "ar"
-                            ? "تسجيل إعادة اختبار"
-                            : "Register Retest"
-                          : lang === "ar"
-                            ? "أوردر اختبار جديد"
-                            : "New Test Order"}
-                      </h2>
-                      <p className="text-xs text-muted-foreground truncate">
-                        {receptionMode === "retest"
-                          ? lang === "ar"
-                            ? "اختر عينة فاشلة معتمدة من QC وسجّل إعادة الاختبار"
-                            : "Select a QC-signed failed sample and register a retest"
-                          : lang === "ar"
-                            ? "أدخل بيانات الطلب يساراً ثم اختر الاختبارات يميناً"
-                            : "Fill order details on the left, select tests on the right"}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="icon"
-                  className="h-9 w-9 shrink-0"
-                  onClick={() => setOpen(false)}
-                  aria-label={lang === "ar" ? "إغلاق" : "Close"}
-                >
-                  <X className="w-4 h-4" />
-                </Button>
-              </div>
-
-              {receptionMode === "retest" ? (
-                <ReceptionRetestPanel
-                  onSuccess={() => { setOpen(false); setReceptionMode("new"); refetch(); }}
-                  onCancel={() => setOpen(false)}
-                />
-              ) : (
-              <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0 overflow-hidden">
-
-                {/* ── BODY ── */}
-                <div className="flex flex-1 overflow-hidden min-h-0">
-
-                  {/* LEFT COLUMN — Order info (35%) */}
-                  <div className="w-[35%] border-r border-border bg-muted/30 flex flex-col overflow-y-auto px-6 py-6 gap-5">
-
-                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
-                      <FileText className="w-3.5 h-3.5" />
-                      {lang === "ar" ? "معلومات الطلب" : "Order information"}
+                    <p className="text-xs text-muted-foreground truncate">
+                      {order.contractorName} · {typeLabel(order.sampleType ?? "")} ·{" "}
+                      {order.createdAt ? format(new Date(order.createdAt), "dd MMM yyyy, HH:mm") : "—"}
                     </p>
+                  </div>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-8 gap-1"
+                      onClick={() => setLocation(`/order/${order.id}`)}
+                    >
+                      <Eye className="w-3.5 h-3.5" />
+                      {lang === "ar" ? "عرض" : "View"}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-8 gap-1"
+                      onClick={() => window.open(`/print-receipt/${order.sampleId}`, "_blank")}
+                    >
+                      <Printer className="w-3.5 h-3.5" />
+                      {lang === "ar" ? "إعادة طباعة الوصل" : "Reprint receipt"}
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
 
-                {/* Contract */}
-                <div className="space-y-1.5">
-                  <Label>{t("tests.contractNumber")} <span className="text-red-500">*</span></Label>
-                  {contracts.length > 0 ? (
-                    <Select value={form.contractId} onValueChange={handleContractChange}>
-                      <SelectTrigger>
-                        <SelectValue placeholder={lang === "ar" ? "اختر رقم العقد..." : "Select contract..."} />
-                      </SelectTrigger>
-                      <SelectContent className="max-h-60">
-                        {contracts.map((c: any) => (
-                          <SelectItem key={c.id} value={String(c.id)}>
-                            <div className="flex items-center gap-2">
-                              <FileText className="w-3.5 h-3.5 text-muted-foreground" />
-                              <span className="font-mono text-xs font-semibold">{c.contractNumber}</span>
-                              <span className="text-xs text-muted-foreground truncate max-w-[180px]">{c.contractName}</span>
-                            </div>
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  ) : (
-                    <div className="p-3 bg-amber-50 border border-amber-200 rounded-md text-xs text-amber-700">
-                      {lang === "ar" ? "لا توجد عقود مسجلة. يرجى إضافة عقود أولاً." : "No contracts registered. Add contracts first."}
+        {receptionMode === "retest" ? (
+          <div className="rounded-xl border bg-card p-5 shadow-sm">
+            <ReceptionRetestPanel
+              onSuccess={() => { setReceptionMode("new"); refetch(); }}
+              onCancel={() => setReceptionMode("new")}
+            />
+          </div>
+        ) : (
+          <form onSubmit={handleSubmit}>
+            <div className="grid grid-cols-1 xl:grid-cols-[1fr_300px] gap-6 items-start">
+              {/* Main form column */}
+              <div className="space-y-5 min-w-0">
+
+                <FormSection
+                  step={1}
+                  title={lang === "ar" ? "المصدر والعقد" : "Source & Contract"}
+                >
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
+                      <Label>{t("reception.contractorName")} <span className="text-red-500">*</span></Label>
+                      <Input
+                        readOnly
+                        value={form.contractorName || ""}
+                        placeholder={lang === "ar" ? "يُملأ من العقد" : "Filled from contract"}
+                        className="bg-muted/40"
+                      />
                     </div>
+                    <div className="space-y-1.5">
+                      <Label>{t("tests.contractNumber")} <span className="text-red-500">*</span></Label>
+                      {contracts.length > 0 ? (
+                        <Select value={form.contractId} onValueChange={handleContractChange}>
+                          <SelectTrigger>
+                            <SelectValue placeholder={lang === "ar" ? "اختر رقم العقد..." : "Select contract..."} />
+                          </SelectTrigger>
+                          <SelectContent className="max-h-60">
+                            {contracts.map((c: any) => (
+                              <SelectItem key={c.id} value={String(c.id)}>
+                                <span className="font-mono text-xs font-semibold">{c.contractNumber}</span>
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      ) : (
+                        <div className="p-3 bg-amber-50 border border-amber-200 rounded-md text-xs text-amber-700">
+                          {lang === "ar" ? "لا توجد عقود مسجلة." : "No contracts registered."}
+                        </div>
+                      )}
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label>{lang === "ar" ? "القطاع" : "Sector"} <span className="text-red-500">*</span></Label>
+                      <Select value={form.sectorKey} onValueChange={handleSectorChange}>
+                        <SelectTrigger>
+                          <SelectValue placeholder={lang === "ar" ? "اختر القطاع..." : "Select sector..."} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {sectors.filter((s: any) => s.isActive).map((s: any) => (
+                            <SelectItem key={s.sectorKey} value={s.sectorKey}>
+                              {lang === "ar" ? s.nameAr : s.nameEn}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label>{lang === "ar" ? "موقع العينة" : "Sample Location"}</Label>
+                      <Input
+                        placeholder={lang === "ar" ? "مثال: الطابق 3، عمود C2" : "e.g. Floor 3, Column C2"}
+                        value={form.location}
+                        onChange={(e) => setForm({ ...form, location: e.target.value })}
+                      />
+                    </div>
+                  </div>
+                  {form.contractName && (
+                    <p className="text-xs text-muted-foreground">
+                      {t("reception.contractName")}: <span className="font-medium text-foreground">{form.contractName}</span>
+                    </p>
                   )}
-                </div>
+                </FormSection>
 
-                {/* Auto-filled info */}
-                {form.contractId && (
-                  <div className="p-3.5 bg-blue-50 rounded-xl border border-blue-200 space-y-2.5">
-                    <div className="flex items-center gap-1.5">
-                      <Lock className="w-3 h-3 text-blue-600" />
-                      <span className="text-xs text-blue-600 font-medium">{t("reception.autoFilled")}</span>
-                    </div>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="min-w-0">
-                        <p className="text-[11px] text-blue-400 mb-1">{t("reception.contractName")}</p>
-                        <p className="text-sm font-medium text-blue-900 truncate">{form.contractName || "—"}</p>
+                <FormSection
+                  step={2}
+                  title={lang === "ar" ? "العينة والحالة" : "Sample & Condition"}
+                >
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <Label>{lang === "ar" ? "نوع المادة" : "Material Type"} <span className="text-red-500">*</span></Label>
+                      <div className="flex flex-wrap gap-2">
+                        {CATEGORIES.map(cat => (
+                          <button
+                            key={cat.value}
+                            type="button"
+                            onClick={() => {
+                              setForm(f => ({ ...f, sampleType: cat.value }));
+                              setSelectedTests([]);
+                              setSubtypeFor(null);
+                              setAsphaltKind("");
+                            }}
+                            className={`px-4 py-2 rounded-lg text-sm font-medium transition-all border ${
+                              form.sampleType === cat.value
+                                ? "bg-primary text-primary-foreground border-primary"
+                                : "bg-background text-muted-foreground border-border hover:border-primary/40"
+                            }`}
+                          >
+                            {lang === "ar" ? cat.labelAr : cat.labelEn}
+                          </button>
+                        ))}
                       </div>
-                      <div className="min-w-0">
-                        <p className="text-[11px] text-blue-400 mb-1">{t("reception.contractorName")}</p>
-                        <p className="text-sm font-medium text-blue-900 truncate">{form.contractorName || "—"}</p>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="space-y-1.5">
+                        <Label>{t("reception.condition")}</Label>
+                        <Select value={form.condition} onValueChange={(v) => setForm({ ...form, condition: v as any })}>
+                          <SelectTrigger><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="good">{t("reception.good")}</SelectItem>
+                            <SelectItem value="damaged">{t("reception.damaged")}</SelectItem>
+                            <SelectItem value="partial">{t("reception.acceptable")}</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label>{t("reception.priority")}</Label>
+                        <Select value={form.priority} onValueChange={(v) => setForm({ ...form, priority: v as any })}>
+                          <SelectTrigger><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="low">{lang === "ar" ? "منخفضة" : "Low"}</SelectItem>
+                            <SelectItem value="normal">{lang === "ar" ? "عادية" : "Normal"}</SelectItem>
+                            <SelectItem value="high">{lang === "ar" ? "عالية" : "High"}</SelectItem>
+                            <SelectItem value="urgent">{lang === "ar" ? "عاجلة" : "Urgent"}</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      {isCastingRequired && (
+                        <div className="space-y-1.5">
+                          <Label className="flex items-center gap-1">
+                            {lang === "ar" ? "تاريخ الصب / أخذ العينة" : "Casting / Sampling Date"}
+                            <span className="text-red-500">*</span>
+                          </Label>
+                          <Popover>
+                            <PopoverTrigger asChild>
+                              <Button variant="outline" className={`w-full justify-start text-left font-normal ${!form.castingDate && "text-muted-foreground"}`}>
+                                <CalendarIcon className="mr-2 h-4 w-4" />
+                                {form.castingDate ? format(form.castingDate, "dd MMM yyyy") : (lang === "ar" ? "اختر التاريخ" : "Select date")}
+                              </Button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-auto p-0" align="start">
+                              <Calendar
+                                mode="single"
+                                selected={form.castingDate}
+                                onSelect={(d) => setForm(f => ({ ...f, castingDate: d }))}
+                                disabled={(date) => date > new Date()}
+                                captionLayout="dropdown"
+                              />
+                            </PopoverContent>
+                          </Popover>
+                        </div>
+                      )}
+                      <div className="space-y-1.5">
+                        <Label>{lang === "ar" ? "تاريخ الاستلام" : "Date Received"}</Label>
+                        <Input
+                          readOnly
+                          value={format(new Date(), "dd MMM yyyy, HH:mm")}
+                          className="bg-muted/40"
+                        />
                       </div>
                     </div>
+                    <div className="space-y-1.5">
+                      <Label>{t("common.notes")}</Label>
+                      <Textarea
+                        placeholder={lang === "ar" ? "ملاحظات إضافية..." : "Additional notes..."}
+                        rows={2}
+                        value={form.notes}
+                        onChange={(e) => setForm({ ...form, notes: e.target.value })}
+                      />
+                    </div>
                   </div>
-                )}
+                </FormSection>
 
-                {/* Sector */}
-                <div className="space-y-1.5">
-                  <Label className="flex items-center gap-1.5">
-                    <Building2 className="w-3.5 h-3.5 text-muted-foreground" />
-                    {lang === "ar" ? "القطاع" : "Sector"} <span className="text-red-500">*</span>
-                  </Label>
-                  <Select value={form.sectorKey} onValueChange={handleSectorChange}>
-                    <SelectTrigger>
-                      <SelectValue placeholder={lang === "ar" ? "اختر القطاع..." : "Select sector..."} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {sectors.filter((s: any) => s.isActive).map((s: any) => (
-                        <SelectItem key={s.sectorKey} value={s.sectorKey}>
-                          {lang === "ar" ? s.nameAr : s.nameEn}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {/* Condition + Priority */}
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1.5">
-                    <Label>{t("reception.condition")}</Label>
-                    <Select value={form.condition} onValueChange={(v) => setForm({ ...form, condition: v as any })}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="good">{t("reception.good")}</SelectItem>
-                        <SelectItem value="damaged">{t("reception.damaged")}</SelectItem>
-                        <SelectItem value="partial">{t("reception.acceptable")}</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label>{lang === "ar" ? "الأولوية" : "Priority"}</Label>
-                    <Select value={form.priority} onValueChange={(v) => setForm({ ...form, priority: v as any })}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="low">{lang === "ar" ? "منخفضة" : "Low"}</SelectItem>
-                        <SelectItem value="normal">{lang === "ar" ? "عادية" : "Normal"}</SelectItem>
-                        <SelectItem value="high">{lang === "ar" ? "عالية" : "High"}</SelectItem>
-                        <SelectItem value="urgent">{lang === "ar" ? "عاجلة" : "Urgent"}</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-
-                {/* Location */}
-                <div className="space-y-1.5">
-                  <Label>{lang === "ar" ? "موقع العينة" : "Sample Location"}</Label>
-                  <Input
-                    placeholder={lang === "ar" ? "مثال: الطابق 3، عمود C2" : "e.g. Floor 3, Column C2"}
-                    value={form.location}
-                    onChange={(e) => setForm({ ...form, location: e.target.value })}
-                  />
-                </div>
-
-                {/* Notes */}
-                <div className="space-y-1.5">
-                  <Label>{t("common.notes")}</Label>
-                  <Textarea placeholder={lang === "ar" ? "ملاحظات إضافية..." : "Additional notes..."} rows={2} value={form.notes}
-                    onChange={(e) => setForm({ ...form, notes: e.target.value })} />
-                </div>
-
-                  </div>
-                  {/* /LEFT COLUMN */}
-
-                  {/* RIGHT COLUMN — Test selection (65%) */}
-                  <div className="w-[65%] flex flex-col overflow-hidden">
-                    <div className="flex-1 overflow-y-auto px-7 py-6 space-y-5">
-
-                {/* Test Category */}
-                <div className="space-y-3">
-                  <Label className="flex items-center gap-2 text-base font-semibold text-foreground">
-                    <Layers className="w-4 h-4 text-blue-600" />
-                    {lang === "ar" ? "فئة الاختبار" : "Test Category"} <span className="text-red-500">*</span>
-                  </Label>
-                  <div className="flex flex-wrap gap-2.5">
-                    {CATEGORIES.map(cat => (
-                      <button key={cat.value} type="button"
-                        onClick={() => {
-                          setForm(f => ({ ...f, sampleType: cat.value }));
-                          setSelectedTests([]);
-                          setSubtypeFor(null);
-                          setAsphaltKind("");
-                        }}
-                        className={`px-5 py-2.5 rounded-xl text-sm font-medium transition-all border-2 ${form.sampleType === cat.value ? "bg-blue-600 text-white border-blue-600 shadow-sm" : "bg-card text-muted-foreground border-border hover:border-blue-300 hover:text-foreground"}`}>
-                        {lang === "ar" ? cat.labelAr : cat.labelEn}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
+                <FormSection
+                  step={3}
+                  title={lang === "ar" ? "الاختبارات المطلوبة" : "Tests Requested"}
+                >
+                  <div className="space-y-5">
                 {form.sampleType === "asphalt" && (
                   <div className="space-y-4">
                     <Label className="flex items-center gap-2 text-base font-semibold text-foreground">
@@ -1630,41 +1687,6 @@ export default function Reception() {
                   </div>
                 )}
 
-                {/* Casting Date - shown if any selected test requires it */}
-                {isCastingRequired && (
-                  <div className="space-y-1.5">
-                    <Label className="flex items-center gap-1">
-                      {lang === "ar" ? "تاريخ الصب" : "Date of Casting"}
-                      <span className="text-red-500">*</span>
-                    </Label>
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <Button variant="outline" className={`w-full justify-start text-left font-normal ${!form.castingDate && "text-muted-foreground"}`}>
-                          <CalendarIcon className="mr-2 h-4 w-4" />
-                          {form.castingDate ? format(form.castingDate, "dd/MM/yyyy") : (lang === "ar" ? "اختر تاريخ الصب" : "Select casting date")}
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-auto p-0" align="start">
-                        <Calendar
-                          mode="single"
-                          selected={form.castingDate}
-                          onSelect={(d) => setForm(f => ({ ...f, castingDate: d }))}
-                          disabled={(date) => date > new Date()}
-                          captionLayout="dropdown"
-                        />
-                      </PopoverContent>
-                    </Popover>
-                    {form.castingDate && (
-                      <p className="text-xs text-muted-foreground">
-                        {lang === "ar" ? "العمر عند الاستقبال:" : "Age at reception:"}{" "}
-                        <span className="font-semibold text-primary">
-                          {Math.floor((Date.now() - form.castingDate.getTime()) / (1000 * 60 * 60 * 24))} {lang === "ar" ? "يوم" : "days"}
-                        </span>
-                      </p>
-                    )}
-                  </div>
-                )}
-
                 {selectedTests.some(t => t.testTypeCode === "CONC_CUBE") && (
                   <div className="space-y-3 p-3 border border-blue-200 rounded-lg bg-blue-50/40">
                     <p className="text-xs font-semibold text-blue-800 flex items-center gap-1">
@@ -1687,7 +1709,7 @@ export default function Reception() {
                 )}
 
                 {selectedTests.some(t => t.testTypeCode === "CONC_FOAM") && (
-                  <div className="space-y-1.5 mt-1">
+                  <div className="space-y-1.5">
                     <Label className="flex items-center gap-1">
                       {lang === "ar" ? "عمر الخرسانة (أيام)" : "Age of Concrete (days)"}
                       <span className="text-red-500">*</span>
@@ -1708,125 +1730,80 @@ export default function Reception() {
                   </div>
                 )}
 
-                    </div>
-                    {/* /right scroll area */}
-
-                    {/* ── ORDER SUMMARY — sticky bottom of right column ── */}
-                    {selectedTests.length > 0 && (
-                      <div className="border-t border-border bg-green-50/60 px-7 py-3.5 flex-shrink-0">
-                        <p className="text-xs font-semibold text-green-800 mb-1.5">
-                          {lang === "ar" ? "ملخص الأوردر:" : "Order Summary:"}
-                        </p>
-                        <div className="space-y-1 max-h-28 overflow-y-auto pr-1">
-                          {selectedTests.map(t => {
-                            const isMulti = MULTI_SUBTYPE_TESTS.includes(t.testTypeCode) && t.testSubType === "__multi__";
-                            if (isMulti) {
-                              const subtypeMap = multiSubtypes[t.testTypeId] ?? {};
-                              const entries = Object.entries(subtypeMap).filter(([, qty]) => qty > 0);
-                              if (entries.length === 0) {
-                                return (
-                                  <div key={t.testTypeId} className="flex items-center justify-between text-xs text-amber-600">
-                                    <span>• {t.testTypeName} — {lang === "ar" ? "لم يُحدد نوع" : "no type selected"}</span>
-                                    <span>0 {lang === "ar" ? "درهم" : "AED"}</span>
-                                  </div>
-                                );
-                              }
-                              return entries.map(([subtypeValue, qty]) => {
-                                const subLabel = SUBTYPES_BY_CODE[t.testTypeCode]?.find(s => s.value === subtypeValue);
-                                const label = subLabel ? (lang === "ar" ? subLabel.labelAr : subLabel.labelEn) : subtypeValue;
-                                return (
-                                  <div key={`${t.testTypeId}-${subtypeValue}`} className="flex items-center justify-between text-xs text-green-700">
-                                    <span>• {t.testTypeName} ({label}) × {qty}</span>
-                                    <span>{(t.unitPrice * qty).toFixed(0)} {lang === "ar" ? "درهم" : "AED"}</span>
-                                  </div>
-                                );
-                              });
-                            }
-                            return (
-                              <div key={t.testTypeId} className="flex items-center justify-between text-xs text-green-700">
-                                <span>
-                                  • {t.testTypeName} {t.testSubType ? `(${t.testSubType})` : ""}
-                                  {t.testTypeCode === "CONC_FOAM" && foamConcreteAge.trim()
-                                    ? lang === "ar"
-                                      ? ` — عمر ${foamConcreteAge.trim()} يوم`
-                                      : ` — age ${foamConcreteAge.trim()} d`
-                                    : ""}{" "}
-                                  × {t.quantity}
-                                </span>
-                                {t.quantity > 0
-                                  ? <span>{(t.unitPrice * t.quantity).toFixed(0)} {lang === "ar" ? "درهم" : "AED"}</span>
-                                  : <span className="text-amber-600">{lang === "ar" ? "الكمية مطلوبة" : "Qty required"}</span>}
-                              </div>
-                            );
-                          })}
-                        </div>
-                        <div className="border-t border-green-300 pt-1.5 mt-1.5 flex justify-between text-sm font-bold text-green-900">
-                          <span>{lang === "ar" ? "الإجمالي:" : "Total:"}</span>
-                          <span>{totalPrice.toFixed(2)} {lang === "ar" ? "درهم" : "AED"}</span>
-                        </div>
-                      </div>
+                    {!form.sampleType && (
+                      <p className="text-sm text-muted-foreground text-center py-6">
+                        {lang === "ar" ? "اختر نوع المادة أعلاه لعرض الاختبارات" : "Select a material type above to see available tests"}
+                      </p>
                     )}
-                  </div>
-                  {/* /RIGHT COLUMN */}
-                </div>
-                {/* /BODY */}
 
-                {/* ── FOOTER ── */}
-                <div className="flex items-center justify-between gap-3 px-7 py-4 border-t border-border bg-background flex-shrink-0">
-                  <p className="text-xs text-muted-foreground flex items-center gap-2 flex-1 min-w-0">
-                    <AlertTriangle className="w-4 h-4 text-amber-500 flex-shrink-0" />
-                    <span className="truncate">
-                      {lang === "ar"
-                        ? "يجب أن تكون جميع الاختبارات المحددة بكمية 1 على الأقل قبل الإرسال"
-                        : "All selected tests must have a quantity ≥ 1 before submitting"}
-                    </span>
-                  </p>
-                  <div className="flex items-center gap-2 flex-shrink-0">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="px-6"
-                      onClick={() => {
-                        setOpen(false);
-                        setForm(emptyForm());
-                        setSelectedTests([]);
-                        setSubtypeFor(null);
-                        setAsphaltKind("");
-                        setHotBinAddons({});
-                        setAsphaltMixCourse("");
-                        setAsphaltMixSelectionMode("batch");
-                        setNominalCubeSize("150mm");
-                        setFoamConcreteAge("");
-                      }}
-                    >
-                      {t("common.cancel")}
-                    </Button>
-                    <Button
-                      type="submit"
-                      className="px-6 gap-2"
-                      disabled={createOrder.isPending || selectedTests.length === 0 || hasInvalidQtyTests}
-                    >
-                      <FlaskConical className="w-4 h-4" />
-                      {createOrder.isPending
-                        ? (lang === "ar" ? "جاري الإنشاء..." : "Creating...")
-                        : selectedTests.length === 0
-                          ? (lang === "ar" ? "اختر اختباراً أولاً" : "Select a test first")
-                          : hasInvalidQtyTests
-                            ? (lang === "ar" ? "أصلح الكميات للمتابعة" : "Fix quantities to continue")
-                            : selectedTests.length > 1
-                              ? (lang === "ar"
-                                  ? `إنشاء أمر (${selectedTests.length} اختبارات)`
-                                  : `Create Order (${selectedTests.length} tests)`)
-                              : (lang === "ar" ? "إنشاء أمر (اختبار واحد)" : "Create Order (1 test)")}
-                    </Button>
                   </div>
+                </FormSection>
+              </div>
+
+              {/* Summary sidebar */}
+              <aside className="xl:sticky xl:top-4 space-y-4">
+                <div className="rounded-xl bg-primary text-primary-foreground p-4 shadow-md">
+                  <p className="text-[11px] font-medium uppercase tracking-wide opacity-80">
+                    {lang === "ar" ? "رمز العينة (تلقائي)" : "Sample Code (auto)"}
+                  </p>
+                  <p className="font-mono text-lg font-bold mt-1 tracking-wide">
+                    {lang === "ar" ? "يُولَّد عند التسجيل" : "Generated on save"}
+                  </p>
                 </div>
-              </form>
-              )}
-            </DialogContent>
-          </Dialog>
-          </div>
-        </div>
+                <div className="rounded-xl border bg-card p-4 space-y-3 shadow-sm">
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between gap-2">
+                      <span className="text-muted-foreground">{lang === "ar" ? "المادة" : "Material"}</span>
+                      <span className="font-medium text-end">{form.sampleType ? typeLabel(form.sampleType) : "—"}</span>
+                    </div>
+                    <div className="flex justify-between gap-2">
+                      <span className="text-muted-foreground">{t("reception.quantity")}</span>
+                      <span className="font-medium">{totalSpecimens > 0 ? `${totalSpecimens} ${lang === "ar" ? "عينة" : "specimens"}` : "—"}</span>
+                    </div>
+                    <div className="flex justify-between gap-2">
+                      <span className="text-muted-foreground">{lang === "ar" ? "اختبارات محددة" : "Tests selected"}</span>
+                      <span className="font-medium">{selectedTests.length || "—"}</span>
+                    </div>
+                    <div className="flex justify-between gap-2 pt-2 border-t">
+                      <span className="font-semibold">{lang === "ar" ? "الإجمالي" : "Total"}</span>
+                      <span className="font-bold text-primary">{totalPrice > 0 ? `${totalPrice.toFixed(0)} AED` : "—"}</span>
+                    </div>
+                  </div>
+                  {hasInvalidQtyTests && selectedTests.length > 0 && (
+                    <p className="text-xs text-amber-700 flex items-start gap-1.5">
+                      <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                      {lang === "ar" ? "أصلح كميات الاختبارات قبل التسجيل" : "Fix test quantities before registering"}
+                    </p>
+                  )}
+                  <Button
+                    type="submit"
+                    className="w-full gap-2"
+                    size="lg"
+                    disabled={createOrder.isPending || selectedTests.length === 0 || hasInvalidQtyTests}
+                  >
+                    <Printer className="w-4 h-4" />
+                    {createOrder.isPending
+                      ? (lang === "ar" ? "جاري التسجيل..." : "Registering...")
+                      : (lang === "ar" ? "تسجيل وطباعة الوصل" : "Register & Print Receipt")}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="w-full text-muted-foreground"
+                    onClick={resetRegistrationForm}
+                  >
+                    {lang === "ar" ? "مسح النموذج" : "Clear form"}
+                  </Button>
+                </div>
+              </aside>
+            </div>
+          </form>
+        )}
+
+        {/* Orders history */}
+        <div className="border-t pt-5 space-y-4">
+          <h2 className="text-base font-semibold">{lang === "ar" ? "سجل الأوردرات" : "Order History"}</h2>
 
         {/* Task Filter Buttons */}
         <div className="flex items-center gap-2 flex-wrap">
