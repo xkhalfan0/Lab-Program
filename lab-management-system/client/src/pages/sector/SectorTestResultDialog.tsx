@@ -1,23 +1,21 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
+  DialogClose,
   DialogContent,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
   buildSectorResultReportHtml,
-  formatFormSections,
   pickMainSummaryEntries,
 } from "./sectorReportUtils";
 import {
   CheckCircle2,
   XCircle,
   Clock,
-  Download,
-  Printer,
   RefreshCw,
   Hash,
   Building2,
@@ -26,8 +24,8 @@ import {
   FileText,
   ClipboardList,
   Info,
-  ChevronDown,
-  ChevronUp,
+  X,
+  ExternalLink,
 } from "lucide-react";
 
 const REPORT_LABELS = {
@@ -38,20 +36,23 @@ const REPORT_LABELS = {
     testType: "نوع الاختبار",
     testDate: "تاريخ الفحص",
     testedBy: "الفني",
-    formData: "بيانات الفحص",
     notes: "ملاحظات",
     approved: "ناجح",
     failed: "راسب",
     pending: "قيد المراجعة",
-    download: "تنزيل التقرير",
-    print: "طباعة",
     generating: "جاري التوليد...",
     loadError: "تعذّر تحميل التقرير",
     viewFullReport: "عرض التقرير الكامل",
-    hideFullReport: "إخفاء التفاصيل",
     resultSummary: "ملخص سريع",
     title: "نتيجة الاختبار",
     failAlert: "هذه العينة لم تجتز الفحص — يرجى مراجعة التقرير الكامل",
+    close: "إغلاق",
+    projectName: "اسم المشروع",
+    overallResult: "النتيجة",
+    summaryValues: "ملخص النتائج",
+    formData: "بيانات الفحص",
+    managerReview: "مراجعة المشرف",
+    qcReview: "اعتماد الجودة",
   },
   en: {
     sampleCode: "Sample Code",
@@ -60,20 +61,23 @@ const REPORT_LABELS = {
     testType: "Test Type",
     testDate: "Test Date",
     testedBy: "Technician",
-    formData: "Test Data",
     notes: "Notes",
     approved: "Pass",
     failed: "Fail",
     pending: "Pending",
-    download: "Download Report",
-    print: "Print",
     generating: "Generating...",
     loadError: "Could not load report",
     viewFullReport: "View Full Report",
-    hideFullReport: "Hide Details",
     resultSummary: "Quick Summary",
     title: "Test Result",
     failAlert: "This sample did not pass — review the full report",
+    close: "Close",
+    projectName: "Project",
+    overallResult: "Result",
+    summaryValues: "Summary",
+    formData: "Test Data",
+    managerReview: "Manager Review",
+    qcReview: "QC Approval",
   },
 };
 
@@ -116,11 +120,6 @@ export function SectorTestResultDialog({
   const T = REPORT_LABELS[lang];
   const isRtl = lang === "ar";
   const [isPdfLoading, setIsPdfLoading] = useState(false);
-  const [showFullReport, setShowFullReport] = useState(false);
-
-  useEffect(() => {
-    if (!open) setShowFullReport(false);
-  }, [open, resultId]);
 
   const utils = trpc.useUtils();
   const { data: detail, isLoading, isError } = trpc.sector.getInboxItemDetail.useQuery(
@@ -164,43 +163,38 @@ export function SectorTestResultDialog({
     }
   }, [detail, resultId]);
 
-  async function handlePrint() {
+  async function handleOpenReport() {
     const blob = await generatePdf(lang);
+    const sampleCode = detail?.type === "result" ? detail.sample?.sampleCode ?? resultId : resultId;
+    const filename = `test-result-${sampleCode}-${lang}.pdf`;
+
     if (blob) {
       const url = URL.createObjectURL(blob);
-      const win = window.open(url, "_blank");
-      if (win) setTimeout(() => { win.print(); URL.revokeObjectURL(url); }, 800);
-      else URL.revokeObjectURL(url);
+      const opened = window.open(url, "_blank");
+      if (!opened) {
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = filename;
+        a.click();
+      }
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
       return;
     }
+
     if (!detail || detail.type !== "result") return;
-    const labName = lang === "ar" ? "مختبر الإنشاءات والمواد الهندسية" : "Construction & Engineering Materials Laboratory";
+    const labName =
+      lang === "ar" ? "مختبر الإنشاءات والمواد الهندسية" : "Construction & Engineering Materials Laboratory";
     const html = buildSectorResultReportHtml(detail, lang, labName, T as Record<string, string>);
     const win = window.open("", "_blank");
     if (!win) return;
     win.document.write(html);
     win.document.close();
     win.focus();
-    setTimeout(() => win.print(), 500);
-  }
-
-  async function handleDownload() {
-    const blob = await generatePdf(lang);
-    const filename = `test-result-${detail?.type === "result" ? detail.sample?.sampleCode ?? resultId : resultId}-${lang}.pdf`;
-    if (blob) {
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = filename;
-      a.click();
-      URL.revokeObjectURL(url);
-    }
   }
 
   const r = detail?.type === "result" ? detail.result : null;
   const s = detail?.type === "result" ? detail.sample : null;
   const mainSummary = pickMainSummaryEntries(r?.summaryValues as Record<string, unknown>, lang);
-  const form = formatFormSections(r?.formData as Record<string, unknown>, lang);
 
   const overallBadge =
     r?.overallResult === "pass"
@@ -219,12 +213,24 @@ export function SectorTestResultDialog({
   return (
     <Dialog open={open} onOpenChange={handleOpen}>
       <DialogContent
+        showCloseButton={false}
         className={`max-h-[90vh] max-w-lg overflow-y-auto p-0 ${isFail ? "border-red-300" : ""}`}
         dir={isRtl ? "rtl" : "ltr"}
       >
-        <DialogHeader className="sticky top-0 z-10 border-b border-slate-200 bg-white px-5 py-4">
-          <DialogTitle className="text-lg font-bold text-slate-900">{T.title}</DialogTitle>
-          <p className="mt-1 font-mono text-sm text-slate-500">{s?.sampleCode ?? "—"}</p>
+        <DialogHeader className="sticky top-0 z-10 flex flex-row items-start justify-between gap-3 border-b border-slate-200 bg-white px-5 py-4">
+          <div className="min-w-0 flex-1 text-start">
+            <DialogTitle className="text-lg font-bold text-slate-900">{T.title}</DialogTitle>
+            <p className="mt-1 font-mono text-sm text-slate-500">{s?.sampleCode ?? "—"}</p>
+          </div>
+          <DialogClose asChild>
+            <button
+              type="button"
+              aria-label={T.close}
+              className="flex-shrink-0 rounded-lg p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </DialogClose>
         </DialogHeader>
 
         <div className="space-y-4 px-5 py-4">
@@ -280,62 +286,23 @@ export function SectorTestResultDialog({
                 </div>
               )}
 
-              {!showFullReport ? (
-                <Button type="button" variant="outline" className="w-full gap-2" onClick={() => setShowFullReport(true)}>
-                  <ChevronDown className="h-4 w-4" />
-                  {T.viewFullReport}
-                </Button>
-              ) : (
-                <>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="w-full gap-2 text-slate-500"
-                    onClick={() => setShowFullReport(false)}
-                  >
-                    <ChevronUp className="h-4 w-4" />
-                    {T.hideFullReport}
-                  </Button>
+              <Button
+                type="button"
+                className="w-full gap-2"
+                onClick={handleOpenReport}
+                disabled={isPdfLoading}
+              >
+                {isPdfLoading ? (
+                  <RefreshCw className="h-4 w-4 animate-spin" />
+                ) : (
+                  <ExternalLink className="h-4 w-4" />
+                )}
+                {isPdfLoading ? T.generating : T.viewFullReport}
+              </Button>
 
-                  {(form.fields.length > 0 || form.tables.length > 0) && (
-                    <div className="overflow-hidden rounded-xl border border-slate-200">
-                      <div className="border-b border-slate-100 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-800">
-                        {T.formData}
-                      </div>
-                      <div className="divide-y divide-slate-100 px-4">
-                        {form.fields.map((f) => (
-                          <DetailRow key={f.label} icon={Info} label={f.label} value={f.value} />
-                        ))}
-                      </div>
-                      {form.tables.map((t) => (
-                        <div key={t.title} className="border-t border-slate-100 p-4">
-                          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">{t.title}</p>
-                          <div className="overflow-x-auto" dangerouslySetInnerHTML={{ __html: t.html }} />
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  {r.notes && (
-                    <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-                      <p className="mb-1 text-xs text-slate-500">{T.notes}</p>
-                      <p className="text-sm text-slate-700">{r.notes}</p>
-                    </div>
-                  )}
-
-                  <div className="flex flex-wrap gap-2">
-                    <Button size="sm" variant="outline" className="flex-1 gap-2" onClick={handlePrint} disabled={isPdfLoading}>
-                      {isPdfLoading ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Printer className="h-4 w-4" />}
-                      {T.print}
-                    </Button>
-                    <Button size="sm" className="flex-1 gap-2" onClick={handleDownload} disabled={isPdfLoading}>
-                      {isPdfLoading ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
-                      {T.download}
-                    </Button>
-                  </div>
-                </>
-              )}
+              <Button type="button" variant="outline" className="w-full" onClick={onClose}>
+                {T.close}
+              </Button>
             </>
           )}
         </div>
