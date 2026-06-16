@@ -83,7 +83,7 @@ describe("role-based access control", () => {
     ).rejects.toThrow();
   });
 
-  it("denies non-sample_manager from doing manager review", async () => {
+  it("denies non-supervisor from doing manager review", async () => {
     const caller = appRouter.createCaller(makeCtx("technician"));
     await expect(
       caller.reviews.managerReview({

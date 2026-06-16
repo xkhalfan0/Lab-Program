@@ -5,9 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from "@/components/ui/select";
+import { SearchableSelect } from "@/components/SearchableSelect";
 import { Badge } from "@/components/ui/badge";
 import { useLanguage } from "@/contexts/LanguageContext";
 import {
@@ -145,6 +143,48 @@ export default function Analytics() {
     return map;
   }, [data?.byTestType]);
 
+  const contractOptions = useMemo(
+    () =>
+      (data?.contracts ?? []).map((c) => ({
+        value: String(c.id),
+        label: `${c.contractNumber} — ${c.name}`,
+        searchText: `${c.contractNumber} ${c.name}`,
+      })),
+    [data?.contracts]
+  );
+
+  const contractorOptions = useMemo(
+    () =>
+      (data?.contractors ?? []).map((c) => ({
+        value: String(c.id),
+        label: c.name,
+        searchText: c.name,
+      })),
+    [data?.contractors]
+  );
+
+  const categoryOptions = useMemo(
+    () =>
+      Object.entries(CATEGORY_LABELS).map(([k, v]) => ({
+        value: k,
+        label: lang === "ar" ? v.ar : v.en,
+        searchText: `${v.ar} ${v.en}`,
+      })),
+    [lang]
+  );
+
+  const testTypeOptions = useMemo(
+    () =>
+      (data?.testTypes ?? [])
+        .filter((t) => category === "all" || t.category === category)
+        .map((t) => ({
+          value: t.code,
+          label: lang === "ar" ? (t.nameAr || t.nameEn) : t.nameEn,
+          searchText: `${t.code} ${t.nameEn} ${t.nameAr ?? ""}`,
+        })),
+    [data?.testTypes, category, lang]
+  );
+
   return (
     <DashboardLayout>
       {/* Print header — only visible when printing */}
@@ -218,68 +258,66 @@ export default function Analytics() {
                 {/* Contract */}
                 <div className="space-y-1">
                   <Label className="text-xs">{lang === "ar" ? "العقد" : "Contract"}</Label>
-                  <Select value={contractId} onValueChange={setContractId}>
-                    <SelectTrigger className="text-xs h-8">
-                      <SelectValue placeholder={lang === "ar" ? "الكل" : "All"} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">{lang === "ar" ? "جميع العقود" : "All Contracts"}</SelectItem>
-                      {(data?.contracts ?? []).map(c => (
-                        <SelectItem key={c.id} value={String(c.id)}>
-                          {c.contractNumber} — {c.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <SearchableSelect
+                    value={contractId}
+                    onValueChange={setContractId}
+                    allOption={{
+                      value: "all",
+                      label: lang === "ar" ? "جميع العقود" : "All Contracts",
+                    }}
+                    options={contractOptions}
+                    placeholder={lang === "ar" ? "جميع العقود" : "All Contracts"}
+                    searchPlaceholder={lang === "ar" ? "بحث بالعقد أو المشروع…" : "Search contract or project…"}
+                    emptyText={lang === "ar" ? "لا توجد عقود" : "No contracts found"}
+                  />
                 </div>
                 {/* Contractor */}
                 <div className="space-y-1">
                   <Label className="text-xs">{lang === "ar" ? "المقاول" : "Contractor"}</Label>
-                  <Select value={contractorId} onValueChange={setContractorId}>
-                    <SelectTrigger className="text-xs h-8">
-                      <SelectValue placeholder={lang === "ar" ? "الكل" : "All"} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">{lang === "ar" ? "جميع المقاولين" : "All Contractors"}</SelectItem>
-                      {(data?.contractors ?? []).map(c => (
-                        <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <SearchableSelect
+                    value={contractorId}
+                    onValueChange={setContractorId}
+                    allOption={{
+                      value: "all",
+                      label: lang === "ar" ? "جميع المقاولين" : "All Contractors",
+                    }}
+                    options={contractorOptions}
+                    placeholder={lang === "ar" ? "جميع المقاولين" : "All Contractors"}
+                    searchPlaceholder={lang === "ar" ? "بحث بالمقاول…" : "Search contractor…"}
+                    emptyText={lang === "ar" ? "لا يوجد مقاولون" : "No contractors found"}
+                  />
                 </div>
                 {/* Category */}
                 <div className="space-y-1">
                   <Label className="text-xs">{lang === "ar" ? "الفئة" : "Category"}</Label>
-                  <Select value={category} onValueChange={v => { setCategory(v); setTestTypeCode("all"); }}>
-                    <SelectTrigger className="text-xs h-8">
-                      <SelectValue placeholder={lang === "ar" ? "الكل" : "All"} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">{lang === "ar" ? "جميع الفئات" : "All Categories"}</SelectItem>
-                      {Object.entries(CATEGORY_LABELS).map(([k, v]) => (
-                        <SelectItem key={k} value={k}>{lang === "ar" ? v.ar : v.en}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <SearchableSelect
+                    value={category}
+                    onValueChange={(v) => { setCategory(v); setTestTypeCode("all"); }}
+                    allOption={{
+                      value: "all",
+                      label: lang === "ar" ? "جميع الفئات" : "All Categories",
+                    }}
+                    options={categoryOptions}
+                    placeholder={lang === "ar" ? "جميع الفئات" : "All Categories"}
+                    searchPlaceholder={lang === "ar" ? "بحث بالفئة…" : "Search category…"}
+                    emptyText={lang === "ar" ? "لا توجد فئات" : "No categories found"}
+                  />
                 </div>
                 {/* Test Type */}
                 <div className="space-y-1">
                   <Label className="text-xs">{lang === "ar" ? "نوع الاختبار" : "Test Type"}</Label>
-                  <Select value={testTypeCode} onValueChange={setTestTypeCode}>
-                    <SelectTrigger className="text-xs h-8">
-                      <SelectValue placeholder={lang === "ar" ? "الكل" : "All"} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">{lang === "ar" ? "جميع الأنواع" : "All Types"}</SelectItem>
-                      {(data?.testTypes ?? [])
-                        .filter(t => category === "all" || t.category === category)
-                        .map(t => (
-                          <SelectItem key={t.code} value={t.code}>
-                            {lang === "ar" ? (t.nameAr || t.nameEn) : t.nameEn}
-                          </SelectItem>
-                        ))}
-                    </SelectContent>
-                  </Select>
+                  <SearchableSelect
+                    value={testTypeCode}
+                    onValueChange={setTestTypeCode}
+                    allOption={{
+                      value: "all",
+                      label: lang === "ar" ? "جميع الأنواع" : "All Types",
+                    }}
+                    options={testTypeOptions}
+                    placeholder={lang === "ar" ? "جميع الأنواع" : "All Types"}
+                    searchPlaceholder={lang === "ar" ? "بحث بنوع الاختبار…" : "Search test type…"}
+                    emptyText={lang === "ar" ? "لا توجد أنواع" : "No test types found"}
+                  />
                 </div>
               </div>
               <div className="flex justify-end mt-3">

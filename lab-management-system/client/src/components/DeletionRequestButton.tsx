@@ -3,6 +3,7 @@ import { Trash2 } from "lucide-react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
+import { effectiveUserRole } from "@/lib/labTypes";
 import { DeletionRequestModal } from "@/components/DeletionRequestModal";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
@@ -24,7 +25,7 @@ export function DeletionRequestButton({
   const { user } = useAuth();
   const [showModal, setShowModal] = useState(false);
   const role = user?.role ?? "";
-  const canRequest = ["admin", "lab_manager", "sample_manager", "qc_inspector"].includes(role);
+  const canRequest = ["admin", "lab_manager", "qc_inspector"].includes(effectiveUserRole(role));
   const isAdmin = role === "admin";
 
   const { data: existingRequest } = trpc.deletion.getPendingForTarget.useQuery(

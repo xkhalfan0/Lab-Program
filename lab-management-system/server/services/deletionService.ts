@@ -162,6 +162,7 @@ async function softDeleteTargetRow(
           deletedBy: reviewedBy,
           deletionReason: audit?.reason ?? null,
           deletionCategory: audit?.category ?? null,
+          status: "deleted",
           updatedAt: now,
         })
         .where(and(eq(samples.id, targetId), isNull(samples.deletedAt)));

@@ -66,17 +66,10 @@ async function main() {
         await db
           .select({ id: users.id, name: users.name })
           .from(users)
-          .where(eq(users.role, "sample_manager"))
-          .limit(1)
-      )[0] ??
-      (
-        await db
-          .select({ id: users.id, name: users.name })
-          .from(users)
           .where(eq(users.role, "lab_manager"))
           .limit(1)
       )[0];
-    if (!supervisor) throw new Error("No supervisor user (sample_manager/lab_manager) found.");
+    if (!supervisor) throw new Error("No supervisor user (lab_manager) found.");
 
     const reception =
       (

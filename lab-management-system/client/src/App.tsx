@@ -31,6 +31,7 @@ import SupervisorDashboard from "./pages/SupervisorDashboard";
 import ManagerDashboard from "./pages/ManagerDashboard";
 import ChangePassword from "./pages/ChangePassword";
 import PrintReceipt from "./pages/PrintReceipt";
+import PrintTestCatalog from "./pages/PrintTestCatalog";
 import ClearanceArchive from "./pages/ClearanceArchive";
 import PrintCertificate from "./pages/PrintCertificate";
 import OrderReport from "./pages/OrderReport";
@@ -44,6 +45,7 @@ import SectorClearances from "./pages/sector/SectorClearances";
 import SectorNotifications from "./pages/sector/SectorNotifications";
 import { Loader2 } from "lucide-react";
 import { useEffect } from "react";
+import { effectiveUserRole } from "./lib/labTypes";
 
 // ─── Role-based redirect map ─────────────────────────────────────────────────
 const ROLE_HOME: Record<string, string> = {
@@ -51,7 +53,6 @@ const ROLE_HOME: Record<string, string> = {
   reception: "/reception",
   lab_manager: "/distribution",
   technician: "/technician",
-  sample_manager: "/manager-review",
   qc_inspector: "/qc-review",
   accountant: "/clearance",
   user: "/manager-dashboard",
@@ -84,7 +85,7 @@ function resolveHomePage(user: any): string {
     }
   }
   // Fall back to role default
-  return ROLE_HOME[user.role] ?? "/reception";
+  return ROLE_HOME[effectiveUserRole(user.role)] ?? "/reception";
 }
 
 // Pages accessible to specific roles (empty = all authenticated users)
@@ -94,10 +95,10 @@ const ROUTE_ROLES: Record<string, string[]> = {
   "/technician": ["admin", "technician", "lab_manager"],
   "/batch/:sampleId/:orderId": ["admin", "technician", "lab_manager"],
   "/batch-report/:sampleId/:orderId": ["admin", "technician", "lab_manager"],
-  "/manager-review": ["admin", "sample_manager", "lab_manager"],
+  "/manager-review": ["admin", "lab_manager"],
   "/qc-review": ["admin", "qc_inspector", "lab_manager"],
-  "/clearance": ["admin", "lab_manager", "sample_manager", "accountant"],
-  "/manager-dashboard": ["admin", "lab_manager", "supervisor", "sample_manager"],
+  "/clearance": ["admin", "lab_manager", "accountant"],
+  "/manager-dashboard": ["admin", "lab_manager", "supervisor"],
   "/users": ["admin"],
   "/admin/deletion-requests": ["admin", "lab_manager"],
   "/admin/deletion-log": ["admin", "lab_manager"],
@@ -191,9 +192,8 @@ function ProtectedRoute({ component: Component, path }: { component: React.Compo
     }
     // Role-based access control
     const allowedRoles = ROUTE_ROLES[path];
-    if (allowedRoles && user && !allowedRoles.includes(user.role)) {
-      // Redirect to role home page
-      const home = ROLE_HOME[user.role] ?? "/";
+    if (allowedRoles && user && !allowedRoles.includes(effectiveUserRole(user.role))) {
+      const home = ROLE_HOME[effectiveUserRole(user.role)] ?? "/";
       setLocation(home);
     }
   }, [loading, isAuthenticated, user, path, setLocation]);
@@ -212,7 +212,7 @@ function ProtectedRoute({ component: Component, path }: { component: React.Compo
   if (!isAuthenticated) return null;
 
   const allowedRoles = ROUTE_ROLES[path];
-  if (allowedRoles && user && !allowedRoles.includes(user.role)) return null;
+  if (allowedRoles && user && !allowedRoles.includes(effectiveUserRole(user.role))) return null;
 
   return <Component />;
 }
@@ -312,6 +312,7 @@ function Router() {
 
       {/* Print pages — opened in new tab, session cookie is shared */}
       <Route path="/print-receipt/:id" component={PrintReceipt} />
+      <Route path="/print/test-catalog" component={PrintTestCatalog} />
       <Route path="/print-certificate/:id" component={PrintCertificate} />
 
       {/* /admin redirect → home dashboard */}

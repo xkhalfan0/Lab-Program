@@ -10,6 +10,7 @@ export type DocumentType =
   | "payment_order"        // أمر الدفع
   | "clearance"            // شهادة براءة الذمة
   | "analytics"            // تقرير الإحصائيات
+  | "test_catalog"         // قائمة أسعار الاختبارات
   | "custom";              // عنوان مخصص
 
 const DOC_LABELS: Record<DocumentType, { ar: string; en: string }> = {
@@ -36,6 +37,10 @@ const DOC_LABELS: Record<DocumentType, { ar: string; en: string }> = {
   analytics: {
     ar: "تقرير الإحصائيات والتقارير",
     en: "Analytics & Statistics Report",
+  },
+  test_catalog: {
+    ar: "قائمة أسعار الاختبارات",
+    en: "Laboratory Test Price List",
   },
   custom: { ar: "", en: "" },
 };

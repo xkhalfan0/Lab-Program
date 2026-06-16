@@ -32,12 +32,12 @@ import { DashboardLayoutSkeleton } from "./DashboardLayoutSkeleton";
 import { Button } from "./ui/button";
 import { useLanguage } from "@/contexts/LanguageContext";
 import NotificationBell from "@/components/NotificationBell";
+import { effectiveUserRole } from "@/lib/labTypes";
 
 type AllowedRole =
   | "admin"
   | "lab_manager"
   | "supervisor"
-  | "sample_manager"
   | "reception"
   | "technician"
   | "qc_inspector"
@@ -45,19 +45,19 @@ type AllowedRole =
 
 // Each item has: required permission key + minimum level needed ("view" or "edit")
 const ALL_MENU_ITEMS = [
-  { icon: Target, labelKey: "nav.managerDashboard", path: "/manager-dashboard", permKey: "admin_dashboard", minLevel: "view", allowedRoles: ["admin", "lab_manager", "supervisor", "sample_manager"] as AllowedRole[] },
-  { icon: Eye, labelKey: "nav.supervisorDashboard", path: "/supervisor-dashboard", permKey: "supervisor_dashboard", minLevel: "view", allowedRoles: ["admin", "lab_manager", "supervisor", "sample_manager"] as AllowedRole[] },
+  { icon: Target, labelKey: "nav.managerDashboard", path: "/manager-dashboard", permKey: "admin_dashboard", minLevel: "view", allowedRoles: ["admin", "lab_manager", "supervisor"] as AllowedRole[] },
+  { icon: Eye, labelKey: "nav.supervisorDashboard", path: "/supervisor-dashboard", permKey: "supervisor_dashboard", minLevel: "view", allowedRoles: ["admin", "lab_manager", "supervisor"] as AllowedRole[] },
   { icon: FlaskConical, labelKey: "nav.reception", path: "/reception", permKey: "samples", minLevel: "view", allowedRoles: ["admin", "lab_manager", "reception"] as AllowedRole[] },
-  { icon: ClipboardList, labelKey: "nav.distribution", path: "/distribution", permKey: "distribution", minLevel: "view", allowedRoles: ["admin", "lab_manager", "supervisor", "sample_manager"] as AllowedRole[] },
+  { icon: ClipboardList, labelKey: "nav.distribution", path: "/distribution", permKey: "distribution", minLevel: "view", allowedRoles: ["admin", "lab_manager", "supervisor"] as AllowedRole[] },
   { icon: Microscope, labelKey: "nav.assignments", path: "/technician", permKey: "results", minLevel: "view", allowedRoles: ["admin", "technician"] as AllowedRole[] },
-  { icon: CheckSquare, labelKey: "nav.managerReview", path: "/manager-review", permKey: "supervisor", minLevel: "view", allowedRoles: ["admin", "lab_manager", "supervisor", "sample_manager", "qc_inspector"] as AllowedRole[] },
+  { icon: CheckSquare, labelKey: "nav.managerReview", path: "/manager-review", permKey: "supervisor", minLevel: "view", allowedRoles: ["admin", "lab_manager", "supervisor", "qc_inspector"] as AllowedRole[] },
   { icon: ShieldCheck, labelKey: "nav.qcReview", path: "/qc-review", permKey: "qc", minLevel: "view", allowedRoles: ["admin", "lab_manager", "qc_inspector"] as AllowedRole[] },
   { icon: Award, labelKey: "nav.clearance", path: "/clearance", permKey: "certificates", minLevel: "view", allowedRoles: ["admin", "lab_manager", "accountant", "qc_inspector"] as AllowedRole[] },
   { icon: Archive, labelKey: "nav.clearanceArchive", path: "/clearance-archive", permKey: "cert_archive", minLevel: "view", allowedRoles: ["admin", "lab_manager", "accountant"] as AllowedRole[] },
   { icon: Users, labelKey: "nav.users", path: "/users", permKey: "users", minLevel: "view", allowedRoles: ["admin"] as AllowedRole[] },
   { icon: ShieldCheck, labelKey: "nav.deletionRequests", path: "/admin/deletion-requests", permKey: "deletion_requests", minLevel: "view", allowedRoles: ["admin", "lab_manager"] as AllowedRole[] },
   { icon: FlaskConical, labelKey: "nav.tests", path: "/tests-management", permKey: "settings", minLevel: "view", allowedRoles: ["admin", "lab_manager"] as AllowedRole[] },
-  { icon: TrendingUp, labelKey: "nav.analytics", path: "/analytics", permKey: "analytics", minLevel: "view", allowedRoles: ["admin", "lab_manager", "supervisor", "sample_manager"] as AllowedRole[] },
+  { icon: TrendingUp, labelKey: "nav.analytics", path: "/analytics", permKey: "analytics", minLevel: "view", allowedRoles: ["admin", "lab_manager", "supervisor"] as AllowedRole[] },
   { icon: TrendingUp, labelKey: "nav.monthlyReport", path: "/monthly-report", permKey: "monthly_report", minLevel: "view", allowedRoles: ["admin", "lab_manager"] as AllowedRole[] },
 ];
 
@@ -70,7 +70,6 @@ const ROLE_HOME: Record<string, string> = {
   reception: "/reception",
   lab_manager: "/distribution",
   technician: "/technician",
-  sample_manager: "/manager-review",
   qc_inspector: "/qc-review",
   accountant: "/clearance",
   user: "/manager-dashboard",
@@ -107,13 +106,6 @@ const ROLE_DEFAULT_PERMS: Record<string, PermMap> = {
     supervisor: false, qc: false, certificates: false,
     users: false, settings: false, analytics: false, deletion_requests: false,
   },
-  // Sample Manager / Supervisor: only Supervisor Review
-  sample_manager: {
-    admin_dashboard: false, supervisor_dashboard: false,
-    manager_dashboard: false, samples: false, distribution: false, results: false,
-    supervisor: "edit", qc: false, certificates: false,
-    users: false, settings: false, analytics: false, deletion_requests: false,
-  },
   // QC Inspector: only QC Review
   qc_inspector: {
     admin_dashboard: false, supervisor_dashboard: false,
@@ -140,7 +132,7 @@ function hasPermission(user: any, permKey: string | null, minLevel: string | nul
   // If no permKey defined, always show (shouldn't happen with new config)
   if (!permKey || !minLevel) return true;
 
-  const role = user?.role ?? "user";
+  const role = effectiveUserRole(user?.role ?? "user");
   // Admin always has full access
   if (role === "admin") return true;
 
@@ -239,7 +231,7 @@ function DashboardLayoutContent({ children, setSidebarWidth, sidebarSide }: Prop
   const isMobile = useIsMobile();
   const { lang, setLang, t, dir } = useLanguage();
 
-  const currentRole = ((user?.role ?? "user") === "sample_manager" ? "supervisor" : (user?.role ?? "user")) as AllowedRole | "user";
+  const currentRole = effectiveUserRole(user?.role ?? "user") as AllowedRole | "user";
   const menuItems = ALL_MENU_ITEMS.filter((item) => {
     const isAllowedByRole = currentRole === "admin" || item.allowedRoles.includes(currentRole as AllowedRole);
     if (!isAllowedByRole) return false;

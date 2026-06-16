@@ -12,7 +12,7 @@ import {
   RotateCcw,
   ChevronLeft,
   ChevronRight,
-  Eye,
+  FileText,
 } from "lucide-react";
 
 const t = {
@@ -41,8 +41,12 @@ const t = {
     hours_ago: "ساعة",
     days_ago: "يوم",
     ago: "مضى",
-    hourAgo: "منذ ساعة",
+    hourAgo: "قبل ساعة",
     yesterday: "أمس",
+    beforeHours: "قبل",
+    hoursUnit: "ساعة",
+    beforeDays: "قبل",
+    daysUnit: "يوم",
     outsideLimits: "خارج الحدود المسموحة",
     strengthBelow: "مقاومة أقل من المطلوب",
     tapToReview: "اضغط لمراجعة جميع النتائج الراسبة",
@@ -108,12 +112,12 @@ function timeAgo(dateVal: unknown, lang: "ar" | "en"): string {
   }
   if (diff < 86400) {
     const h = Math.floor(diff / 3600);
-    if (h === 1 && lang === "en") return T.hourAgo;
-    return lang === "ar" ? `${T.ago} ${h} ${T.hours_ago}` : `${h} ${T.hours_ago}`;
+    if (h === 1) return lang === "ar" ? T.hourAgo : T.hourAgo;
+    return lang === "ar" ? `${T.beforeHours} ${h} ${T.hoursUnit}` : `${h} ${T.hours_ago}`;
   }
   const d = Math.floor(diff / 86400);
-  if (d === 1 && lang === "en") return T.yesterday;
-  return lang === "ar" ? `${T.ago} ${d} ${T.days_ago}` : `${d} ${T.days_ago}`;
+  if (d === 1) return T.yesterday;
+  return lang === "ar" ? `${T.beforeDays} ${d} ${T.daysUnit}` : `${d} ${T.days_ago}`;
 }
 
 function isResultFail(item: InboxItem) {
@@ -130,6 +134,15 @@ function activityLabel(item: InboxItem, lang: "ar" | "en"): string {
   const title = lang === "ar" ? item.title : (item.titleEn ?? item.title);
   if (/retest|إعادة/i.test(title)) return T.retestRegistered;
   return title;
+}
+
+function failedItemDescription(
+  testLabel: string,
+  hint: string | undefined,
+  T: (typeof t)["ar"],
+) {
+  if (hint && /^\d/.test(hint)) return `${testLabel} — ${T.outsideLimits}`;
+  return `${testLabel} — ${T.strengthBelow}`;
 }
 
 function FailedCriticalSection({
@@ -166,66 +179,71 @@ function FailedCriticalSection({
         : `${totalFailed} Failed Results`;
 
   return (
-    <div className="sticky top-16 z-30">
-      <div className="overflow-hidden rounded-2xl border-2 border-red-500 bg-gradient-to-br from-red-100 via-red-50 to-rose-50 shadow-xl ring-4 ring-red-300/50">
-        <Link
-          href="/sector/results?filter=fail"
-          className="flex flex-wrap items-center gap-5 border-b border-red-200/80 p-6 transition hover:bg-red-100/40"
-        >
-          <div className="flex h-24 w-24 flex-shrink-0 items-center justify-center rounded-2xl border-2 border-red-400 bg-red-200 shadow-inner">
-            <AlertTriangle className="h-12 w-12 text-red-700" strokeWidth={2.5} />
+    <section
+      dir={isRtl ? "rtl" : "ltr"}
+      className="overflow-hidden rounded-2xl border border-red-200 bg-gradient-to-b from-red-50 to-rose-50/80 p-4 shadow-sm sm:p-5"
+    >
+      {/* Header */}
+      <div className="mb-4 flex items-start justify-between gap-4">
+        <div className="flex min-w-0 flex-1 items-start gap-3">
+          <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl bg-red-100">
+            <AlertTriangle className="h-6 w-6 text-red-600" strokeWidth={2.25} />
           </div>
-          <div className="min-w-0 flex-1">
-            <h2 className="text-2xl font-extrabold text-red-900">{title}</h2>
-            <p className="mt-1 text-base font-medium text-red-700">
+          <div className="min-w-0">
+            <h2 className="text-lg font-bold leading-snug text-red-800 sm:text-xl">{title}</h2>
+            <p className="mt-0.5 text-sm text-red-600/80">
               {totalFailed === 1 ? T.failedSubtitleOne : T.failedSubtitle}
             </p>
-            <p className="mt-2 text-sm font-semibold text-red-600 underline-offset-2 hover:underline">
-              {T.tapToReview} →
-            </p>
           </div>
-          <span className="rounded-xl bg-red-600 px-5 py-3 text-lg font-bold tabular-nums text-white shadow-md">
-            {totalFailed}
-          </span>
+        </div>
+        <Link
+          href="/sector/results?filter=fail"
+          className="flex-shrink-0 rounded-lg border border-red-200 bg-white px-4 py-2 text-sm font-semibold text-red-700 shadow-sm transition hover:border-red-300 hover:bg-red-50"
+        >
+          {T.viewAll}
+          <span className="ms-1 inline-block">{isRtl ? "←" : "→"}</span>
         </Link>
-
-        {items.length > 0 && (
-          <div className="divide-y divide-red-200/80 bg-white/40">
-            {items.map((item) => {
-              const testLabel = isRtl ? item.testTypeNameAr : item.testTypeNameEn;
-              const desc =
-                item.hint && /^\d/.test(item.hint)
-                  ? `${testLabel} — ${T.outsideLimits}`
-                  : `${testLabel} — ${T.strengthBelow}`;
-              return (
-                <div key={item.id} className="flex flex-wrap items-center justify-between gap-4 px-6 py-4">
-                  <div className="flex min-w-0 flex-1 items-center gap-4">
-                    <div className="flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-xl border border-red-300 bg-red-100">
-                      <AlertTriangle className="h-7 w-7 text-red-600" />
-                    </div>
-                    <div className="min-w-0">
-                      <p className="font-mono text-base font-bold text-red-900">{item.sampleCode}</p>
-                      <p className="mt-0.5 truncate text-sm text-red-700/90">{desc}</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <span className="text-sm text-red-500">{timeAgo(item.createdAt, lang)}</span>
-                    <button
-                      type="button"
-                      onClick={() => onViewReport(item.id, testLabel)}
-                      className="inline-flex items-center gap-2 rounded-xl bg-red-600 px-4 py-2.5 text-sm font-bold text-white shadow-md transition hover:bg-red-700"
-                    >
-                      <Eye className="h-4 w-4" />
-                      {T.viewReport}
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
       </div>
-    </div>
+
+      {/* Failed sample rows */}
+      {items.length > 0 ? (
+        <div className="space-y-2.5">
+          {items.map((item) => {
+            const testLabel = isRtl ? item.testTypeNameAr : item.testTypeNameEn;
+            const desc = failedItemDescription(testLabel, item.hint, T);
+            return (
+              <div
+                key={item.id}
+                className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-100 bg-white px-4 py-3.5 shadow-sm"
+              >
+                <div className="min-w-0 flex-1">
+                  <p className="font-mono text-sm font-bold text-red-700 sm:text-base">{item.sampleCode}</p>
+                  <p className="mt-0.5 text-xs text-slate-500 sm:text-sm">{desc}</p>
+                </div>
+                <div className="flex flex-shrink-0 items-center gap-3">
+                  <span className="text-xs text-slate-400">{timeAgo(item.createdAt, lang)}</span>
+                  <button
+                    type="button"
+                    onClick={() => onViewReport(item.id, testLabel)}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-slate-50 sm:text-sm"
+                  >
+                    <FileText className="h-3.5 w-3.5 text-slate-500" />
+                    {T.viewReport}
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <Link
+          href="/sector/results?filter=fail"
+          className="block rounded-xl border border-slate-100 bg-white px-4 py-3.5 text-center text-sm font-semibold text-red-700 shadow-sm hover:bg-red-50"
+        >
+          {T.tapToReview}
+        </Link>
+      )}
+    </section>
   );
 }
 

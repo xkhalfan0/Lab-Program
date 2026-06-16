@@ -20,7 +20,6 @@ const SEED_USERS: Array<{ username: string; role: Role; name: string; specialty?
   { username: "rec", role: "reception", name: "Reception" },
   { username: "lbm", role: "lab_manager", name: "Lab Manager" },
   { username: "tec", role: "technician", name: "Technician", specialty: "general" },
-  { username: "smg", role: "sample_manager", name: "Sample Manager" },
   { username: "qci", role: "qc_inspector", name: "QC Inspector" },
   { username: "acc", role: "accountant", name: "Accountant" },
 ];

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { trpc } from "@/lib/trpc";
+import { effectiveUserRole } from "@/lib/labTypes";
 import DashboardLayout from "@/components/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -111,12 +112,6 @@ const ROLE_DEFAULT_PERMISSIONS: Record<string, PermMap> = {
     supervisor: false, qc: false, certificates: false, cert_archive: false,
     users: false, settings: false,
   },
-  sample_manager: {
-    admin_dashboard: false, supervisor_dashboard: false, analytics: false,
-    samples: false, distribution: false, results: false,
-    supervisor: "edit", qc: false, certificates: false, cert_archive: false,
-    users: false, settings: false,
-  },
   qc_inspector: {
     admin_dashboard: false, supervisor_dashboard: false, analytics: false,
     samples: false, distribution: false, results: false,
@@ -139,20 +134,28 @@ const ROLE_DEFAULT_PERMISSIONS: Record<string, PermMap> = {
 
 const ROLE_LABELS_EN: Record<string, string> = {
   admin: "Admin", reception: "Reception", lab_manager: "Supervisor",
-  technician: "Technician", sample_manager: "Sample Manager",
+  technician: "Technician",
   qc_inspector: "QC Inspector", accountant: "Accountant", user: "User",
 };
 
 const ROLE_LABELS_AR: Record<string, string> = {
   admin: "مدير النظام", reception: "استقبال", lab_manager: "مشرف",
-  technician: "فني", sample_manager: "مدير عينات",
+  technician: "فني",
   qc_inspector: "مفتش جودة", accountant: "محاسب", user: "مستخدم",
 };
+
+const ASSIGNABLE_ROLES = [
+  "admin", "reception", "lab_manager", "technician", "qc_inspector", "accountant", "user",
+] as const;
+
+function roleDisplayLabel(role: string, labels: Record<string, string>): string {
+  return labels[effectiveUserRole(role)] ?? role;
+}
 
 const ROLE_COLORS: Record<string, string> = {
   admin: "bg-red-100 text-red-700", reception: "bg-blue-100 text-blue-700",
   lab_manager: "bg-purple-100 text-purple-700", technician: "bg-green-100 text-green-700",
-  sample_manager: "bg-orange-100 text-orange-700", qc_inspector: "bg-teal-100 text-teal-700",
+  qc_inspector: "bg-teal-100 text-teal-700",
   accountant: "bg-cyan-100 text-cyan-700", user: "bg-slate-100 text-slate-700",
 };
 
@@ -286,9 +289,10 @@ export default function UserManagement() {
     const rawPerms = (u as any).permissions as PermMap | null;
     setForm({
       name: u.name ?? "", username: (u as any).username ?? "",
-      password: "", confirmPassword: "", role: u.role,
+      password: "", confirmPassword: "",
+      role: effectiveUserRole(u.role),
       specialty: (u as any).specialty ?? "",
-      permissions: rawPerms ?? { ...ROLE_DEFAULT_PERMISSIONS[u.role] },
+      permissions: rawPerms ?? { ...ROLE_DEFAULT_PERMISSIONS[effectiveUserRole(u.role)] },
       isActive: u.isActive,
     });
     setActiveTab("info"); setDialogOpen(true);
@@ -367,9 +371,10 @@ export default function UserManagement() {
 
         {/* Stats — dynamic: one card per role that has at least one user */}
         {(() => {
-          const ROLE_ORDER = ["admin", "lab_manager", "qc_inspector", "sample_manager", "technician", "reception", "user"];
+          const ROLE_ORDER = ["admin", "lab_manager", "qc_inspector", "technician", "reception", "accountant", "user"];
           const roleCounts = users.reduce((acc, u) => {
-            acc[u.role] = (acc[u.role] ?? 0) + 1;
+            const role = effectiveUserRole(u.role);
+            acc[role] = (acc[role] ?? 0) + 1;
             return acc;
           }, {} as Record<string, number>);
           const roleEntries = Object.entries(roleCounts).sort(
@@ -386,7 +391,7 @@ export default function UserManagement() {
                   <CardContent className="p-4">
                     <div className="flex items-center justify-between gap-2">
                       <div className="min-w-0">
-                        <p className="text-xs text-slate-500 truncate">{ROLE_LABELS[role] ?? role}</p>
+                        <p className="text-xs text-slate-500 truncate">{roleDisplayLabel(role, ROLE_LABELS)}</p>
                         <p className="text-2xl font-bold text-slate-900">{count}</p>
                       </div>
                       <Users className="w-8 h-8 text-slate-200 shrink-0" />
@@ -431,8 +436,8 @@ export default function UserManagement() {
                         <td className="px-6 py-3 font-medium text-slate-900">{u.name ?? "—"}</td>
                         <td className="px-4 py-3 font-mono text-xs text-slate-600">{(u as any).username ?? "—"}</td>
                         <td className="px-4 py-3">
-                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${ROLE_COLORS[u.role]}`}>
-                            {ROLE_LABELS[u.role]}
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${ROLE_COLORS[effectiveUserRole(u.role)] ?? ROLE_COLORS.user}`}>
+                            {roleDisplayLabel(u.role, ROLE_LABELS)}
                           </span>
                         </td>
                         <td className="px-4 py-3">
@@ -524,8 +529,8 @@ export default function UserManagement() {
                   <Select value={form.role} onValueChange={handleRoleChange}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      {Object.entries(ROLE_LABELS).map(([value, label]) => (
-                        <SelectItem key={value} value={value}>{label}</SelectItem>
+                      {ASSIGNABLE_ROLES.map((value) => (
+                        <SelectItem key={value} value={value}>{ROLE_LABELS[value]}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>

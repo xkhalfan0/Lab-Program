@@ -4,6 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { FlaskConical, Loader2, Eye, EyeOff, AlertCircle, CheckCircle2, Settings } from "lucide-react";
+import { effectiveUserRole } from "@/lib/labTypes";
 
 export default function Login() {
   const [username, setUsername] = useState("");
@@ -28,7 +29,6 @@ export default function Login() {
     reception: "/reception",
     lab_manager: "/distribution",
     technician: "/technician",
-    sample_manager: "/manager-review",
     qc_inspector: "/qc-review",
     accountant: "/clearance",
     user: "/manager-dashboard",
@@ -63,7 +63,7 @@ export default function Login() {
         return;
       }
       const role = data.user?.role ?? "user";
-      const home = ROLE_HOME[role] ?? "/";
+      const home = ROLE_HOME[effectiveUserRole(role)] ?? "/";
       window.location.href = home;
     } catch {
       setError("Network error. Please check your connection.");

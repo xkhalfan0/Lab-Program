@@ -22,6 +22,7 @@ import {
   MessageSquare,
   Loader2,
   ShieldCheck,
+  ScrollText,
 } from "lucide-react";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useLocation } from "wouter";
@@ -51,7 +52,7 @@ type ImpactAnalysis = {
   warnings: string[];
 };
 
-type StatusFilter = 'all' | 'pending' | 'approved' | 'rejected';
+type StatusFilter = 'all' | 'pending' | 'approved' | 'rejected' | 'deleted_samples';
 
 export default function AdminDeletionRequests() {
   const [, setLocation] = useLocation();
@@ -64,11 +65,20 @@ export default function AdminDeletionRequests() {
 
   // Queries
   const { data: requests, isLoading, error, refetch } = trpc.deletion.getPendingRequests.useQuery();
+  const {
+    data: deletedSamples,
+    isLoading: deletedLoading,
+    error: deletedError,
+    refetch: refetchDeleted,
+  } = trpc.samples.deletionAuditLog.useQuery(undefined, {
+    enabled: statusFilter === 'deleted_samples',
+  });
 
   // Mutations
   const approveMutation = trpc.deletion.approveDeletion.useMutation({
     onSuccess: () => {
       refetch();
+      refetchDeleted();
       toast.success(lang === "ar" ? "تمت الموافقة على طلب الحذف" : "Deletion request approved");
     },
     onError: (err) => {
@@ -89,7 +99,7 @@ export default function AdminDeletionRequests() {
 
   // Filter requests
   const filteredRequests = React.useMemo(() => {
-    if (!requests) return [];
+    if (!requests || statusFilter === 'deleted_samples') return [];
     if (statusFilter === 'all') return requests;
     return requests.filter((req) => req.status === statusFilter);
   }, [requests, statusFilter]);
@@ -331,10 +341,98 @@ export default function AdminDeletionRequests() {
           >
             {lang === "ar" ? "مرفوض" : "Rejected"} {requests?.filter((r) => r.status === 'rejected').length || 0}
           </button>
+          <button
+            onClick={() => setStatusFilter('deleted_samples')}
+            className={`px-4 py-2 rounded-full text-sm font-medium transition-all ${
+              statusFilter === 'deleted_samples'
+                ? 'bg-slate-800 text-white shadow'
+                : 'bg-muted text-muted-foreground hover:bg-muted/80'
+            }`}
+          >
+            <span className="inline-flex items-center gap-1.5">
+              <ScrollText className="w-3.5 h-3.5" />
+              {lang === "ar" ? "العينات المحذوفة" : "Deleted samples"}
+            </span>
+          </button>
         </div>
 
-        {/* Table */}
-        {filteredRequests.length === 0 ? (
+        {statusFilter === 'deleted_samples' ? (
+          deletedLoading ? (
+            <Card className="border-0 shadow-sm">
+              <CardContent className="p-12 text-center">
+                <Loader2 className="w-8 h-8 animate-spin text-primary mx-auto mb-3" />
+                <p className="text-sm text-muted-foreground">{lang === "ar" ? "جاري التحميل…" : "Loading…"}</p>
+              </CardContent>
+            </Card>
+          ) : deletedError ? (
+            <Card className="border-0 shadow-sm">
+              <CardContent className="p-8 text-center text-destructive text-sm">{deletedError.message}</CardContent>
+            </Card>
+          ) : !deletedSamples?.length ? (
+            <Card className="border-0 shadow-sm">
+              <CardContent className="p-12 text-center">
+                <ScrollText className="w-16 h-16 text-slate-400 mx-auto mb-4 opacity-30" />
+                <h3 className="text-lg font-semibold text-slate-900 mb-2">
+                  {lang === "ar" ? "لا توجد عينات محذوفة" : "No deleted samples"}
+                </h3>
+                <p className="text-slate-600">
+                  {lang === "ar"
+                    ? "ستظهر هنا العينات التي أُزيلت من العمل النشط (لا تُحسب في إجماليات المختبر)."
+                    : "Samples removed from active workflow appear here (excluded from lab totals)."}
+                </p>
+              </CardContent>
+            </Card>
+          ) : (
+            <Card className="border-0 shadow-sm">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base">{lang === "ar" ? "سجل العينات المحذوفة" : "Deleted sample log"}</CardTitle>
+                <p className="text-xs text-muted-foreground">
+                  {lang === "ar"
+                    ? `${deletedSamples.length} عينة — للمراجعة فقط، غير مدرجة في العدّ`
+                    : `${deletedSamples.length} sample(s) — audit only, not included in active counts`}
+                </p>
+              </CardHeader>
+              <CardContent className="p-0">
+                <div className="rounded-lg border overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className="bg-muted/50">
+                      <tr>
+                        <th className="text-start p-3 font-medium text-xs text-slate-500">{lang === "ar" ? "العينة" : "Sample"}</th>
+                        <th className="text-start p-3 font-medium text-xs text-slate-500">{lang === "ar" ? "المشروع" : "Project"}</th>
+                        <th className="text-start p-3 font-medium text-xs text-slate-500">{lang === "ar" ? "حُذف بواسطة" : "Deleted by"}</th>
+                        <th className="text-start p-3 font-medium text-xs text-slate-500">{lang === "ar" ? "التاريخ" : "Date"}</th>
+                        <th className="text-start p-3 font-medium text-xs text-slate-500">{lang === "ar" ? "السبب" : "Reason"}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {deletedSamples.map((sample) => (
+                        <tr
+                          key={sample.id}
+                          className="border-t hover:bg-muted/30 cursor-pointer"
+                          onClick={() => setLocation(`/sample/${sample.id}`)}
+                        >
+                          <td className="p-3 font-mono text-xs font-medium">{sample.sampleCode}</td>
+                          <td className="p-3 text-xs max-w-[180px] truncate">{sample.contractName ?? "—"}</td>
+                          <td className="p-3 text-xs">
+                            {sample.deletedByUserName?.trim() || sample.deletedByUsername?.trim() || "—"}
+                          </td>
+                          <td className="p-3 text-xs whitespace-nowrap">
+                            {sample.deletedAt
+                              ? new Date(sample.deletedAt).toLocaleString(lang === "ar" ? "ar-AE" : "en-AE")
+                              : "—"}
+                          </td>
+                          <td className="p-3 text-xs max-w-xs truncate" title={sample.deletionReason ?? ""}>
+                            {sample.deletionReason ?? sample.deletionCategory ?? "—"}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </CardContent>
+            </Card>
+          )
+        ) : filteredRequests.length === 0 ? (
           <Card className="border-0 shadow-sm">
             <CardContent className="p-12 text-center">
               <Trash2 className="w-16 h-16 text-slate-400 mx-auto mb-4 opacity-30" />

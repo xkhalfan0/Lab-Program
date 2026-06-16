@@ -1,16 +1,15 @@
-import { useState, useMemo } from "react";
+import { useState } from "react";
 import DashboardLayout from "@/components/DashboardLayout";
 import { trpc } from "@/lib/trpc";
-import { getOfficialTestCatalog } from "@/lib/officialTestCatalog";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
 import {
   Table,
   TableBody,
@@ -32,76 +31,17 @@ import {
   FileText,
   Download,
   Search,
-  Check,
-  X,
-  ChevronDown,
-  ChevronRight,
   Users,
   MapPin,
-  Wrench,
-  Mountain,
-  Truck,
-  Box,
   Settings,
   Database,
+  Printer,
 } from "lucide-react";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useAuth } from "@/_core/hooks/useAuth";
-import type { LucideIcon } from "lucide-react";
-
-function dbCategoryFromConfigKey(key: string): string {
-  return key === "aggregate" ? "aggregates" : key;
-}
-
-const categoryConfig: Array<{
-  key: string;
-  icon: LucideIcon;
-  nameEn: string;
-  nameAr: string;
-  bgColor: string;
-  textColor: string;
-}> = [
-  {
-    key: "concrete",
-    icon: Building2,
-    nameEn: "Concrete Tests",
-    nameAr: "اختبارات الخرسانة",
-    bgColor: "bg-blue-100",
-    textColor: "text-blue-600",
-  },
-  {
-    key: "steel",
-    icon: Wrench,
-    nameEn: "Steel Tests",
-    nameAr: "اختبارات الحديد",
-    bgColor: "bg-gray-100",
-    textColor: "text-gray-600",
-  },
-  {
-    key: "soil",
-    icon: Mountain,
-    nameEn: "Soil Tests",
-    nameAr: "اختبارات التربة",
-    bgColor: "bg-amber-100",
-    textColor: "text-amber-600",
-  },
-  {
-    key: "asphalt",
-    icon: Truck,
-    nameEn: "Asphalt Tests",
-    nameAr: "اختبارات الإسفلت",
-    bgColor: "bg-slate-100",
-    textColor: "text-slate-600",
-  },
-  {
-    key: "aggregate",
-    icon: Box,
-    nameEn: "Aggregate Tests",
-    nameAr: "اختبارات الركام",
-    bgColor: "bg-stone-100",
-    textColor: "text-stone-600",
-  },
-];
+import { TestCatalogView } from "@/components/TestCatalogView";
+import { useMergedTestCatalog } from "@/hooks/useMergedTestCatalog";
+import { openTestCatalogPrint } from "@/lib/testCatalogCategories";
 
 // ─── Test Types (Configuration) ─────────────────────────────────────────────
 function TestTypesTab() {
@@ -110,30 +50,11 @@ function TestTypesTab() {
   const isAdmin = user?.role === "admin";
   const utils = trpc.useUtils();
 
-  const [expandedCategories, setExpandedCategories] = useState<string[]>(["concrete"]);
   const [searchQuery, setSearchQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [editingPrice, setEditingPrice] = useState<{ testId: number; value: string } | null>(null);
 
-  // DB rows used only for numeric ids and stored prices; catalog is the test list source of truth.
-  const { data: dbTestTypes = [] } = trpc.testTypes.list.useQuery();
-
-  const allTestTypes = useMemo(() => {
-    const dbByCode = new Map(dbTestTypes.map((t) => [t.code ?? "", t]));
-    return getOfficialTestCatalog().map((test) => {
-      const db = dbByCode.get(test.code);
-      return {
-        id: db?.id ?? 0,
-        code: test.code,
-        nameEn: test.nameEn,
-        nameAr: test.nameAr,
-        category: test.category,
-        unitPrice: db?.unitPrice ?? test.unitPrice,
-        unit: test.unit,
-        standardRef: test.standardRef ?? "",
-      };
-    });
-  }, [dbTestTypes]);
+  const { tests: allTestTypes } = useMergedTestCatalog();
 
   const updatePriceMutation = trpc.testTypes.updatePrice.useMutation({
     onSuccess: () => {
@@ -145,39 +66,6 @@ function TestTypesTab() {
       toast.error(err.message);
     },
   });
-
-  const filteredTests = useMemo(() => {
-    return allTestTypes.filter((test) => {
-      const q = searchQuery.trim().toLowerCase();
-      const matchesSearch =
-        searchQuery === "" ||
-        (test.nameEn?.toLowerCase().includes(q) ?? false) ||
-        (test.nameAr?.includes(searchQuery) ?? false) ||
-        (test.code?.toLowerCase().includes(q) ?? false);
-
-      const cat = test.category?.toLowerCase() ?? "";
-      const matchesCategory =
-        categoryFilter === "all" ||
-        (categoryFilter === "aggregate" ? cat === "aggregates" : cat === categoryFilter.toLowerCase());
-
-      return matchesSearch && matchesCategory;
-    });
-  }, [allTestTypes, searchQuery, categoryFilter]);
-
-  const groupedTests = useMemo(() => {
-    return categoryConfig
-      .map((cat) => ({
-        ...cat,
-        tests: filteredTests.filter(
-          (t) => (t.category?.toLowerCase() ?? "") === dbCategoryFromConfigKey(cat.key).toLowerCase()
-        ),
-      }))
-      .filter((cat) => cat.tests.length > 0);
-  }, [filteredTests]);
-
-  const toggleCategory = (key: string) => {
-    setExpandedCategories((prev) => (prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]));
-  };
 
   const handleExportCSV = () => {
     const csvData: string[][] = [
@@ -215,234 +103,73 @@ function TestTypesTab() {
     toast.success(lang === "ar" ? "تم تصدير الملف بنجاح" : "CSV exported successfully");
   };
 
-  const renderPriceCell = (test: (typeof allTestTypes)[number]) => {
-    const priceNum = Number(test.unitPrice ?? 0);
-    const isEditing = editingPrice?.testId === test.id;
-
-    if (!isAdmin) {
-      return (
-        <span className="font-mono font-semibold">
-          {priceNum.toFixed(2)} AED
-        </span>
-      );
+  const handleSavePrice = (testId: number, value: string) => {
+    const newPrice = parseFloat(value);
+    if (Number.isNaN(newPrice) || newPrice <= 0) {
+      toast.error(lang === "ar" ? "السعر غير صالح" : "Invalid price");
+      return;
     }
-
-    if (isEditing && editingPrice) {
-      return (
-        <div className="flex items-center justify-end gap-2">
-          <Input
-            type="number"
-            step="0.01"
-            min="0"
-            value={editingPrice.value}
-            onChange={(e) => setEditingPrice({ testId: test.id, value: e.target.value })}
-            className="w-28 h-8 text-right font-mono"
-            autoFocus
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                const newPrice = parseFloat(editingPrice.value);
-                if (!Number.isNaN(newPrice) && newPrice > 0) {
-                  updatePriceMutation.mutate({ testTypeId: test.id, newPrice });
-                }
-              }
-              if (e.key === "Escape") {
-                setEditingPrice(null);
-              }
-            }}
-          />
-          <Button
-            type="button"
-            size="sm"
-            variant="default"
-            className="h-8 w-8 p-0"
-            onClick={() => {
-              const newPrice = parseFloat(editingPrice.value);
-              if (!Number.isNaN(newPrice) && newPrice > 0) {
-                updatePriceMutation.mutate({ testTypeId: test.id, newPrice });
-              } else {
-                toast.error(lang === "ar" ? "السعر غير صالح" : "Invalid price");
-              }
-            }}
-            disabled={updatePriceMutation.isPending}
-          >
-            <Check className="h-4 w-4" />
-          </Button>
-          <Button type="button" size="sm" variant="ghost" className="h-8 w-8 p-0" onClick={() => setEditingPrice(null)}>
-            <X className="h-4 w-4" />
-          </Button>
-        </div>
-      );
-    }
-
-    return (
-      <div className="flex items-center gap-2 justify-end">
-        <span className="font-mono font-semibold">
-          {priceNum.toFixed(2)} AED
-        </span>
-        <Button
-          type="button"
-          size="sm"
-          variant="ghost"
-          className="h-7 w-7 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
-          onClick={(e) => {
-            e.stopPropagation();
-            setEditingPrice({ testId: test.id, value: String(test.unitPrice ?? "0") });
-          }}
-        >
-          <Pencil className="h-3 w-3" />
-        </Button>
-      </div>
-    );
+    updatePriceMutation.mutate({ testTypeId: testId, newPrice });
   };
 
   return (
-    <div className="space-y-4 p-6">
-      <div className="flex items-center justify-between mb-4">
+    <div className="space-y-5 p-6">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h2 className="text-xl font-bold flex items-center gap-2">
-            <FlaskConical className="h-5 w-5" />
+            <FlaskConical className="h-5 w-5 text-primary" />
             {lang === "ar" ? "إدارة أنواع الاختبارات" : "Test Types Management"}
           </h2>
-          <p className="text-xs text-muted-foreground mt-0.5">
+          <p className="text-sm text-muted-foreground mt-1">
             {lang === "ar"
-              ? "إدارة أنواع الاختبارات والأسعار (المسؤول فقط)"
-              : "Manage test types and pricing (Admin only)"}
+              ? "قائمة الاختبارات الرسمية مع الأسعار — يمكن طباعتها أو مشاركتها مع المقاولين"
+              : "Official test catalog with AED prices — print or share with contractors"}
           </p>
-        </div>
-
-        <Button type="button" variant="outline" size="sm" onClick={handleExportCSV} className="gap-2 shrink-0">
-          <Download className="h-3.5 w-3.5" />
-          {lang === "ar" ? "تصدير CSV" : "Export CSV"}
-        </Button>
-      </div>
-
-      <div className="flex items-center gap-6 text-sm mb-4">
-        <div className="flex items-baseline gap-2">
-          <span className="text-2xl font-bold text-primary">{filteredTests.length}</span>
-          <span className="text-muted-foreground">{lang === "ar" ? "اختبار" : "tests"}</span>
-        </div>
-        <div className="text-muted-foreground">•</div>
-        <div className="flex items-baseline gap-2">
-          <span className="text-2xl font-bold text-primary">5</span>
-          <span className="text-muted-foreground">{lang === "ar" ? "فئات" : "categories"}</span>
-        </div>
-      </div>
-
-      <div className="flex flex-col gap-3 mb-4 sm:flex-row">
-        <div className="flex-1 max-w-md">
-          <div className="relative">
-            <Search className="absolute start-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
-            <Input
-              placeholder={lang === "ar" ? "البحث عن الاختبارات..." : "Search tests..."}
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="ps-8 h-9"
-            />
+          <div className="flex items-center gap-3 mt-3 text-sm">
+            <span>
+              <strong className="text-primary text-lg">{allTestTypes.length}</strong>{" "}
+              <span className="text-muted-foreground">{lang === "ar" ? "اختبار" : "tests"}</span>
+            </span>
+            <span className="text-muted-foreground">·</span>
+            <span className="text-muted-foreground">5 {lang === "ar" ? "فئات" : "categories"}</span>
           </div>
         </div>
-        <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-          <SelectTrigger className="w-full h-9 sm:w-[180px]">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">{lang === "ar" ? "جميع الفئات" : "All Categories"}</SelectItem>
-            <SelectItem value="concrete">{lang === "ar" ? "الخرسانة" : "Concrete"}</SelectItem>
-            <SelectItem value="steel">{lang === "ar" ? "الحديد" : "Steel"}</SelectItem>
-            <SelectItem value="soil">{lang === "ar" ? "التربة" : "Soil"}</SelectItem>
-            <SelectItem value="asphalt">{lang === "ar" ? "الإسفلت" : "Asphalt"}</SelectItem>
-            <SelectItem value="aggregate">{lang === "ar" ? "الركام" : "Aggregate"}</SelectItem>
-          </SelectContent>
-        </Select>
+
+        <div className="flex flex-wrap gap-2 shrink-0">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="gap-2"
+            onClick={() => openTestCatalogPrint(categoryFilter)}
+          >
+            <Printer className="h-3.5 w-3.5" />
+            {lang === "ar" ? "طباعة القائمة" : "Print List"}
+          </Button>
+          <Button type="button" variant="outline" size="sm" onClick={handleExportCSV} className="gap-2">
+            <Download className="h-3.5 w-3.5" />
+            {lang === "ar" ? "تصدير CSV" : "Export CSV"}
+          </Button>
+        </div>
       </div>
 
-      <div className="space-y-3">
-        {groupedTests.length === 0 ? (
-          <p className="text-xs text-muted-foreground text-center py-6">
-            {lang === "ar" ? "لا توجد اختبارات تطابق البحث أو الفلتر" : "No tests match your search or filter"}
-          </p>
-        ) : (
-          groupedTests.map((category) => {
-            const isExpanded = expandedCategories.includes(category.key);
-            const Icon = category.icon;
-
-            return (
-              <Card key={category.key} className="overflow-hidden">
-                <button
-                  type="button"
-                  className="flex w-full items-center justify-between p-3 cursor-pointer hover:bg-muted/50 transition-colors border-b text-start"
-                  onClick={() => toggleCategory(category.key)}
-                >
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    <div className={`p-1.5 rounded-lg shrink-0 ${category.bgColor}`}>
-                      <Icon className={`h-4 w-4 ${category.textColor}`} />
-                    </div>
-                    <div className="min-w-0">
-                      <h3 className="font-semibold text-base truncate">
-                        {lang === "ar" ? category.nameAr : category.nameEn}
-                      </h3>
-                      <p className="text-xs text-muted-foreground">
-                        {category.tests.length} {lang === "ar" ? "اختبار" : "tests"}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0 ms-2">
-                    <Badge variant="secondary" className="font-mono text-xs">
-                      {category.tests.length}
-                    </Badge>
-                    {isExpanded ? (
-                      <ChevronDown className="h-4 w-4 text-muted-foreground" />
-                    ) : (
-                      <ChevronRight className="h-4 w-4 text-muted-foreground" />
-                    )}
-                  </div>
-                </button>
-
-                {isExpanded && (
-                  <div className="overflow-x-auto">
-                    <Table>
-                      <TableHeader>
-                        <TableRow className="h-10">
-                          <TableHead className="w-10">#</TableHead>
-                          <TableHead>{lang === "ar" ? "اسم الاختبار" : "Test Name"}</TableHead>
-                          <TableHead>{lang === "ar" ? "الرمز" : "Code"}</TableHead>
-                          <TableHead className="text-right">{lang === "ar" ? "السعر" : "Price"}</TableHead>
-                          <TableHead>{lang === "ar" ? "الوحدة" : "Unit"}</TableHead>
-                          <TableHead>{lang === "ar" ? "المعيار" : "Standard"}</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {category.tests.map((test, idx) => (
-                          <TableRow key={test.id} className="group h-12">
-                            <TableCell className="font-medium text-muted-foreground py-2">{idx + 1}</TableCell>
-                            <TableCell className="py-2">
-                              <div className="space-y-0.5">
-                                <div className="font-medium text-sm">{test.nameEn}</div>
-                                <div className="text-xs text-muted-foreground" dir="rtl">
-                                  {test.nameAr || "—"}
-                                </div>
-                              </div>
-                            </TableCell>
-                            <TableCell className="py-2">
-                              <code className="text-xs bg-muted px-1.5 py-0.5 rounded font-mono">
-                                {test.code || "—"}
-                              </code>
-                            </TableCell>
-                            <TableCell className="text-right py-2">{renderPriceCell(test)}</TableCell>
-                            <TableCell className="text-xs py-2">{test.unit || "—"}</TableCell>
-                            <TableCell className="text-xs text-muted-foreground py-2">
-                              {test.standardRef || "—"}
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
-                )}
-              </Card>
-            );
-          })
-        )}
-      </div>
+      <TestCatalogView
+        tests={allTestTypes}
+        lang={lang}
+        searchQuery={searchQuery}
+        onSearchChange={setSearchQuery}
+        categoryFilter={categoryFilter}
+        onCategoryFilterChange={setCategoryFilter}
+        isAdmin={isAdmin}
+        editingPrice={editingPrice}
+        onStartEditPrice={(test) =>
+          setEditingPrice({ testId: test.id, value: String(test.unitPrice ?? "0") })
+        }
+        onCancelEditPrice={() => setEditingPrice(null)}
+        onSavePrice={handleSavePrice}
+        onPriceInputChange={(testId, value) => setEditingPrice({ testId, value })}
+        isSavingPrice={updatePriceMutation.isPending}
+      />
     </div>
   );
 }

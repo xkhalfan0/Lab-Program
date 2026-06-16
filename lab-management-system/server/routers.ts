@@ -126,6 +126,8 @@ import {
   getAllLabOrders,
   getLabOrderById,
   getLabOrderItems,
+  getActiveLabOrderItemsForAnalytics,
+  getSpecializedResultsByDistributionIds,
   getLabOrdersByStatus,
   getLabOrdersByTechnician,
   updateLabOrderStatus,
@@ -266,7 +268,7 @@ export const appRouter = router({
           name: z.string().min(1),
           username: z.string().min(3).max(64).regex(/^[a-zA-Z0-9_.-]+$/, "Username can only contain letters, numbers, underscores, dots, and hyphens"),
           password: z.string().min(6),
-          role: z.enum(["admin", "reception", "lab_manager", "technician", "sample_manager", "qc_inspector", "user"]),
+          role: z.enum(["admin", "reception", "lab_manager", "technician", "qc_inspector", "accountant", "user"]),
           specialty: z.string().optional(),
           permissions: permissionsRecordSchema.optional(),
         })
@@ -301,7 +303,7 @@ export const appRouter = router({
       .input(
         z.object({
           userId: z.number(),
-          role: z.enum(["admin", "reception", "lab_manager", "technician", "sample_manager", "qc_inspector", "user"]),
+          role: z.enum(["admin", "reception", "lab_manager", "technician", "qc_inspector", "accountant", "user"]),
           specialty: z.string().optional(),
         })
       )
@@ -465,7 +467,7 @@ export const appRouter = router({
         if (!row) throw new TRPCError({ code: "NOT_FOUND" });
         const deleted = Boolean((row as { deletedAt?: Date | null }).deletedAt);
         if (deleted) {
-          const allowed = ["admin", "lab_manager", "reception", "sample_manager", "qc_inspector"].includes(
+          const allowed = ["admin", "lab_manager", "reception", "qc_inspector"].includes(
             ctx.user.role
           );
           if (!allowed) throw new TRPCError({ code: "NOT_FOUND" });
@@ -1278,7 +1280,7 @@ ${testSummaries.length > 0 ? testSummaries.join("\n\n") : "لم تُجرَ اخ�
         });
         const reviewSample = await getSampleById(input.sampleId);
         await notifyUsersByRole(
-          "sample_manager",
+          "lab_manager",
           `نتائج جاهزة للمراجعة — Results Ready for Review`,
           `تم رفع نتائج اختبار العينة ${reviewSample?.sampleCode} وتنتظر مراجعتك | Test results for sample ${reviewSample?.sampleCode} are ready for your review.`,
           input.sampleId,
@@ -1303,7 +1305,7 @@ ${testSummaries.length > 0 ? testSummaries.join("\n\n") : "لم تُجرَ اخ�
     markManagerRead: protectedProcedure
       .input(z.object({ sampleId: z.number() }))
       .mutation(async ({ ctx, input }) => {
-        requireRole(ctx.user.role, ["admin", "lab_manager", "sample_manager"]);
+        requireRole(ctx.user.role, ["admin", "lab_manager"]);
         await markSampleManagerRead(input.sampleId);
         return { success: true };
       }),
@@ -1325,7 +1327,7 @@ ${testSummaries.length > 0 ? testSummaries.join("\n\n") : "لم تُجرَ اخ�
         })
       )
       .mutation(async ({ ctx, input }) => {
-        requireRole(ctx.user.role, ["admin", "sample_manager", "lab_manager"]);
+        requireRole(ctx.user.role, ["admin", "lab_manager"]);
         // Enforce mandatory notes on reject/revision
         if ((input.decision === "rejected" || input.decision === "needs_revision") && !input.comments?.trim()) {
           throw new TRPCError({ code: "BAD_REQUEST", message: "يجب إدخال ملاحظات عند الرفض أو طلب المراجعة | Notes are required when rejecting or requesting revision" });
@@ -1693,7 +1695,7 @@ ${testSummaries.length > 0 ? testSummaries.join("\n\n") : "لم تُجرَ اخ�
     groupsByDistribution: protectedProcedure
       .input(z.object({ distributionId: z.number() }))
       .query(async ({ ctx, input }) => {
-        requireRole(ctx.user.role, ["admin", "technician", "lab_manager", "sample_manager", "qc_inspector"]);
+        requireRole(ctx.user.role, ["admin", "technician", "lab_manager", "qc_inspector"]);
         const groups = await getConcreteGroupsByDistribution(input.distributionId);
         const result = await Promise.all(groups.map(async (g) => ({
           ...g,
@@ -1718,7 +1720,7 @@ ${testSummaries.length > 0 ? testSummaries.join("\n\n") : "لم تُجرَ اخ�
     groupsBySample: protectedProcedure
       .input(z.object({ sampleId: z.number() }))
       .query(async ({ ctx, input }) => {
-        requireRole(ctx.user.role, ["admin", "technician", "lab_manager", "sample_manager", "qc_inspector"]);
+        requireRole(ctx.user.role, ["admin", "technician", "lab_manager", "qc_inspector"]);
         const groups = await getConcreteGroupsBySample(input.sampleId);
         const result = await Promise.all(groups.map(async (g) => ({
           ...g,
@@ -2035,7 +2037,7 @@ ${testSummaries.length > 0 ? testSummaries.join("\n\n") : "لم تُجرَ اخ�
 
         // Notify sample managers
         await notifyUsersByRole(
-          "sample_manager",
+          "lab_manager",
           "New Concrete Test Results Ready",
           `Concrete cube results for ${submittedGroup.testAge}-day test are ready for review (Sample: ${submittedGroup.contractorName})`,
           submittedGroup.sampleId,
@@ -2351,7 +2353,7 @@ ${testSummaries.length > 0 ? testSummaries.join("\n\n") : "لم تُجرَ اخ�
               notes: `Test: ${input.testTypeCode}, Result: ${input.overallResult}`,
             });
             await notifyUsersByRole(
-              "sample_manager",
+              "lab_manager",
               "Test Results Ready for Review",
               `Results for ${input.testTypeCode} test are ready for review.`,
               input.sampleId,
@@ -2403,7 +2405,7 @@ ${testSummaries.length > 0 ? testSummaries.join("\n\n") : "لم تُجرَ اخ�
             notes: `Test: ${input.testTypeCode}, Result: ${input.overallResult}`,
           });
           await notifyUsersByRole(
-            "sample_manager",
+            "lab_manager",
             "Test Results Ready for Review",
             `Results for ${input.testTypeCode} test are ready for review.`,
             input.sampleId,
@@ -2443,7 +2445,7 @@ ${testSummaries.length > 0 ? testSummaries.join("\n\n") : "لم تُجرَ اخ�
         notes: z.string().optional(),
       }))
       .mutation(async ({ ctx, input }) => {
-        requireRole(ctx.user.role, ["admin", "lab_manager", "sample_manager"]);
+        requireRole(ctx.user.role, ["admin", "lab_manager"]);
         const dbConn = await import("./db").then(m => m.getDb());
         const code = await import("./db").then(m => m.generateClearanceCode(dbConn));
         // Compute inventory from samples/distributions for this contract
@@ -2782,23 +2784,28 @@ ${testSummaries.length > 0 ? testSummaries.join("\n\n") : "لم تُجرَ اخ�
         testTypeCode: z.string().optional(),
       }))
       .query(async ({ input }) => {
-        const allSamples = await getAllSamples();
         const allTT = await getAllTestTypes();
+        const ttByCode = new Map(allTT.map((t) => [t.code ?? "", t]));
         const allContracts = await getAllContracts();
+        const contractById = new Map(allContracts.map((c) => [c.id, c]));
         const allContractors = await getAllContractors();
 
-        // Build date range
         const dateFrom = input.dateFrom ? new Date(input.dateFrom) : null;
         const dateTo = input.dateTo ? new Date(input.dateTo + "T23:59:59") : null;
 
-        // Filter samples by contract / contractor / date
-        let samples = allSamples;
-        if (input.contractId) samples = samples.filter(s => s.contractId === input.contractId);
-        if (input.contractorId) samples = samples.filter(s => (s as any).contractorId === input.contractorId);
-        if (dateFrom) samples = samples.filter(s => new Date(s.createdAt) >= dateFrom!);
-        if (dateTo) samples = samples.filter(s => new Date(s.createdAt) <= dateTo!);
+        const orderItems = await getActiveLabOrderItemsForAnalytics();
+        const distIds = [
+          ...new Set(
+            orderItems
+              .map((i) => i.distributionId)
+              .filter((id): id is number => id != null)
+          ),
+        ];
+        const specResults = await getSpecializedResultsByDistributionIds(distIds);
+        const specByDist = new Map(
+          specResults.map((r) => [r.distributionId, r])
+        );
 
-        // Collect all distributions for filtered samples
         const rows: {
           sampleCode: string;
           contractId: number | null;
@@ -2809,83 +2816,123 @@ ${testSummaries.length > 0 ? testSummaries.join("\n\n") : "لم تُجرَ اخ�
           testNameAr: string;
           category: string;
           price: number;
-          result: string;
+          units: number;
+          result: "pass" | "fail" | "pending";
           createdAt: Date;
         }[] = [];
 
-        for (const sample of samples) {
-          const dists = await getDistributionsBySample(sample.id);
-          for (const dist of dists) {
-            const tt = allTT.find(t => t.code === dist.testType) ?? null;
-            if (input.category && tt?.category !== input.category) continue;
-            if (input.testTypeCode && tt?.code !== input.testTypeCode) continue;
-            const specResult = await getSpecializedTestResultByDistribution(dist.id);
-            const legacyResults = await getTestResultBySample(sample.id);
-            const legacyResult = Array.isArray(legacyResults) ? legacyResults[0] : legacyResults;
-            let result = "pending";
-            if ((specResult as any)?.overallResult === "pass" || (legacyResult as any)?.overallResult === "pass") result = "pass";
-            else if ((specResult as any)?.overallResult === "fail" || (legacyResult as any)?.overallResult === "fail") result = "fail";
-            const contract = allContracts.find(c => c.id === sample.contractId);
-            rows.push({
-              sampleCode: sample.sampleCode,
-              contractId: sample.contractId ?? null,
-              contractNumber: contract?.contractNumber ?? null,
-              contractName: (contract as any)?.contractName ?? contract?.contractNumber ?? null,
-              testCode: tt?.code ?? dist.testType,
-              testNameEn: tt?.nameEn ?? dist.testType,
-              testNameAr: tt?.nameAr ?? "",
-              category: tt?.category ?? "concrete",
-              price: (tt ? Number(tt.unitPrice) : 0) * billingUnitCount(tt, dist.testType, specResult),
-              result,
-              createdAt: new Date(sample.createdAt),
-            });
+        for (const item of orderItems) {
+          if (input.contractId && item.contractId !== input.contractId) continue;
+
+          if (input.contractorId) {
+            const contract = item.contractId
+              ? contractById.get(item.contractId)
+              : null;
+            if (!contract || contract.contractorId !== input.contractorId) continue;
           }
+
+          const sampleDate = new Date(item.receivedAt ?? item.createdAt);
+          if (dateFrom && sampleDate < dateFrom) continue;
+          if (dateTo && sampleDate > dateTo) continue;
+
+          const tt = ttByCode.get(item.testTypeCode) ?? null;
+          const category = tt?.category ?? "concrete";
+          if (input.category && category !== input.category) continue;
+          if (input.testTypeCode && item.testTypeCode !== input.testTypeCode) continue;
+
+          const units = Math.max(1, Number(item.quantity) || 1);
+          const specResult = item.distributionId
+            ? specByDist.get(item.distributionId)
+            : null;
+          let result: "pass" | "fail" | "pending" = "pending";
+          if (specResult?.overallResult === "pass") result = "pass";
+          else if (specResult?.overallResult === "fail") result = "fail";
+
+          const contract = item.contractId ? contractById.get(item.contractId) : null;
+          const billUnits = billingUnitCount(tt, item.testTypeCode, specResult) * units;
+          const unitPrice = tt ? Number(tt.unitPrice) : Number(item.unitPrice) || 0;
+          const price = unitPrice * billUnits;
+
+          rows.push({
+            sampleCode: item.sampleCode ?? "",
+            contractId: item.contractId ?? null,
+            contractNumber: contract?.contractNumber ?? item.contractNumber ?? null,
+            contractName:
+              (contract as { contractName?: string })?.contractName ??
+              item.contractName ??
+              contract?.contractNumber ??
+              null,
+            testCode: item.testTypeCode,
+            testNameEn: tt?.nameEn ?? item.testTypeName,
+            testNameAr: tt?.nameAr ?? "",
+            category,
+            price,
+            units,
+            result,
+            createdAt: sampleDate,
+          });
         }
 
-        // Summary
-        const total = rows.length;
-        const passed = rows.filter(r => r.result === "pass").length;
-        const failed = rows.filter(r => r.result === "fail").length;
-        const pending = rows.filter(r => r.result === "pending").length;
+        const total = rows.reduce((s, r) => s + r.units, 0);
+        const passed = rows.reduce((s, r) => s + (r.result === "pass" ? r.units : 0), 0);
+        const failed = rows.reduce((s, r) => s + (r.result === "fail" ? r.units : 0), 0);
+        const pending = rows.reduce((s, r) => s + (r.result === "pending" ? r.units : 0), 0);
         const totalAmount = rows.reduce((s, r) => s + r.price, 0);
 
-        // Group by category
         const byCategory: Record<string, { count: number; amount: number; passed: number; failed: number; pending: number }> = {};
         for (const r of rows) {
-          if (!byCategory[r.category]) byCategory[r.category] = { count: 0, amount: 0, passed: 0, failed: 0, pending: 0 };
-          byCategory[r.category].count++;
+          if (!byCategory[r.category]) {
+            byCategory[r.category] = { count: 0, amount: 0, passed: 0, failed: 0, pending: 0 };
+          }
+          byCategory[r.category].count += r.units;
           byCategory[r.category].amount += r.price;
-          if (r.result === "pass") byCategory[r.category].passed++;
-          else if (r.result === "fail") byCategory[r.category].failed++;
-          else byCategory[r.category].pending++;
+          if (r.result === "pass") byCategory[r.category].passed += r.units;
+          else if (r.result === "fail") byCategory[r.category].failed += r.units;
+          else byCategory[r.category].pending += r.units;
         }
 
-        // Group by test type
         const byTestType: Record<string, { code: string; nameEn: string; nameAr: string; category: string; count: number; amount: number; passed: number; failed: number; pending: number }> = {};
         for (const r of rows) {
           const key = r.testCode;
-          if (!byTestType[key]) byTestType[key] = { code: r.testCode, nameEn: r.testNameEn, nameAr: r.testNameAr, category: r.category, count: 0, amount: 0, passed: 0, failed: 0, pending: 0 };
-          byTestType[key].count++;
+          if (!byTestType[key]) {
+            byTestType[key] = {
+              code: r.testCode,
+              nameEn: r.testNameEn,
+              nameAr: r.testNameAr,
+              category: r.category,
+              count: 0,
+              amount: 0,
+              passed: 0,
+              failed: 0,
+              pending: 0,
+            };
+          }
+          byTestType[key].count += r.units;
           byTestType[key].amount += r.price;
-          if (r.result === "pass") byTestType[key].passed++;
-          else if (r.result === "fail") byTestType[key].failed++;
-          else byTestType[key].pending++;
+          if (r.result === "pass") byTestType[key].passed += r.units;
+          else if (r.result === "fail") byTestType[key].failed += r.units;
+          else byTestType[key].pending += r.units;
         }
 
-        // Group by month (for chart)
         const byMonth: Record<string, number> = {};
         for (const r of rows) {
-          const m = r.createdAt.toISOString().slice(0, 7); // YYYY-MM
-          byMonth[m] = (byMonth[m] ?? 0) + 1;
+          const m = r.createdAt.toISOString().slice(0, 7);
+          byMonth[m] = (byMonth[m] ?? 0) + r.units;
         }
 
-        // Group by contract
         const byContract: Record<string, { contractNumber: string; contractName: string; count: number; amount: number }> = {};
         for (const r of rows) {
           if (!r.contractId) continue;
           const key = String(r.contractId);
-          if (!byContract[key]) byContract[key] = { contractNumber: r.contractNumber ?? "", contractName: r.contractName ?? "", count: 0, amount: 0 };
-          byContract[key].count++;
+          if (!byContract[key]) {
+            byContract[key] = {
+              contractNumber: r.contractNumber ?? "",
+              contractName: r.contractName ?? "",
+              count: 0,
+              amount: 0,
+            };
+          }
+          byContract[key].count += r.units;
           byContract[key].amount += r.price;
         }
 
@@ -2893,11 +2940,25 @@ ${testSummaries.length > 0 ? testSummaries.join("\n\n") : "لم تُجرَ اخ�
           summary: { total, passed, failed, pending, totalAmount },
           byCategory: Object.entries(byCategory).map(([cat, v]) => ({ category: cat, ...v })),
           byTestType: Object.values(byTestType).sort((a, b) => b.count - a.count),
-          byMonth: Object.entries(byMonth).sort((a, b) => a[0].localeCompare(b[0])).map(([month, count]) => ({ month, count })),
+          byMonth: Object.entries(byMonth)
+            .sort((a, b) => a[0].localeCompare(b[0]))
+            .map(([month, count]) => ({ month, count })),
           byContract: Object.values(byContract).sort((a, b) => b.count - a.count),
-          contracts: allContracts.map(c => ({ id: c.id, contractNumber: c.contractNumber, name: (c as any).contractName ?? c.contractNumber })),
-          contractors: allContractors.map(c => ({ id: c.id, name: c.nameEn })),
-          testTypes: allTT.map(t => ({ code: t.code ?? "", nameEn: t.nameEn, nameAr: t.nameAr ?? "", category: t.category })),
+          contracts: allContracts.map((c) => ({
+            id: c.id,
+            contractNumber: c.contractNumber,
+            name: (c as { contractName?: string }).contractName ?? c.contractNumber,
+          })),
+          contractors: allContractors.map((c) => ({
+            id: c.id,
+            name: c.nameEn ?? c.nameAr ?? String(c.id),
+          })),
+          testTypes: allTT.map((t) => ({
+            code: t.code ?? "",
+            nameEn: t.nameEn,
+            nameAr: t.nameAr ?? "",
+            category: t.category,
+          })),
         };
       }),
   }),
@@ -2946,7 +3007,7 @@ ${testSummaries.length > 0 ? testSummaries.join("\n\n") : "لم تُجرَ اخ�
   // ─── Lab Orders (Multi-Test) ─────────────────────────────────────────────────
   orders: router({
     list: protectedProcedure.query(async ({ ctx }) => {
-      requireRole(ctx.user.role, ["admin", "reception", "lab_manager", "technician", "sample_manager", "qc_inspector"]);
+      requireRole(ctx.user.role, ["admin", "reception", "lab_manager", "technician", "qc_inspector"]);
       const orders = await getAllLabOrders();
       // Attach items + sampleSubType + assignedTechnicianName to each order
       const allUsers = await getAllUsers();
@@ -3031,7 +3092,7 @@ ${testSummaries.length > 0 ? testSummaries.join("\n\n") : "لم تُجرَ اخ�
       }),
 
     myOrders: protectedProcedure.query(async ({ ctx }) => {
-      requireRole(ctx.user.role, ["admin", "lab_manager", "technician", "sample_manager", "qc_inspector", "reception"]);
+      requireRole(ctx.user.role, ["admin", "lab_manager", "technician", "qc_inspector", "reception"]);
       const orders = await getLabOrdersByTechnician(ctx.user.id);
       // Attach items to each order
       const result = await Promise.all(
@@ -3265,7 +3326,7 @@ ${testSummaries.length > 0 ? testSummaries.join("\n\n") : "لم تُجرَ اخ�
           const order = await getLabOrderById(input.orderId);
           if (order) {
             await checkAndUpdateSampleStatusAfterSubmission(order.sampleId);
-            await notifyUsersByRole("sample_manager", "Order Complete", `Order ${order.orderCode} — all tests completed`, order.sampleId, "info", "order_complete");
+            await notifyUsersByRole("lab_manager", "Order Complete", `Order ${order.orderCode} — all tests completed`, order.sampleId, "info", "order_complete");
           }
         }
         return { success: true, orderCompleted: allDone };
@@ -3278,7 +3339,7 @@ ${testSummaries.length > 0 ? testSummaries.join("\n\n") : "لم تُجرَ اخ�
         notes: z.string().optional(),
       }))
       .mutation(async ({ ctx, input }) => {
-        requireRole(ctx.user.role, ["admin", "sample_manager"]);
+        requireRole(ctx.user.role, ["admin", "lab_manager"]);
         const order = await getLabOrderById(input.orderId);
         if (!order) throw new TRPCError({ code: "NOT_FOUND" });
         const reviewerName = ctx.user.name || ctx.user.username || "";
@@ -3414,7 +3475,7 @@ ${testSummaries.length > 0 ? testSummaries.join("\n\n") : "لم تُجرَ اخ�
         lang:  z.enum(["ar", "en"]).default("ar"),
       }))
       .mutation(async ({ input, ctx }) => {
-        requireRole(ctx.user.role, ["admin", "lab_manager", "sample_manager", "qc_inspector"]);
+        requireRole(ctx.user.role, ["admin", "lab_manager", "qc_inspector"]);
         const { year, month, lang } = input;
         const startDate = new Date(year, month - 1, 1);
         const endDate   = new Date(year, month, 0, 23, 59, 59);
@@ -3511,7 +3572,7 @@ ${testSummaries.length > 0 ? testSummaries.join("\n\n") : "لم تُجرَ اخ�
         lang: z.enum(["ar", "en", "both"]).optional(),
       }))
       .mutation(async ({ input, ctx }) => {
-        requireRole(ctx.user.role, ["admin", "lab_manager", "supervisor", "sample_manager"]);
+        requireRole(ctx.user.role, ["admin", "lab_manager", "supervisor"]);
         if (input.range === "custom" && (!input.dateFrom || !input.dateTo)) {
           throw new TRPCError({
             code: "BAD_REQUEST",
@@ -3532,7 +3593,7 @@ ${testSummaries.length > 0 ? testSummaries.join("\n\n") : "لم تُجرَ اخ�
         month: z.number().int().min(1).max(12),
       }))
       .query(async ({ input, ctx }) => {
-        requireRole(ctx.user.role, ["admin", "lab_manager", "sample_manager", "qc_inspector"]);
+        requireRole(ctx.user.role, ["admin", "lab_manager", "qc_inspector"]);
 
         const { year, month } = input;
         const startDate = new Date(year, month - 1, 1);

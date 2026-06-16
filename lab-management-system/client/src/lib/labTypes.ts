@@ -35,9 +35,14 @@ export type UserRole =
   | "reception"
   | "lab_manager"
   | "technician"
-  | "sample_manager"
   | "qc_inspector"
+  | "accountant"
   | "user";
+
+/** Legacy DB rows may still have sample_manager; treat as lab_manager (Supervisor). */
+export function effectiveUserRole(role: string): string {
+  return role === "sample_manager" ? "lab_manager" : role;
+}
 
 export const STATUS_LABELS: Record<SampleStatus, string> = {
   received: "Received",
@@ -63,8 +68,8 @@ export const ROLE_LABELS: Record<UserRole, string> = {
   reception: "Reception Staff",
   lab_manager: "Supervisor",
   technician: "Technician",
-  sample_manager: "Sample Manager",
   qc_inspector: "QC Inspector",
+  accountant: "Accountant",
   user: "User",
 };
 

@@ -42,6 +42,7 @@ import {
   MIN_CONC_CUBE_COUNT,
   MAX_CONC_CUBE_COUNT,
 } from "@shared/concreteCubeReception";
+import { openTestCatalogPrint } from "@/lib/testCatalogCategories";
 import {
   getCbrDependencyHint,
   getCbrUnitPrice,
@@ -978,12 +979,23 @@ export default function Reception() {
     <DashboardLayout>
       <div className="space-y-5">
         {/* Header */}
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-3 flex-wrap">
           <div>
             <h1 className="text-xl font-bold">{t("reception.title")}</h1>
             <p className="text-sm text-muted-foreground">{t("reception.subtitle")}</p>
           </div>
-          <Dialog open={open} onOpenChange={(v) => {
+          <div className="flex items-center gap-2 flex-wrap">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="gap-1.5"
+              onClick={() => openTestCatalogPrint()}
+            >
+              <FileText className="w-4 h-4" />
+              {lang === "ar" ? "قائمة أسعار الاختبارات" : "Test Price List"}
+            </Button>
+            <Dialog open={open} onOpenChange={(v) => {
             setOpen(v);
             if (!v) {
               setReceptionMode("new");

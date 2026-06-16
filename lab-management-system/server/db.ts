@@ -1,5 +1,5 @@
 import { computeOrderKpisFromStatusCounts } from "@shared/dashboardInsights";
-import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import { alias } from "drizzle-orm/mysql-core";
 import { createPool } from "mysql2";
@@ -653,7 +653,11 @@ export async function getSampleDetailRow(id: number) {
 export async function listDeletedSamplesAudit() {
   const db = await getDb();
   if (!db) return [];
-  if (!samplesHasSoftDeleteColumns()) return [];
+
+  const deletedWhere = samplesHasSoftDeleteColumns()
+    ? or(isNotNull(samples.deletedAt), eq(samples.status, "deleted"))
+    : eq(samples.status, "deleted");
+
   return db
     .select({
       id: samples.id,
@@ -671,8 +675,8 @@ export async function listDeletedSamplesAudit() {
     })
     .from(samples)
     .leftJoin(users, eq(samples.deletedBy, users.id))
-    .where(isNotNull(samples.deletedAt))
-    .orderBy(desc(samples.deletedAt));
+    .where(deletedWhere)
+    .orderBy(desc(samples.deletedAt), desc(samples.updatedAt));
 }
 
 export async function getSampleById(id: number) {
@@ -792,6 +796,7 @@ export async function softDeleteSample(
   const patch: Record<string, unknown> = {
     deletedAt: now,
     deletedBy: userId,
+    status: "deleted",
     updatedAt: now,
   };
   if (opts?.deletionReason !== undefined) patch.deletionReason = opts.deletionReason;
@@ -2209,6 +2214,55 @@ export async function getLabOrderItems(orderId: number) {
     .from(labOrderItems)
     .where(eq(labOrderItems.orderId, orderId))
     .orderBy(labOrderItems.id);
+}
+
+/** Active lab order line items joined to non-deleted orders and visible samples (analytics source of truth). */
+export async function getActiveLabOrderItemsForAnalytics() {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select({
+      itemId: labOrderItems.id,
+      orderId: labOrders.id,
+      sampleId: labOrders.sampleId,
+      distributionId: labOrderItems.distributionId,
+      testTypeCode: labOrderItems.testTypeCode,
+      testTypeName: labOrderItems.testTypeName,
+      quantity: labOrderItems.quantity,
+      itemStatus: labOrderItems.status,
+      unitPrice: labOrderItems.unitPrice,
+      orderCreatedAt: labOrders.createdAt,
+      sampleCode: samples.sampleCode,
+      contractId: samples.contractId,
+      contractNumber: samples.contractNumber,
+      contractName: samples.contractName,
+      contractorName: samples.contractorName,
+      sampleStatus: samples.status,
+      receivedAt: samples.receivedAt,
+      createdAt: samples.createdAt,
+    })
+    .from(labOrderItems)
+    .innerJoin(labOrders, eq(labOrderItems.orderId, labOrders.id))
+    .innerJoin(samples, eq(labOrders.sampleId, samples.id))
+    .where(
+      and(
+        isNull(labOrders.deletedAt),
+        ne(samples.status, "deleted"),
+        ne(labOrderItems.status, "cancelled"),
+        buildSampleVisibilityCondition()
+      )
+    )
+    .orderBy(desc(labOrders.createdAt));
+}
+
+export async function getSpecializedResultsByDistributionIds(distributionIds: number[]) {
+  if (!distributionIds.length) return [];
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select()
+    .from(specializedTestResults)
+    .where(inArray(specializedTestResults.distributionId, distributionIds));
 }
 
 export async function getOrderIdForDistribution(distributionId: number): Promise<number | null> {
