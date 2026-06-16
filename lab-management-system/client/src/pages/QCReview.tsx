@@ -1025,34 +1025,16 @@ export default function QCReview() {
                 </div>
               )}
 
-              {/* QC Checklist */}
-              <div className="border rounded-lg p-3 space-y-2">
-                <p className="text-xs font-semibold">{lang === "ar" ? "قائمة تحقق الجودة" : "QC Verification Checklist"}</p>
-                {(lang === "ar" ? [
-                  "تم تنفيذ الاختبار وفق المعايير",
-                  "الحسابات دقيقة",
-                  "النتائج تتطابق متطلبات المشروع",
-                  "الرسوم البيانية صحيحة وذات معنى",
-                  "التوثيق مكتمل",
-                  "النتائج معقولة ومتسقة",
-                  "تم اتباع الإجراءات بشكل صحيح",
-                ] : [
-                  "Test performed according to standards",
-                  "Calculations are accurate",
-                  "Results match project requirements",
-                  "Charts are correct and meaningful",
-                  "Documentation is complete",
-                  "Results are reasonable and consistent",
-                  "Procedures were followed correctly",
-                ]                ).map((item, i) => (
-                  <label
-                    key={i}
-                    className={`flex items-center gap-2 text-xs ${dialogSamplePending ? "cursor-not-allowed opacity-70" : "cursor-pointer"}`}
-                  >
-                    <input type="checkbox" className="rounded" disabled={dialogSamplePending} />
-                    <span>{item}</span>
-                  </label>
-                ))}
+              {/* QC attestation */}
+              <div className="rounded-lg border border-blue-200 bg-blue-50/60 p-3.5 space-y-2">
+                <p className="text-xs font-semibold text-blue-900">
+                  {lang === "ar" ? "إقرار ضبط الجودة" : "QC Inspector Attestation"}
+                </p>
+                <p className="text-xs leading-relaxed text-blue-950/90">
+                  {lang === "ar"
+                    ? "بالضغط على «اعتماد الجودة»، أُقرّ بصفتي مسؤول ضبط الجودة أنني راجعت نتائج هذا الاختبار وفق مؤهلات وصلاحيات ضبط الجودة المعتمدة في المختبر، وأن الاختبار نُفّذ وفق المعايير المعتمدة، والحسابات والنتائج دقيقة ومتوافقة مع متطلبات المشروع، والتوثيق مكتمل، والإجراءات اتُبعت بشكل صحيح."
+                    : "By selecting QC Approved, I confirm—as the authorized QC inspector—that I have reviewed this test result in accordance with the laboratory’s QC qualifications and procedures; that the test was performed per applicable standards; that calculations, results, charts, and documentation are accurate, complete, and consistent with project requirements; and that all QC requirements for release have been satisfied."}
+                </p>
               </div>
 
               {/* Decision */}
