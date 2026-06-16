@@ -2072,6 +2072,7 @@ export default function Reception() {
           )}
         </DialogContent>
       </Dialog>
+      </div>
     </DashboardLayout>
   );
 }
