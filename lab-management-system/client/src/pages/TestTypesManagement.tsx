@@ -29,7 +29,6 @@ import {
   Mail,
   User,
   FileText,
-  Download,
   Search,
   Users,
   MapPin,
@@ -66,42 +65,6 @@ function TestTypesTab() {
       toast.error(err.message);
     },
   });
-
-  const handleExportCSV = () => {
-    const csvData: string[][] = [
-      ["#", "Test Name (EN)", "Test Name (AR)", "Code", "Price (AED)", "Unit", "Category", "Standard"],
-      ...allTestTypes.map((test, idx) => {
-        const price = Number(test.unitPrice ?? 0);
-        return [
-          (idx + 1).toString(),
-          test.nameEn || "",
-          test.nameAr || "",
-          test.code || "",
-          price.toFixed(2),
-          test.unit || "",
-          test.category || "",
-          test.standardRef || "",
-        ];
-      }),
-    ];
-
-    const csvContent = csvData
-      .map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(","))
-      .join("\n");
-
-    const blob = new Blob(["\ufeff" + csvContent], { type: "text/csv;charset=utf-8;" });
-    const link = document.createElement("a");
-    const url = URL.createObjectURL(blob);
-    link.setAttribute("href", url);
-    link.setAttribute("download", `test-types-${new Date().toISOString().split("T")[0]}.csv`);
-    link.style.visibility = "hidden";
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-
-    toast.success(lang === "ar" ? "تم تصدير الملف بنجاح" : "CSV exported successfully");
-  };
 
   const handleSavePrice = (testId: number, value: string) => {
     const newPrice = parseFloat(value);
@@ -145,10 +108,6 @@ function TestTypesTab() {
           >
             <Printer className="h-3.5 w-3.5" />
             {lang === "ar" ? "طباعة القائمة" : "Print List"}
-          </Button>
-          <Button type="button" variant="outline" size="sm" onClick={handleExportCSV} className="gap-2">
-            <Download className="h-3.5 w-3.5" />
-            {lang === "ar" ? "تصدير CSV" : "Export CSV"}
           </Button>
         </div>
       </div>

@@ -199,7 +199,12 @@ export function TestCatalogView({
           {lang === "ar" ? "لا توجد اختبارات تطابق البحث" : "No tests match your search"}
         </div>
       ) : (
-        <div className="rounded-xl border bg-card shadow-sm overflow-hidden divide-y">
+        <div
+          className={cn(
+            "rounded-xl border bg-card shadow-sm overflow-hidden divide-y",
+            categoryFilter === "all" && "max-h-[min(560px,calc(100vh-18rem))] overflow-y-auto"
+          )}
+        >
           {groupedTests.map((category) => {
             const Icon = category.icon;
 
@@ -207,31 +212,19 @@ export function TestCatalogView({
               <section key={category.key}>
                 <div
                   className={cn(
-                    "flex items-center justify-between gap-3 px-4 py-3 border-b",
+                    "flex items-center gap-3 px-4 py-3 border-b",
                     category.bgColor
                   )}
                 >
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className={cn("p-2 rounded-lg bg-white/80 shadow-sm shrink-0", category.borderColor, "border")}>
-                      <Icon className={cn("h-4 w-4", category.textColor)} />
-                    </div>
-                    <div className="min-w-0">
-                      <h3 className="font-semibold text-sm">
-                        {lang === "ar" ? `${category.nameAr} — ${category.nameEn}` : `${category.nameEn} Tests`}
-                      </h3>
-                      <p className="text-xs text-muted-foreground">
-                        {category.tests.length} {lang === "ar" ? "اختبار" : "tests"}
-                      </p>
-                    </div>
+                  <div className={cn("p-2 rounded-lg bg-white/80 shadow-sm shrink-0", category.borderColor, "border")}>
+                    <Icon className={cn("h-4 w-4", category.textColor)} />
                   </div>
-                  <div className="text-end shrink-0">
-                    <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
-                      {lang === "ar" ? "من" : "from"}
-                    </p>
-                    <p className="font-mono text-sm font-semibold tabular-nums">
-                      {formatPrice(Math.min(...category.tests.map((t) => Number(t.unitPrice ?? 0))))} –{" "}
-                      {formatPrice(Math.max(...category.tests.map((t) => Number(t.unitPrice ?? 0))))}{" "}
-                      <span className="text-xs font-normal">AED</span>
+                  <div className="min-w-0">
+                    <h3 className="font-semibold text-sm">
+                      {lang === "ar" ? `${category.nameAr} — ${category.nameEn}` : `${category.nameEn} Tests`}
+                    </h3>
+                    <p className="text-xs text-muted-foreground">
+                      {category.tests.length} {lang === "ar" ? "اختبار" : "tests"}
                     </p>
                   </div>
                 </div>
