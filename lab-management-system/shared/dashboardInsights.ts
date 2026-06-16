@@ -98,6 +98,8 @@ export function computeOrderKpisFromStatusCounts(
 
   return { total, active, completed, needsAction, failed };
 }
+
+export type LabOrderRow = {
   id?: number;
   orderCode?: string | null;
   contractNumber?: string | null;
