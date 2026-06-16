@@ -43,6 +43,7 @@ import SectorSamples from "./pages/sector/SectorSamples";
 import SectorResults from "./pages/sector/SectorResults";
 import SectorClearances from "./pages/sector/SectorClearances";
 import SectorNotifications from "./pages/sector/SectorNotifications";
+import SectorTestReportPage from "./pages/sector/SectorTestReportPage";
 import { Loader2 } from "lucide-react";
 import { useEffect } from "react";
 import { effectiveUserRole } from "./lib/labTypes";
@@ -327,6 +328,7 @@ function Router() {
       <Route path="/sector/dashboard">{() => <SectorPage component={SectorDashboard} />}</Route>
       <Route path="/sector/samples">{() => <SectorPage component={SectorSamples} />}</Route>
       <Route path="/sector/results">{() => <SectorPage component={SectorResults} />}</Route>
+      <Route path="/sector/test-report/:resultId">{() => <SectorPage component={SectorTestReportPage} />}</Route>
       <Route path="/sector/clearances">{() => <SectorPage component={SectorClearances} />}</Route>
       <Route path="/sector/notifications">{() => <SectorPage component={SectorNotifications} />}</Route>
 

@@ -3892,55 +3892,77 @@ export function renderFormData(formTemplate: string, formData: any, isAr: boolea
 }
 
 // ─── Main Report Component ────────────────────────────────────────────────────
-export default function SpecializedTestReport() {
+type SpecializedTestReportProps = {
+  /** When set, loads approved report data via sector portal auth (same UI as lab). */
+  sectorResultId?: number;
+};
+
+export default function SpecializedTestReport({ sectorResultId }: SpecializedTestReportProps = {}) {
   const { distributionId } = useParams<{ distributionId: string }>();
   const { lang, setLang } = useLanguage();
   const ar = lang === "ar";
   const isAr = lang === "ar";
   const printRef = useRef<HTMLDivElement>(null);
-  const distId = parseInt(distributionId ?? "0");
+  const isSectorMode = sectorResultId != null && sectorResultId > 0;
+  const distIdFromRoute = parseInt(distributionId ?? "0");
 
-  const { data: result, isLoading: specLoading } = trpc.specializedTests.getByDistribution.useQuery(
-    { distributionId: distId },
-    { enabled: !!distId }
+  const { data: sectorBundle, isLoading: sectorLoading, isError: sectorError } = trpc.sector.getTestReportBundle.useQuery(
+    { resultId: sectorResultId! },
+    { enabled: isSectorMode }
   );
 
-  const { data: dist } = trpc.distributions.get.useQuery(
-    { id: distId },
-    { enabled: !!distId }
+  const resolvedDistId = isSectorMode ? (sectorBundle?.result?.distributionId ?? 0) : distIdFromRoute;
+
+  const { data: specResult, isLoading: specLoading } = trpc.specializedTests.getByDistribution.useQuery(
+    { distributionId: resolvedDistId },
+    { enabled: !!resolvedDistId && !isSectorMode }
   );
+
+  const { data: distFromQuery } = trpc.distributions.get.useQuery(
+    { id: resolvedDistId },
+    { enabled: !!resolvedDistId && !isSectorMode }
+  );
+
+  const batchDistId = isSectorMode
+    ? (sectorBundle?.dist as { batchDistributionId?: string } | undefined)?.batchDistributionId
+    : (distFromQuery as { batchDistributionId?: string } | undefined)?.batchDistributionId;
+  const { data: batchDistsFromQuery } = trpc.distributions.getByBatch.useQuery(
+    { batchDistributionId: batchDistId! },
+    { enabled: !!batchDistId && !isSectorMode }
+  );
+
+  const { data: legacyFromQuery, isLoading: legacyLoading } = trpc.testResults.getByDistribution.useQuery(
+    { distributionId: resolvedDistId },
+    { enabled: !!resolvedDistId && !isSectorMode }
+  );
+
+  const result = isSectorMode ? sectorBundle?.result : specResult;
+  const dist = isSectorMode ? sectorBundle?.dist : distFromQuery;
+  const legacyResult = isSectorMode ? sectorBundle?.legacyResult : legacyFromQuery;
+  const batchDists = isSectorMode ? sectorBundle?.batchDists : batchDistsFromQuery;
+  const sectorBatchResults = isSectorMode ? sectorBundle?.batchResults : undefined;
+  const distIdForRender = resolvedDistId;
+
+  const pageLoading = isSectorMode ? sectorLoading : (specLoading || legacyLoading);
 
   // Lab-order batches (orderId + 2+ sibling distributions) are viewed at
   // /batch-report/:sampleId/:orderId via BatchOverview — no redirect from this page.
   // This route always renders the individual distribution report.
 
   // Block batches (shared batchDistributionId) may still consolidate below via getByBatch.
-  const batchDistId = (dist as any)?.batchDistributionId as string | undefined;
-  const { data: batchDists } = trpc.distributions.getByBatch.useQuery(
-    { batchDistributionId: batchDistId! },
-    { enabled: !!batchDistId }
-  );
-
-  // Fetch legacy testResult for reviewer signatures (and legacy-only printable report)
-  const { data: legacyResult, isLoading: legacyLoading } = trpc.testResults.getByDistribution.useQuery(
-    { distributionId: distId },
-    { enabled: !!distId }
-  );
-
-  const pageLoading = specLoading || legacyLoading;
-
-  // Routed Manager Review opens /test-report for concrete; send users to the concrete printable report.
   useEffect(() => {
-    if (!distId || result) return;
+    if (!distIdForRender || result) return;
     const src = (legacyResult?.chartsData as { source?: string } | undefined)?.source;
     if (src === "concrete_cubes") {
-      window.location.replace(`/concrete-report/${distId}`);
+      window.location.replace(`/concrete-report/${distIdForRender}`);
     }
-  }, [distId, result, legacyResult]);
+  }, [distIdForRender, result, legacyResult]);
 
   const handleClose = () => {
     if (window.opener) {
       window.close();
+    } else if (isSectorMode) {
+      window.location.href = "/sector/results";
     } else {
       window.history.back();
     }
@@ -3954,7 +3976,7 @@ export default function SpecializedTestReport() {
     setIsPdfLoading(true);
     const { generatePdfFromElement } = await import("@/lib/pdf");
     const ok = await generatePdfFromElement(printRef.current, {
-      filename: `specialized-report-${distId}`,
+      filename: `specialized-report-${distIdForRender}`,
       mode: "print",
     });
     if (!ok) window.print();
@@ -3966,7 +3988,7 @@ export default function SpecializedTestReport() {
     setIsDownloadLoading(true);
     const { generatePdfFromElement } = await import("@/lib/pdf");
     const ok = await generatePdfFromElement(printRef.current, {
-      filename: `specialized-report-${distId}`,
+      filename: `specialized-report-${distIdForRender}`,
       mode: "download",
     });
     if (!ok) window.print();
@@ -3977,6 +3999,20 @@ export default function SpecializedTestReport() {
     return (
       <div className="flex items-center justify-center h-screen">
         <Loader2 className="animate-spin text-slate-400" size={32} />
+      </div>
+    );
+  }
+
+  if (isSectorMode && sectorError) {
+    return (
+      <div className="flex flex-col items-center justify-center h-screen gap-4">
+        <XCircle className="text-red-400" size={40} />
+        <p className="text-slate-600 font-medium">
+          {isAr ? "تعذّر تحميل التقرير" : "Could not load this report."}
+        </p>
+        <Button variant="outline" onClick={handleClose}>
+          {isAr ? "إغلاق" : "Close"}
+        </Button>
       </div>
     );
   }
@@ -4195,7 +4231,7 @@ export default function SpecializedTestReport() {
               <div className="text-[11px] text-gray-600 space-y-0.5">
                 <div className="flex gap-1">
                   <span className="text-gray-500">{isAr ? ":رقم الوثيقة" : "Doc No.:"}</span>
-                  <span className="font-mono font-bold text-gray-800">{result.contractNo ?? `RPT-${String(distId).padStart(6, "0")}`}</span>
+                  <span className="font-mono font-bold text-gray-800">{result.contractNo ?? `RPT-${String(distIdForRender).padStart(6, "0")}`}</span>
                 </div>
                 <div className="flex gap-1">
                   <span className="text-gray-500">{isAr ? ":التاريخ" : "Date:"}</span>
@@ -4243,7 +4279,7 @@ export default function SpecializedTestReport() {
                   </td>
                   <td className="border border-gray-200 px-2 py-2 text-center align-top w-1/3">
                     <span className="text-gray-400 text-[10px] uppercase tracking-wide block mb-1">{isAr ? "رقم التوزيع" : "Distribution No."}</span>
-                    <span className="font-mono font-bold text-blue-700 text-sm">{(dist as any)?.distributionCode ?? `DIST-${String(distId).padStart(6, "0")}`}</span>
+                    <span className="font-mono font-bold text-blue-700 text-sm">{(dist as any)?.distributionCode ?? `DIST-${String(distIdForRender).padStart(6, "0")}`}</span>
                   </td>
                   <td className="border border-gray-200 px-2 py-2 text-center align-top w-1/3">
                     <span className="text-gray-400 text-[10px] uppercase tracking-wide block mb-1">{isAr ? "تاريخ الاستلام" : "Received Date"}</span>
@@ -4324,7 +4360,7 @@ export default function SpecializedTestReport() {
 
           {/* Detailed Results — Batch (multiple types) or Single */}
           {batchDists && batchDists.length > 1 ? (
-            <BatchResultsSection batchDists={batchDists} distId={distId} isAr={isAr} />
+            <BatchResultsSection batchDists={batchDists ?? []} distId={distIdForRender} isAr={isAr} prefetchedBatchResults={sectorBatchResults} />
           ) : (
             <div className="mb-5">
               <h3 className="text-xs font-bold text-gray-700 uppercase border-b border-gray-300 pb-1 mb-3">
@@ -4410,16 +4446,19 @@ function BatchResultsSection({
   batchDists,
   distId,
   isAr,
+  prefetchedBatchResults,
 }: {
   batchDists: any[];
   distId: number;
   isAr: boolean;
+  prefetchedBatchResults?: any[] | null;
 }) {
   const batchId = batchDists[0]?.batchDistributionId as string | undefined;
-  const { data: batchResults } = trpc.specializedTests.getByBatch.useQuery(
+  const { data: batchResultsFromQuery } = trpc.specializedTests.getByBatch.useQuery(
     { batchId: batchId ?? "" },
-    { enabled: !!batchId }
+    { enabled: !!batchId && !prefetchedBatchResults }
   );
+  const batchResults = prefetchedBatchResults ?? batchResultsFromQuery;
 
   const resultByDistributionId = new Map<number, any>();
   for (const row of batchResults ?? []) {

@@ -1,4 +1,3 @@
-import { useCallback, useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import {
@@ -9,14 +8,12 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
-  buildSectorResultReportHtml,
   pickMainSummaryEntries,
 } from "./sectorReportUtils";
 import {
   CheckCircle2,
   XCircle,
   Clock,
-  RefreshCw,
   Hash,
   Building2,
   User,
@@ -119,7 +116,6 @@ export function SectorTestResultDialog({
 }) {
   const T = REPORT_LABELS[lang];
   const isRtl = lang === "ar";
-  const [isPdfLoading, setIsPdfLoading] = useState(false);
 
   const utils = trpc.useUtils();
   const { data: detail, isLoading, isError } = trpc.sector.getInboxItemDetail.useQuery(
@@ -140,56 +136,11 @@ export function SectorTestResultDialog({
     else if (resultId) markRead.mutate({ resultId });
   };
 
-  const generatePdf = useCallback(async (pdfLang: "ar" | "en"): Promise<Blob | null> => {
-    if (!detail || detail.type !== "result") return null;
-    const labName =
-      pdfLang === "ar" ? "مختبر الإنشاءات والمواد الهندسية" : "Construction & Engineering Materials Laboratory";
-    const html = buildSectorResultReportHtml(detail, pdfLang, labName, REPORT_LABELS[pdfLang] as Record<string, string>);
-    const filename = `test-result-${detail.sample?.sampleCode ?? resultId}-${pdfLang}.pdf`;
-    try {
-      setIsPdfLoading(true);
-      const res = await fetch("/api/pdf/generate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ html, filename }),
-      });
-      if (!res.ok) throw new Error(await res.text());
-      return await res.blob();
-    } catch {
-      return null;
-    } finally {
-      setIsPdfLoading(false);
-    }
-  }, [detail, resultId]);
-
-  async function handleOpenReport() {
-    const blob = await generatePdf(lang);
-    const sampleCode = detail?.type === "result" ? detail.sample?.sampleCode ?? resultId : resultId;
-    const filename = `test-result-${sampleCode}-${lang}.pdf`;
-
-    if (blob) {
-      const url = URL.createObjectURL(blob);
-      const opened = window.open(url, "_blank");
-      if (!opened) {
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = filename;
-        a.click();
-      }
-      setTimeout(() => URL.revokeObjectURL(url), 60000);
-      return;
-    }
-
-    if (!detail || detail.type !== "result") return;
-    const labName =
-      lang === "ar" ? "مختبر الإنشاءات والمواد الهندسية" : "Construction & Engineering Materials Laboratory";
-    const html = buildSectorResultReportHtml(detail, lang, labName, T as Record<string, string>);
-    const win = window.open("", "_blank");
-    if (!win) return;
-    win.document.write(html);
-    win.document.close();
-    win.focus();
+  function handleOpenReport() {
+    if (!resultId) return;
+    const url = `/sector/test-report/${resultId}`;
+    const opened = window.open(url, "_blank");
+    if (!opened) window.location.href = url;
   }
 
   const r = detail?.type === "result" ? detail.result : null;
@@ -290,14 +241,9 @@ export function SectorTestResultDialog({
                 type="button"
                 className="w-full gap-2"
                 onClick={handleOpenReport}
-                disabled={isPdfLoading}
               >
-                {isPdfLoading ? (
-                  <RefreshCw className="h-4 w-4 animate-spin" />
-                ) : (
-                  <ExternalLink className="h-4 w-4" />
-                )}
-                {isPdfLoading ? T.generating : T.viewFullReport}
+                <ExternalLink className="h-4 w-4" />
+                {T.viewFullReport}
               </Button>
 
               <Button type="button" variant="outline" className="w-full" onClick={onClose}>

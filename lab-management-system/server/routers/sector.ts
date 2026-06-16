@@ -5,7 +5,22 @@
  * The sector portal sends this token as Authorization: Bearer <token> header.
  */
 import { router, publicProcedure } from "../_core/trpc";
-import { getDb, mysqlRawInsertRow, getContractById, getContractorById, createClearanceRequest, generateClearanceCode, buildClearanceInventoryForContract, getClearanceRequesterUserId } from "../db";
+import {
+  getDb,
+  mysqlRawInsertRow,
+  getContractById,
+  getContractorById,
+  createClearanceRequest,
+  generateClearanceCode,
+  buildClearanceInventoryForContract,
+  getClearanceRequesterUserId,
+  getSampleById,
+  getDistributionById,
+  getTestResultByDistribution,
+  getSpecializedTestResultById,
+  getDistributionsByBatch,
+  getSpecializedTestResultsBySample,
+} from "../db";
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import bcrypt from "bcryptjs";
@@ -453,6 +468,42 @@ export const sectorRouter = router({
     }),
 
   // ── Mark test result as read ───────────────────────────────────────────────
+  getTestReportBundle: sectorProcedure
+    .input(z.object({ resultId: z.number() }))
+    .query(async ({ ctx, input }) => {
+      const result = await getSpecializedTestResultById(input.resultId);
+      if (!result) throw new TRPCError({ code: "NOT_FOUND" });
+      if (result.status !== "approved") {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Report not available until approved" });
+      }
+
+      const sample = await getSampleById(result.sampleId);
+      if (!sample || sample.sector !== ctx.sectorKey) {
+        throw new TRPCError({ code: "FORBIDDEN" });
+      }
+
+      const dist = await getDistributionById(result.distributionId);
+      if (!dist) throw new TRPCError({ code: "NOT_FOUND", message: "Distribution not found" });
+
+      const legacyResult = await getTestResultByDistribution(result.distributionId);
+
+      let batchDists: Awaited<ReturnType<typeof getDistributionsByBatch>> = [];
+      let batchResults: Array<{ sample: Awaited<ReturnType<typeof getSampleById>>; testResults: Awaited<ReturnType<typeof getSpecializedTestResultsBySample>> }> = [];
+
+      if (dist.batchDistributionId) {
+        batchDists = await getDistributionsByBatch(dist.batchDistributionId);
+        const sampleIds = Array.from(new Set(batchDists.map((d) => d.sampleId)));
+        batchResults = await Promise.all(
+          sampleIds.map(async (sampleId) => ({
+            sample: await getSampleById(sampleId),
+            testResults: await getSpecializedTestResultsBySample(sampleId),
+          }))
+        );
+      }
+
+      return { result, dist, legacyResult, batchDists, batchResults };
+    }),
+
   markResultRead: sectorProcedure
     .input(z.object({ resultId: z.number() }))
     .mutation(async ({ ctx, input }) => {
