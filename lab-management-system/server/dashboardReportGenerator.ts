@@ -6,7 +6,7 @@ import { launchPuppeteerBrowser } from "./puppeteerBrowser";
 import {
   computeContractReadinessRows,
   computeContractorScores,
-  computeSampleKpis,
+  computeOrderKpisFromStatusCounts,
 } from "@shared/dashboardInsights";
 import {
   getAllSamples,
@@ -180,8 +180,13 @@ function resolveRange(input: ReportInput): { from: Date; to: Date } {
 }
 
 async function collectSectionData(sections: ReportSection[], from: Date, to: Date) {
+  const allOrders = await getAllLabOrders();
   const allSamples = await getAllSamples();
-  const inRange = allSamples.filter((s) => {
+  const ordersInRange = allOrders.filter((o) => {
+    const t = new Date(o.createdAt ?? 0);
+    return t >= from && t <= to;
+  });
+  const samplesInRange = allSamples.filter((s) => {
     const t = new Date(s.receivedAt ?? s.createdAt);
     return t >= from && t <= to;
   });
@@ -189,36 +194,45 @@ async function collectSectionData(sections: ReportSection[], from: Date, to: Dat
   const data: Record<string, unknown> = {};
 
   if (sections.includes("overview")) {
-    const kpis = computeSampleKpis(allSamples);
+    const kpis = computeOrderKpisFromStatusCounts(
+      Object.entries(
+        allOrders.reduce<Record<string, number>>((acc, o) => {
+          const st = o.status ?? "pending";
+          acc[st] = (acc[st] ?? 0) + 1;
+          return acc;
+        }, {})
+      ).map(([status, count]) => ({ status, count }))
+    );
     data.overview = {
       total: kpis.total,
       active: kpis.active,
       completed: kpis.completed,
       needsAction: kpis.needsAction,
-      periodReceived: inRange.length,
+      periodReceived: ordersInRange.length,
     };
   }
 
   if (sections.includes("status")) {
     const counts: Record<string, number> = {};
-    for (const s of inRange) {
-      counts[s.status] = (counts[s.status] ?? 0) + 1;
+    for (const o of ordersInRange) {
+      counts[o.status ?? "pending"] = (counts[o.status ?? "pending"] ?? 0) + 1;
     }
     data.status = Object.entries(counts).map(([status, count]) => ({ status, count }));
   }
 
   if (sections.includes("type")) {
     const counts: Record<string, number> = {};
-    for (const s of inRange) {
-      counts[s.sampleType] = (counts[s.sampleType] ?? 0) + 1;
+    for (const o of ordersInRange) {
+      const t = o.sampleType ?? "unknown";
+      counts[t] = (counts[t] ?? 0) + 1;
     }
     data.type = Object.entries(counts).map(([type, count]) => ({ type, count }));
   }
 
   if (sections.includes("trend")) {
     const byMonth: Record<string, number> = {};
-    for (const s of inRange) {
-      const m = new Date(s.receivedAt).toISOString().slice(0, 7);
+    for (const o of ordersInRange) {
+      const m = new Date(o.createdAt ?? 0).toISOString().slice(0, 7);
       byMonth[m] = (byMonth[m] ?? 0) + 1;
     }
     data.trend = Object.entries(byMonth)
@@ -228,7 +242,7 @@ async function collectSectionData(sections: ReportSection[], from: Date, to: Dat
 
   if (sections.includes("passfail")) {
     const cats: Record<string, { pass: number; fail: number }> = {};
-    for (const s of inRange) {
+    for (const s of samplesInRange) {
       const cat = s.sampleType ?? "other";
       if (!cats[cat]) cats[cat] = { pass: 0, fail: 0 };
       if (isInGroup(s.status, SAMPLE_STATUS_GROUPS.completed)) cats[cat].pass++;
@@ -241,12 +255,11 @@ async function collectSectionData(sections: ReportSection[], from: Date, to: Dat
     }));
   }
 
-  const orders = await getAllLabOrders();
   if (sections.includes("readiness")) {
-    data.readiness = computeContractReadinessRows(orders);
+    data.readiness = computeContractReadinessRows(allOrders);
   }
   if (sections.includes("scorecard")) {
-    data.scorecard = computeContractorScores(orders);
+    data.scorecard = computeContractorScores(allOrders);
   }
 
   if (sections.includes("techperf")) {
@@ -265,7 +278,7 @@ async function collectSectionData(sections: ReportSection[], from: Date, to: Dat
 
   if (sections.includes("toptests")) {
     const typeCounts: Record<string, number> = {};
-    for (const s of inRange) {
+    for (const s of samplesInRange) {
       const key = s.testTypeName ?? s.sampleType;
       typeCounts[key] = (typeCounts[key] ?? 0) + 1;
     }

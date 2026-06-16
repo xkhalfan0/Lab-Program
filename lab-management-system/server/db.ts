@@ -1,4 +1,4 @@
-import { computeSampleKpisFromStatusCounts } from "@shared/dashboardInsights";
+import { computeOrderKpisFromStatusCounts } from "@shared/dashboardInsights";
 import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import { alias } from "drizzle-orm/mysql-core";
@@ -811,19 +811,21 @@ export async function softDeleteSample(
 export async function getDashboardStats() {
   const db = await getDb();
   if (!db) return null;
-  const activeFilter = samplesHasSoftDeleteColumns() ? isNull(samples.deletedAt) : sql`TRUE`;
-  const byStatus = await db
-    .select({ status: samples.status, count: sql<number>`COUNT(*)` })
-    .from(samples)
-    .where(activeFilter)
-    .groupBy(samples.status);
-  const byType = await db
-    .select({ sampleType: samples.sampleType, count: sql<number>`COUNT(*)` })
-    .from(samples)
-    .where(activeFilter)
-    .groupBy(samples.sampleType);
 
-  const kpis = computeSampleKpisFromStatusCounts(byStatus);
+  // KPIs follow lab_orders (same source as Reception / Distribution), not orphan sample rows.
+  const orderFilter = isNull(labOrders.deletedAt);
+  const byStatus = await db
+    .select({ status: labOrders.status, count: sql<number>`COUNT(*)` })
+    .from(labOrders)
+    .where(orderFilter)
+    .groupBy(labOrders.status);
+  const byType = await db
+    .select({ sampleType: labOrders.sampleType, count: sql<number>`COUNT(*)` })
+    .from(labOrders)
+    .where(orderFilter)
+    .groupBy(labOrders.sampleType);
+
+  const kpis = computeOrderKpisFromStatusCounts(byStatus);
 
   return {
     total: kpis.total,

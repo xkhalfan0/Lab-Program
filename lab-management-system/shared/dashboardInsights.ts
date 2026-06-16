@@ -64,7 +64,40 @@ export function computeSampleKpis(
   );
 }
 
-export type LabOrderRow = {
+/** Aggregate order KPIs from status histogram (matches Reception / Distribution). */
+export function computeOrderKpisFromStatusCounts(
+  byStatus: Array<{ status: string; count: number | string }>
+): SampleKpis {
+  let total = 0;
+  let active = 0;
+  let completed = 0;
+  let needsAction = 0;
+  let failed = 0;
+
+  for (const row of byStatus) {
+    const n = Number(row.count);
+    if (!Number.isFinite(n) || n <= 0) continue;
+    const status = row.status;
+
+    total += n;
+
+    if (isInGroup(status, LAB_ORDER_STATUS_GROUPS.completed)) {
+      completed += n;
+      continue;
+    }
+    if (isInGroup(status, LAB_ORDER_STATUS_GROUPS.failed)) {
+      failed += n;
+      continue;
+    }
+
+    active += n;
+    if (isInGroup(status, LAB_ORDER_STATUS_GROUPS.pending)) {
+      needsAction += n;
+    }
+  }
+
+  return { total, active, completed, needsAction, failed };
+}
   id?: number;
   orderCode?: string | null;
   contractNumber?: string | null;
