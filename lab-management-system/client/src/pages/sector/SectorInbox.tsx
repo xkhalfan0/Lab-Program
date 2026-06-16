@@ -55,6 +55,7 @@ const T_AR = {
   new: "جديد",
   approved: "مجتاز",
   failed: "راسب",
+  failedOnly: "راسبة",
   pending: "قيد المراجعة",
   issued: "صادرة",
   rejected: "مرفوض",
@@ -119,6 +120,7 @@ const T_EN = {
   new: "New",
   approved: "Passed",
   failed: "Failed",
+  failedOnly: "Failed",
   pending: "Pending",
   issued: "Issued",
   rejected: "Rejected",
@@ -200,11 +202,11 @@ type InboxItem = {
   contractNumber?: string;
 };
 
-function getTypeConfig(type: string, lang: string) {
+function getTypeConfig(type: string, lang: string, isFail = false) {
   if (type === "result") return {
     icon: FlaskConical,
-    color: "text-blue-600",
-    bg: "bg-blue-50 border-blue-100",
+    color: isFail ? "text-red-600" : "text-blue-600",
+    bg: isFail ? "bg-red-100 border-red-300" : "bg-blue-50 border-blue-100",
     label: lang === "ar" ? "نتيجة فحص" : "Test Result",
   };
   if (type === "clearance") return {
@@ -770,35 +772,49 @@ function NotificationDetail({ detail, T, lang }: { detail: any; T: typeof T_AR; 
 }
 
 // ─── Inbox Row ────────────────────────────────────────────────────────────────
+function isResultFail(item: InboxItem) {
+  return item.type === "result" && (item.status === "fail" || item.status === "failed");
+}
+
 function InboxRow({ item, lang, onClick }: { item: InboxItem; lang: string; onClick: () => void }) {
   const T = lang === "ar" ? T_AR : T_EN;
   const isRtl = lang === "ar";
-  const typeConf = getTypeConfig(item.type, lang);
+  const isFail = isResultFail(item);
+  const typeConf = getTypeConfig(item.type, lang, isFail);
   const statusBadge = getStatusBadge(item.status, lang);
   const TypeIcon = typeConf.icon;
   const title = isRtl ? item.title : (item.titleEn ?? item.title);
 
   return (
     <div
-      className={`flex cursor-pointer items-start gap-4 rounded-xl border p-4 transition hover:border-blue-200 hover:bg-blue-50/40 ${
-        !item.isRead ? "border-blue-200 bg-blue-50/60" : "border-slate-200 bg-white"
+      className={`flex cursor-pointer items-start gap-4 rounded-xl border p-4 transition ${
+        isFail
+          ? "border-red-400 bg-red-50 ring-2 ring-red-200 hover:bg-red-100/80"
+          : !item.isRead
+            ? "border-blue-200 bg-blue-50/60 hover:border-blue-300 hover:bg-blue-50"
+            : "border-slate-200 bg-white hover:border-blue-200 hover:bg-blue-50/40"
       }`}
       onClick={onClick}
       dir={isRtl ? "rtl" : "ltr"}
     >
       <div className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl border ${typeConf.bg}`}>
-        <TypeIcon className={`h-5 w-5 ${typeConf.color}`} />
+        {isFail ? <XCircle className="h-5 w-5 text-red-600" /> : <TypeIcon className={`h-5 w-5 ${typeConf.color}`} />}
       </div>
 
       <div className="min-w-0 flex-1">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
-              {!item.isRead && <span className="h-2 w-2 flex-shrink-0 rounded-full bg-blue-500" />}
-              <span className={`truncate text-sm font-semibold ${!item.isRead ? "text-slate-900" : "text-slate-700"}`}>
+              {!item.isRead && !isFail && <span className="h-2 w-2 flex-shrink-0 rounded-full bg-blue-500" />}
+              {isFail && (
+                <span className="inline-flex items-center gap-1 rounded-full border border-red-400 bg-red-600 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">
+                  {T.failed}
+                </span>
+              )}
+              <span className={`truncate text-sm font-semibold ${isFail ? "text-red-900" : !item.isRead ? "text-slate-900" : "text-slate-700"}`}>
                 {title}
               </span>
-              {statusBadge && statusBadge.label && (
+              {!isFail && statusBadge && statusBadge.label && (
                 <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium ${statusBadge.color}`}>
                   {statusBadge.icon && <statusBadge.icon className="h-3 w-3" />}
                   {statusBadge.label}
@@ -806,17 +822,17 @@ function InboxRow({ item, lang, onClick }: { item: InboxItem; lang: string; onCl
               )}
             </div>
             {item.subtitle && (
-              <p className="mt-0.5 truncate text-xs text-slate-500">{item.subtitle}</p>
+              <p className={`mt-0.5 truncate text-xs ${isFail ? "text-red-700/80" : "text-slate-500"}`}>{item.subtitle}</p>
             )}
           </div>
           <div className="flex flex-shrink-0 items-center gap-2">
-            <span className="text-xs text-slate-400">{timeAgo(item.createdAt, lang)}</span>
-            {!item.isRead ? <Mail className="h-4 w-4 text-blue-500" /> : <MailOpen className="h-4 w-4 text-slate-400" />}
+            <span className={`text-xs ${isFail ? "text-red-600" : "text-slate-400"}`}>{timeAgo(item.createdAt, lang)}</span>
+            {!item.isRead ? <Mail className={`h-4 w-4 ${isFail ? "text-red-500" : "text-blue-500"}`} /> : <MailOpen className="h-4 w-4 text-slate-400" />}
           </div>
         </div>
       </div>
 
-      <ChevronRight className={`mt-1 h-4 w-4 flex-shrink-0 text-slate-400 ${isRtl ? "rotate-180" : ""}`} />
+      <ChevronRight className={`mt-1 h-4 w-4 flex-shrink-0 ${isFail ? "text-red-500" : "text-slate-400"} ${isRtl ? "rotate-180" : ""}`} />
     </div>
   );
 }
@@ -827,7 +843,7 @@ export default function SectorInbox() {
   const T = lang === "ar" ? T_AR : T_EN;
   const isRtl = lang === "ar";
 
-  const [filter, setFilter] = useState<"all" | "result" | "clearance" | "notification" | "unread">("all");
+  const [filter, setFilter] = useState<"all" | "result" | "clearance" | "notification" | "unread" | "failed">("all");
   const [selectedItem, setSelectedItem] = useState<InboxItem | null>(null);
 
   const { data, isLoading, refetch } = trpc.sector.getInbox.useQuery(undefined, {
@@ -841,23 +857,36 @@ export default function SectorInbox() {
   const items: InboxItem[] = data?.items ?? [];
 
   const filtered = useMemo(() => {
-    if (filter === "all") return items;
-    if (filter === "unread") return items.filter(i => !i.isRead);
-    return items.filter(i => i.type === filter);
+    let list = items;
+    if (filter === "unread") list = items.filter((i) => !i.isRead);
+    else if (filter === "failed") list = items.filter((i) => isResultFail(i));
+    else if (filter !== "all") list = items.filter((i) => i.type === filter);
+
+    if (filter === "all") {
+      return [...list].sort((a, b) => {
+        const aFail = isResultFail(a) ? 0 : 1;
+        const bFail = isResultFail(b) ? 0 : 1;
+        if (aFail !== bFail) return aFail - bFail;
+        return new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime();
+      });
+    }
+    return list;
   }, [items, filter]);
 
   const counts = useMemo(() => ({
     all: items.length,
-    unread: items.filter(i => !i.isRead).length,
-    result: items.filter(i => i.type === "result").length,
-    clearance: items.filter(i => i.type === "clearance").length,
-    notification: items.filter(i => i.type === "notification").length,
+    unread: items.filter((i) => !i.isRead).length,
+    result: items.filter((i) => i.type === "result").length,
+    clearance: items.filter((i) => i.type === "clearance").length,
+    notification: items.filter((i) => i.type === "notification").length,
+    failed: items.filter((i) => isResultFail(i)).length,
   }), [items]);
 
-  const filterBtns: { key: typeof filter; label: string; icon: any; count: number }[] = [
+  const filterBtns: { key: typeof filter; label: string; icon: any; count: number; danger?: boolean }[] = [
     { key: "all", label: T.all, icon: Inbox, count: counts.all },
     { key: "unread", label: T.unread, icon: Mail, count: counts.unread },
     { key: "result", label: T.results, icon: FlaskConical, count: counts.result },
+    { key: "failed", label: T.failedOnly, icon: XCircle, count: counts.failed, danger: true },
     { key: "clearance", label: T.clearances, icon: FileCheck2, count: counts.clearance },
     { key: "notification", label: T.notifications, icon: Bell, count: counts.notification },
   ];
@@ -868,13 +897,12 @@ export default function SectorInbox() {
         {/* Header */}
         <div className="flex items-start justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl flex items-center justify-center"
-              style={{ background: "rgba(59,130,246,0.15)", border: "1px solid rgba(59,130,246,0.3)" }}>
-              <Inbox className="w-5 h-5 text-blue-400" />
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-blue-200 bg-blue-50">
+              <Inbox className="h-5 w-5 text-blue-600" />
             </div>
             <div>
-              <h1 className="text-xl font-bold text-white">{T.title}</h1>
-              <p className="text-xs text-slate-500 mt-0.5">{T.subtitle}</p>
+              <h1 className="text-xl font-bold text-slate-900">{T.title}</h1>
+              <p className="mt-0.5 text-xs text-slate-500">{T.subtitle}</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -884,10 +912,9 @@ export default function SectorInbox() {
                 size="sm"
                 onClick={() => markAllRead.mutate()}
                 disabled={markAllRead.isPending}
-                className="text-xs gap-1.5"
-                style={{ borderColor: "rgba(255,255,255,0.1)", color: "rgba(148,163,184,0.8)", background: "transparent" }}
+                className="gap-1.5 text-xs"
               >
-                <CheckCheck className="w-3.5 h-3.5" />
+                <CheckCheck className="h-3.5 w-3.5" />
                 {T.markAllRead}
               </Button>
             )}
@@ -897,20 +924,34 @@ export default function SectorInbox() {
               onClick={() => refetch()}
               disabled={isLoading}
               className="gap-1.5"
-              style={{ borderColor: "rgba(255,255,255,0.1)", color: "rgba(148,163,184,0.8)", background: "transparent" }}
             >
-              <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? "animate-spin" : ""}`} />
-              <span className="hidden sm:inline text-xs">{T.refresh}</span>
+              <RefreshCw className={`h-3.5 w-3.5 ${isLoading ? "animate-spin" : ""}`} />
+              <span className="hidden text-xs sm:inline">{T.refresh}</span>
             </Button>
           </div>
         </div>
 
+        {/* Failed results alert */}
+        {counts.failed > 0 && filter !== "failed" && (
+          <button
+            type="button"
+            onClick={() => setFilter("failed")}
+            className="flex w-full items-center gap-2 rounded-xl border border-red-300 bg-red-50 px-4 py-2.5 text-left transition hover:bg-red-100"
+          >
+            <XCircle className="h-4 w-4 flex-shrink-0 text-red-600" />
+            <span className="text-sm font-semibold text-red-800">
+              {isRtl
+                ? `${counts.failed} نتيجة راسبة — اضغط للعرض`
+                : `${counts.failed} failed result${counts.failed > 1 ? "s" : ""} — tap to view`}
+            </span>
+          </button>
+        )}
+
         {/* Unread badge */}
         {counts.unread > 0 && (
-          <div className="flex items-center gap-2 px-4 py-2.5 rounded-xl"
-            style={{ background: "rgba(59,130,246,0.08)", border: "1px solid rgba(59,130,246,0.2)" }}>
-            <AlertCircle className="w-4 h-4 text-blue-400 flex-shrink-0" />
-            <span className="text-sm text-blue-300">
+          <div className="flex items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 py-2.5">
+            <AlertCircle className="h-4 w-4 flex-shrink-0 text-blue-600" />
+            <span className="text-sm text-blue-800">
               {isRtl
                 ? `لديك ${counts.unread} رسالة غير مقروءة`
                 : `You have ${counts.unread} unread message${counts.unread > 1 ? "s" : ""}`}
@@ -920,24 +961,26 @@ export default function SectorInbox() {
 
         {/* Filter buttons */}
         <div className="flex items-center gap-2 flex-wrap">
-          {filterBtns.map(({ key, label, icon: Icon, count }) => {
+          {filterBtns.map(({ key, label, icon: Icon, count, danger }) => {
             const active = filter === key;
             return (
               <button
                 key={key}
+                type="button"
                 onClick={() => setFilter(key)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all border"
-                style={{
-                  background: active ? "rgba(59,130,246,0.2)" : "rgba(255,255,255,0.04)",
-                  borderColor: active ? "rgba(59,130,246,0.4)" : "rgba(255,255,255,0.08)",
-                  color: active ? "#93c5fd" : "rgba(148,163,184,0.7)",
-                }}
+                className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition ${
+                  active
+                    ? danger
+                      ? "border-red-600 bg-red-600 text-white"
+                      : "border-blue-600 bg-blue-600 text-white"
+                    : danger
+                      ? "border-red-200 bg-red-50 text-red-700 hover:border-red-300"
+                      : "border-slate-200 bg-white text-slate-600 hover:border-slate-300"
+                }`}
               >
-                <Icon className="w-3.5 h-3.5" />
+                <Icon className="h-3.5 w-3.5" />
                 {label}
-                <span className={`px-1.5 py-0.5 rounded-full text-xs font-bold min-w-[18px] text-center ${
-                  active ? "bg-blue-500/30 text-blue-200" : "bg-white/8 text-slate-400"
-                }`}>
+                <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold ${active ? "bg-white/20" : danger ? "bg-red-100" : "bg-slate-100"}`}>
                   {count}
                 </span>
               </button>
@@ -948,20 +991,18 @@ export default function SectorInbox() {
         {/* Messages list */}
         {isLoading ? (
           <div className="space-y-3">
-            {[1, 2, 3, 4].map(i => (
-              <div key={i} className="h-20 rounded-xl animate-pulse"
-                style={{ background: "rgba(255,255,255,0.04)" }} />
+            {[1, 2, 3, 4].map((i) => (
+              <div key={i} className="h-20 animate-pulse rounded-xl bg-slate-100" />
             ))}
           </div>
         ) : filtered.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-20 gap-4">
-            <div className="w-16 h-16 rounded-2xl flex items-center justify-center"
-              style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}>
-              <Inbox className="w-8 h-8 text-slate-600" />
+          <div className="flex flex-col items-center justify-center gap-4 py-20">
+            <div className="flex h-16 w-16 items-center justify-center rounded-2xl border border-slate-200 bg-white">
+              <Inbox className="h-8 w-8 text-slate-400" />
             </div>
             <div className="text-center">
-              <p className="text-slate-400 font-medium">{T.noMessages}</p>
-              <p className="text-slate-600 text-sm mt-1">{T.noMessagesDesc}</p>
+              <p className="font-medium text-slate-600">{T.noMessages}</p>
+              <p className="mt-1 text-sm text-slate-400">{T.noMessagesDesc}</p>
             </div>
           </div>
         ) : (

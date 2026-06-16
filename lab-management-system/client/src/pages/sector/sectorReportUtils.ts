@@ -93,6 +93,31 @@ function buildArrayTable(rows: Record<string, unknown>[], lang: string): string 
   return `<table class="data-table" style="width:100%;border-collapse:collapse;font-size:11px;margin-top:4px"><thead><tr>${ordered.map((c) => `<th style="background:#1e40af;color:#fff;padding:6px 8px;text-align:${lang === "ar" ? "right" : "left"}">${labelFor(c, lang)}</th>`).join("")}</tr></thead><tbody>${tbody}</tbody></table>`;
 }
 
+const SKIP_SUMMARY_KEYS = new Set([
+  "rows",
+  "gradingReport",
+  "elongationInputs",
+  "flakinessInputs",
+  "sieveRows",
+  "blocks",
+  "cubes",
+  "specimens",
+  "fractions",
+  "readings",
+  "blockSpec",
+]);
+
+/** Scalar summary fields only — for the compact result preview (no tables). */
+export function pickMainSummaryEntries(
+  summary: Record<string, unknown> | null | undefined,
+  lang: string,
+  max = 6
+) {
+  return formatSummaryEntries(summary, lang)
+    .filter((e) => !e.isTable && !SKIP_SUMMARY_KEYS.has(e.key))
+    .slice(0, max);
+}
+
 export function formatSummaryEntries(summary: Record<string, unknown> | null | undefined, lang: string) {
   if (!summary) return [];
   return Object.entries(summary)
