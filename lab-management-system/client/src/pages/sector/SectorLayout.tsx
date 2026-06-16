@@ -2,7 +2,7 @@ import { createContext, useContext, useState, useEffect, useRef } from "react";
 import { useLocation, Link } from "wouter";
 import { FlaskConical, Inbox, TestTube2, FileCheck2, LogOut, Bell, Globe, Menu, X } from "lucide-react";
 import { trpc } from "@/lib/trpc";
-import { toast } from "sonner";
+import { toast, Toaster } from "sonner";
 import { useSSESectorNotifications } from "@/hooks/useSSESectorNotifications";
 
 const SectorLangContext = createContext<{
@@ -67,6 +67,8 @@ const t = {
   },
 };
 
+const SECTOR_TOAST = { position: "bottom-right" as const, duration: 2500 };
+
 export function SectorLayout({ children }: { children: React.ReactNode }) {
   const [location, setLocation] = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -83,23 +85,13 @@ export function SectorLayout({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (unreadCount === undefined) return;
     const total = unreadCount.total ?? 0;
-    if (prevUnreadRef.current === null) {
-      if (total > 0) {
-        toast.info(
-          isRtl ? `لديك ${total} ${total === 1 ? "تقرير جديد" : "تقارير جديدة"}` : `You have ${total} new ${total === 1 ? "report" : "reports"}`,
-          {
-            description: isRtl ? "انتقل إلى صندوق الوارد للاطلاع عليها" : "Check your Inbox to view them",
-            duration: 6000,
-          }
-        );
-      }
-    } else if (total > prevUnreadRef.current) {
+    if (prevUnreadRef.current !== null && total > prevUnreadRef.current) {
       const newCount = total - prevUnreadRef.current;
       toast.success(
         isRtl ? `${newCount} ${newCount === 1 ? "تقرير جديد" : "تقارير جديدة"}` : `${newCount} new ${newCount === 1 ? "report" : "reports"}`,
         {
+          ...SECTOR_TOAST,
           description: isRtl ? "وصلت نتائج جديدة لقطاعك" : "New results have arrived for your sector",
-          duration: 5000,
         }
       );
     }
@@ -115,8 +107,8 @@ export function SectorLayout({ children }: { children: React.ReactNode }) {
     onNew: (n) => {
       refetchNotifCount();
       toast(n.title, {
+        ...SECTOR_TOAST,
         description: n.message?.length > 80 ? n.message.slice(0, 80) + "…" : n.message,
-        duration: 6000,
       });
     },
   });
@@ -138,6 +130,7 @@ export function SectorLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <div dir={isRtl ? "rtl" : "ltr"} className="min-h-screen bg-slate-50">
+      <Toaster position="bottom-right" duration={2500} closeButton richColors />
       <header className="sticky top-0 z-50 border-b border-white/10 bg-gradient-to-r from-slate-900 via-slate-800 to-blue-950 shadow-lg shadow-slate-900/20">
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-4 px-4 lg:px-6">
           <div className="flex items-center gap-3">

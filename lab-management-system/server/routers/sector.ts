@@ -22,8 +22,18 @@ import {
 import { eq, and, desc, inArray, sql, or, like, gte, lte, isNotNull } from "drizzle-orm";
 import { storagePut } from "../storage";
 import { buildSampleVisibilityCondition } from "../db";
+import { getOfficialTestByCode } from "../data/official-test-catalog";
 
 const SECTOR_TOKEN_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+
+function resolveTestTypeMeta(testTypeCode: string | null | undefined) {
+  const meta = getOfficialTestByCode(testTypeCode);
+  return {
+    testTypeCode: testTypeCode ?? "",
+    testTypeNameAr: meta?.nameAr ?? testTypeCode ?? "",
+    testTypeNameEn: meta?.nameEn ?? testTypeCode ?? "",
+  };
+}
 
 function sectorSamplesWhere(
   sectorKey: string,
@@ -358,21 +368,25 @@ export const sectorRouter = router({
       const unreadCount = allApproved.filter((r: { id: number }) => !readIds.has(r.id)).length;
 
       return {
-        results: results.map((r: any) => ({
-          id: r.id,
-          sampleId: r.sampleId,
-          sampleCode: sampleMap[r.sampleId]?.sampleCode ?? "",
-          contractNumber: sampleMap[r.sampleId]?.contractNumber ?? "",
-          contractName: sampleMap[r.sampleId]?.contractName ?? "",
-          contractorName: sampleMap[r.sampleId]?.contractorName ?? "",
-          testType: r.testType,
-          overallResult: r.overallResult,
-          summaryValues: r.summaryValues,
-          testedBy: r.testedBy,
-          testDate: r.testDate,
-          updatedAt: r.updatedAt,
-          isRead: readIds.has(r.id),
-        })),
+        results: results.map((r: any) => {
+          const typeMeta = resolveTestTypeMeta(r.testTypeCode);
+          return {
+            id: r.id,
+            sampleId: r.sampleId,
+            sampleCode: sampleMap[r.sampleId]?.sampleCode ?? "",
+            contractNumber: sampleMap[r.sampleId]?.contractNumber ?? "",
+            contractName: sampleMap[r.sampleId]?.contractName ?? "",
+            contractorName: sampleMap[r.sampleId]?.contractorName ?? "",
+            ...typeMeta,
+            testType: typeMeta.testTypeNameEn,
+            overallResult: r.overallResult,
+            summaryValues: r.summaryValues,
+            testedBy: r.testedBy,
+            testDate: r.testDate,
+            updatedAt: r.updatedAt,
+            isRead: readIds.has(r.id),
+          };
+        }),
         total: allApproved.length,
         unreadCount,
       };
@@ -813,19 +827,27 @@ export const sectorRouter = router({
         ));
       const readResultIds = new Set(readRows.map((r: { reportId: number }) => r.reportId));
 
-      resultItems = results.map((r: any) => ({
-        id: `result-${r.id}`,
-        type: "result" as const,
-        title: `نتيجة فحص: ${sampleMap[r.sampleId]?.sampleCode ?? r.sampleId}`,
-        titleEn: `Test Result: ${sampleMap[r.sampleId]?.sampleCode ?? r.sampleId}`,
-        subtitle: `${sampleMap[r.sampleId]?.contractNumber ?? ""} — ${r.testType}`,
-        status: r.overallResult,
-        isRead: readResultIds.has(r.id),
-        createdAt: r.updatedAt ?? r.testDate,
-        refId: r.id,
-        sampleCode: sampleMap[r.sampleId]?.sampleCode,
-        contractNumber: sampleMap[r.sampleId]?.contractNumber,
-      }));
+      resultItems = results.map((r: any) => {
+        const typeMeta = resolveTestTypeMeta(r.testTypeCode);
+        const contractNumber = sampleMap[r.sampleId]?.contractNumber ?? "";
+        const testLabel = typeMeta.testTypeNameAr || typeMeta.testTypeCode;
+        return {
+          id: `result-${r.id}`,
+          type: "result" as const,
+          title: `نتيجة فحص: ${sampleMap[r.sampleId]?.sampleCode ?? r.sampleId}`,
+          titleEn: `Test Result: ${sampleMap[r.sampleId]?.sampleCode ?? r.sampleId}`,
+          subtitle: contractNumber ? `${contractNumber} — ${testLabel}` : testLabel,
+          status: r.overallResult,
+          isRead: readResultIds.has(r.id),
+          createdAt: r.updatedAt ?? r.testDate,
+          refId: r.id,
+          sampleCode: sampleMap[r.sampleId]?.sampleCode,
+          contractNumber,
+          testTypeCode: typeMeta.testTypeCode,
+          testTypeNameAr: typeMeta.testTypeNameAr,
+          testTypeNameEn: typeMeta.testTypeNameEn,
+        };
+      });
     }
 
     // 3. Clearance requests for this sector
@@ -940,7 +962,17 @@ export const sectorRouter = router({
           });
         }
 
-        return { type: "result" as const, result, sample };
+        const typeMeta = resolveTestTypeMeta(result.testTypeCode);
+
+        return {
+          type: "result" as const,
+          result: {
+            ...result,
+            ...typeMeta,
+            testTypeName: typeMeta.testTypeNameAr,
+          },
+          sample,
+        };
       }
 
       if (input.type === "clearance") {

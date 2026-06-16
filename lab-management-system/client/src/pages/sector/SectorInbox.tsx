@@ -1,6 +1,8 @@
 import { useState, useMemo, useRef, useCallback } from "react";
 import { trpc } from "@/lib/trpc";
 import { SectorLayout, useSectorLang } from "./SectorLayout";
+import { buildSectorResultReportHtml } from "./sectorReportUtils";
+import { SectorTestResultDialog } from "./SectorTestResultDialog";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -201,20 +203,20 @@ type InboxItem = {
 function getTypeConfig(type: string, lang: string) {
   if (type === "result") return {
     icon: FlaskConical,
-    color: "text-blue-400",
-    bg: "bg-blue-500/10 border-blue-500/20",
+    color: "text-blue-600",
+    bg: "bg-blue-50 border-blue-100",
     label: lang === "ar" ? "نتيجة فحص" : "Test Result",
   };
   if (type === "clearance") return {
     icon: FileCheck2,
-    color: "text-emerald-400",
-    bg: "bg-emerald-500/10 border-emerald-500/20",
+    color: "text-emerald-600",
+    bg: "bg-emerald-50 border-emerald-100",
     label: lang === "ar" ? "براءة ذمة" : "Clearance",
   };
   return {
     icon: Bell,
-    color: "text-amber-400",
-    bg: "bg-amber-500/10 border-amber-500/20",
+    color: "text-amber-600",
+    bg: "bg-amber-50 border-amber-100",
     label: lang === "ar" ? "إشعار" : "Notification",
   };
 }
@@ -223,17 +225,17 @@ function getStatusBadge(status: string | undefined, lang: string) {
   const T = lang === "ar" ? T_AR : T_EN;
   if (!status) return null;
   const map: Record<string, { label: string; color: string; icon: any }> = {
-    approved: { label: T.approved, color: "bg-green-500/20 text-green-300 border-green-500/30", icon: CheckCircle2 },
-    pass: { label: T.approved, color: "bg-green-500/20 text-green-300 border-green-500/30", icon: CheckCircle2 },
-    qc_passed: { label: T.approved, color: "bg-green-500/20 text-green-300 border-green-500/30", icon: CheckCircle2 },
-    fail: { label: T.failed, color: "bg-red-500/20 text-red-300 border-red-500/30", icon: XCircle },
-    failed: { label: T.failed, color: "bg-red-500/20 text-red-300 border-red-500/30", icon: XCircle },
-    rejected: { label: T.rejected, color: "bg-red-500/20 text-red-300 border-red-500/30", icon: XCircle },
-    pending: { label: T.pending, color: "bg-yellow-500/20 text-yellow-300 border-yellow-500/30", icon: Clock },
-    issued: { label: T.issued, color: "bg-purple-500/20 text-purple-300 border-purple-500/30", icon: CheckCircle2 },
-    clearance_issued: { label: T.issued, color: "bg-purple-500/20 text-purple-300 border-purple-500/30", icon: CheckCircle2 },
+    approved: { label: T.approved, color: "bg-emerald-50 text-emerald-700 border-emerald-200", icon: CheckCircle2 },
+    pass: { label: T.approved, color: "bg-emerald-50 text-emerald-700 border-emerald-200", icon: CheckCircle2 },
+    qc_passed: { label: T.approved, color: "bg-emerald-50 text-emerald-700 border-emerald-200", icon: CheckCircle2 },
+    fail: { label: T.failed, color: "bg-red-50 text-red-700 border-red-200", icon: XCircle },
+    failed: { label: T.failed, color: "bg-red-50 text-red-700 border-red-200", icon: XCircle },
+    rejected: { label: T.rejected, color: "bg-red-50 text-red-700 border-red-200", icon: XCircle },
+    pending: { label: T.pending, color: "bg-amber-50 text-amber-700 border-amber-200", icon: Clock },
+    issued: { label: T.issued, color: "bg-purple-50 text-purple-700 border-purple-200", icon: CheckCircle2 },
+    clearance_issued: { label: T.issued, color: "bg-purple-50 text-purple-700 border-purple-200", icon: CheckCircle2 },
   };
-  return map[status] ?? { label: status, color: "bg-slate-500/20 text-slate-300 border-slate-500/30", icon: Info };
+  return map[status] ?? { label: status, color: "bg-slate-50 text-slate-600 border-slate-200", icon: Info };
 }
 
 // ─── Detail Row helper ────────────────────────────────────────────────────────
@@ -259,101 +261,24 @@ function DetailRow({ icon: Icon, label, value, highlight }: { icon: any; label: 
 function buildPrintContent(detail: any, lang: string, labName: string): string {
   const T = lang === "ar" ? T_AR : T_EN;
   const dir = lang === "ar" ? "rtl" : "ltr";
-  const font = lang === "ar" ? "Tajawal, Arial" : "Arial, sans-serif";
+  const font = lang === "ar" ? "'Tajawal', Arial" : "Arial, sans-serif";
 
   if (detail?.type === "result") {
-    const r = detail.result;
-    const s = detail.sample;
-    const summaryRows = r.summaryValues
-      ? Object.entries(r.summaryValues as Record<string, any>)
-          .map(([k, v]) => `<tr><td style="padding:6px 12px;border:1px solid #ddd;color:#555">${k}</td><td style="padding:6px 12px;border:1px solid #ddd;font-weight:600">${v}</td></tr>`)
-          .join("")
-      : "";
-    const formRows = r.formData
-      ? Object.entries(r.formData as Record<string, any>)
-          .filter(([, v]) => v !== null && v !== undefined && v !== "")
-          .map(([k, v]) => `<tr><td style="padding:6px 12px;border:1px solid #ddd;color:#555">${k}</td><td style="padding:6px 12px;border:1px solid #ddd">${typeof v === "object" ? JSON.stringify(v) : v}</td></tr>`)
-          .join("")
-      : "";
-
-    return `<!DOCTYPE html><html dir="${dir}"><head><meta charset="UTF-8">
-<style>
-  body { font-family: ${font}; direction: ${dir}; margin: 0; padding: 24px; color: #1a1a2e; }
-  .header { text-align: center; border-bottom: 3px solid #1e40af; padding-bottom: 16px; margin-bottom: 24px; }
-  .lab-name { font-size: 22px; font-weight: 700; color: #1e40af; }
-  .report-title { font-size: 16px; color: #374151; margin-top: 4px; }
-  .report-id { font-size: 12px; color: #6b7280; margin-top: 4px; }
-  .section { margin-bottom: 20px; }
-  .section-title { font-size: 13px; font-weight: 700; color: #1e40af; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 10px; padding-bottom: 6px; border-bottom: 1px solid #e5e7eb; }
-  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-  .field { background: #f9fafb; border-radius: 6px; padding: 10px 12px; }
-  .field-label { font-size: 11px; color: #6b7280; margin-bottom: 2px; }
-  .field-value { font-size: 13px; font-weight: 600; color: #111827; }
-  .result-badge { display: inline-block; padding: 6px 16px; border-radius: 20px; font-weight: 700; font-size: 14px; }
-  .pass { background: #d1fae5; color: #065f46; }
-  .fail { background: #fee2e2; color: #991b1b; }
-  table { width: 100%; border-collapse: collapse; font-size: 12px; }
-  th { background: #1e40af; color: white; padding: 8px 12px; text-align: ${lang === "ar" ? "right" : "left"}; }
-  .signature-section { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 30px; }
-  .sig-box { border: 1px solid #d1d5db; border-radius: 8px; padding: 14px; text-align: center; }
-  .sig-title { font-size: 11px; color: #6b7280; margin-bottom: 8px; }
-  .sig-name { font-size: 13px; font-weight: 600; color: #1e40af; }
-  .sig-date { font-size: 11px; color: #6b7280; margin-top: 4px; }
-  .footer { text-align: center; margin-top: 30px; padding-top: 12px; border-top: 1px solid #e5e7eb; font-size: 11px; color: #9ca3af; }
-  @media print { body { padding: 0; } }
-</style></head><body>
-<div class="header">
-  <div class="lab-name">${labName}</div>
-  <div class="report-title">${lang === "ar" ? "تقرير نتيجة الاختبار" : "Test Result Report"}</div>
-  <div class="report-id">${lang === "ar" ? "رمز العينة" : "Sample Code"}: ${s?.sampleCode ?? "—"}</div>
-</div>
-
-<div class="section">
-  <div class="section-title">${lang === "ar" ? "معلومات العينة" : "Sample Information"}</div>
-  <div class="grid">
-    <div class="field"><div class="field-label">${T.sampleCode}</div><div class="field-value">${s?.sampleCode ?? "—"}</div></div>
-    <div class="field"><div class="field-label">${T.contractNumber}</div><div class="field-value">${r.contractNo ?? s?.contractNumber ?? "—"}</div></div>
-    <div class="field"><div class="field-label">${T.projectName}</div><div class="field-value">${r.projectName ?? "—"}</div></div>
-    <div class="field"><div class="field-label">${T.contractorName}</div><div class="field-value">${r.contractorName ?? "—"}</div></div>
-    <div class="field"><div class="field-label">${T.testType}</div><div class="field-value">${r.testTypeCode ?? "—"}</div></div>
-    <div class="field"><div class="field-label">${T.testDate}</div><div class="field-value">${r.testDate ? new Date(r.testDate).toLocaleDateString(lang === "ar" ? "ar-AE" : "en-GB") : "—"}</div></div>
-    <div class="field"><div class="field-label">${T.testedBy}</div><div class="field-value">${r.testedBy ?? "—"}</div></div>
-    <div class="field"><div class="field-label">${T.overallResult}</div><div class="field-value"><span class="result-badge ${r.overallResult === "pass" ? "pass" : "fail"}">${r.overallResult === "pass" ? (lang === "ar" ? "مجتاز ✓" : "PASSED ✓") : (lang === "ar" ? "راسب ✗" : "FAILED ✗")}</span></div></div>
-  </div>
-</div>
-
-${summaryRows ? `<div class="section">
-  <div class="section-title">${T.summaryValues}</div>
-  <table><thead><tr><th>${lang === "ar" ? "المعامل" : "Parameter"}</th><th>${lang === "ar" ? "القيمة" : "Value"}</th></tr></thead>
-  <tbody>${summaryRows}</tbody></table>
-</div>` : ""}
-
-${formRows ? `<div class="section">
-  <div class="section-title">${T.formData}</div>
-  <table><thead><tr><th>${lang === "ar" ? "الحقل" : "Field"}</th><th>${lang === "ar" ? "القيمة" : "Value"}</th></tr></thead>
-  <tbody>${formRows}</tbody></table>
-</div>` : ""}
-
-${r.notes ? `<div class="section">
-  <div class="section-title">${T.notes}</div>
-  <div style="background:#f9fafb;border-radius:6px;padding:12px;font-size:13px;color:#374151">${r.notes}</div>
-</div>` : ""}
-
-<div class="signature-section">
-  <div class="sig-box">
-    <div class="sig-title">${T.managerReview}</div>
-    ${r.managerReviewedByName ? `<div class="sig-name">${r.managerReviewedByName}</div><div class="sig-date">${r.managerReviewedAt ? new Date(r.managerReviewedAt).toLocaleDateString(lang === "ar" ? "ar-AE" : "en-GB") : ""}</div>` : `<div style="height:30px"></div>`}
-    ${r.managerNotes ? `<div style="font-size:11px;color:#6b7280;margin-top:6px">${r.managerNotes}</div>` : ""}
-  </div>
-  <div class="sig-box">
-    <div class="sig-title">${T.qcReview}</div>
-    ${r.qcReviewedByName ? `<div class="sig-name">${r.qcReviewedByName}</div><div class="sig-date">${r.qcReviewedAt ? new Date(r.qcReviewedAt).toLocaleDateString(lang === "ar" ? "ar-AE" : "en-GB") : ""}</div>` : `<div style="height:30px"></div>`}
-    ${r.qcNotes ? `<div style="font-size:11px;color:#6b7280;margin-top:6px">${r.qcNotes}</div>` : ""}
-  </div>
-</div>
-
-<div class="footer">${lang === "ar" ? "مختبر الإنشاءات والمواد الهندسية" : "Construction & Engineering Materials Laboratory"} — ${new Date().toLocaleDateString(lang === "ar" ? "ar-AE" : "en-GB")}</div>
-</body></html>`;
+    return buildSectorResultReportHtml(detail, lang, labName, {
+      sampleCode: T.sampleCode,
+      contractNumber: T.contractNumber,
+      projectName: T.projectName,
+      contractorName: T.contractorName,
+      testType: T.testType,
+      testDate: T.testDate,
+      testedBy: T.testedBy,
+      overallResult: T.overallResult,
+      summaryValues: T.summaryValues,
+      formData: T.formData,
+      notes: T.notes,
+      managerReview: T.managerReview,
+      qcReview: T.qcReview,
+    });
   }
 
   if (detail?.type === "clearance") {
@@ -855,49 +780,43 @@ function InboxRow({ item, lang, onClick }: { item: InboxItem; lang: string; onCl
 
   return (
     <div
-      className={`flex items-start gap-4 p-4 rounded-xl border transition-all cursor-pointer hover:scale-[1.005] ${
-        !item.isRead
-          ? "border-blue-500/30 bg-blue-500/5 hover:bg-blue-500/10"
-          : "border-white/5 bg-white/3 hover:bg-white/6"
+      className={`flex cursor-pointer items-start gap-4 rounded-xl border p-4 transition hover:border-blue-200 hover:bg-blue-50/40 ${
+        !item.isRead ? "border-blue-200 bg-blue-50/60" : "border-slate-200 bg-white"
       }`}
       onClick={onClick}
-      style={{ direction: isRtl ? "rtl" : "ltr" }}
+      dir={isRtl ? "rtl" : "ltr"}
     >
-      <div className={`flex-shrink-0 w-10 h-10 rounded-xl flex items-center justify-center border ${typeConf.bg}`}>
-        <TypeIcon className={`w-5 h-5 ${typeConf.color}`} />
+      <div className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl border ${typeConf.bg}`}>
+        <TypeIcon className={`h-5 w-5 ${typeConf.color}`} />
       </div>
 
-      <div className="flex-1 min-w-0">
+      <div className="min-w-0 flex-1">
         <div className="flex items-start justify-between gap-2">
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 flex-wrap">
-              {!item.isRead && <span className="w-2 h-2 rounded-full bg-blue-400 flex-shrink-0" />}
-              <span className={`text-sm font-semibold truncate ${!item.isRead ? "text-white" : "text-slate-300"}`}>
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              {!item.isRead && <span className="h-2 w-2 flex-shrink-0 rounded-full bg-blue-500" />}
+              <span className={`truncate text-sm font-semibold ${!item.isRead ? "text-slate-900" : "text-slate-700"}`}>
                 {title}
               </span>
               {statusBadge && statusBadge.label && (
-                <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs border font-medium ${statusBadge.color}`}>
-                  {statusBadge.icon && <statusBadge.icon className="w-3 h-3" />}
+                <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium ${statusBadge.color}`}>
+                  {statusBadge.icon && <statusBadge.icon className="h-3 w-3" />}
                   {statusBadge.label}
                 </span>
               )}
             </div>
             {item.subtitle && (
-              <p className="text-xs text-slate-500 mt-0.5 truncate">{item.subtitle}</p>
+              <p className="mt-0.5 truncate text-xs text-slate-500">{item.subtitle}</p>
             )}
           </div>
-          <div className="flex items-center gap-2 flex-shrink-0">
-            <span className="text-xs text-slate-600">{timeAgo(item.createdAt, lang)}</span>
-            {!item.isRead ? (
-              <Mail className="w-4 h-4 text-blue-400" />
-            ) : (
-              <MailOpen className="w-4 h-4 text-slate-600" />
-            )}
+          <div className="flex flex-shrink-0 items-center gap-2">
+            <span className="text-xs text-slate-400">{timeAgo(item.createdAt, lang)}</span>
+            {!item.isRead ? <Mail className="h-4 w-4 text-blue-500" /> : <MailOpen className="h-4 w-4 text-slate-400" />}
           </div>
         </div>
       </div>
 
-      <ChevronRight className={`w-4 h-4 text-slate-600 flex-shrink-0 mt-1 ${isRtl ? "rotate-180" : ""}`} />
+      <ChevronRight className={`mt-1 h-4 w-4 flex-shrink-0 text-slate-400 ${isRtl ? "rotate-180" : ""}`} />
     </div>
   );
 }
@@ -1060,11 +979,21 @@ export default function SectorInbox() {
       </div>
 
       {/* Detail Dialog */}
-      <InboxDetailDialog
-        item={selectedItem}
-        onClose={() => { setSelectedItem(null); refetch(); }}
-        lang={lang}
-      />
+      {selectedItem?.type === "result" ? (
+        <SectorTestResultDialog
+          resultId={selectedItem.refId}
+          open={!!selectedItem}
+          onClose={() => { setSelectedItem(null); refetch(); }}
+          lang={lang as "ar" | "en"}
+          testTypeLabel={selectedItem.subtitle?.split(" — ").slice(1).join(" — ")}
+        />
+      ) : (
+        <InboxDetailDialog
+          item={selectedItem}
+          onClose={() => { setSelectedItem(null); refetch(); }}
+          lang={lang}
+        />
+      )}
     </SectorLayout>
   );
 }
