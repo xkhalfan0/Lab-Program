@@ -18,11 +18,13 @@ import {
   clearanceRequests,
   notifications,
   contracts,
+  labOrders,
 } from "../../drizzle/schema";
-import { eq, and, desc, inArray, sql, or, like, gte, lte, isNotNull } from "drizzle-orm";
+import { eq, and, desc, inArray, sql, or, like, gte, lte, isNotNull, isNull, ne } from "drizzle-orm";
 import { storagePut } from "../storage";
 import { buildSampleVisibilityCondition } from "../db";
 import { getOfficialTestByCode } from "../data/official-test-catalog";
+import { computeSampleKpisFromStatusCounts } from "../../shared/dashboardInsights";
 
 const SECTOR_TOKEN_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
@@ -36,12 +38,21 @@ function resolveTestTypeMeta(testTypeCode: string | null | undefined) {
 }
 
 function sectorSamplesWhere(
+  db: NonNullable<Awaited<ReturnType<typeof getDb>>>,
   sectorKey: string,
   filters?: { search?: string; status?: string; dateFrom?: string; dateTo?: string }
 ) {
   const conditions = [
     eq(samples.sector, sectorKey as any),
     buildSampleVisibilityCondition(),
+    ne(samples.status, "deleted"),
+    inArray(
+      samples.id,
+      db
+        .select({ sampleId: labOrders.sampleId })
+        .from(labOrders)
+        .where(isNull(labOrders.deletedAt))
+    ),
   ];
   if (filters?.status) {
     conditions.push(eq(samples.status, filters.status as any));
@@ -177,13 +188,7 @@ export const sectorRouter = router({
     const db = await getDb();
     if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
 
-    const baseWhere = sectorSamplesWhere(ctx.sectorKey);
-
-    const [countRow] = await db
-      .select({ count: sql<number>`COUNT(*)` })
-      .from(samples)
-      .where(baseWhere);
-    const totalSamples = Number(countRow?.count ?? 0);
+    const baseWhere = sectorSamplesWhere(db, ctx.sectorKey);
 
     const statusRows = await db
       .select({ status: samples.status, count: sql<number>`COUNT(*)` })
@@ -191,14 +196,10 @@ export const sectorRouter = router({
       .where(baseWhere)
       .groupBy(samples.status);
 
-    let pendingSamples = 0;
-    let completedSamples = 0;
-    for (const row of statusRows) {
-      const st = row.status ?? "";
-      const c = Number(row.count ?? 0);
-      if (st === "received" || st === "distributed") pendingSamples += c;
-      if (st === "qc_passed" || st === "clearance_issued") completedSamples += c;
-    }
+    const sampleKpis = computeSampleKpisFromStatusCounts(statusRows);
+    const totalSamples = sampleKpis.total;
+    const pendingSamples = sampleKpis.active;
+    const completedSamples = sampleKpis.completed;
 
     const approvedCountRow = await db
       .select({ count: sql<number>`COUNT(*)` })
@@ -331,8 +332,8 @@ export const sectorRouter = router({
         dateFrom: input.dateFrom,
         dateTo: input.dateTo,
       };
-      const whereClause = sectorSamplesWhere(ctx.sectorKey, filters);
-      const summaryWhere = sectorSamplesWhere(ctx.sectorKey);
+      const whereClause = sectorSamplesWhere(db, ctx.sectorKey, filters);
+      const summaryWhere = sectorSamplesWhere(db, ctx.sectorKey);
 
       const [rows, countRow, statusSummaryRows] = await Promise.all([
         db
@@ -388,7 +389,7 @@ export const sectorRouter = router({
       const sectorSamples = await db
         .select({ id: samples.id, sampleCode: samples.sampleCode, contractNumber: samples.contractNumber, contractName: samples.contractName, contractorName: samples.contractorName })
         .from(samples)
-        .where(eq(samples.sector, ctx.sectorKey as any));
+        .where(sectorSamplesWhere(db, ctx.sectorKey));
 
       if (sectorSamples.length === 0) return { results: [], total: 0, unreadCount: 0 };
 
@@ -489,7 +490,7 @@ export const sectorRouter = router({
       const sectorSampleContracts = await db
         .select({ contractId: samples.contractId })
         .from(samples)
-        .where(eq(samples.sector, ctx.sectorKey as any));
+        .where(sectorSamplesWhere(db, ctx.sectorKey));
 
       const contractIds = Array.from(new Set(
         sectorSampleContracts
@@ -556,7 +557,7 @@ export const sectorRouter = router({
     const sectorSamples = await db
       .select({ id: samples.id, contractId: samples.contractId })
       .from(samples)
-      .where(eq(samples.sector, ctx.sectorKey as any));
+      .where(sectorSamplesWhere(db, ctx.sectorKey));
 
     const sampleIds = sectorSamples.map((s: { id: number }) => s.id);
     let unreadResults = 0;
@@ -705,7 +706,7 @@ export const sectorRouter = router({
     const sectorSamples = await db
       .select({ contractId: samples.contractId, contractNumber: samples.contractNumber, contractName: samples.contractName, contractorName: samples.contractorName })
       .from(samples)
-      .where(eq(samples.sector, ctx.sectorKey as any));
+      .where(sectorSamplesWhere(db, ctx.sectorKey));
     // Deduplicate by contractId
     const seen = new Set<number>();
     const result: { contractId: number; contractNumber: string; contractName: string | null; contractorName: string | null }[] = [];
@@ -734,7 +735,7 @@ export const sectorRouter = router({
       const contractSamples = await db
         .select({ contractNumber: samples.contractNumber, contractName: samples.contractName, contractorName: samples.contractorName, contractorId: samples.contractId })
         .from(samples)
-        .where(and(eq(samples.sector, ctx.sectorKey as any), eq(samples.contractId, input.contractId)))
+        .where(and(sectorSamplesWhere(db, ctx.sectorKey), eq(samples.contractId, input.contractId)))
         .limit(1);
       if (!contractSamples[0]) throw new TRPCError({ code: "NOT_FOUND", message: "Contract not found for this sector" });
       const contractInfo = contractSamples[0];
@@ -861,7 +862,7 @@ export const sectorRouter = router({
     const sectorSamples = await db
       .select({ id: samples.id, sampleCode: samples.sampleCode, contractNumber: samples.contractNumber })
       .from(samples)
-      .where(eq(samples.sector, ctx.sectorKey as any));
+      .where(sectorSamplesWhere(db, ctx.sectorKey));
     const sampleIds = sectorSamples.map((s: { id: number }) => s.id);
     const sampleMap: Record<number, { sampleCode: string; contractNumber: string | null }> = Object.fromEntries(
       sectorSamples.map((s: { id: number; sampleCode: string; contractNumber: string | null }) => [s.id, s])
@@ -915,7 +916,7 @@ export const sectorRouter = router({
     const contractRows = await db
       .select({ contractId: samples.contractId })
       .from(samples)
-      .where(eq(samples.sector, ctx.sectorKey as any));
+      .where(sectorSamplesWhere(db, ctx.sectorKey));
     const contractIds = Array.from(new Set(
       contractRows.map((c: { contractId: number | null }) => c.contractId).filter((id): id is number => id !== null)
     ));
