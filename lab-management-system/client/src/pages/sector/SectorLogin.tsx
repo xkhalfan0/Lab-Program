@@ -40,7 +40,7 @@ export default function SectorLogin() {
     onSuccess: (data) => {
       localStorage.setItem("sector_token", data.token);
       localStorage.setItem("sector_info", JSON.stringify(data.sector));
-      setLocation("/sector/inbox");
+      setLocation("/sector/dashboard");
     },
     onError: (err) => {
       const msg = err.message ?? "";

@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { trpc } from "@/lib/trpc";
 import { SectorLayout, useSectorLang } from "./SectorLayout";
 import { SectorTestResultDialog } from "./SectorTestResultDialog";
+import { Link, useLocation } from "wouter";
 import {
   SectorPageHeader,
   SectorCard,
@@ -88,6 +89,7 @@ const t = {
 
 export default function SectorResults() {
   const { lang } = useSectorLang();
+  const [location] = useLocation();
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
   const [resultFilter, setResultFilter] = useState("");
@@ -100,6 +102,12 @@ export default function SectorResults() {
   const T = t[lang];
   const isRtl = lang === "ar";
   const limit = 15;
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const filter = params.get("filter");
+    if (filter === "fail" || filter === "pass") setResultFilter(filter);
+  }, [location]);
 
   const { data, isLoading } = trpc.sector.getTestResults.useQuery({ page, limit });
 

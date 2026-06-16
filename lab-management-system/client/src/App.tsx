@@ -158,7 +158,7 @@ function SectorRootRedirect() {
   const [, setLocation] = useLocation();
   useEffect(() => {
     const token = localStorage.getItem("sector_token");
-    setLocation(token ? "/sector/inbox" : "/sector/login");
+    setLocation(token ? "/sector/dashboard" : "/sector/login");
   }, [setLocation]);
   return (
     <div className="min-h-screen flex items-center justify-center bg-slate-50">

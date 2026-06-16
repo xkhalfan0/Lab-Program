@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useEffect, useRef } from "react";
 import { useLocation, Link } from "wouter";
-import { FlaskConical, Inbox, TestTube2, FileCheck2, LogOut, Bell, Globe, Menu, X } from "lucide-react";
+import { FlaskConical, Inbox, TestTube2, FileCheck2, LogOut, Bell, Globe, Menu, X, LayoutDashboard } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { toast, Toaster } from "sonner";
 import { useSSESectorNotifications } from "@/hooks/useSSESectorNotifications";
@@ -48,6 +48,7 @@ const t = {
   ar: {
     title: "مختبر الإنشاءات",
     subtitle: "بوابة القطاعات",
+    home: "الرئيسية",
     inbox: "صندوق الوارد",
     samples: "طلبات الفحص",
     results: "نتائج الاختبارات",
@@ -58,6 +59,7 @@ const t = {
   en: {
     title: "Construction Lab",
     subtitle: "Sector Portal",
+    home: "Home",
     inbox: "Inbox",
     samples: "Test Requests",
     results: "Test Results",
@@ -116,6 +118,7 @@ export function SectorLayout({ children }: { children: React.ReactNode }) {
   const inboxUnread = (unreadCount?.total ?? 0) + (notifCount?.unread ?? 0);
 
   const navItems = [
+    { path: "/sector/dashboard", label: T.home, icon: LayoutDashboard },
     { path: "/sector/inbox", label: T.inbox, icon: Inbox, badge: inboxUnread },
     { path: "/sector/samples", label: T.samples, icon: TestTube2 },
     { path: "/sector/results", label: T.results, icon: FlaskConical, badge: unreadCount?.results },
@@ -141,13 +144,15 @@ export function SectorLayout({ children }: { children: React.ReactNode }) {
             >
               {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
             </button>
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500 to-cyan-500 shadow-md">
-              <FlaskConical className="h-5 w-5 text-white" />
-            </div>
-            <div className="hidden sm:block">
-              <div className="text-sm font-bold leading-tight text-white">{T.title}</div>
-              <div className="text-xs text-blue-300">{T.subtitle}</div>
-            </div>
+            <Link href="/sector/dashboard" className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500 to-cyan-500 shadow-md">
+                <FlaskConical className="h-5 w-5 text-white" />
+              </div>
+              <div className="hidden sm:block">
+                <div className="text-sm font-bold leading-tight text-white">{T.title}</div>
+                <div className="text-xs text-blue-300">{T.subtitle}</div>
+              </div>
+            </Link>
           </div>
 
           <nav className="hidden items-center gap-1 lg:flex">
@@ -180,7 +185,7 @@ export function SectorLayout({ children }: { children: React.ReactNode }) {
               <div className="hidden items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-1.5 sm:flex">
                 <span className="h-2 w-2 rounded-full bg-emerald-400" />
                 <span className="max-w-[200px] truncate text-xs font-medium text-white">
-                  {isRtl ? `قسم المختبر - ${sector.nameAr}` : `Lab Section - ${sector.nameEn}`}
+                  {isRtl ? sector.nameAr : sector.nameEn}
                 </span>
               </div>
             )}

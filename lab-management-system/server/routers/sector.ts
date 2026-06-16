@@ -207,6 +207,55 @@ export const sectorRouter = router({
       .where(and(baseWhere, eq(specializedTestResults.status, "approved")));
     const approvedResults = Number(approvedCountRow[0]?.count ?? 0);
 
+    const [passCountRow] = await db
+      .select({ count: sql<number>`COUNT(*)` })
+      .from(specializedTestResults)
+      .innerJoin(samples, eq(specializedTestResults.sampleId, samples.id))
+      .where(and(baseWhere, eq(specializedTestResults.status, "approved"), eq(specializedTestResults.overallResult, "pass")));
+    const readyResults = Number(passCountRow?.count ?? 0);
+
+    const [failCountRow] = await db
+      .select({ count: sql<number>`COUNT(*)` })
+      .from(specializedTestResults)
+      .innerJoin(samples, eq(specializedTestResults.sampleId, samples.id))
+      .where(and(baseWhere, eq(specializedTestResults.status, "approved"), eq(specializedTestResults.overallResult, "fail")));
+    const failedResults = Number(failCountRow?.count ?? 0);
+
+    const recentFailedRows = await db
+      .select({
+        id: specializedTestResults.id,
+        sampleCode: samples.sampleCode,
+        contractNumber: samples.contractNumber,
+        testTypeCode: specializedTestResults.testTypeCode,
+        testDate: specializedTestResults.testDate,
+        updatedAt: specializedTestResults.updatedAt,
+        summaryValues: specializedTestResults.summaryValues,
+      })
+      .from(specializedTestResults)
+      .innerJoin(samples, eq(specializedTestResults.sampleId, samples.id))
+      .where(and(baseWhere, eq(specializedTestResults.status, "approved"), eq(specializedTestResults.overallResult, "fail")))
+      .orderBy(desc(specializedTestResults.updatedAt))
+      .limit(5);
+
+    const recentFailedResults = recentFailedRows.map((r) => {
+      const meta = resolveTestTypeMeta(r.testTypeCode);
+      const summary = r.summaryValues as Record<string, unknown> | null;
+      const hint =
+        (summary?.overallIndex != null ? String(summary.overallIndex) : null) ??
+        (summary?.result != null ? String(summary.result) : null) ??
+        meta.testTypeNameAr;
+      return {
+        id: r.id,
+        sampleCode: r.sampleCode,
+        contractNumber: r.contractNumber,
+        testTypeCode: meta.testTypeCode,
+        testTypeNameAr: meta.testTypeNameAr,
+        testTypeNameEn: meta.testTypeNameEn,
+        hint,
+        createdAt: r.updatedAt ?? r.testDate,
+      };
+    });
+
     const readResults = await db
       .select({ reportId: sectorReportReads.reportId })
       .from(sectorReportReads)
@@ -249,7 +298,17 @@ export const sectorRouter = router({
       unreadClearances = allClearances.filter((c: { id: number }) => !readClearanceIds.has(c.id)).length;
     }
 
-    return { totalSamples, pendingSamples, completedSamples, approvedResults, unreadResults, unreadClearances };
+    return {
+      totalSamples,
+      pendingSamples,
+      completedSamples,
+      approvedResults,
+      readyResults,
+      failedResults,
+      recentFailedResults,
+      unreadResults,
+      unreadClearances,
+    };
   }),
 
   // ── Samples received for this sector ──────────────────────────────────────
