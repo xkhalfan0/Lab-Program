@@ -37,6 +37,12 @@ import {
 } from "../../drizzle/schema";
 import { eq, and, desc, inArray, sql, or, like, gte, lte, isNotNull, isNull, ne, notInArray } from "drizzle-orm";
 import { storagePut } from "../storage";
+import {
+  decodeBase64Payload,
+  mimeFromClearanceFileName,
+  sanitizeUploadFileName,
+  validateClearanceLetterFile,
+} from "../uploadUtils";
 import { buildSampleVisibilityCondition } from "../db";
 import { getOfficialTestByCode } from "../data/official-test-catalog";
 import { computeSampleKpisFromStatusCounts } from "../../shared/dashboardInsights";
@@ -823,24 +829,23 @@ export const sectorRouter = router({
       let contractorLetterUrl: string | undefined;
       if (input.contractorLetterBase64 && input.contractorLetterFileName) {
         try {
-          const buffer = Buffer.from(input.contractorLetterBase64, "base64");
-          const ext = input.contractorLetterFileName.split(".").pop()?.toLowerCase() ?? "pdf";
+          const safeName = sanitizeUploadFileName(input.contractorLetterFileName);
+          const buffer = decodeBase64Payload(input.contractorLetterBase64);
+          validateClearanceLetterFile(safeName, buffer.length);
+          const ext = safeName.split(".").pop()?.toLowerCase() ?? "pdf";
           const key = `clearance/contractor-letters/sector-${ctx.sectorId}-${Date.now()}.${ext}`;
-          const mime =
-            ext === "pdf"
-              ? "application/pdf"
-              : ext === "png"
-                ? "image/png"
-                : ext === "jpg" || ext === "jpeg"
-                  ? "image/jpeg"
-                  : "application/octet-stream";
+          const mime = mimeFromClearanceFileName(safeName);
           const uploaded = await storagePut(key, buffer, mime);
           contractorLetterUrl = uploaded.url;
         } catch (uploadErr) {
           console.warn("[SectorClearance] Contractor letter upload failed:", uploadErr);
+          const detail =
+            uploadErr instanceof Error && uploadErr.message.length < 160
+              ? uploadErr.message
+              : "Could not upload contractor letter. Use PDF, JPG, or PNG up to 10MB, or submit without a file.";
           throw new TRPCError({
             code: "BAD_REQUEST",
-            message: "Could not upload contractor letter. Check storage configuration or try again without a file.",
+            message: detail,
           });
         }
       }

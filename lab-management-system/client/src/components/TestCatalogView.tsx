@@ -209,27 +209,51 @@ export function TestCatalogView({
             const Icon = category.icon;
 
             return (
-              <section key={category.key}>
+              <section key={category.key} className="first:border-t-0 border-t-2 border-border/40">
                 <div
                   className={cn(
-                    "flex items-center gap-3 px-4 py-3 border-b",
-                    category.bgColor
+                    "sticky top-0 z-10 flex items-center justify-between gap-3 px-4 py-3.5 border-b-2 border-l-4 shadow-sm backdrop-blur-md",
+                    category.bgColor,
+                    category.borderColor,
+                    category.textColor.replace("text-", "border-l-")
                   )}
                 >
-                  <div className={cn("p-2 rounded-lg bg-white/80 shadow-sm shrink-0", category.borderColor, "border")}>
-                    <Icon className={cn("h-4 w-4", category.textColor)} />
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div
+                      className={cn(
+                        "flex h-10 w-10 items-center justify-center rounded-xl shrink-0 border-2 bg-white shadow-sm",
+                        category.borderColor
+                      )}
+                    >
+                      <Icon className={cn("h-5 w-5", category.textColor)} />
+                    </div>
+                    <div className="min-w-0">
+                      <h3
+                        className={cn(
+                          "font-bold text-base leading-tight tracking-tight",
+                          category.textColor
+                        )}
+                      >
+                        {lang === "ar" ? `${category.nameAr} — ${category.nameEn}` : `${category.nameEn} Tests`}
+                      </h3>
+                      <p className={cn("text-[11px] font-medium uppercase tracking-wider mt-0.5 opacity-80", category.textColor)}>
+                        {lang === "ar" ? "فئة الاختبارات" : "Test category"}
+                      </p>
+                    </div>
                   </div>
-                  <div className="min-w-0">
-                    <h3 className="font-semibold text-sm">
-                      {lang === "ar" ? `${category.nameAr} — ${category.nameEn}` : `${category.nameEn} Tests`}
-                    </h3>
-                    <p className="text-xs text-muted-foreground">
-                      {category.tests.length} {lang === "ar" ? "اختبار" : "tests"}
-                    </p>
-                  </div>
+                  <Badge
+                    variant="outline"
+                    className={cn(
+                      "shrink-0 font-semibold tabular-nums px-2.5 py-1 text-xs border-2 bg-white/90",
+                      category.borderColor,
+                      category.textColor
+                    )}
+                  >
+                    {category.tests.length} {lang === "ar" ? "اختبار" : "tests"}
+                  </Badge>
                 </div>
 
-                <ul className="divide-y divide-border/60">
+                <ul className="divide-y divide-border/60 bg-background">
                   {category.tests.map((test, idx) => (
                     <li
                       key={test.code}

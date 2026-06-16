@@ -1,5 +1,6 @@
 import "dotenv/config";
 import express from "express";
+import path from "path";
 import { createServer } from "http";
 import net from "net";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
@@ -106,6 +107,9 @@ async function startServer() {
       createContext,
     })
   );
+
+  // Uploaded files (clearance letters, attachments) when using local disk storage
+  app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
 
   // development mode uses Vite, production mode uses static files
   if (process.env.NODE_ENV === "development") {

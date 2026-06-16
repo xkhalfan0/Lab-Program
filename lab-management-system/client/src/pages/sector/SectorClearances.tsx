@@ -4,6 +4,51 @@ import { SectorLayout, useSectorLang } from "./SectorLayout";
 import { FileCheck2, CheckCircle2, Clock, Circle, ChevronLeft, ChevronRight, Eye, ExternalLink, Search, X, Plus, Upload, FileText, AlertCircle, Calendar } from "lucide-react";
 import { Loader2 } from "lucide-react";
 
+const CLEARANCE_LETTER_MAX_BYTES = 10 * 1024 * 1024;
+const CLEARANCE_LETTER_ACCEPT = "application/pdf,image/jpeg,image/png,.pdf,.jpg,.jpeg,.png";
+
+function validateContractorLetterFile(file: File, lang: "ar" | "en"): string | null {
+  const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
+  const allowedExt = ["pdf", "jpg", "jpeg", "png"];
+  const allowedMime = ["application/pdf", "image/jpeg", "image/png", ""];
+
+  if (!allowedExt.includes(ext) && !allowedMime.includes(file.type)) {
+    return lang === "ar"
+      ? "نوع الملف غير مدعوم. استخدم PDF أو JPG أو PNG."
+      : "Unsupported file type. Use PDF, JPG, or PNG.";
+  }
+  if (file.size > CLEARANCE_LETTER_MAX_BYTES) {
+    return lang === "ar"
+      ? "حجم الملف كبير جداً. الحد الأقصى 10 ميغابايت."
+      : "File is too large. Maximum size is 10 MB.";
+  }
+  if (file.size <= 0) {
+    return lang === "ar" ? "الملف فارغ." : "The file is empty.";
+  }
+  return null;
+}
+
+async function readFileAsBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result;
+      if (typeof result !== "string") {
+        reject(new Error("Could not read file"));
+        return;
+      }
+      const payload = result.includes(",") ? result.split(",")[1] : result;
+      if (!payload) {
+        reject(new Error("Could not encode file"));
+        return;
+      }
+      resolve(payload);
+    };
+    reader.onerror = () => reject(new Error("Could not read file"));
+    reader.readAsDataURL(file);
+  });
+}
+
 const t = {
   ar: {
     title: "براءة الذمة",
@@ -24,7 +69,7 @@ const t = {
     selectContract: "اختر العقد",
     contractLabel: "العقد",
     contractorLetter: "كتاب المقاول",
-    contractorLetterHint: "ارفع كتاب المقاول الرسمي (PDF أو صورة)",
+    contractorLetterHint: "ارفع كتاب المقاول الرسمي (PDF أو صورة — حتى 10 م.ب)",
     uploadFile: "رفع ملف",
     fileSelected: "تم اختيار الملف",
     notesLabel: "ملاحظات",
@@ -89,7 +134,7 @@ const t = {
     selectContract: "Select Contract",
     contractLabel: "Contract",
     contractorLetter: "Contractor Letter",
-    contractorLetterHint: "Upload the official contractor letter (PDF or image)",
+    contractorLetterHint: "Upload the official contractor letter (PDF or image — max 10 MB)",
     uploadFile: "Upload File",
     fileSelected: "File selected",
     notesLabel: "Notes",
@@ -186,8 +231,16 @@ export default function SectorClearances() {
     onError: (err) => {
       if (err.message?.includes("CONFLICT") || err.message?.includes("already exists")) {
         setSubmitError(T.errorConflict);
-      } else if (err.message?.includes("upload contractor letter")) {
-        setSubmitError(lang === "ar" ? "تعذر رفع كتاب المقاول. تحقق من الإعدادات أو أرسل الطلب بدون ملف." : err.message);
+      } else if (err.message?.includes("upload contractor letter") || err.message?.includes("Invalid file") || err.message?.includes("File too large") || err.message?.includes("Empty file")) {
+        setSubmitError(
+          lang === "ar" && err.message.includes("Invalid file")
+            ? "نوع الملف غير مدعوم. استخدم PDF أو JPG أو PNG."
+            : lang === "ar" && err.message.includes("File too large")
+              ? "حجم الملف كبير جداً. الحد الأقصى 10 ميغابايت."
+              : lang === "ar" && (err.message.includes("upload contractor letter") || err.message.includes("Could not upload"))
+                ? "تعذر رفع كتاب المقاول. تحقق من نوع الملف (PDF/صورة) أو أرسل الطلب بدون ملف."
+                : err.message
+        );
       } else if (err.message && err.message.length < 120) {
         setSubmitError(err.message);
       } else {
@@ -202,12 +255,18 @@ export default function SectorClearances() {
     let base64: string | undefined;
     let fileName: string | undefined;
     if (contractorLetterFile) {
-      const reader = new FileReader();
-      base64 = await new Promise<string>((resolve) => {
-        reader.onload = (e) => resolve((e.target?.result as string).split(",")[1]);
-        reader.readAsDataURL(contractorLetterFile);
-      });
-      fileName = contractorLetterFile.name;
+      const fileError = validateContractorLetterFile(contractorLetterFile, lang);
+      if (fileError) {
+        setSubmitError(fileError);
+        return;
+      }
+      try {
+        base64 = await readFileAsBase64(contractorLetterFile);
+        fileName = contractorLetterFile.name;
+      } catch {
+        setSubmitError(lang === "ar" ? "تعذر قراءة الملف. حاول مرة أخرى." : "Could not read the file. Please try again.");
+        return;
+      }
     }
     createRequest.mutate({
       contractId: selectedContractId as number,
@@ -215,6 +274,23 @@ export default function SectorClearances() {
       contractorLetterFileName: fileName,
       notes: requestNotes || undefined,
     });
+  };
+
+  const handleContractorLetterChange = (file: File | null) => {
+    if (!file) {
+      setContractorLetterFile(null);
+      setSubmitError("");
+      return;
+    }
+    const fileError = validateContractorLetterFile(file, lang);
+    if (fileError) {
+      setContractorLetterFile(null);
+      setSubmitError(fileError);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      return;
+    }
+    setSubmitError("");
+    setContractorLetterFile(file);
   };
 
   const markRead = trpc.sector.markClearanceRead.useMutation({
@@ -590,9 +666,9 @@ export default function SectorClearances() {
               <input
                 ref={fileInputRef}
                 type="file"
-                accept=".pdf,.jpg,.jpeg,.png"
+                accept={CLEARANCE_LETTER_ACCEPT}
                 className="hidden"
-                onChange={(e) => setContractorLetterFile(e.target.files?.[0] ?? null)}
+                onChange={(e) => handleContractorLetterChange(e.target.files?.[0] ?? null)}
               />
               <button
                 onClick={() => fileInputRef.current?.click()}

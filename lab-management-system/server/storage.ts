@@ -1,9 +1,16 @@
-// Preconfigured storage helpers for Manus WebDev templates
-// Uses the Biz-provided storage proxy (Authorization: Bearer <token>)
+// Storage helpers — Forge proxy when configured, local disk fallback otherwise.
 
-import { ENV } from './_core/env';
+import fs from "fs/promises";
+import path from "path";
+import { ENV } from "./_core/env";
 
 type StorageConfig = { baseUrl: string; apiKey: string };
+
+const UPLOADS_ROOT = path.join(process.cwd(), "uploads");
+
+function hasForgeStorage(): boolean {
+  return Boolean(ENV.forgeApiUrl?.trim() && ENV.forgeApiKey?.trim());
+}
 
 function getStorageConfig(): StorageConfig {
   const baseUrl = ENV.forgeApiUrl;
@@ -49,6 +56,10 @@ function normalizeKey(relKey: string): string {
   return relKey.replace(/^\/+/, "");
 }
 
+function toPublicUploadUrl(key: string): string {
+  return `/uploads/${key.replace(/\\/g, "/")}`;
+}
+
 function toFormData(
   data: Buffer | Uint8Array | string,
   contentType: string,
@@ -57,7 +68,7 @@ function toFormData(
   const blob =
     typeof data === "string"
       ? new Blob([data], { type: contentType })
-      : new Blob([data as any], { type: contentType });
+      : new Blob([data as BlobPart], { type: contentType });
   const form = new FormData();
   form.append("file", blob, fileName || "file");
   return form;
@@ -67,10 +78,22 @@ function buildAuthHeaders(apiKey: string): HeadersInit {
   return { Authorization: `Bearer ${apiKey}` };
 }
 
-export async function storagePut(
+async function localStoragePut(
+  relKey: string,
+  data: Buffer | Uint8Array | string
+): Promise<{ key: string; url: string }> {
+  const key = normalizeKey(relKey);
+  const filePath = path.join(UPLOADS_ROOT, key);
+  await fs.mkdir(path.dirname(filePath), { recursive: true });
+  const buf = typeof data === "string" ? Buffer.from(data) : Buffer.from(data);
+  await fs.writeFile(filePath, buf);
+  return { key, url: toPublicUploadUrl(key) };
+}
+
+async function forgeStoragePut(
   relKey: string,
   data: Buffer | Uint8Array | string,
-  contentType = "application/octet-stream"
+  contentType: string
 ): Promise<{ key: string; url: string }> {
   const { baseUrl, apiKey } = getStorageConfig();
   const key = normalizeKey(relKey);
@@ -92,9 +115,28 @@ export async function storagePut(
   return { key, url };
 }
 
-export async function storageGet(relKey: string): Promise<{ key: string; url: string; }> {
-  const { baseUrl, apiKey } = getStorageConfig();
+export async function storagePut(
+  relKey: string,
+  data: Buffer | Uint8Array | string,
+  contentType = "application/octet-stream"
+): Promise<{ key: string; url: string }> {
+  if (!hasForgeStorage()) {
+    return localStoragePut(relKey, data);
+  }
+  try {
+    return await forgeStoragePut(relKey, data, contentType);
+  } catch (err) {
+    console.warn("[storagePut] Forge upload failed, falling back to local disk:", err);
+    return localStoragePut(relKey, data);
+  }
+}
+
+export async function storageGet(relKey: string): Promise<{ key: string; url: string }> {
   const key = normalizeKey(relKey);
+  if (!hasForgeStorage()) {
+    return { key, url: toPublicUploadUrl(key) };
+  }
+  const { baseUrl, apiKey } = getStorageConfig();
   return {
     key,
     url: await buildDownloadUrl(baseUrl, key, apiKey),
