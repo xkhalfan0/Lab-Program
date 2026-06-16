@@ -21,7 +21,7 @@ import { SAMPLE_TYPE_LABELS } from "@/lib/labTypes";
 import {
   ShieldCheck, CheckCircle, XCircle, RotateCcw, ClipboardCheck,
   BadgeCheck, FlaskConical, Clock, DollarSign, CheckCircle2,
-  History, ChevronRight, ExternalLink, AlertCircle,
+  History, ChevronRight, ExternalLink,
 } from "lucide-react";
 import { useState, useEffect, type ReactElement } from "react";
 import { useAuth } from "@/_core/hooks/useAuth";
@@ -708,6 +708,17 @@ export default function QCReview() {
     result?.managerReviewedAt ||
     null;
 
+  const testTypeDisplay =
+    lang === "ar"
+      ? ((dist as { testNameAr?: string } | undefined)?.testNameAr ?? dist?.testName ?? specializedResult?.testTypeCode ?? "—")
+      : ((dist as { testNameEn?: string } | undefined)?.testNameEn ?? dist?.testName ?? specializedResult?.testTypeCode ?? "—");
+  const contractorDisplay =
+    selectedSample?.contractorName ?? specializedResult?.contractorName ?? (dist as { contractorName?: string } | undefined)?.contractorName ?? "—";
+  const contractNameDisplay =
+    selectedSample?.contractName ?? specializedResult?.projectName ?? "—";
+  const contractNumberDisplay =
+    selectedSample?.contractNumber ?? specializedResult?.contractNo ?? "—";
+
   const chartsData = result?.chartsData as any;
   const rawValues: number[] = chartsData?.values ?? [];
   const avg = parseFloat(result?.average ?? "0");
@@ -913,60 +924,40 @@ export default function QCReview() {
             <div className="space-y-5 mt-2">
               {/* Pass / Fail banner */}
               {(isPass || isFail) && (
-                <div className={`rounded-xl p-4 flex items-center gap-4 border-2 ${
+                <div className={`rounded-lg px-3 py-2 flex items-center gap-2 border ${
                   isPass
-                    ? "bg-green-50 border-green-300 text-green-800"
-                    : "bg-red-50 border-red-300 text-red-800"
+                    ? "bg-green-50 border-green-200 text-green-800"
+                    : "bg-red-50 border-red-200 text-red-800"
                 }`}>
                   {isPass ? (
-                    <CheckCircle2 className="w-10 h-10 text-green-600 shrink-0" />
+                    <CheckCircle2 className="w-5 h-5 shrink-0 text-green-600" />
                   ) : (
-                    <AlertCircle className="w-10 h-10 text-red-600 shrink-0" />
+                    <XCircle className="w-5 h-5 shrink-0 text-red-600" />
                   )}
-                  <div>
-                    <p className="text-lg font-bold">
-                      {isPass
-                        ? (lang === "ar" ? "✓ النتيجة: ناجح — PASS" : "✓ Result: PASS")
-                        : (lang === "ar" ? "✗ النتيجة: راسب — FAIL" : "✗ Result: FAIL")}
-                    </p>
-                    <p className="text-xs opacity-80 mt-0.5">
-                      {lang === "ar"
-                        ? "الحكم بناءً على نتائج الاختبار المُدخلة"
-                        : "Based on submitted test results"}
-                    </p>
-                  </div>
+                  <span className="text-sm font-semibold">
+                    {isPass
+                      ? (lang === "ar" ? "PASS — ناجح" : "PASS")
+                      : (lang === "ar" ? "FAIL — راسب" : "FAIL")}
+                  </span>
                 </div>
               )}
 
-              {/* Specialized result summary (for tests like Marshall, soil proctor, etc.) */}
-              {specializedResult && (
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-xs space-y-1">
-                  <div className="flex items-center justify-between gap-2 flex-wrap">
-                    <p className="font-semibold text-blue-800">
-                      {lang === "ar" ? "نتيجة الاختبار التخصصي" : "Specialized Test Result"}
-                    </p>
-                    <span className={`px-3 py-1 rounded-full text-xs font-bold ${
-                      specializedResult.overallResult === "pass" ? "bg-green-100 text-green-700 border border-green-300" :
-                      specializedResult.overallResult === "fail" ? "bg-red-100 text-red-700 border border-red-300" :
-                      "bg-gray-100 text-gray-600 border border-gray-200"
-                    }`}>
-                      {specializedResult.overallResult === "pass" ? (lang === "ar" ? "ناجح — PASS" : "PASS") :
-                       specializedResult.overallResult === "fail" ? (lang === "ar" ? "راسب — FAIL" : "FAIL") :
-                       (lang === "ar" ? "قيد المراجعة" : "Pending")}
-                    </span>
-                  </div>
-                  <p>
-                    <span className="text-muted-foreground">{lang === "ar" ? "القالب:" : "Template:"}</span>{" "}
-                    <span className="font-medium">{specializedResult.formTemplate}</span>
-                  </p>
-                  {specializedResult.testTypeCode && (
-                    <p>
-                      <span className="text-muted-foreground">{lang === "ar" ? "رمز الاختبار:" : "Test Code:"}</span>{" "}
-                      <span className="font-mono">{specializedResult.testTypeCode}</span>
-                    </p>
-                  )}
+              {/* Sample / test context */}
+              <div className="rounded-lg border bg-muted/30 p-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2 text-xs">
+                  {[
+                    { label: lang === "ar" ? "نوع الاختبار" : "Test Type", value: testTypeDisplay },
+                    { label: lang === "ar" ? "المقاول" : "Contractor", value: contractorDisplay },
+                    { label: lang === "ar" ? "اسم العقد" : "Contract Name", value: contractNameDisplay },
+                    { label: lang === "ar" ? "رقم العقد" : "Contract Number", value: contractNumberDisplay },
+                  ].map(({ label, value }) => (
+                    <div key={label}>
+                      <span className="text-muted-foreground">{label}: </span>
+                      <span className="font-medium">{value}</span>
+                    </div>
+                  ))}
                 </div>
-              )}
+              </div>
 
               {/* Stats */}
               {result && (
