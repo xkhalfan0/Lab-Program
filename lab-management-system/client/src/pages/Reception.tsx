@@ -16,7 +16,7 @@ import { trpc } from "@/lib/trpc";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Plus, Search, Eye, Printer, FileText, Lock, Building2, Pencil, X, Trash2, CheckSquare, Package, CalendarIcon, AlertTriangle, RotateCcw } from "lucide-react";
+import { Search, Eye, Printer, FileText, Lock, Pencil, X, Trash2, CheckSquare, Package, CalendarIcon, AlertTriangle, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState, useMemo, useEffect, type ReactElement, type ReactNode } from "react";
 import { format } from "date-fns";
@@ -201,22 +201,17 @@ const emptyForm = () => ({
 });
 
 function FormSection({
-  step,
   title,
   children,
+  className,
 }: {
-  step: number;
-  title: string;
+  title?: string;
   children: ReactNode;
+  className?: string;
 }) {
   return (
-    <section className="rounded-xl border bg-card p-5 space-y-4 shadow-sm">
-      <div className="flex items-center gap-2.5">
-        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
-          {step}
-        </span>
-        <h2 className="text-sm font-semibold text-foreground">{title}</h2>
-      </div>
+    <section className={cn("space-y-3", className)}>
+      {title ? <h3 className="text-sm font-medium text-foreground">{title}</h3> : null}
       {children}
     </section>
   );
@@ -332,8 +327,8 @@ export default function Reception() {
   const [receptionMode, setReceptionMode] = useState<"new" | "retest">("new");
   const { user } = useAuth();
   const canEditSample = ["admin", "lab_manager", "reception"].includes(user?.role ?? "");
-  const [sampleLookup, setSampleLookup] = useState("");
   const [search, setSearch] = useState("");
+  const [showOrderHistory, setShowOrderHistory] = useState(false);
   const [sectorFilter, setSectorFilter] = useState<string>("all");
   const [taskFilter, setTaskFilter] = useState<"all" | "new" | "incomplete" | "done">("all");
   const [form, setForm] = useState(emptyForm());
@@ -1010,7 +1005,7 @@ export default function Reception() {
   }, 0);
 
   const sampleLookupResults = useMemo(() => {
-    const q = sampleLookup.trim().toLowerCase();
+    const q = search.trim().toLowerCase();
     if (!q || !orders?.length) return [];
     const seen = new Set<number>();
     return orders
@@ -1028,313 +1023,217 @@ export default function Reception() {
         seen.add(o.sampleId);
         return true;
       })
-      .slice(0, 6);
-  }, [orders, sampleLookup]);
+      .slice(0, 5);
+  }, [orders, search]);
 
   return (
     <DashboardLayout>
-      <div className="space-y-5">
-        {/* Page header */}
-        <div className="flex items-start justify-between gap-4 flex-wrap">
+      <div className="space-y-4 max-w-6xl">
+        {/* Header */}
+        <div className="flex items-center justify-between gap-3 flex-wrap">
           <div>
-            <h1 className="text-xl font-bold">{t("reception.registerSample")}</h1>
-            <p className="text-sm text-muted-foreground">
-              {lang === "ar"
-                ? "تسجيل عينة واردة وطلب الاختبارات"
-                : "Log an incoming sample and request tests"}
-            </p>
+            <h1 className="text-xl font-bold">{t("reception.title")}</h1>
+            <p className="text-sm text-muted-foreground">{t("reception.subtitle")}</p>
           </div>
-          <div className="flex items-center gap-2 flex-wrap">
-            <div
-              className="inline-flex items-center rounded-xl border border-border bg-muted/50 p-1 shadow-sm"
-              role="tablist"
-              aria-label={lang === "ar" ? "نوع الاستقبال" : "Reception mode"}
-            >
+          <div className="flex items-center gap-2">
+            <div className="inline-flex rounded-lg border bg-muted/40 p-0.5">
               {([
-                { id: "new" as const, icon: Plus, labelAr: "عينة جديدة", labelEn: "New sample" },
-                { id: "retest" as const, icon: RotateCcw, labelAr: "إعادة اختبار", labelEn: "Retest" },
-              ]).map(({ id, icon: Icon, labelAr, labelEn }) => {
-                const active = receptionMode === id;
-                return (
-                  <button
-                    key={id}
-                    type="button"
-                    role="tab"
-                    aria-selected={active}
-                    onClick={() => setReceptionMode(id)}
-                    className={cn(
-                      "flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition-all",
-                      active
-                        ? id === "retest"
-                          ? "bg-amber-600 text-white shadow-sm"
-                          : "bg-primary text-primary-foreground shadow-sm"
-                        : "text-muted-foreground hover:bg-background/80 hover:text-foreground"
-                    )}
-                  >
-                    <Icon className="w-4 h-4 shrink-0" />
-                    <span>{lang === "ar" ? labelAr : labelEn}</span>
-                  </button>
-                );
-              })}
+                { id: "new" as const, labelAr: "عينة جديدة", labelEn: "New" },
+                { id: "retest" as const, labelAr: "إعادة", labelEn: "Retest" },
+              ]).map(({ id, labelAr, labelEn }) => (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => setReceptionMode(id)}
+                  className={cn(
+                    "rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
+                    receptionMode === id
+                      ? "bg-background text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  {lang === "ar" ? labelAr : labelEn}
+                </button>
+              ))}
             </div>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="gap-1.5"
-              onClick={() => openTestCatalogPrint()}
-            >
-              <FileText className="w-4 h-4" />
-              {lang === "ar" ? "طباعة قائمة الأسعار" : "Print Price List"}
+            <Button type="button" variant="outline" size="sm" className="gap-1.5" onClick={() => openTestCatalogPrint()}>
+              <FileText className="w-3.5 h-3.5" />
+              {lang === "ar" ? "الأسعار" : "Prices"}
             </Button>
           </div>
         </div>
 
-        {/* Sample lookup */}
-        <div className="space-y-2">
-          <div className="relative">
-            <Search className="absolute start-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input
-              placeholder={t("reception.searchPlaceholder")}
-              className="ps-9 h-11"
-              value={sampleLookup}
-              onChange={(e) => setSampleLookup(e.target.value)}
-            />
-          </div>
-          {sampleLookup.trim() && sampleLookupResults.length > 0 && (
-            <div className="rounded-xl border bg-card divide-y shadow-sm">
-              <p className="px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                {sampleLookupResults.length} {lang === "ar" ? "نتيجة" : "matches"}
-              </p>
-              {sampleLookupResults.map((order: any) => (
-                <div key={order.sampleId} className="flex items-center justify-between gap-3 px-4 py-3">
-                  <div className="min-w-0 space-y-0.5">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-mono text-sm font-bold text-primary">{order.sampleCode}</span>
-                      <RetestBadge
-                        retestNumber={order.retestNumber}
-                        originalSampleId={order.originalSampleId}
-                        originalSampleCode={order.originalSampleCode}
-                        retestReason={order.retestReason}
-                        compact
-                      />
-                    </div>
-                    <p className="text-xs text-muted-foreground truncate">
-                      {order.contractorName} · {typeLabel(order.sampleType ?? "")} ·{" "}
-                      {order.createdAt ? format(new Date(order.createdAt), "dd MMM yyyy, HH:mm") : "—"}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-1 shrink-0">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="h-8 gap-1"
-                      onClick={() => setLocation(`/order/${order.id}`)}
-                    >
-                      <Eye className="w-3.5 h-3.5" />
-                      {lang === "ar" ? "عرض" : "View"}
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="h-8 gap-1"
-                      onClick={() => window.open(`/print-receipt/${order.sampleId}`, "_blank")}
-                    >
-                      <Printer className="w-3.5 h-3.5" />
-                      {lang === "ar" ? "إعادة طباعة الوصل" : "Reprint receipt"}
-                    </Button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
+        {/* Search — one bar for lookup + order filter */}
+        <div className="relative">
+          <Search className="absolute start-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <Input
+            placeholder={t("reception.searchPlaceholder")}
+            className="ps-9"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
         </div>
+        {search.trim() && sampleLookupResults.length > 0 && (
+          <div className="rounded-lg border bg-muted/20 divide-y text-sm">
+            {sampleLookupResults.map((order: any) => (
+              <div key={order.sampleId} className="flex items-center justify-between gap-3 px-3 py-2">
+                <div className="min-w-0">
+                  <span className="font-mono font-semibold text-primary">{order.sampleCode}</span>
+                  <span className="text-muted-foreground text-xs ms-2">{order.contractorName}</span>
+                  <RetestBadge
+                    retestNumber={order.retestNumber}
+                    originalSampleId={order.originalSampleId}
+                    originalSampleCode={order.originalSampleCode}
+                    retestReason={order.retestReason}
+                    compact
+                  />
+                </div>
+                <div className="flex gap-1 shrink-0">
+                  <Button type="button" variant="ghost" size="sm" className="h-7 px-2" onClick={() => setLocation(`/order/${order.id}`)}>
+                    <Eye className="w-3.5 h-3.5" />
+                  </Button>
+                  <Button type="button" variant="ghost" size="sm" className="h-7 px-2" onClick={() => window.open(`/print-receipt/${order.sampleId}`, "_blank")}>
+                    <Printer className="w-3.5 h-3.5" />
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
 
         {receptionMode === "retest" ? (
-          <div className="rounded-xl border bg-card p-5 shadow-sm">
-            <ReceptionRetestPanel
-              onSuccess={() => { setReceptionMode("new"); refetch(); }}
-              onCancel={() => setReceptionMode("new")}
-            />
-          </div>
+          <Card>
+            <CardContent className="p-4">
+              <ReceptionRetestPanel
+                onSuccess={() => { setReceptionMode("new"); refetch(); }}
+                onCancel={() => setReceptionMode("new")}
+              />
+            </CardContent>
+          </Card>
         ) : (
           <form onSubmit={handleSubmit}>
-            <div className="grid grid-cols-1 xl:grid-cols-[1fr_300px] gap-6 items-start">
-              {/* Main form column */}
-              <div className="space-y-5 min-w-0">
-
-                <FormSection
-                  step={1}
-                  title={lang === "ar" ? "المصدر والعقد" : "Source & Contract"}
-                >
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div className="space-y-1.5">
-                      <Label>{t("reception.contractorName")} <span className="text-red-500">*</span></Label>
-                      <Input
-                        readOnly
-                        value={form.contractorName || ""}
-                        placeholder={lang === "ar" ? "يُملأ من العقد" : "Filled from contract"}
-                        className="bg-muted/40"
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label>{t("tests.contractNumber")} <span className="text-red-500">*</span></Label>
-                      {contracts.length > 0 ? (
-                        <Select value={form.contractId} onValueChange={handleContractChange}>
-                          <SelectTrigger>
-                            <SelectValue placeholder={lang === "ar" ? "اختر رقم العقد..." : "Select contract..."} />
-                          </SelectTrigger>
-                          <SelectContent className="max-h-60">
-                            {contracts.map((c: any) => (
-                              <SelectItem key={c.id} value={String(c.id)}>
-                                <span className="font-mono text-xs font-semibold">{c.contractNumber}</span>
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      ) : (
-                        <div className="p-3 bg-amber-50 border border-amber-200 rounded-md text-xs text-amber-700">
-                          {lang === "ar" ? "لا توجد عقود مسجلة." : "No contracts registered."}
+            <Card>
+              <CardContent className="p-0">
+                <div className="grid grid-cols-1 lg:grid-cols-[1fr_260px] divide-y lg:divide-y-0 lg:divide-x">
+                  <div className="p-5 space-y-6">
+                    <FormSection title={lang === "ar" ? "بيانات العينة" : "Sample details"}>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div className="space-y-1.5 sm:col-span-2">
+                          <Label>{t("tests.contractNumber")} <span className="text-red-500">*</span></Label>
+                          {contracts.length > 0 ? (
+                            <Select value={form.contractId} onValueChange={handleContractChange}>
+                              <SelectTrigger>
+                                <SelectValue placeholder={lang === "ar" ? "اختر العقد..." : "Select contract..."} />
+                              </SelectTrigger>
+                              <SelectContent className="max-h-60">
+                                {contracts.map((c: any) => (
+                                  <SelectItem key={c.id} value={String(c.id)}>
+                                    <span className="font-mono text-xs font-semibold">{c.contractNumber}</span>
+                                    <span className="text-muted-foreground text-xs ms-2 truncate">{c.contractName}</span>
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          ) : (
+                            <p className="text-xs text-amber-700">{lang === "ar" ? "لا توجد عقود." : "No contracts."}</p>
+                          )}
                         </div>
-                      )}
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label>{lang === "ar" ? "القطاع" : "Sector"} <span className="text-red-500">*</span></Label>
-                      <Select value={form.sectorKey} onValueChange={handleSectorChange}>
-                        <SelectTrigger>
-                          <SelectValue placeholder={lang === "ar" ? "اختر القطاع..." : "Select sector..."} />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {sectors.filter((s: any) => s.isActive).map((s: any) => (
-                            <SelectItem key={s.sectorKey} value={s.sectorKey}>
-                              {lang === "ar" ? s.nameAr : s.nameEn}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label>{lang === "ar" ? "موقع العينة" : "Sample Location"}</Label>
-                      <Input
-                        placeholder={lang === "ar" ? "مثال: الطابق 3، عمود C2" : "e.g. Floor 3, Column C2"}
-                        value={form.location}
-                        onChange={(e) => setForm({ ...form, location: e.target.value })}
-                      />
-                    </div>
-                  </div>
-                  {form.contractName && (
-                    <p className="text-xs text-muted-foreground">
-                      {t("reception.contractName")}: <span className="font-medium text-foreground">{form.contractName}</span>
-                    </p>
-                  )}
-                </FormSection>
-
-                <FormSection
-                  step={2}
-                  title={lang === "ar" ? "العينة والحالة" : "Sample & Condition"}
-                >
-                  <div className="space-y-4">
-                    <div className="space-y-2">
-                      <Label>{lang === "ar" ? "نوع المادة" : "Material Type"} <span className="text-red-500">*</span></Label>
-                      <div className="flex flex-wrap gap-2">
-                        {CATEGORIES.map(cat => (
-                          <button
-                            key={cat.value}
-                            type="button"
-                            onClick={() => {
-                              setForm(f => ({ ...f, sampleType: cat.value }));
-                              setSelectedTests([]);
-                              setSubtypeFor(null);
-                              setAsphaltKind("");
-                            }}
-                            className={`px-4 py-2 rounded-lg text-sm font-medium transition-all border ${
-                              form.sampleType === cat.value
-                                ? "bg-primary text-primary-foreground border-primary"
-                                : "bg-background text-muted-foreground border-border hover:border-primary/40"
-                            }`}
-                          >
-                            {lang === "ar" ? cat.labelAr : cat.labelEn}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div className="space-y-1.5">
-                        <Label>{t("reception.condition")}</Label>
-                        <Select value={form.condition} onValueChange={(v) => setForm({ ...form, condition: v as any })}>
-                          <SelectTrigger><SelectValue /></SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="good">{t("reception.good")}</SelectItem>
-                            <SelectItem value="damaged">{t("reception.damaged")}</SelectItem>
-                            <SelectItem value="partial">{t("reception.acceptable")}</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="space-y-1.5">
-                        <Label>{t("reception.priority")}</Label>
-                        <Select value={form.priority} onValueChange={(v) => setForm({ ...form, priority: v as any })}>
-                          <SelectTrigger><SelectValue /></SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="low">{lang === "ar" ? "منخفضة" : "Low"}</SelectItem>
-                            <SelectItem value="normal">{lang === "ar" ? "عادية" : "Normal"}</SelectItem>
-                            <SelectItem value="high">{lang === "ar" ? "عالية" : "High"}</SelectItem>
-                            <SelectItem value="urgent">{lang === "ar" ? "عاجلة" : "Urgent"}</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      {isCastingRequired && (
+                        {form.contractId && (
+                          <>
+                            <div className="space-y-1.5">
+                              <Label>{t("reception.contractorName")}</Label>
+                              <Input readOnly value={form.contractorName || "—"} className="bg-muted/30 h-9" />
+                            </div>
+                            <div className="space-y-1.5">
+                              <Label>{t("reception.contractName")}</Label>
+                              <Input readOnly value={form.contractName || "—"} className="bg-muted/30 h-9" />
+                            </div>
+                          </>
+                        )}
                         <div className="space-y-1.5">
-                          <Label className="flex items-center gap-1">
-                            {lang === "ar" ? "تاريخ الصب / أخذ العينة" : "Casting / Sampling Date"}
-                            <span className="text-red-500">*</span>
-                          </Label>
-                          <Popover>
-                            <PopoverTrigger asChild>
-                              <Button variant="outline" className={`w-full justify-start text-left font-normal ${!form.castingDate && "text-muted-foreground"}`}>
-                                <CalendarIcon className="mr-2 h-4 w-4" />
-                                {form.castingDate ? format(form.castingDate, "dd MMM yyyy") : (lang === "ar" ? "اختر التاريخ" : "Select date")}
-                              </Button>
-                            </PopoverTrigger>
-                            <PopoverContent className="w-auto p-0" align="start">
-                              <Calendar
-                                mode="single"
-                                selected={form.castingDate}
-                                onSelect={(d) => setForm(f => ({ ...f, castingDate: d }))}
-                                disabled={(date) => date > new Date()}
-                                captionLayout="dropdown"
-                              />
-                            </PopoverContent>
-                          </Popover>
+                          <Label>{lang === "ar" ? "القطاع" : "Sector"} <span className="text-red-500">*</span></Label>
+                          <Select value={form.sectorKey} onValueChange={handleSectorChange}>
+                            <SelectTrigger className="h-9"><SelectValue placeholder={lang === "ar" ? "اختر..." : "Select..."} /></SelectTrigger>
+                            <SelectContent>
+                              {sectors.filter((s: any) => s.isActive).map((s: any) => (
+                                <SelectItem key={s.sectorKey} value={s.sectorKey}>{lang === "ar" ? s.nameAr : s.nameEn}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
                         </div>
-                      )}
-                      <div className="space-y-1.5">
-                        <Label>{lang === "ar" ? "تاريخ الاستلام" : "Date Received"}</Label>
-                        <Input
-                          readOnly
-                          value={format(new Date(), "dd MMM yyyy, HH:mm")}
-                          className="bg-muted/40"
-                        />
+                        <div className="space-y-1.5">
+                          <Label>{lang === "ar" ? "الموقع" : "Location"}</Label>
+                          <Input className="h-9" placeholder={lang === "ar" ? "اختياري" : "Optional"} value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} />
+                        </div>
+                        <div className="space-y-1.5 sm:col-span-2">
+                          <Label>{lang === "ar" ? "نوع المادة" : "Material"} <span className="text-red-500">*</span></Label>
+                          <div className="flex flex-wrap gap-1.5">
+                            {CATEGORIES.map(cat => (
+                              <button
+                                key={cat.value}
+                                type="button"
+                                onClick={() => {
+                                  setForm(f => ({ ...f, sampleType: cat.value }));
+                                  setSelectedTests([]);
+                                  setSubtypeFor(null);
+                                  setAsphaltKind("");
+                                }}
+                                className={cn(
+                                  "px-3 py-1.5 rounded-md text-xs font-medium border transition-colors",
+                                  form.sampleType === cat.value
+                                    ? "bg-primary text-primary-foreground border-primary"
+                                    : "bg-background border-border text-muted-foreground hover:border-primary/50"
+                                )}
+                              >
+                                {lang === "ar" ? cat.labelAr : cat.labelEn}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label>{t("reception.condition")}</Label>
+                          <Select value={form.condition} onValueChange={(v) => setForm({ ...form, condition: v as any })}>
+                            <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="good">{t("reception.good")}</SelectItem>
+                              <SelectItem value="damaged">{t("reception.damaged")}</SelectItem>
+                              <SelectItem value="partial">{t("reception.acceptable")}</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label>{t("reception.priority")}</Label>
+                          <Select value={form.priority} onValueChange={(v) => setForm({ ...form, priority: v as any })}>
+                            <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="low">{lang === "ar" ? "منخفضة" : "Low"}</SelectItem>
+                              <SelectItem value="normal">{lang === "ar" ? "عادية" : "Normal"}</SelectItem>
+                              <SelectItem value="high">{lang === "ar" ? "عالية" : "High"}</SelectItem>
+                              <SelectItem value="urgent">{lang === "ar" ? "عاجلة" : "Urgent"}</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        {isCastingRequired && (
+                          <div className="space-y-1.5 sm:col-span-2">
+                            <Label>{lang === "ar" ? "تاريخ الصب" : "Casting date"} <span className="text-red-500">*</span></Label>
+                            <Popover>
+                              <PopoverTrigger asChild>
+                                <Button variant="outline" className={cn("w-full h-9 justify-start font-normal", !form.castingDate && "text-muted-foreground")}>
+                                  <CalendarIcon className="mr-2 h-4 w-4" />
+                                  {form.castingDate ? format(form.castingDate, "dd MMM yyyy") : (lang === "ar" ? "اختر..." : "Pick date")}
+                                </Button>
+                              </PopoverTrigger>
+                              <PopoverContent className="w-auto p-0" align="start">
+                                <Calendar mode="single" selected={form.castingDate} onSelect={(d) => setForm(f => ({ ...f, castingDate: d }))} disabled={(date) => date > new Date()} captionLayout="dropdown" />
+                              </PopoverContent>
+                            </Popover>
+                          </div>
+                        )}
                       </div>
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label>{t("common.notes")}</Label>
-                      <Textarea
-                        placeholder={lang === "ar" ? "ملاحظات إضافية..." : "Additional notes..."}
-                        rows={2}
-                        value={form.notes}
-                        onChange={(e) => setForm({ ...form, notes: e.target.value })}
-                      />
-                    </div>
-                  </div>
-                </FormSection>
+                    </FormSection>
 
-                <FormSection
-                  step={3}
-                  title={lang === "ar" ? "الاختبارات المطلوبة" : "Tests Requested"}
-                >
-                  <div className="space-y-5">
+                    <FormSection title={lang === "ar" ? "الاختبارات" : "Tests"} className="border-t pt-5">
+                      <div className="space-y-4">
                 {form.sampleType === "asphalt" && (
                   <div className="space-y-4">
                     <Label className="flex items-center gap-2 text-base font-semibold text-foreground">
@@ -1738,73 +1637,59 @@ export default function Reception() {
 
                   </div>
                 </FormSection>
-              </div>
-
-              {/* Summary sidebar */}
-              <aside className="xl:sticky xl:top-4 space-y-4">
-                <div className="rounded-xl bg-primary text-primary-foreground p-4 shadow-md">
-                  <p className="text-[11px] font-medium uppercase tracking-wide opacity-80">
-                    {lang === "ar" ? "رمز العينة (تلقائي)" : "Sample Code (auto)"}
-                  </p>
-                  <p className="font-mono text-lg font-bold mt-1 tracking-wide">
-                    {lang === "ar" ? "يُولَّد عند التسجيل" : "Generated on save"}
-                  </p>
-                </div>
-                <div className="rounded-xl border bg-card p-4 space-y-3 shadow-sm">
-                  <div className="space-y-2 text-sm">
-                    <div className="flex justify-between gap-2">
-                      <span className="text-muted-foreground">{lang === "ar" ? "المادة" : "Material"}</span>
-                      <span className="font-medium text-end">{form.sampleType ? typeLabel(form.sampleType) : "—"}</span>
-                    </div>
-                    <div className="flex justify-between gap-2">
-                      <span className="text-muted-foreground">{t("reception.quantity")}</span>
-                      <span className="font-medium">{totalSpecimens > 0 ? `${totalSpecimens} ${lang === "ar" ? "عينة" : "specimens"}` : "—"}</span>
-                    </div>
-                    <div className="flex justify-between gap-2">
-                      <span className="text-muted-foreground">{lang === "ar" ? "اختبارات محددة" : "Tests selected"}</span>
-                      <span className="font-medium">{selectedTests.length || "—"}</span>
-                    </div>
-                    <div className="flex justify-between gap-2 pt-2 border-t">
-                      <span className="font-semibold">{lang === "ar" ? "الإجمالي" : "Total"}</span>
-                      <span className="font-bold text-primary">{totalPrice > 0 ? `${totalPrice.toFixed(0)} AED` : "—"}</span>
-                    </div>
                   </div>
-                  {hasInvalidQtyTests && selectedTests.length > 0 && (
-                    <p className="text-xs text-amber-700 flex items-start gap-1.5">
-                      <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
-                      {lang === "ar" ? "أصلح كميات الاختبارات قبل التسجيل" : "Fix test quantities before registering"}
-                    </p>
-                  )}
-                  <Button
-                    type="submit"
-                    className="w-full gap-2"
-                    size="lg"
-                    disabled={createOrder.isPending || selectedTests.length === 0 || hasInvalidQtyTests}
-                  >
-                    <Printer className="w-4 h-4" />
-                    {createOrder.isPending
-                      ? (lang === "ar" ? "جاري التسجيل..." : "Registering...")
-                      : (lang === "ar" ? "تسجيل وطباعة الوصل" : "Register & Print Receipt")}
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="w-full text-muted-foreground"
-                    onClick={resetRegistrationForm}
-                  >
-                    {lang === "ar" ? "مسح النموذج" : "Clear form"}
-                  </Button>
+
+                  <aside className="p-5 bg-muted/20 space-y-4 lg:sticky lg:top-4 lg:self-start">
+                    <div className="text-sm space-y-2">
+                      <p className="text-xs text-muted-foreground">{lang === "ar" ? "رمز العينة" : "Sample code"}</p>
+                      <p className="font-mono text-sm text-muted-foreground">{lang === "ar" ? "يُولَّد تلقائياً" : "Auto on save"}</p>
+                    </div>
+                    <div className="space-y-2 text-sm border-t pt-3">
+                      <div className="flex justify-between gap-2">
+                        <span className="text-muted-foreground">{lang === "ar" ? "المادة" : "Material"}</span>
+                        <span className="font-medium">{form.sampleType ? typeLabel(form.sampleType) : "—"}</span>
+                      </div>
+                      <div className="flex justify-between gap-2">
+                        <span className="text-muted-foreground">{lang === "ar" ? "الاختبارات" : "Tests"}</span>
+                        <span className="font-medium">{selectedTests.length || "—"}</span>
+                      </div>
+                      <div className="flex justify-between gap-2 pt-2 border-t font-semibold">
+                        <span>{lang === "ar" ? "الإجمالي" : "Total"}</span>
+                        <span className="text-primary">{totalPrice > 0 ? `${totalPrice.toFixed(0)} AED` : "—"}</span>
+                      </div>
+                    </div>
+                    {hasInvalidQtyTests && selectedTests.length > 0 && (
+                      <p className="text-xs text-amber-700">{lang === "ar" ? "أصلح الكميات أولاً" : "Fix quantities first"}</p>
+                    )}
+                    <Button type="submit" className="w-full" disabled={createOrder.isPending || selectedTests.length === 0 || hasInvalidQtyTests}>
+                      {createOrder.isPending
+                        ? (lang === "ar" ? "جاري..." : "Saving...")
+                        : (lang === "ar" ? "تسجيل وطباعة" : "Register & print")}
+                    </Button>
+                    <button type="button" className="w-full text-xs text-muted-foreground hover:text-foreground" onClick={resetRegistrationForm}>
+                      {lang === "ar" ? "مسح" : "Clear"}
+                    </button>
+                  </aside>
                 </div>
-              </aside>
-            </div>
+              </CardContent>
+            </Card>
           </form>
         )}
 
-        {/* Orders history */}
-        <div className="border-t pt-5 space-y-4">
-          <h2 className="text-base font-semibold">{lang === "ar" ? "سجل الأوردرات" : "Order History"}</h2>
+        {/* Orders — collapsed by default */}
+        <div className="pt-2">
+          <button
+            type="button"
+            onClick={() => setShowOrderHistory(v => !v)}
+            className="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground"
+          >
+            <ChevronRight className={cn("w-4 h-4 transition-transform", showOrderHistory && "rotate-90")} />
+            {lang === "ar" ? "سجل الأوردرات" : "Order history"} ({orders?.length ?? 0})
+          </button>
+        </div>
 
+        {showOrderHistory && (
+        <div className="space-y-3">
         {/* Task Filter Buttons */}
         <div className="flex items-center gap-2 flex-wrap">
           {[
@@ -1831,31 +1716,21 @@ export default function Reception() {
           ))}
         </div>
 
-        {/* Search + Sector Filter */}
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="relative flex-1 min-w-[200px] max-w-sm">
-            <Search className="absolute start-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input placeholder={lang === "ar" ? "بحث بالأوردر أو المقاول..." : "Search by order or contractor..."}
-              className="ps-9" value={search} onChange={(e) => setSearch(e.target.value)} />
-          </div>
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <span className="text-xs text-muted-foreground flex items-center gap-1">
-              <Building2 className="w-3.5 h-3.5" />
-              {lang === "ar" ? "القطاع:" : "Sector:"}
-            </span>
-            <button
-              onClick={() => setSectorFilter("all")}
-              className={`px-3 py-1 rounded-full text-xs font-medium transition-all border ${sectorFilter === "all" ? "bg-primary text-primary-foreground border-primary shadow-sm" : "bg-background text-muted-foreground border-border hover:border-primary/50"}`}>
-              {lang === "ar" ? "الكل" : "All"}
+        {/* Sector Filter */}
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <span className="text-xs text-muted-foreground">{lang === "ar" ? "القطاع:" : "Sector:"}</span>
+          <button
+            onClick={() => setSectorFilter("all")}
+            className={`px-2.5 py-0.5 rounded-full text-xs border ${sectorFilter === "all" ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground"}`}>
+            {lang === "ar" ? "الكل" : "All"}
+          </button>
+          {sectors.filter((s: any) => s.isActive).map((sec: any) => (
+            <button key={sec.sectorKey}
+              onClick={() => setSectorFilter(sec.sectorKey)}
+              className={`px-2.5 py-0.5 rounded-full text-xs border ${sectorFilter === sec.sectorKey ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground"}`}>
+              {lang === "ar" ? sec.nameAr : sec.nameEn}
             </button>
-            {sectors.filter((s: any) => s.isActive).map((sec: any) => (
-              <button key={sec.sectorKey}
-                onClick={() => setSectorFilter(sec.sectorKey)}
-                className={`px-3 py-1 rounded-full text-xs font-medium transition-all border ${sectorFilter === sec.sectorKey ? "bg-blue-600 text-white border-blue-600 shadow-sm" : "bg-background text-muted-foreground border-border hover:border-blue-400"}`}>
-                {lang === "ar" ? sec.nameAr : sec.nameEn}
-              </button>
-            ))}
-          </div>
+          ))}
         </div>
 
         {/* Orders Table */}
@@ -1954,7 +1829,8 @@ export default function Reception() {
             )}
           </CardContent>
         </Card>
-      </div>
+        </div>
+        )}
 
       {/* ─── Edit Order Dialog ─────────────────────────────────────────────── */}
       <Dialog open={editOpen} onOpenChange={(v) => { setEditOpen(v); if (!v) setEditingOrder(null); }}>
