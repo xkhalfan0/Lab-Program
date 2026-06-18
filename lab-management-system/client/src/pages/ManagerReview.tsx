@@ -13,6 +13,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { trpc } from "@/lib/trpc";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useDeletionStatus } from "@/hooks/useDeletionStatus";
@@ -29,8 +30,6 @@ import {
   Building2,
   ClipboardCheck,
   FileText,
-  Clock,
-  History,
   ChevronRight,
   Loader2,
 } from "lucide-react";
@@ -53,7 +52,7 @@ function sectorLabel(val: string | null | undefined, lang: string) {
 }
 
 // ─── Task state helpers ───────────────────────────────────────────────────────
-type TaskFilter = "all" | "new" | "incomplete" | "completed";
+type ListTab = "pending" | "done";
 
 function getSampleTaskState(sample: any): "new" | "incomplete" | "completed" {
   if (sample.status === "reviewed" || sample.status === "approved" || sample.status === "qc_passed" || sample.status === "qc_failed" || sample.status === "clearance_issued" || sample.status === "rejected") {
@@ -141,13 +140,18 @@ function ManagerReviewActiveSampleCard({
         <div className="space-y-1.5 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <p className="font-mono text-sm font-bold text-primary">{sample.sampleCode}</p>
+            <StatusBadge status={sample.status} />
+            {state === "new" && (
+              <Badge className="bg-red-100 text-red-700 border-red-200 gap-1 text-xs">
+                <span className="w-1.5 h-1.5 rounded-full bg-red-500 inline-block animate-pulse" />
+                {lang === "ar" ? "جديدة" : "New"}
+              </Badge>
+            )}
             <RetestBadge
               retestNumber={(sample as { retestNumber?: number }).retestNumber}
               originalSampleId={(sample as { originalSampleId?: number }).originalSampleId}
               compact
             />
-            <TaskStateBadge state={state} lang={lang} />
-            <StatusBadge status={sample.status} />
             {PendingDeletionBadge}
             {(sample as any).sector && (
               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200">
@@ -273,29 +277,6 @@ function ManagerReviewArchiveSampleCard({
   );
 }
 
-function TaskStateBadge({ state, lang }: { state: "new" | "incomplete" | "completed"; lang: string }) {
-  if (state === "new")
-    return (
-      <Badge className="bg-red-100 text-red-700 border-red-200 gap-1 text-xs">
-        <span className="w-1.5 h-1.5 rounded-full bg-red-500 inline-block animate-pulse" />
-        {lang === "ar" ? "جديدة" : "New"}
-      </Badge>
-    );
-  if (state === "incomplete")
-    return (
-      <Badge className="bg-amber-100 text-amber-700 border-amber-200 gap-1 text-xs">
-        <Clock className="w-3 h-3" />
-        {lang === "ar" ? "غير مكتملة" : "Incomplete"}
-      </Badge>
-    );
-  return (
-    <Badge className="bg-green-100 text-green-700 border-green-200 gap-1 text-xs">
-      <CheckCircle2 className="w-3 h-3" />
-      {lang === "ar" ? "مُنجزة" : "Completed"}
-    </Badge>
-  );
-}
-
 function isConcreteCubeReport(
   dist: { testType?: string } | undefined,
   legacyResult: { chartsData?: unknown } | undefined
@@ -346,8 +327,7 @@ export default function ManagerReview() {
   const [selectedResult, setSelectedResult] = useState<any>(null);
   const [comments, setComments] = useState("");
   const [decision, setDecision] = useState<"approved" | "needs_revision" | "rejected" | null>(null);
-  const [taskFilter, setTaskFilter] = useState<TaskFilter>("new");
-  const [showHistory, setShowHistory] = useState(false);
+  const [listTab, setListTab] = useState<ListTab>("pending");
   const [listSearch, setListSearch] = useState("");
   const [sectorFilter, setSectorFilter] = useState("all");
   const [sampleTypeFilter, setSampleTypeFilter] = useState("all");
@@ -404,28 +384,25 @@ export default function ManagerReview() {
   });
 
   // Count by state
-  const newCount = reviewSamples.filter(s => getSampleTaskState(s) === "new").length;
-  const incompleteCount = reviewSamples.filter(s => getSampleTaskState(s) === "incomplete").length;
-  const completedCount = reviewSamples.filter(s => getSampleTaskState(s) === "completed").length;
+  const pendingCount = reviewSamples.filter(s => getSampleTaskState(s) !== "completed").length;
+  const doneCount = reviewSamples.filter(s => getSampleTaskState(s) === "completed").length;
 
   const listFilters = useMemo(
     () => ({ search: listSearch, sector: sectorFilter, sampleType: sampleTypeFilter }),
     [listSearch, sectorFilter, sampleTypeFilter],
   );
 
-  // Filtered list
-  const filteredSamples = useMemo(() => {
-    const byTask = sortedReviewSamples.filter((s) => {
-      if (taskFilter === "all") return true;
-      return getSampleTaskState(s) === taskFilter;
-    });
-    return applySampleFilters(byTask, listFilters);
-  }, [sortedReviewSamples, taskFilter, listFilters]);
+  const pendingSamples = useMemo(() => {
+    const pending = sortedReviewSamples.filter(s => getSampleTaskState(s) !== "completed");
+    return applySampleFilters(pending, listFilters);
+  }, [sortedReviewSamples, listFilters]);
 
-  const activeSamples = filteredSamples.filter(s => getSampleTaskState(s) !== "completed");
-  const awaitingReviewSamples = activeSamples.filter(s => s.status === "awaiting_review");
-  const otherActiveSamples = activeSamples.filter(s => s.status !== "awaiting_review");
-  const completedSamples = filteredSamples.filter(s => getSampleTaskState(s) === "completed");
+  const doneSamples = useMemo(() => {
+    const done = sortedReviewSamples.filter(s => getSampleTaskState(s) === "completed");
+    return applySampleFilters(done, listFilters);
+  }, [sortedReviewSamples, listFilters]);
+
+  const tabSamples = listTab === "pending" ? pendingSamples : doneSamples;
 
   const handleOpenSample = (sample: any) => {
     setSelectedSample(sample);
@@ -526,7 +503,16 @@ export default function ManagerReview() {
     window.open(reportUrl, "_blank");
   };
 
-  const totalActive = newCount + incompleteCount;
+  const tabTriggerClass =
+    "group flex-1 min-w-0 rounded-lg border border-transparent px-4 py-3 text-sm font-semibold transition-all " +
+    "text-muted-foreground hover:text-foreground hover:bg-white/60 " +
+    "data-[state=active]:bg-white data-[state=active]:text-primary data-[state=active]:shadow-sm " +
+    "data-[state=active]:border-slate-200 data-[state=active]:ring-1 data-[state=active]:ring-primary/20 " +
+    "data-[state=active]:[&_svg]:text-primary";
+
+  const tabBadgeClass =
+    "ms-2 inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full px-1.5 text-[10px] font-bold " +
+    "bg-slate-200 text-slate-700 group-data-[state=active]:bg-primary/15 group-data-[state=active]:text-primary";
 
   return (
     <DashboardLayout>
@@ -540,52 +526,21 @@ export default function ManagerReview() {
           </p>
         </div>
 
-        {/* ── Filter Buttons ──────────────────────────────────────────────── */}
-        <div className="flex flex-wrap gap-2">
-          <button
-            onClick={() => setTaskFilter("new")}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg border text-sm font-medium transition-all ${
-              taskFilter === "new"
-                ? "bg-red-600 text-white border-red-600 shadow-sm"
-                : "bg-background text-muted-foreground border-border hover:border-red-400"
-            }`}
-          >
-            <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-            {lang === "ar" ? "جديدة" : "New"}
-            <span className={`px-1.5 py-0.5 rounded-full text-xs font-bold ${taskFilter === "new" ? "bg-white/20 text-white" : "bg-red-100 text-red-700"}`}>
-              {newCount}
-            </span>
-          </button>
-          <button
-            onClick={() => setTaskFilter("incomplete")}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg border text-sm font-medium transition-all ${
-              taskFilter === "incomplete"
-                ? "bg-amber-500 text-white border-amber-500 shadow-sm"
-                : "bg-background text-muted-foreground border-border hover:border-amber-400"
-            }`}
-          >
-            <Clock className="w-4 h-4" />
-            {lang === "ar" ? "غير مكتملة" : "Incomplete"}
-            <span className={`px-1.5 py-0.5 rounded-full text-xs font-bold ${taskFilter === "incomplete" ? "bg-white/20 text-white" : "bg-amber-100 text-amber-700"}`}>
-              {incompleteCount}
-            </span>
-          </button>
-          <button
-            onClick={() => { setTaskFilter("completed"); }}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg border text-sm font-medium transition-all ${
-              taskFilter === "completed"
-                ? "bg-green-600 text-white border-green-600 shadow-sm"
-                : "bg-background text-muted-foreground border-border hover:border-green-400"
-            }`}
-          >
-            <History className="w-4 h-4" />
-            {lang === "ar" ? "الأرشيف" : "Archive"}
-            <span className={`px-1.5 py-0.5 rounded-full text-xs font-bold ${taskFilter === "completed" ? "bg-white/20 text-white" : "bg-green-100 text-green-700"}`}>
-              {completedCount}
-            </span>
-          </button>
-        </div>
+        <Tabs value={listTab} onValueChange={(v) => setListTab(v as ListTab)} className="w-full">
+          <TabsList className="w-full h-auto p-1.5 bg-slate-100 border border-slate-200 rounded-xl flex gap-1">
+            <TabsTrigger value="pending" className={tabTriggerClass}>
+              <ClipboardCheck className="w-4 h-4 me-2 shrink-0" />
+              <span className="truncate">{lang === "ar" ? "بانتظار المراجعة" : "To Review"}</span>
+              <span className={tabBadgeClass}>{pendingCount}</span>
+            </TabsTrigger>
+            <TabsTrigger value="done" className={tabTriggerClass}>
+              <CheckCircle2 className="w-4 h-4 me-2 shrink-0" />
+              <span className="truncate">{lang === "ar" ? "مكتمل" : "Done"}</span>
+              <span className={tabBadgeClass}>{doneCount}</span>
+            </TabsTrigger>
+          </TabsList>
 
+          <div className="mt-4 space-y-4">
         <ListFilterBar
           lang={lang}
           search={listSearch}
@@ -605,78 +560,47 @@ export default function ManagerReview() {
             setSectorFilter("all");
             setSampleTypeFilter("all");
           }}
-          resultCount={filteredSamples.length}
+          resultCount={tabSamples.length}
         />
 
-        {/* ── Active Tasks ──────────────────────────────────────────────── */}
-        {activeSamples.length === 0 && taskFilter !== "completed" ? (
-          <Card>
-            <CardContent className="p-10 text-center">
-              <CheckSquare className="w-12 h-12 mx-auto mb-3 text-muted-foreground opacity-30" />
-              <p className="text-sm text-muted-foreground">
-                {lang === "ar" ? "لا توجد عينات بانتظار مراجعة النتائج" : "No samples awaiting results review"}
-              </p>
-            </CardContent>
-          </Card>
-        ) : (
-          <div className="space-y-6">
-            {(taskFilter === "all" || taskFilter === "new") && (
-              <div>
-                <h3 className="text-lg font-semibold mb-3 flex items-center gap-2">
-                  <span className="bg-orange-100 text-orange-800 px-2 py-1 rounded text-sm">
-                    {lang === "ar" ? "في انتظار المراجعة" : "Awaiting Review"}
-                  </span>
-                  <span className="text-sm text-muted-foreground">
-                    ({awaitingReviewSamples.length})
-                  </span>
-                </h3>
-                {awaitingReviewSamples.length === 0 ? (
-                  <p className="text-sm italic text-muted-foreground">
-                    {lang === "ar" ? "لا توجد عينات في انتظار المراجعة" : "No samples awaiting review"}
-                  </p>
-                ) : (
-                  <div className="grid gap-3">
-                    {awaitingReviewSamples.map((sample) => (
-                      <ManagerReviewActiveSampleCard
-                        key={sample.id}
-                        sample={sample}
-                        lang={lang}
-                        onOpen={handleOpenSample}
-                        onRefetch={() => refetch()}
-                      />
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
+        <TabsContent value="pending" className="mt-0 space-y-3">
+          {pendingSamples.length === 0 ? (
+            <Card>
+              <CardContent className="p-10 text-center">
+                <CheckSquare className="w-12 h-12 mx-auto mb-3 text-muted-foreground opacity-30" />
+                <p className="text-sm text-muted-foreground">
+                  {lang === "ar" ? "لا توجد عينات بانتظار مراجعة النتائج" : "No samples awaiting results review"}
+                </p>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="grid gap-3">
+              {pendingSamples.map((sample) => (
+                <ManagerReviewActiveSampleCard
+                  key={sample.id}
+                  sample={sample}
+                  lang={lang}
+                  onOpen={handleOpenSample}
+                  onRefetch={() => refetch()}
+                />
+              ))}
+            </div>
+          )}
+        </TabsContent>
 
-            {otherActiveSamples.length > 0 && (
-              <div>
-                {(taskFilter === "all" || taskFilter === "new") && (
-                  <h3 className="text-lg font-semibold mb-3">
-                    {lang === "ar" ? "عينات أخرى" : "Other Samples"}
-                  </h3>
-                )}
-                <div className="grid gap-3">
-                  {otherActiveSamples.map((sample) => (
-                    <ManagerReviewActiveSampleCard
-                      key={sample.id}
-                      sample={sample}
-                      lang={lang}
-                      onOpen={handleOpenSample}
-                      onRefetch={() => refetch()}
-                    />
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* ── Archive (Completed) ──────────────────────────────────────────── */}
-        {taskFilter === "completed" && (
-          <div className="space-y-3">
-            {completedSamples.map((sample) => (
+        <TabsContent value="done" className="mt-0 space-y-3">
+          {doneSamples.length === 0 ? (
+            <Card>
+              <CardContent className="p-10 text-center">
+                <CheckCircle2 className="w-12 h-12 mx-auto mb-3 text-muted-foreground opacity-30" />
+                <p className="text-sm text-muted-foreground">
+                  {lang === "ar" ? "لا توجد نتائج مكتملة" : "No completed reviews yet"}
+                </p>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="grid gap-3">
+              {doneSamples.map((sample) => (
                 <ManagerReviewArchiveSampleCard
                   key={sample.id}
                   sample={sample}
@@ -684,13 +608,11 @@ export default function ManagerReview() {
                   onOpen={handleOpenSample}
                 />
               ))}
-            {completedSamples.length === 0 && (
-              <div className="text-center py-8 text-sm text-muted-foreground">
-                {lang === "ar" ? "لا توجد نتائج للبحث" : "No results found"}
-              </div>
-            )}
+            </div>
+          )}
+        </TabsContent>
           </div>
-        )}
+        </Tabs>
       </div>
 
       {/* Review Dialog */}
