@@ -5,6 +5,7 @@ import { RetestBadge } from "@/components/RetestBadge";
 import { DeletionRequestButton } from "@/components/DeletionRequestButton";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   Dialog,
@@ -550,7 +551,7 @@ export default function Technician() {
   const [rawValues, setRawValues] = useState<string[]>(["", "", ""]);
   const [unit, setUnit] = useState("MPa");
   const [testNotes, setTestNotes] = useState("");
-  const [filterTab, setFilterTab] = useState<"all" | "active" | "completed">("all");
+  const [taskTab, setTaskTab] = useState<"active" | "completed">("active");
   const [listSearch, setListSearch] = useState("");
   const [sampleTypeFilter, setSampleTypeFilter] = useState("all");
 
@@ -665,7 +666,7 @@ export default function Technician() {
   const counts = useMemo(() => {
     const active = filteredTasks.filter((d) => d.status !== "completed").length;
     const completed = filteredTasks.filter((d) => d.status === "completed").length;
-    return { all: filteredTasks.length, active, completed };
+    return { active, completed };
   }, [filteredTasks]);
 
   const activeList = useMemo(
@@ -819,29 +820,16 @@ export default function Technician() {
     );
   };
 
-  const tabBtn = (key: "all" | "active" | "completed", labelKey: keyof typeof T, count: number) => {
-    const active = filterTab === key;
-    return (
-      <button
-        type="button"
-        onClick={() => setFilterTab(key)}
-        className={`flex items-center gap-2 rounded-lg border px-4 py-2 text-sm font-medium transition-all ${
-          active
-            ? "border-primary bg-primary text-primary-foreground shadow-sm"
-            : "border-border bg-background text-muted-foreground hover:border-primary/40"
-        }`}
-      >
-        {tx(labelKey, lang)}
-        <span
-          className={`rounded-full px-2 py-0.5 text-xs font-bold ${
-            active ? "bg-primary-foreground/20 text-primary-foreground" : "bg-muted text-foreground"
-          }`}
-        >
-          {count}
-        </span>
-      </button>
-    );
-  };
+  const tabTriggerClass =
+    "group flex-1 min-w-0 rounded-lg border border-transparent px-4 py-3 text-sm font-semibold transition-all " +
+    "text-muted-foreground hover:text-foreground hover:bg-white/60 " +
+    "data-[state=active]:bg-white data-[state=active]:text-primary data-[state=active]:shadow-sm " +
+    "data-[state=active]:border-slate-200 data-[state=active]:ring-1 data-[state=active]:ring-primary/20 " +
+    "data-[state=active]:[&_svg]:text-primary";
+
+  const tabBadgeClass =
+    "ms-2 inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full px-1.5 text-[10px] font-bold " +
+    "bg-slate-200 text-slate-700 group-data-[state=active]:bg-primary/15 group-data-[state=active]:text-primary";
 
   return (
     <DashboardLayout>
@@ -851,69 +839,49 @@ export default function Technician() {
           <p className="text-sm text-muted-foreground">{tx("subtitle", lang)}</p>
         </div>
 
-        <div className="flex flex-wrap gap-2">
-          {tabBtn("all", "tabAll", counts.all)}
-          {tabBtn("active", "tabActive", counts.active)}
-          {tabBtn("completed", "tabCompleted", counts.completed)}
-        </div>
+        <Tabs value={taskTab} onValueChange={(v) => setTaskTab(v as "active" | "completed")} className="w-full">
+          <TabsList className="w-full h-auto p-1.5 bg-slate-100 border border-slate-200 rounded-xl flex gap-1">
+            <TabsTrigger value="active" className={tabTriggerClass}>
+              <Clock className="w-4 h-4 me-2 shrink-0" />
+              <span className="truncate">{tx("tabActive", lang)}</span>
+              <span className={tabBadgeClass}>{counts.active}</span>
+            </TabsTrigger>
+            <TabsTrigger value="completed" className={tabTriggerClass}>
+              <CheckCircle2 className="w-4 h-4 me-2 shrink-0" />
+              <span className="truncate">{tx("tabCompleted", lang)}</span>
+              <span className={tabBadgeClass}>{counts.completed}</span>
+            </TabsTrigger>
+          </TabsList>
 
-        <ListFilterBar
-          lang={lang}
-          search={listSearch}
-          onSearchChange={setListSearch}
-          searchPlaceholder={
-            lang === "ar"
-              ? "بحث برمز العينة، العقد، المقاول، أو نوع الاختبار..."
-              : "Search by sample code, contract, contractor, or test..."
-          }
-          sampleType={sampleTypeFilter}
-          onSampleTypeChange={setSampleTypeFilter}
-          showClear={hasActiveListFilters({ search: listSearch, sampleType: sampleTypeFilter })}
-          onClear={() => {
-            setListSearch("");
-            setSampleTypeFilter("all");
-          }}
-          resultCount={filteredTasks.length}
-        />
-
-        {filterTab === "all" && (
-          <div className="space-y-8">
-            <section className="space-y-3 border-l-4 border-amber-400 pl-4">
-              <h2 className="text-sm font-semibold uppercase tracking-wide text-amber-900">
-                {tx("sectionActive", lang)}
-              </h2>
-              <div className="space-y-3">
-                {renderTaskList(activeList)}
-              </div>
-            </section>
-            <section className="space-y-3 border-l-4 border-green-500 pl-4">
-              <h2 className="text-sm font-semibold uppercase tracking-wide text-green-800">
-                {tx("sectionDone", lang)}
-              </h2>
-              <div className="space-y-3">
-                {renderTaskList(completedList)}
-              </div>
-            </section>
+          <div className="mt-4">
+            <ListFilterBar
+              lang={lang}
+              search={listSearch}
+              onSearchChange={setListSearch}
+              searchPlaceholder={
+                lang === "ar"
+                  ? "بحث برمز العينة، العقد، المقاول، أو نوع الاختبار..."
+                  : "Search by sample code, contract, contractor, or test..."
+              }
+              sampleType={sampleTypeFilter}
+              onSampleTypeChange={setSampleTypeFilter}
+              showClear={hasActiveListFilters({ search: listSearch, sampleType: sampleTypeFilter })}
+              onClear={() => {
+                setListSearch("");
+                setSampleTypeFilter("all");
+              }}
+              resultCount={taskTab === "active" ? activeList.length : completedList.length}
+            />
           </div>
-        )}
 
-        {filterTab === "active" && (
-          <div className="space-y-3 border-l-4 border-amber-400 pl-4">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-amber-900">
-              {tx("sectionActive", lang)}
-            </h2>
+          <TabsContent value="active" className="mt-4 space-y-3 border-l-4 border-amber-400 pl-4">
             {renderTaskList(activeList)}
-          </div>
-        )}
+          </TabsContent>
 
-        {filterTab === "completed" && (
-          <div className="space-y-3 border-l-4 border-green-500 pl-4">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-green-800">
-              {tx("sectionDone", lang)}
-            </h2>
+          <TabsContent value="completed" className="mt-4 space-y-3 border-l-4 border-green-500 pl-4">
             {renderTaskList(completedList)}
-          </div>
-        )}
+          </TabsContent>
+        </Tabs>
       </div>
 
       <Dialog open={!!selectedDist} onOpenChange={(o) => !o && setSelectedDist(null)}>
