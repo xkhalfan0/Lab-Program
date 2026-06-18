@@ -357,7 +357,7 @@ export default function Reception() {
   const [editOpen, setEditOpen] = useState(false);
   const [editingOrder, setEditingOrder] = useState<{
     id: number; orderCode: string; contractNumber: string; contractorName: string; location: string;
-    notes: string; priority: "low" | "normal" | "high" | "urgent"; castingDate: Date | undefined;
+    notes: string; castingDate: Date | undefined;
     items: { id: number; testTypeName: string; testTypeCode: string; testSubType?: string | null; quantity: number }[];
   } | null>(null);
 
@@ -464,7 +464,6 @@ export default function Reception() {
       contractorName: order.contractorName ?? "",
       location: order.location ?? "",
       notes: order.notes ?? "",
-      priority: order.priority ?? "normal",
       castingDate: order.castingDate ? new Date(order.castingDate) : undefined,
       items: (order.items ?? []).map((item: any) => ({
         id: item.id,
@@ -1182,29 +1181,6 @@ export default function Reception() {
                             ))}
                           </div>
                         </div>
-                        <div className="space-y-1.5">
-                          <Label>{t("reception.condition")}</Label>
-                          <Select value={form.condition} onValueChange={(v) => setForm({ ...form, condition: v as any })}>
-                            <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="good">{t("reception.good")}</SelectItem>
-                              <SelectItem value="damaged">{t("reception.damaged")}</SelectItem>
-                              <SelectItem value="partial">{t("reception.acceptable")}</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <div className="space-y-1.5">
-                          <Label>{t("reception.priority")}</Label>
-                          <Select value={form.priority} onValueChange={(v) => setForm({ ...form, priority: v as any })}>
-                            <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="low">{lang === "ar" ? "منخفضة" : "Low"}</SelectItem>
-                              <SelectItem value="normal">{lang === "ar" ? "عادية" : "Normal"}</SelectItem>
-                              <SelectItem value="high">{lang === "ar" ? "عالية" : "High"}</SelectItem>
-                              <SelectItem value="urgent">{lang === "ar" ? "عاجلة" : "Urgent"}</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
                         {isCastingRequired && (
                           <div className="space-y-1.5 sm:col-span-2">
                             <Label>{lang === "ar" ? "تاريخ الصب" : "Casting date"} <span className="text-red-500">*</span></Label>
@@ -1750,7 +1726,6 @@ export default function Reception() {
                       <th className="text-start px-4 py-2.5 text-xs font-medium text-muted-foreground">{t("table.contractor")}</th>
                       <th className="text-start px-4 py-2.5 text-xs font-medium text-muted-foreground">{lang === "ar" ? "نوع العينة" : "Type"}</th>
                       <th className="text-start px-4 py-2.5 text-xs font-medium text-muted-foreground">{lang === "ar" ? "الاختبارات" : "Tests"}</th>
-                      <th className="text-start px-4 py-2.5 text-xs font-medium text-muted-foreground">{lang === "ar" ? "الأولوية" : "Priority"}</th>
                       <th className="text-start px-4 py-2.5 text-xs font-medium text-muted-foreground">{t("table.status")}</th>
                       <th className="text-start px-4 py-2.5 text-xs font-medium text-muted-foreground">{t("table.receivedAt")}</th>
                       <th className="text-start px-4 py-2.5 text-xs font-medium text-muted-foreground">{t("table.actions")}</th>
@@ -1785,19 +1760,6 @@ export default function Reception() {
                           >
                             {((order as any).testCount ?? 0)} {lang === "ar" ? "اختبار" : "tests"}
                           </Badge>
-                        </td>
-                        <td className="px-4 py-2.5 text-xs">
-                          <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-                            order.priority === "urgent" ? "bg-red-100 text-red-700" :
-                            order.priority === "high" ? "bg-orange-100 text-orange-700" :
-                            order.priority === "normal" ? "bg-blue-100 text-blue-700" :
-                            "bg-gray-100 text-gray-600"
-                          }`}>
-                            {order.priority === "urgent" ? (lang === "ar" ? "عاجل" : "Urgent") :
-                             order.priority === "high" ? (lang === "ar" ? "عالي" : "High") :
-                             order.priority === "normal" ? (lang === "ar" ? "عادي" : "Normal") :
-                             (lang === "ar" ? "منخفض" : "Low")}
-                          </span>
                         </td>
                         <td className="px-4 py-2.5"><StatusBadge status={order.status} /></td>
                         <td className="px-4 py-2.5 text-xs text-muted-foreground">
@@ -1872,18 +1834,6 @@ export default function Reception() {
                 </Popover>
               </div>
               <div className="space-y-1.5">
-                <Label>{lang === "ar" ? "الأولوية" : "Priority"}</Label>
-                <Select value={editingOrder.priority} onValueChange={(v) => setEditingOrder(o => o ? { ...o, priority: v as any } : o)}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="low">{lang === "ar" ? "منخفض" : "Low"}</SelectItem>
-                    <SelectItem value="normal">{lang === "ar" ? "عادي" : "Normal"}</SelectItem>
-                    <SelectItem value="high">{lang === "ar" ? "عالي" : "High"}</SelectItem>
-                    <SelectItem value="urgent">{lang === "ar" ? "عاجل" : "Urgent"}</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1.5">
                 <Label>{lang === "ar" ? "ملاحظات" : "Notes"}</Label>
                 <Textarea value={editingOrder.notes} onChange={e => setEditingOrder(o => o ? { ...o, notes: e.target.value } : o)} rows={3} />
               </div>
@@ -1927,7 +1877,6 @@ export default function Reception() {
                     contractorName: editingOrder.contractorName,
                     location: editingOrder.location,
                     notes: editingOrder.notes,
-                    priority: editingOrder.priority,
                     castingDate: editingOrder.castingDate ? format(editingOrder.castingDate, "yyyy-MM-dd") : null,
                   })}>
                   {updateOrder.isPending ? (lang === "ar" ? "جاري الحفظ..." : "Saving...") : (lang === "ar" ? "حفظ التعديلات" : "Save Changes")}

@@ -43,8 +43,6 @@ export function ReceptionRetestPanel({ onSuccess, onCancel }: Props) {
   const [tests, setTests] = useState<RetestTest[]>([]);
   const [location, setLocation] = useState("");
   const [castingDate, setCastingDate] = useState("");
-  const [condition, setCondition] = useState<"good" | "damaged" | "partial">("good");
-  const [priority, setPriority] = useState<"low" | "normal" | "high" | "urgent">("normal");
   const [notes, setNotes] = useState("");
   const [retestReason, setRetestReason] = useState<string>("");
   const [retestReasonNotes, setRetestReasonNotes] = useState("");
@@ -130,7 +128,6 @@ export function ReceptionRetestPanel({ onSuccess, onCancel }: Props) {
         ? new Date(source.header.castingDate).toISOString().slice(0, 10)
         : ""
     );
-    setPriority((source.defaultPriority as typeof priority) ?? "normal");
     setNominalCubeSize(source.header.nominalCubeSize ?? "150mm");
     setTests(
       source.tests.map((t) => ({
@@ -176,11 +173,11 @@ export function ReceptionRetestPanel({ onSuccess, onCancel }: Props) {
       sector: source.header.sector,
       sectorNameAr: source.header.sectorNameAr ?? undefined,
       sectorNameEn: source.header.sectorNameEn ?? undefined,
-      condition,
+      condition: "good",
       notes: notes || undefined,
       location: location || undefined,
       castingDate: castingDate || undefined,
-      priority,
+      priority: "normal",
       nominalCubeSize: selected.some((t) => t.testTypeCode === "CONC_CUBE") ? nominalCubeSize : undefined,
       tests: selected.map((t) => ({
         testTypeId: t.testTypeId,
@@ -299,31 +296,18 @@ export function ReceptionRetestPanel({ onSuccess, onCancel }: Props) {
               </p>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <Label>{isAr ? "السبب" : "Reason"} *</Label>
-                <Select value={retestReason} onValueChange={setRetestReason}>
-                  <SelectTrigger><SelectValue placeholder={isAr ? "اختر السبب" : "Select reason"} /></SelectTrigger>
-                  <SelectContent>
-                    {RETEST_REASONS.map((r) => (
-                      <SelectItem key={r.value} value={r.value}>
-                        {isAr ? r.ar : r.en}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label>{isAr ? "الأولوية" : "Priority"}</Label>
-                <Select value={priority} onValueChange={(v) => setPriority(v as typeof priority)}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {["low", "normal", "high", "urgent"].map((p) => (
-                      <SelectItem key={p} value={p}>{p}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+            <div>
+              <Label>{isAr ? "السبب" : "Reason"} *</Label>
+              <Select value={retestReason} onValueChange={setRetestReason}>
+                <SelectTrigger><SelectValue placeholder={isAr ? "اختر السبب" : "Select reason"} /></SelectTrigger>
+                <SelectContent>
+                  {RETEST_REASONS.map((r) => (
+                    <SelectItem key={r.value} value={r.value}>
+                      {isAr ? r.ar : r.en}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
             <div>
