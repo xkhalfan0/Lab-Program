@@ -2,7 +2,6 @@ import DashboardLayout from "@/components/DashboardLayout";
 import { DeletionRequestButton } from "@/components/DeletionRequestButton";
 import { ReceptionRetestPanel } from "@/components/ReceptionRetestPanel";
 import { RetestBadge } from "@/components/RetestBadge";
-import { StatusBadge } from "@/components/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -16,13 +15,12 @@ import { trpc } from "@/lib/trpc";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Search, Eye, Printer, FileText, Lock, Pencil, X, Trash2, CheckSquare, Package, CalendarIcon, AlertTriangle, ChevronRight } from "lucide-react";
+import { Search, Printer, FileText, Lock, Pencil, X, Trash2, CheckSquare, Package, CalendarIcon, AlertTriangle, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState, useMemo, useEffect, type ReactElement, type ReactNode } from "react";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import { useAuth } from "@/_core/hooks/useAuth";
-import { useLocation } from "wouter";
 import { useDeletionStatus } from "@/hooks/useDeletionStatus";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
@@ -210,8 +208,8 @@ function FormSection({
   className?: string;
 }) {
   return (
-    <section className={cn("space-y-3", className)}>
-      {title ? <h3 className="text-sm font-medium text-foreground">{title}</h3> : null}
+    <section className={cn("space-y-4", className)}>
+      {title ? <h3 className="text-base font-semibold tracking-tight text-foreground">{title}</h3> : null}
       {children}
     </section>
   );
@@ -220,14 +218,12 @@ function FormSection({
 function ReceptionOrderActionsCell({
   order,
   lang,
-  setLocation,
   canEditSample,
   handleEditOrder,
   onDeletionSuccess,
 }: {
   order: any;
   lang: string;
-  setLocation: (path: string) => void;
   canEditSample: boolean;
   handleEditOrder: (order: any) => void;
   onDeletionSuccess: () => void;
@@ -257,18 +253,6 @@ function ReceptionOrderActionsCell({
           size="sm"
           variant="ghost"
           className="h-7 px-2"
-          title={lang === "ar" ? "عرض" : "View"}
-          disabled={hasPendingDeletion}
-          onClick={() => setLocation(`/order/${order.id}`)}
-        >
-          <Eye className="w-3.5 h-3.5" />
-        </Button>
-      )}
-      {wrapDisabledAction(
-        <Button
-          size="sm"
-          variant="ghost"
-          className="h-7 px-2"
           title={lang === "ar" ? "طباعة وصل الاستلام" : "Print Receipt"}
           disabled={hasPendingDeletion}
           onClick={() => window.open(`/print-receipt/${order.sampleId}`, "_blank")}
@@ -277,7 +261,7 @@ function ReceptionOrderActionsCell({
         </Button>
       )}
       {canEditSample &&
-        ["pending", "distributed"].includes(order.status) &&
+        order.status === "pending" &&
         wrapDisabledAction(
           <Button
             size="sm"
@@ -330,7 +314,6 @@ export default function Reception() {
   const [search, setSearch] = useState("");
   const [showOrderHistory, setShowOrderHistory] = useState(false);
   const [sectorFilter, setSectorFilter] = useState<string>("all");
-  const [taskFilter, setTaskFilter] = useState<"all" | "new" | "incomplete" | "done">("all");
   const [form, setForm] = useState(emptyForm());
   const [selectedTests, setSelectedTests] = useState<SelectedTest[]>([]);
   // For subtype selection per test
@@ -349,7 +332,6 @@ export default function Reception() {
   const [foamConcreteAge, setFoamConcreteAge] = useState("");
   /** Reception: CONC_CUBE nominal face size (stored on sample) */
   const [nominalCubeSize, setNominalCubeSize] = useState("150mm");
-  const [, setLocation] = useLocation();
 
   const minQtyForTest = (code: string) => (code === "CONC_CUBE" ? MIN_CONC_CUBE_COUNT : 1);
   const maxQtyForTest = (code: string) => (code === "CONC_CUBE" ? MAX_CONC_CUBE_COUNT : 999);
@@ -958,27 +940,14 @@ export default function Reception() {
     });
   };
 
-  const NEW_STATUSES = ["pending"];
-  const INCOMPLETE_STATUSES = ["distributed", "in_progress", "reviewed"];
-  const DONE_STATUSES = ["completed", "qc_passed", "rejected"];
-
   const filteredOrders = orders?.filter((o: any) => {
     const matchSearch =
       (o.orderCode ?? "").toLowerCase().includes(search.toLowerCase()) ||
       (o.contractorName ?? "").toLowerCase().includes(search.toLowerCase()) ||
       (o.contractNumber ?? "").toLowerCase().includes(search.toLowerCase());
     const matchSector = sectorFilter === "all" || (o as any).sector === sectorFilter;
-    const matchTask =
-      taskFilter === "all" ? true :
-      taskFilter === "new" ? NEW_STATUSES.includes(o.status) :
-      taskFilter === "incomplete" ? INCOMPLETE_STATUSES.includes(o.status) :
-      DONE_STATUSES.includes(o.status);
-    return matchSearch && matchSector && matchTask;
+    return matchSearch && matchSector;
   }) ?? [];
-
-  const newCount = orders?.filter((o: any) => NEW_STATUSES.includes(o.status)).length ?? 0;
-  const incompleteCount = orders?.filter((o: any) => INCOMPLETE_STATUSES.includes(o.status)).length ?? 0;
-  const doneCount = orders?.filter((o: any) => DONE_STATUSES.includes(o.status)).length ?? 0;
 
   const typeLabel = (type: string) => {
     const cat = CATEGORIES.find(c => c.value === type);
@@ -1019,15 +988,15 @@ export default function Reception() {
 
   return (
     <DashboardLayout>
-      <div className="space-y-4 max-w-6xl">
+      <div className="space-y-5 max-w-7xl">
         {/* Header */}
-        <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div className="flex items-center justify-between gap-4 flex-wrap">
           <div>
-            <h1 className="text-xl font-bold">{t("reception.title")}</h1>
-            <p className="text-sm text-muted-foreground">{t("reception.subtitle")}</p>
+            <h1 className="text-2xl font-bold tracking-tight">{t("reception.title")}</h1>
+            <p className="text-base text-muted-foreground mt-0.5">{t("reception.subtitle")}</p>
           </div>
-          <div className="flex items-center gap-2">
-            <div className="inline-flex rounded-lg border bg-muted/40 p-0.5">
+          <div className="flex items-center gap-2.5">
+            <div className="inline-flex rounded-lg border bg-muted/40 p-1">
               {([
                 { id: "new" as const, labelAr: "عينة جديدة", labelEn: "New" },
                 { id: "retest" as const, labelAr: "إعادة", labelEn: "Retest" },
@@ -1037,7 +1006,7 @@ export default function Reception() {
                   type="button"
                   onClick={() => setReceptionMode(id)}
                   className={cn(
-                    "rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
+                    "rounded-md px-4 py-2 text-sm font-medium transition-colors",
                     receptionMode === id
                       ? "bg-background text-foreground shadow-sm"
                       : "text-muted-foreground hover:text-foreground"
@@ -1047,8 +1016,8 @@ export default function Reception() {
                 </button>
               ))}
             </div>
-            <Button type="button" variant="outline" size="sm" className="gap-1.5" onClick={() => openTestCatalogPrint()}>
-              <FileText className="w-3.5 h-3.5" />
+            <Button type="button" variant="outline" className="gap-2 h-10 px-4" onClick={() => openTestCatalogPrint()}>
+              <FileText className="w-4 h-4" />
               {lang === "ar" ? "الأسعار" : "Prices"}
             </Button>
           </div>
@@ -1056,10 +1025,10 @@ export default function Reception() {
 
         {/* Search — one bar for lookup + order filter */}
         <div className="relative">
-          <Search className="absolute start-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <Search className="absolute start-3.5 top-1/2 -translate-y-1/2 w-[18px] h-[18px] text-muted-foreground" />
           <Input
             placeholder={t("reception.searchPlaceholder")}
-            className="ps-9"
+            className="ps-10 h-11 text-base"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
@@ -1080,9 +1049,6 @@ export default function Reception() {
                   />
                 </div>
                 <div className="flex gap-1 shrink-0">
-                  <Button type="button" variant="ghost" size="sm" className="h-7 px-2" onClick={() => setLocation(`/order/${order.id}`)}>
-                    <Eye className="w-3.5 h-3.5" />
-                  </Button>
                   <Button type="button" variant="ghost" size="sm" className="h-7 px-2" onClick={() => window.open(`/print-receipt/${order.sampleId}`, "_blank")}>
                     <Printer className="w-3.5 h-3.5" />
                   </Button>
@@ -1094,7 +1060,7 @@ export default function Reception() {
 
         {receptionMode === "retest" ? (
           <Card>
-            <CardContent className="p-4">
+            <CardContent className="p-6">
               <ReceptionRetestPanel
                 onSuccess={() => { setReceptionMode("new"); refetch(); }}
                 onCancel={() => setReceptionMode("new")}
@@ -1105,46 +1071,46 @@ export default function Reception() {
           <form onSubmit={handleSubmit}>
             <Card>
               <CardContent className="p-0">
-                <div className="grid grid-cols-1 lg:grid-cols-[1fr_260px] divide-y lg:divide-y-0 lg:divide-x">
-                  <div className="p-5 space-y-6">
+                <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] divide-y lg:divide-y-0 lg:divide-x">
+                  <div className="p-6 lg:p-7 space-y-7">
                     <FormSection title={lang === "ar" ? "بيانات العينة" : "Sample details"}>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <div className="space-y-1.5 sm:col-span-2">
-                          <Label>{t("tests.contractNumber")} <span className="text-red-500">*</span></Label>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div className="space-y-2 sm:col-span-2">
+                          <Label className="text-[15px]">{t("tests.contractNumber")} <span className="text-red-500">*</span></Label>
                           {contracts.length > 0 ? (
                             <Select value={form.contractId} onValueChange={handleContractChange}>
-                              <SelectTrigger>
+                              <SelectTrigger className="h-10 text-base">
                                 <SelectValue placeholder={lang === "ar" ? "اختر العقد..." : "Select contract..."} />
                               </SelectTrigger>
                               <SelectContent className="max-h-60">
                                 {contracts.map((c: any) => (
                                   <SelectItem key={c.id} value={String(c.id)}>
-                                    <span className="font-mono text-xs font-semibold">{c.contractNumber}</span>
-                                    <span className="text-muted-foreground text-xs ms-2 truncate">{c.contractName}</span>
+                                    <span className="font-mono text-sm font-semibold">{c.contractNumber}</span>
+                                    <span className="text-muted-foreground text-sm ms-2 truncate">{c.contractName}</span>
                                   </SelectItem>
                                 ))}
                               </SelectContent>
                             </Select>
                           ) : (
-                            <p className="text-xs text-amber-700">{lang === "ar" ? "لا توجد عقود." : "No contracts."}</p>
+                            <p className="text-sm text-amber-700">{lang === "ar" ? "لا توجد عقود." : "No contracts."}</p>
                           )}
                         </div>
                         {form.contractId && (
                           <>
-                            <div className="space-y-1.5">
-                              <Label>{t("reception.contractorName")}</Label>
-                              <Input readOnly value={form.contractorName || "—"} className="bg-muted/30 h-9" />
+                            <div className="space-y-2">
+                              <Label className="text-[15px]">{t("reception.contractorName")}</Label>
+                              <Input readOnly value={form.contractorName || "—"} className="bg-muted/30 h-10 text-base" />
                             </div>
-                            <div className="space-y-1.5">
-                              <Label>{t("reception.contractName")}</Label>
-                              <Input readOnly value={form.contractName || "—"} className="bg-muted/30 h-9" />
+                            <div className="space-y-2">
+                              <Label className="text-[15px]">{t("reception.contractName")}</Label>
+                              <Input readOnly value={form.contractName || "—"} className="bg-muted/30 h-10 text-base" />
                             </div>
                           </>
                         )}
-                        <div className="space-y-1.5">
-                          <Label>{lang === "ar" ? "القطاع" : "Sector"} <span className="text-red-500">*</span></Label>
+                        <div className="space-y-2">
+                          <Label className="text-[15px]">{lang === "ar" ? "القطاع" : "Sector"} <span className="text-red-500">*</span></Label>
                           <Select value={form.sectorKey} onValueChange={handleSectorChange}>
-                            <SelectTrigger className="h-9"><SelectValue placeholder={lang === "ar" ? "اختر..." : "Select..."} /></SelectTrigger>
+                            <SelectTrigger className="h-10 text-base"><SelectValue placeholder={lang === "ar" ? "اختر..." : "Select..."} /></SelectTrigger>
                             <SelectContent>
                               {sectors.filter((s: any) => s.isActive).map((s: any) => (
                                 <SelectItem key={s.sectorKey} value={s.sectorKey}>{lang === "ar" ? s.nameAr : s.nameEn}</SelectItem>
@@ -1152,13 +1118,13 @@ export default function Reception() {
                             </SelectContent>
                           </Select>
                         </div>
-                        <div className="space-y-1.5">
-                          <Label>{lang === "ar" ? "الموقع" : "Location"}</Label>
-                          <Input className="h-9" placeholder={lang === "ar" ? "اختياري" : "Optional"} value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} />
+                        <div className="space-y-2">
+                          <Label className="text-[15px]">{lang === "ar" ? "الموقع" : "Location"}</Label>
+                          <Input className="h-10 text-base" placeholder={lang === "ar" ? "اختياري" : "Optional"} value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} />
                         </div>
-                        <div className="space-y-1.5 sm:col-span-2">
-                          <Label>{lang === "ar" ? "نوع المادة" : "Material"} <span className="text-red-500">*</span></Label>
-                          <div className="flex flex-wrap gap-1.5">
+                        <div className="space-y-2 sm:col-span-2">
+                          <Label className="text-[15px]">{lang === "ar" ? "نوع المادة" : "Material"} <span className="text-red-500">*</span></Label>
+                          <div className="flex flex-wrap gap-2">
                             {CATEGORIES.map(cat => (
                               <button
                                 key={cat.value}
@@ -1170,10 +1136,10 @@ export default function Reception() {
                                   setAsphaltKind("");
                                 }}
                                 className={cn(
-                                  "px-3 py-1.5 rounded-md text-xs font-medium border transition-colors",
+                                  "px-4 py-2 rounded-lg text-sm font-medium border transition-colors",
                                   form.sampleType === cat.value
-                                    ? "bg-primary text-primary-foreground border-primary"
-                                    : "bg-background border-border text-muted-foreground hover:border-primary/50"
+                                    ? "bg-primary text-primary-foreground border-primary shadow-sm"
+                                    : "bg-background border-border text-muted-foreground hover:border-primary/50 hover:text-foreground"
                                 )}
                               >
                                 {lang === "ar" ? cat.labelAr : cat.labelEn}
@@ -1182,11 +1148,11 @@ export default function Reception() {
                           </div>
                         </div>
                         {isCastingRequired && (
-                          <div className="space-y-1.5 sm:col-span-2">
-                            <Label>{lang === "ar" ? "تاريخ الصب" : "Casting date"} <span className="text-red-500">*</span></Label>
+                          <div className="space-y-2 sm:col-span-2">
+                            <Label className="text-[15px]">{lang === "ar" ? "تاريخ الصب" : "Casting date"} <span className="text-red-500">*</span></Label>
                             <Popover>
                               <PopoverTrigger asChild>
-                                <Button variant="outline" className={cn("w-full h-9 justify-start font-normal", !form.castingDate && "text-muted-foreground")}>
+                                <Button variant="outline" className={cn("w-full h-10 justify-start font-normal text-base", !form.castingDate && "text-muted-foreground")}>
                                   <CalendarIcon className="mr-2 h-4 w-4" />
                                   {form.castingDate ? format(form.castingDate, "dd MMM yyyy") : (lang === "ar" ? "اختر..." : "Pick date")}
                                 </Button>
@@ -1200,7 +1166,7 @@ export default function Reception() {
                       </div>
                     </FormSection>
 
-                    <FormSection title={lang === "ar" ? "الاختبارات" : "Tests"} className="border-t pt-5">
+                    <FormSection title={lang === "ar" ? "الاختبارات" : "Tests"} className="border-t pt-6">
                       <div className="space-y-4">
                 {form.sampleType === "asphalt" && (
                   <div className="space-y-4">
@@ -1355,7 +1321,7 @@ export default function Reception() {
                         const subTypes = SUBTYPES_BY_CODE[tt.code] ?? [];
                         const isCasting = CASTING_DATE_TESTS.includes(tt.code);
                         return (
-                          <div key={tt.id} className={`rounded-xl border-2 p-4 transition-all ${isSelected ? "border-blue-400 bg-blue-50/60" : "border-border bg-card hover:border-blue-200 hover:bg-muted/30"}`}>
+                          <div key={tt.id} className={`rounded-xl border-2 p-5 transition-all ${isSelected ? "border-blue-400 bg-blue-50/60" : "border-border bg-card hover:border-blue-200 hover:bg-muted/30"}`}>
                             <div className="flex items-start gap-3">
                               <Checkbox
                                 id={`test-${tt.id}`}
@@ -1366,11 +1332,11 @@ export default function Reception() {
                               <label htmlFor={`test-${tt.id}`} className="flex-1 cursor-pointer min-w-0">
                                 <div className="flex items-start justify-between gap-3">
                                   <div className="min-w-0">
-                                    <span className="block text-[15px] font-semibold text-foreground">
+                                    <span className="block text-base font-semibold text-foreground">
                                       {testDisplayName(tt.code, tt.nameEn, tt.nameAr)}
                                     </span>
                                     {tt.code && (
-                                      <span className="mt-0.5 block text-xs text-muted-foreground font-mono">{tt.code}</span>
+                                      <span className="mt-0.5 block text-sm text-muted-foreground font-mono">{tt.code}</span>
                                     )}
                                   </div>
                                   <div className="flex items-center gap-2 flex-shrink-0">
@@ -1598,7 +1564,7 @@ export default function Reception() {
                 )}
 
                     {!form.sampleType && (
-                      <p className="text-sm text-muted-foreground text-center py-6">
+                      <p className="text-base text-muted-foreground text-center py-10">
                         {lang === "ar" ? "اختر نوع المادة أعلاه لعرض الاختبارات" : "Select a material type above to see available tests"}
                       </p>
                     )}
@@ -1607,12 +1573,12 @@ export default function Reception() {
                 </FormSection>
                   </div>
 
-                  <aside className="p-5 bg-muted/20 space-y-4 lg:sticky lg:top-4 lg:self-start">
-                    <div className="text-sm space-y-2">
-                      <p className="text-xs text-muted-foreground">{lang === "ar" ? "رمز العينة" : "Sample code"}</p>
-                      <p className="font-mono text-sm text-muted-foreground">{lang === "ar" ? "يُولَّد تلقائياً" : "Auto on save"}</p>
+                  <aside className="p-6 lg:p-7 bg-muted/20 space-y-5 lg:sticky lg:top-4 lg:self-start">
+                    <div className="space-y-2">
+                      <p className="text-sm text-muted-foreground">{lang === "ar" ? "رمز العينة" : "Sample code"}</p>
+                      <p className="font-mono text-base text-muted-foreground">{lang === "ar" ? "يُولَّد تلقائياً" : "Auto on save"}</p>
                     </div>
-                    <div className="space-y-2 text-sm border-t pt-3">
+                    <div className="space-y-3 text-base border-t pt-4">
                       <div className="flex justify-between gap-2">
                         <span className="text-muted-foreground">{lang === "ar" ? "المادة" : "Material"}</span>
                         <span className="font-medium">{form.sampleType ? typeLabel(form.sampleType) : "—"}</span>
@@ -1621,20 +1587,20 @@ export default function Reception() {
                         <span className="text-muted-foreground">{lang === "ar" ? "الاختبارات" : "Tests"}</span>
                         <span className="font-medium">{selectedTests.length || "—"}</span>
                       </div>
-                      <div className="flex justify-between gap-2 pt-2 border-t font-semibold">
+                      <div className="flex justify-between gap-2 pt-3 border-t text-lg font-semibold">
                         <span>{lang === "ar" ? "الإجمالي" : "Total"}</span>
                         <span className="text-primary">{totalPrice > 0 ? `${totalPrice.toFixed(0)} AED` : "—"}</span>
                       </div>
                     </div>
                     {hasInvalidQtyTests && selectedTests.length > 0 && (
-                      <p className="text-xs text-amber-700">{lang === "ar" ? "أصلح الكميات أولاً" : "Fix quantities first"}</p>
+                      <p className="text-sm text-amber-700">{lang === "ar" ? "أصلح الكميات أولاً" : "Fix quantities first"}</p>
                     )}
-                    <Button type="submit" className="w-full" disabled={createOrder.isPending || selectedTests.length === 0 || hasInvalidQtyTests}>
+                    <Button type="submit" size="lg" className="w-full h-11 text-base font-semibold" disabled={createOrder.isPending || selectedTests.length === 0 || hasInvalidQtyTests}>
                       {createOrder.isPending
                         ? (lang === "ar" ? "جاري..." : "Saving...")
                         : (lang === "ar" ? "تسجيل وطباعة" : "Register & print")}
                     </Button>
-                    <button type="button" className="w-full text-xs text-muted-foreground hover:text-foreground" onClick={resetRegistrationForm}>
+                    <button type="button" className="w-full text-sm text-muted-foreground hover:text-foreground py-1" onClick={resetRegistrationForm}>
                       {lang === "ar" ? "مسح" : "Clear"}
                     </button>
                   </aside>
@@ -1649,7 +1615,7 @@ export default function Reception() {
           <button
             type="button"
             onClick={() => setShowOrderHistory(v => !v)}
-            className="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground"
+            className="flex items-center gap-2 text-base font-medium text-muted-foreground hover:text-foreground"
           >
             <ChevronRight className={cn("w-4 h-4 transition-transform", showOrderHistory && "rotate-90")} />
             {lang === "ar" ? "سجل الأوردرات" : "Order history"} ({orders?.length ?? 0})
@@ -1658,32 +1624,6 @@ export default function Reception() {
 
         {showOrderHistory && (
         <div className="space-y-3">
-        {/* Task Filter Buttons */}
-        <div className="flex items-center gap-2 flex-wrap">
-          {[
-            { key: "all", labelAr: "الكل", labelEn: "All", count: orders?.length ?? 0, color: "#3b82f6" },
-            { key: "new", labelAr: "جديدة", labelEn: "New", count: newCount, color: "#ef4444" },
-            { key: "incomplete", labelAr: "قيد التنفيذ", labelEn: "In Progress", count: incompleteCount, color: "#f59e0b" },
-            { key: "done", labelAr: "مُنجزة", labelEn: "Done", count: doneCount, color: "#10b981" },
-          ].map(btn => (
-            <button key={btn.key}
-              onClick={() => setTaskFilter(btn.key as any)}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-semibold transition-all"
-              style={{
-                background: taskFilter === btn.key ? btn.color : "#fff",
-                border: `1.5px solid ${taskFilter === btn.key ? btn.color : "#e2e8f0"}`,
-                color: taskFilter === btn.key ? "#fff" : btn.color,
-                boxShadow: taskFilter === btn.key ? `0 2px 8px ${btn.color}30` : "none",
-              }}>
-              {lang === "ar" ? btn.labelAr : btn.labelEn}
-              <span className="px-1.5 py-0.5 rounded-full text-xs font-bold"
-                style={{ background: taskFilter === btn.key ? "rgba(255,255,255,0.25)" : "#f1f5f9", color: taskFilter === btn.key ? "#fff" : "#64748b" }}>
-                {btn.count}
-              </span>
-            </button>
-          ))}
-        </div>
-
         {/* Sector Filter */}
         <div className="flex items-center gap-1.5 flex-wrap">
           <span className="text-xs text-muted-foreground">{lang === "ar" ? "القطاع:" : "Sector:"}</span>
@@ -1726,7 +1666,6 @@ export default function Reception() {
                       <th className="text-start px-4 py-2.5 text-xs font-medium text-muted-foreground">{t("table.contractor")}</th>
                       <th className="text-start px-4 py-2.5 text-xs font-medium text-muted-foreground">{lang === "ar" ? "نوع العينة" : "Type"}</th>
                       <th className="text-start px-4 py-2.5 text-xs font-medium text-muted-foreground">{lang === "ar" ? "الاختبارات" : "Tests"}</th>
-                      <th className="text-start px-4 py-2.5 text-xs font-medium text-muted-foreground">{t("table.status")}</th>
                       <th className="text-start px-4 py-2.5 text-xs font-medium text-muted-foreground">{t("table.receivedAt")}</th>
                       <th className="text-start px-4 py-2.5 text-xs font-medium text-muted-foreground">{t("table.actions")}</th>
                     </tr>
@@ -1761,7 +1700,6 @@ export default function Reception() {
                             {((order as any).testCount ?? 0)} {lang === "ar" ? "اختبار" : "tests"}
                           </Badge>
                         </td>
-                        <td className="px-4 py-2.5"><StatusBadge status={order.status} /></td>
                         <td className="px-4 py-2.5 text-xs text-muted-foreground">
                           {new Date(order.createdAt).toLocaleDateString(lang === "ar" ? "ar-AE" : "en-AE")}
                         </td>
@@ -1769,7 +1707,6 @@ export default function Reception() {
                           <ReceptionOrderActionsCell
                             order={order}
                             lang={lang}
-                            setLocation={setLocation}
                             canEditSample={canEditSample}
                             handleEditOrder={handleEditOrder}
                             onDeletionSuccess={() => refetch()}

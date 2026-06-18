@@ -195,14 +195,14 @@ export function ReceptionRetestPanel({ onSuccess, onCancel }: Props) {
 
   return (
     <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
-      <div className="flex-1 overflow-y-auto p-6 space-y-5">
+      <div className="flex-1 overflow-y-auto p-6 lg:p-7 space-y-6">
         {/* Search */}
-        <div className="space-y-2">
-          <Label>{isAr ? "بحث عن العينة الأصلية" : "Search original sample"}</Label>
+        <div className="space-y-2.5">
+          <Label className="text-[15px]">{isAr ? "بحث عن العينة الأصلية" : "Search original sample"}</Label>
           <div className="relative">
-            <Search className="absolute start-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Search className="absolute start-3.5 top-1/2 -translate-y-1/2 w-[18px] h-[18px] text-muted-foreground" />
             <Input
-              className="ps-9"
+              className="ps-10 h-11 text-base"
               placeholder={isAr ? "رمز العينة / العقد / المقاول" : "Sample code / contract / contractor"}
               value={searchQ}
               onChange={(e) => {
@@ -212,20 +212,20 @@ export function ReceptionRetestPanel({ onSuccess, onCancel }: Props) {
             />
           </div>
           {!isSearching && (
-            <p className="text-xs text-muted-foreground">
+            <p className="text-sm text-muted-foreground">
               {isAr
                 ? "أحدث العينات ذات النتائج الفاشلة (بعد اعتماد QC)"
                 : "Recent failed samples (QC signed off)"}
             </p>
           )}
           {loadingEligible && (
-            <p className="text-xs text-muted-foreground">{isAr ? "جاري التحميل..." : "Loading..."}</p>
+            <p className="text-sm text-muted-foreground">{isAr ? "جاري التحميل..." : "Loading..."}</p>
           )}
           {searchError && (
             <p className="text-xs text-destructive">{searchErrorDetail?.message}</p>
           )}
           {rootId && selectedSample != null && (
-            <div className="flex items-center justify-between gap-2 rounded-lg border bg-muted/30 px-3 py-2 text-sm">
+            <div className="flex items-center justify-between gap-2 rounded-lg border bg-muted/30 px-4 py-3 text-base">
               <div>
                 <span className="font-mono font-semibold text-primary">{selectedSample.sampleCode}</span>
                 <span className="text-muted-foreground ms-2">{selectedSample.contractorName ?? "—"}</span>
@@ -241,7 +241,7 @@ export function ReceptionRetestPanel({ onSuccess, onCancel }: Props) {
                 <button
                   key={r.id}
                   type="button"
-                  className="w-full text-start px-3 py-2 hover:bg-muted/50 text-sm"
+                  className="w-full text-start px-4 py-3 hover:bg-muted/50 text-base"
                   onClick={() => selectRoot(r)}
                 >
                   <span className="font-mono font-semibold text-primary">{r.sampleCode}</span>
@@ -259,7 +259,7 @@ export function ReceptionRetestPanel({ onSuccess, onCancel }: Props) {
             </div>
           )}
           {!loadingEligible && eligibleSamples?.length === 0 && !rootId && (
-            <p className="text-xs text-muted-foreground">
+            <p className="text-sm text-muted-foreground">
               {isSearching
                 ? isAr
                   ? "لا توجد عينات مطابقة"
@@ -272,13 +272,13 @@ export function ReceptionRetestPanel({ onSuccess, onCancel }: Props) {
         </div>
 
         {loadingSource && rootId && !source && (
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <div className="flex items-center gap-2 text-base text-muted-foreground">
             <Loader2 className="w-4 h-4 animate-spin" /> {isAr ? "تحميل تفاصيل العينة..." : "Loading sample details..."}
           </div>
         )}
 
         {sourceError && rootId && (
-          <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-3 text-sm space-y-2">
+          <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-4 text-base space-y-2">
             <p className="text-destructive">{sourceErrorDetail?.message}</p>
             <Button type="button" variant="outline" size="sm" onClick={clearSelection}>
               {isAr ? "العودة إلى القائمة" : "Back to list"}
@@ -288,7 +288,7 @@ export function ReceptionRetestPanel({ onSuccess, onCancel }: Props) {
 
         {source && (
           <>
-            <div className="rounded-lg border bg-muted/30 p-3 text-sm space-y-1">
+            <div className="rounded-lg border bg-muted/30 p-4 text-base space-y-1">
               <p className="font-mono font-bold">{source.rootSampleCode}</p>
               <p className="flex items-center gap-1 text-muted-foreground">
                 <Lock className="w-3 h-3" />
@@ -297,9 +297,9 @@ export function ReceptionRetestPanel({ onSuccess, onCancel }: Props) {
             </div>
 
             <div>
-              <Label>{isAr ? "السبب" : "Reason"} *</Label>
+              <Label className="text-[15px]">{isAr ? "السبب" : "Reason"} *</Label>
               <Select value={retestReason} onValueChange={setRetestReason}>
-                <SelectTrigger><SelectValue placeholder={isAr ? "اختر السبب" : "Select reason"} /></SelectTrigger>
+                <SelectTrigger className="h-10 text-base mt-1.5"><SelectValue placeholder={isAr ? "اختر السبب" : "Select reason"} /></SelectTrigger>
                 <SelectContent>
                   {RETEST_REASONS.map((r) => (
                     <SelectItem key={r.value} value={r.value}>
@@ -311,29 +311,29 @@ export function ReceptionRetestPanel({ onSuccess, onCancel }: Props) {
             </div>
 
             <div>
-              <Label>{isAr ? "ملاحظات إضافية" : "Additional notes"}</Label>
-              <Textarea value={retestReasonNotes} onChange={(e) => setRetestReasonNotes(e.target.value)} rows={2} />
+              <Label className="text-[15px]">{isAr ? "ملاحظات إضافية" : "Additional notes"}</Label>
+              <Textarea className="mt-1.5 text-base" value={retestReasonNotes} onChange={(e) => setRetestReasonNotes(e.target.value)} rows={2} />
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 gap-4">
               <div>
-                <Label>{isAr ? "الموقع" : "Location"}</Label>
-                <Input value={location} onChange={(e) => setLocation(e.target.value)} />
+                <Label className="text-[15px]">{isAr ? "الموقع" : "Location"}</Label>
+                <Input className="h-10 text-base mt-1.5" value={location} onChange={(e) => setLocation(e.target.value)} />
               </div>
               <div>
-                <Label>{isAr ? "تاريخ الصب" : "Casting date"}</Label>
-                <Input type="date" value={castingDate} onChange={(e) => setCastingDate(e.target.value)} />
+                <Label className="text-[15px]">{isAr ? "تاريخ الصب" : "Casting date"}</Label>
+                <Input type="date" className="h-10 text-base mt-1.5" value={castingDate} onChange={(e) => setCastingDate(e.target.value)} />
               </div>
             </div>
 
             <div>
-              <Label>{isAr ? "الاختبارات" : "Tests"}</Label>
-              <div className="border rounded-lg divide-y mt-1">
+              <Label className="text-[15px]">{isAr ? "الاختبارات" : "Tests"}</Label>
+              <div className="border rounded-lg divide-y mt-2">
                 {tests.map((t) => (
-                  <div key={t.testTypeCode} className="flex items-center gap-3 px-3 py-2">
+                  <div key={t.testTypeCode} className="flex items-center gap-3 px-4 py-3">
                     <Checkbox checked={t.checked} onCheckedChange={() => toggleTest(t.testTypeCode)} />
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium truncate">{t.testTypeName}</p>
+                      <p className="text-base font-medium truncate">{t.testTypeName}</p>
                       {t.isFailed && (
                         <Badge variant="destructive" className="text-[10px] mt-0.5">
                           {isAr ? "فاشل" : "Failed"}
@@ -343,7 +343,7 @@ export function ReceptionRetestPanel({ onSuccess, onCancel }: Props) {
                     <Input
                       type="number"
                       min={1}
-                      className="w-16 h-8 text-xs"
+                      className="w-16 h-9 text-sm"
                       value={t.quantity}
                       onChange={(e) => setQty(t.testTypeCode, Number(e.target.value))}
                       disabled={!t.checked}
@@ -354,20 +354,20 @@ export function ReceptionRetestPanel({ onSuccess, onCancel }: Props) {
             </div>
 
             <div>
-              <Label>{isAr ? "ملاحظات الاستقبال" : "Reception notes"}</Label>
-              <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} />
+              <Label className="text-[15px]">{isAr ? "ملاحظات الاستقبال" : "Reception notes"}</Label>
+              <Textarea className="mt-1.5 text-base" value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} />
             </div>
           </>
         )}
       </div>
 
-      <div className="border-t px-6 py-3 flex justify-end gap-2 bg-background">
-        <Button type="button" variant="outline" onClick={onCancel}>{isAr ? "إلغاء" : "Cancel"}</Button>
+      <div className="border-t px-6 lg:px-7 py-4 flex justify-end gap-3 bg-background">
+        <Button type="button" variant="outline" className="h-10 px-5" onClick={onCancel}>{isAr ? "إلغاء" : "Cancel"}</Button>
         <Button
           type="button"
           disabled={!source || !retestReason || createRetest.isPending || !tests.some((t) => t.checked)}
           onClick={handleSubmit}
-          className="gap-2"
+          className="gap-2 h-10 px-5 text-base font-semibold"
         >
           {createRetest.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <FlaskConical className="w-4 h-4" />}
           {isAr ? "تسجيل إعادة الاختبار" : "Register retest"}
