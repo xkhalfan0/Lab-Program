@@ -14,6 +14,7 @@ import {
   TestPriceBadge,
   TestQtyInput,
   TestSelectionCard,
+  TestSelectionGrid,
   TestSelectionPanel,
   TestSelectionRow,
 } from "@/components/TestDisplay";
@@ -346,7 +347,7 @@ export function ReceptionRetestPanel({ onSuccess, onCancel }: Props) {
                   selectedCount={tests.filter((t) => t.checked).length}
                   selectedLabel={isAr ? "محدد" : "selected"}
                 >
-                  <div className="space-y-1.5">
+                  <TestSelectionGrid>
                     {tests.map((t) => (
                       <TestSelectionCard key={t.testTypeCode} selected={t.checked}>
                         <TestSelectionRow
@@ -355,6 +356,7 @@ export function ReceptionRetestPanel({ onSuccess, onCancel }: Props) {
                           onCheckedChange={() => toggleTest(t.testTypeCode)}
                           name={t.testTypeName}
                           code={t.testTypeCode}
+                          compact
                           trailing={
                             <>
                               <TestQtyInput
@@ -378,15 +380,16 @@ export function ReceptionRetestPanel({ onSuccess, onCancel }: Props) {
                         )}
                       </TestSelectionCard>
                     ))}
-                  </div>
+                  </TestSelectionGrid>
                 </TestSelectionPanel>
               </div>
             </div>
 
             {tests.some((t) => t.checked && t.testTypeCode === "CONC_CUBE") && (
-              <div className="rounded-xl border-2 border-blue-300 bg-blue-50/80 p-4">
+              <div className="rounded-lg border border-border bg-muted/30 p-3 max-w-md">
                 <ReceptionNominalCubeSizePanel
                   lang={lang}
+                  variant="compact"
                   value={nominalCubeSize}
                   onChange={setNominalCubeSize}
                 />

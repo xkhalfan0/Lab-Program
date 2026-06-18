@@ -14,6 +14,7 @@ import {
   TestQtyInput,
   TestSectionLabel,
   TestSelectionCard,
+  TestSelectionGrid,
   TestSelectionPanel,
   TestSelectionRow,
 } from "@/components/TestDisplay";
@@ -759,15 +760,28 @@ export default function Reception() {
     const subTypes = SUBTYPES_BY_CODE[tt.code] ?? [];
     const isCasting = CASTING_DATE_TESTS.includes(tt.code);
     const catalogLang = lang === "ar" ? "ar" : "en";
+    const hasHotBinAddons =
+      isSelected &&
+      tt.code === HOT_BIN_REQUIRED_CODE &&
+      allTests.some(
+        (at: any) => HOT_BIN_OPTIONAL_CODES.includes(at.code ?? "") && at.isActive,
+      );
+    const fullWidth =
+      isSelected &&
+      (MULTI_SUBTYPE_TESTS.includes(tt.code) ||
+        (subTypes.length > 0 && !isCasting && !MULTI_SUBTYPE_TESTS.includes(tt.code)) ||
+        hasHotBinAddons ||
+        !!getSteelDeferredSubtypeOrderHint(tt.code, lang));
 
     return (
-      <TestSelectionCard key={tt.id} selected={isSelected}>
+      <TestSelectionCard key={tt.id} selected={isSelected} fullWidth={fullWidth}>
         <TestSelectionRow
           id={`test-${tt.id}`}
           checked={isSelected}
           onCheckedChange={() => toggleTest(tt)}
           name={testDisplayName(tt.code, tt.nameEn, tt.nameAr)}
           code={tt.code}
+          compact={!fullWidth}
           trailing={
             <>
               {isSelected && !MULTI_SUBTYPE_TESTS.includes(tt.code) && (
@@ -1400,20 +1414,6 @@ export default function Reception() {
                     hint={lang === "ar" ? "مرّر القائمة لاختيار الاختبارات" : "Scroll the list to choose tests"}
                     selectedCount={selectedTests.length}
                     selectedLabel={lang === "ar" ? "محدد" : "selected"}
-                    footer={
-                      hasConcCubeTest ? (
-                        <div
-                          ref={concCubePanelRef}
-                          className="border-t border-blue-300 bg-gradient-to-b from-blue-100/90 to-blue-50/95 p-4 md:p-5"
-                        >
-                          <ReceptionNominalCubeSizePanel
-                            lang={lang}
-                            value={nominalCubeSize}
-                            onChange={setNominalCubeSize}
-                          />
-                        </div>
-                      ) : undefined
-                    }
                   >
                 {form.sampleType === "asphalt" && (
                   <div className="space-y-4">
@@ -1435,9 +1435,9 @@ export default function Reception() {
                               {lang === "ar" ? "لا توجد اختبارات نشطة في هذه المجموعة." : "No active tests in this group."}
                             </TestListEmpty>
                           ) : (
-                            <div className="space-y-1.5">
+                            <TestSelectionGrid>
                               {groupTests.map((test: any) => renderTestSelectionCard(test))}
-                            </div>
+                            </TestSelectionGrid>
                           )}
                         </div>
                       );
@@ -1518,9 +1518,9 @@ export default function Reception() {
                     >
                       {lang === "ar" ? "الاختبارات المطلوبة" : "Required Tests"}
                     </TestSectionLabel>
-                    <div className="space-y-1.5">
+                    <TestSelectionGrid>
                       {filteredTests.length === 0 ? (
-                        <TestListEmpty>
+                        <TestListEmpty className="col-span-full">
                           <p>
                             {allTests.filter(t => t.isActive).length === 0
                               ? (lang === "ar"
@@ -1532,7 +1532,7 @@ export default function Reception() {
                           </p>
                         </TestListEmpty>
                       ) : filteredTests.map((tt: any) => renderTestSelectionCard(tt))}
-                    </div>
+                    </TestSelectionGrid>
                   </div>
                 )}
 
@@ -1587,22 +1587,20 @@ export default function Reception() {
                       </div>
                       {hasConcCubeTest && (
                         <div
+                          ref={concCubePanelRef}
                           className={cn(
-                            "rounded-lg border-2 p-3 text-sm space-y-1",
+                            "rounded-lg border p-3",
                             missingConcCubeSize
-                              ? "border-amber-400 bg-amber-50"
-                              : "border-blue-300 bg-blue-50",
+                              ? "border-amber-400 bg-amber-50/80"
+                              : "border-border bg-muted/30",
                           )}
                         >
-                          <p className="font-semibold text-blue-950">
-                            {lang === "ar" ? "حجم المكعب" : "Cube size"}
-                            <span className="text-red-500 ms-1">*</span>
-                          </p>
-                          <p className="text-lg font-bold text-blue-800">
-                            {isValidNominalCubeSize(nominalCubeSize)
-                              ? (nominalCubeSize === "100mm" ? "100 mm" : "150 mm")
-                              : (lang === "ar" ? "— اختر أدناه —" : "— select below —")}
-                          </p>
+                          <ReceptionNominalCubeSizePanel
+                            lang={lang}
+                            variant="compact"
+                            value={nominalCubeSize}
+                            onChange={setNominalCubeSize}
+                          />
                         </div>
                       )}
                       <div className="flex justify-between gap-2 pt-3 border-t text-lg font-semibold">
@@ -1616,8 +1614,8 @@ export default function Reception() {
                     {missingConcCubeSize && (
                       <p className="text-sm text-amber-800 font-medium">
                         {lang === "ar"
-                          ? "اختر الحجم الاسمي للمكعب أسفل قائمة الاختبارات"
-                          : "Select nominal cube size below the test list"}
+                          ? "اختر الحجم الاسمي للمكعب من القائمة على اليمين"
+                          : "Select nominal cube size in the panel on the right"}
                       </p>
                     )}
                     <Button

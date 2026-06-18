@@ -225,22 +225,40 @@ export function TestListEmpty({ children, className }: { children: ReactNode; cl
   );
 }
 
-export function TestSelectionCard({
-  selected,
+export function TestSelectionGrid({
   children,
   className,
 }: {
-  selected?: boolean;
   children: ReactNode;
   className?: string;
 }) {
   return (
+    <div className={cn("grid grid-cols-1 sm:grid-cols-2 gap-1.5", className)}>
+      {children}
+    </div>
+  );
+}
+
+export function TestSelectionCard({
+  selected,
+  children,
+  className,
+  fullWidth,
+}: {
+  selected?: boolean;
+  children: ReactNode;
+  className?: string;
+  /** Span both columns when the card has expanded details (subtypes, add-ons, etc.). */
+  fullWidth?: boolean;
+}) {
+  return (
     <div
       className={cn(
-        "rounded-lg border px-3 py-2.5 transition-colors",
+        "rounded-lg border px-2.5 py-2 transition-colors min-w-0",
         selected
           ? "border-primary/45 bg-primary/[0.04] ring-1 ring-primary/10"
           : "border-border/70 bg-background hover:border-primary/30 hover:bg-muted/25",
+        fullWidth && "col-span-full",
         className,
       )}
     >
@@ -257,6 +275,7 @@ export function TestSelectionRow({
   code,
   trailing,
   disabled,
+  compact,
 }: {
   id: string;
   checked: boolean;
@@ -265,25 +284,41 @@ export function TestSelectionRow({
   code?: string | null;
   trailing?: ReactNode;
   disabled?: boolean;
+  /** Stack name and controls vertically — fits narrow two-column cells. */
+  compact?: boolean;
 }) {
   return (
-    <div className="flex items-center gap-2.5">
+    <div className="flex items-start gap-2">
       <Checkbox
         id={id}
         checked={checked}
         onCheckedChange={onCheckedChange}
         disabled={disabled}
-        className="shrink-0"
+        className="shrink-0 mt-0.5"
       />
       <label
         htmlFor={id}
         className={cn(
-          "flex flex-1 min-w-0 items-center justify-between gap-2",
+          "flex flex-1 min-w-0 gap-1.5",
+          compact ? "flex-col items-stretch" : "flex-row items-center justify-between gap-2",
           disabled ? "cursor-not-allowed opacity-60" : "cursor-pointer",
         )}
       >
-        <TestNameBlock name={name} code={code} />
-        {trailing && <div className="flex shrink-0 items-center gap-1.5">{trailing}</div>}
+        <TestNameBlock
+          name={name}
+          code={code}
+          nameClassName={compact ? "text-xs leading-snug line-clamp-2" : undefined}
+        />
+        {trailing && (
+          <div
+            className={cn(
+              "flex items-center gap-1.5 shrink-0",
+              compact && "justify-between w-full pt-0.5",
+            )}
+          >
+            {trailing}
+          </div>
+        )}
       </label>
     </div>
   );
