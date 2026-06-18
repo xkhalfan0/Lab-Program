@@ -1,6 +1,7 @@
 import DashboardLayout from "@/components/DashboardLayout";
 import { DeletionRequestButton } from "@/components/DeletionRequestButton";
 import { ReceptionNominalCubeSizePanel, isValidNominalCubeSize } from "@/components/ReceptionNominalCubeSizePanel";
+import { ReceptionRetestPanel } from "@/components/ReceptionRetestPanel";
 import { RetestBadge } from "@/components/RetestBadge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -11,11 +12,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { trpc } from "@/lib/trpc";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Search, Printer, FileText, Pencil, X, Trash2, CheckSquare, Package, CalendarIcon, AlertTriangle, ChevronRight } from "lucide-react";
+import { Search, Printer, FileText, Pencil, X, Trash2, CheckSquare, Package, CalendarIcon, AlertTriangle, ClipboardList } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState, useMemo, useEffect, useRef, type ReactElement, type ReactNode } from "react";
 import { format } from "date-fns";
@@ -312,7 +314,6 @@ export default function Reception() {
   const { user } = useAuth();
   const canEditSample = ["admin", "lab_manager", "reception"].includes(user?.role ?? "");
   const [search, setSearch] = useState("");
-  const [showOrderHistory, setShowOrderHistory] = useState(false);
   const [sectorFilter, setSectorFilter] = useState<string>("all");
   const [sampleTypeFilter, setSampleTypeFilter] = useState<string>("all");
   const [form, setForm] = useState(emptyForm());
@@ -1184,6 +1185,13 @@ export default function Reception() {
       .slice(0, 5);
   }, [orders, search]);
 
+  const receptionTabTriggerClass =
+    "group flex-1 min-w-0 rounded-lg border border-transparent px-4 py-3 text-sm font-semibold transition-all " +
+    "text-muted-foreground hover:text-foreground hover:bg-white/60 " +
+    "data-[state=active]:bg-white data-[state=active]:text-primary data-[state=active]:shadow-sm " +
+    "data-[state=active]:border-slate-200 data-[state=active]:ring-1 data-[state=active]:ring-primary/20 " +
+    "data-[state=active]:[&_svg]:text-primary";
+
   return (
     <DashboardLayout>
       <div className="space-y-5 max-w-7xl">
@@ -1193,68 +1201,85 @@ export default function Reception() {
             <h1 className="text-2xl font-bold tracking-tight">{t("reception.title")}</h1>
             <p className="text-base text-muted-foreground mt-0.5">{t("reception.subtitle")}</p>
           </div>
-          <div className="flex items-center gap-2.5">
-            <div className="inline-flex rounded-lg border bg-muted/40 p-1">
-              {([
-                { id: "new" as const, labelAr: "عينة جديدة", labelEn: "New" },
-                { id: "retest" as const, labelAr: "إعادة", labelEn: "Retest" },
-              ]).map(({ id, labelAr, labelEn }) => (
-                <button
-                  key={id}
-                  type="button"
-                  onClick={() => setReceptionMode(id)}
-                  className={cn(
-                    "rounded-md px-4 py-2 text-sm font-medium transition-colors",
-                    receptionMode === id
-                      ? "bg-background text-foreground shadow-sm"
-                      : "text-muted-foreground hover:text-foreground"
-                  )}
-                >
-                  {lang === "ar" ? labelAr : labelEn}
-                </button>
-              ))}
-            </div>
-            <Button type="button" variant="outline" className="gap-2 h-10 px-4" onClick={() => openTestCatalogPrint()}>
-              <FileText className="w-4 h-4" />
-              {lang === "ar" ? "الأسعار" : "Prices"}
-            </Button>
-          </div>
+          <Button type="button" variant="outline" className="gap-2 h-10 px-4" onClick={() => openTestCatalogPrint()}>
+            <FileText className="w-4 h-4" />
+            {lang === "ar" ? "الأسعار" : "Prices"}
+          </Button>
         </div>
 
-        {/* Search — one bar for lookup + order filter */}
-        <div className="relative">
-          <Search className="absolute start-3.5 top-1/2 -translate-y-1/2 w-[18px] h-[18px] text-muted-foreground" />
-          <Input
-            placeholder={t("reception.searchPlaceholder")}
-            className="ps-10 h-11 text-base"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-        </div>
-        {search.trim() && sampleLookupResults.length > 0 && (
-          <div className="rounded-lg border bg-muted/20 divide-y text-sm">
-            {sampleLookupResults.map((order: any) => (
-              <div key={order.sampleId} className="flex items-center justify-between gap-3 px-3 py-2">
-                <div className="min-w-0">
-                  <span className="font-mono font-semibold text-primary">{order.sampleCode}</span>
-                  <span className="text-muted-foreground text-xs ms-2">{order.contractorName}</span>
-                  <RetestBadge
-                    retestNumber={order.retestNumber}
-                    originalSampleId={order.originalSampleId}
-                    originalSampleCode={order.originalSampleCode}
-                    retestReason={order.retestReason}
-                    compact
-                  />
-                </div>
-                <div className="flex gap-1 shrink-0">
-                  <Button type="button" variant="ghost" size="sm" className="h-7 px-2" onClick={() => window.open(`/print-receipt/${order.sampleId}`, "_blank")}>
-                    <Printer className="w-3.5 h-3.5" />
-                  </Button>
-                </div>
+        <Tabs defaultValue="register" className="w-full">
+          <TabsList className="w-full h-auto p-1.5 bg-slate-100 border border-slate-200 rounded-xl flex gap-1">
+            <TabsTrigger value="register" className={receptionTabTriggerClass}>
+              <CheckSquare className="w-4 h-4 me-2 shrink-0" />
+              <span className="truncate">{lang === "ar" ? "تسجيل عينة" : "Register sample"}</span>
+            </TabsTrigger>
+            <TabsTrigger value="history" className={receptionTabTriggerClass}>
+              <ClipboardList className="w-4 h-4 me-2 shrink-0" />
+              <span className="truncate">{lang === "ar" ? "سجل الأوردرات" : "Order history"}</span>
+              <span className="ms-2 inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-slate-200 px-1.5 text-[10px] font-bold text-slate-700 group-data-[state=active]:bg-primary/15 group-data-[state=active]:text-primary">
+                {orders?.length ?? 0}
+              </span>
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="register" className="mt-4 space-y-5">
+            <div className="flex items-center justify-end">
+              <div className="inline-flex rounded-lg border bg-muted/40 p-1">
+                {([
+                  { id: "new" as const, labelAr: "عينة جديدة", labelEn: "New" },
+                  { id: "retest" as const, labelAr: "إعادة", labelEn: "Retest" },
+                ]).map(({ id, labelAr, labelEn }) => (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => setReceptionMode(id)}
+                    className={cn(
+                      "rounded-md px-4 py-2 text-sm font-medium transition-colors",
+                      receptionMode === id
+                        ? "bg-background text-foreground shadow-sm"
+                        : "text-muted-foreground hover:text-foreground"
+                    )}
+                  >
+                    {lang === "ar" ? labelAr : labelEn}
+                  </button>
+                ))}
               </div>
-            ))}
-          </div>
-        )}
+            </div>
+
+            {/* Search — sample lookup */}
+            <div className="relative">
+              <Search className="absolute start-3.5 top-1/2 -translate-y-1/2 w-[18px] h-[18px] text-muted-foreground" />
+              <Input
+                placeholder={t("reception.searchPlaceholder")}
+                className="ps-10 h-11 text-base"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            </div>
+            {search.trim() && sampleLookupResults.length > 0 && (
+              <div className="rounded-lg border bg-muted/20 divide-y text-sm">
+                {sampleLookupResults.map((order: any) => (
+                  <div key={order.sampleId} className="flex items-center justify-between gap-3 px-3 py-2">
+                    <div className="min-w-0">
+                      <span className="font-mono font-semibold text-primary">{order.sampleCode}</span>
+                      <span className="text-muted-foreground text-xs ms-2">{order.contractorName}</span>
+                      <RetestBadge
+                        retestNumber={order.retestNumber}
+                        originalSampleId={order.originalSampleId}
+                        originalSampleCode={order.originalSampleCode}
+                        retestReason={order.retestReason}
+                        compact
+                      />
+                    </div>
+                    <div className="flex gap-1 shrink-0">
+                      <Button type="button" variant="ghost" size="sm" className="h-7 px-2" onClick={() => window.open(`/print-receipt/${order.sampleId}`, "_blank")}>
+                        <Printer className="w-3.5 h-3.5" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
 
         {receptionMode === "retest" ? (
           <Card>
@@ -1629,137 +1654,135 @@ export default function Reception() {
             </Card>
           </form>
         )}
+          </TabsContent>
 
-        {/* Orders — collapsed by default */}
-        <div className="pt-2">
-          <button
-            type="button"
-            onClick={() => setShowOrderHistory(v => !v)}
-            className="flex items-center gap-2 text-base font-medium text-muted-foreground hover:text-foreground"
-          >
-            <ChevronRight className={cn("w-4 h-4 transition-transform", showOrderHistory && "rotate-90")} />
-            {lang === "ar" ? "سجل الأوردرات" : "Order history"} ({orders?.length ?? 0})
-          </button>
-        </div>
+          <TabsContent value="history" className="mt-4 space-y-4">
+            <div className="relative">
+              <Search className="absolute start-3.5 top-1/2 -translate-y-1/2 w-[18px] h-[18px] text-muted-foreground" />
+              <Input
+                placeholder={
+                  lang === "ar"
+                    ? "بحث برقم العينة، العقد، المقاول، أو الأوردر..."
+                    : "Search by sample ID, contract, contractor, or order..."
+                }
+                className="ps-10 h-11 text-base"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            </div>
 
-        {showOrderHistory && (
-        <div className="space-y-3">
-        {/* Sector Filter */}
-        <div className="flex items-center gap-1.5 flex-wrap">
-          <span className="text-xs text-muted-foreground">{lang === "ar" ? "القطاع:" : "Sector:"}</span>
-          <button
-            onClick={() => setSectorFilter("all")}
-            className={`px-2.5 py-0.5 rounded-full text-xs border ${sectorFilter === "all" ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground"}`}>
-            {lang === "ar" ? "الكل" : "All"}
-          </button>
-          {sectors.filter((s: any) => s.isActive).map((sec: any) => (
-            <button key={sec.sectorKey}
-              onClick={() => setSectorFilter(sec.sectorKey)}
-              className={`px-2.5 py-0.5 rounded-full text-xs border ${sectorFilter === sec.sectorKey ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground"}`}>
-              {lang === "ar" ? sec.nameAr : sec.nameEn}
-            </button>
-          ))}
-        </div>
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span className="text-xs text-muted-foreground">{lang === "ar" ? "القطاع:" : "Sector:"}</span>
+              <button
+                onClick={() => setSectorFilter("all")}
+                className={`px-2.5 py-0.5 rounded-full text-xs border ${sectorFilter === "all" ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground"}`}>
+                {lang === "ar" ? "الكل" : "All"}
+              </button>
+              {sectors.filter((s: any) => s.isActive).map((sec: any) => (
+                <button key={sec.sectorKey}
+                  onClick={() => setSectorFilter(sec.sectorKey)}
+                  className={`px-2.5 py-0.5 rounded-full text-xs border ${sectorFilter === sec.sectorKey ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground"}`}>
+                  {lang === "ar" ? sec.nameAr : sec.nameEn}
+                </button>
+              ))}
+            </div>
 
-        {/* Sample type filter */}
-        <div className="flex items-center gap-1.5 flex-wrap">
-          <span className="text-xs text-muted-foreground">{lang === "ar" ? "النوع:" : "Type:"}</span>
-          <button
-            onClick={() => setSampleTypeFilter("all")}
-            className={`px-2.5 py-0.5 rounded-full text-xs border ${sampleTypeFilter === "all" ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground"}`}>
-            {lang === "ar" ? "الكل" : "All"}
-          </button>
-          {CATEGORIES.map((cat) => (
-            <button
-              key={cat.value}
-              onClick={() => setSampleTypeFilter(cat.value)}
-              className={`px-2.5 py-0.5 rounded-full text-xs border ${sampleTypeFilter === cat.value ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground"}`}>
-              {lang === "ar" ? cat.labelAr : cat.labelEn}
-            </button>
-          ))}
-        </div>
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span className="text-xs text-muted-foreground">{lang === "ar" ? "النوع:" : "Type:"}</span>
+              <button
+                onClick={() => setSampleTypeFilter("all")}
+                className={`px-2.5 py-0.5 rounded-full text-xs border ${sampleTypeFilter === "all" ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground"}`}>
+                {lang === "ar" ? "الكل" : "All"}
+              </button>
+              {CATEGORIES.map((cat) => (
+                <button
+                  key={cat.value}
+                  onClick={() => setSampleTypeFilter(cat.value)}
+                  className={`px-2.5 py-0.5 rounded-full text-xs border ${sampleTypeFilter === cat.value ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground"}`}>
+                  {lang === "ar" ? cat.labelAr : cat.labelEn}
+                </button>
+              ))}
+            </div>
 
-        {/* Orders Table */}
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-semibold">
-              {lang === "ar" ? "الأوردرات" : "Orders"} ({filteredOrders.length})
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="p-0">
-            {filteredOrders.length === 0 ? (
-              <div className="p-10 text-center">
-                <Package className="w-10 h-10 mx-auto mb-3 text-muted-foreground opacity-30" />
-                <p className="text-sm text-muted-foreground">
-                  {lang === "ar" ? "لا توجد أوردرات" : "No orders found"}
-                </p>
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b bg-muted/30">
-                      <th className="text-start px-4 py-2.5 text-xs font-medium text-muted-foreground">{lang === "ar" ? "رقم الأوردر" : "Order #"}</th>
-                      <th className="text-start px-4 py-2.5 text-xs font-medium text-muted-foreground">{t("table.contractNo")}</th>
-                      <th className="text-start px-4 py-2.5 text-xs font-medium text-muted-foreground">{t("table.contractor")}</th>
-                      <th className="text-start px-4 py-2.5 text-xs font-medium text-muted-foreground">{lang === "ar" ? "نوع العينة" : "Type"}</th>
-                      <th className="text-start px-4 py-2.5 text-xs font-medium text-muted-foreground">{lang === "ar" ? "الاختبارات" : "Tests"}</th>
-                      <th className="text-start px-4 py-2.5 text-xs font-medium text-muted-foreground">{t("table.receivedAt")}</th>
-                      <th className="text-start px-4 py-2.5 text-xs font-medium text-muted-foreground">{t("table.actions")}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredOrders.map((order: any) => (
-                      <tr key={order.id} className="border-b last:border-0 hover:bg-muted/20 transition-colors">
-                        <td className="px-4 py-2.5">
-                          <div className="font-mono text-xs font-semibold text-primary">{order.orderCode}</div>
-                          {order.sampleCode && (
-                            <div className="font-mono text-[10px] text-muted-foreground">{order.sampleCode}</div>
-                          )}
-                          <RetestBadge
-                            retestNumber={order.retestNumber}
-                            originalSampleId={order.originalSampleId}
-                            originalSampleCode={order.originalSampleCode}
-                            retestReason={order.retestReason}
-                            compact
-                          />
-                        </td>
-                        <td className="px-4 py-2.5 text-xs font-mono text-muted-foreground">{order.contractNumber ?? "—"}</td>
-                        <td className="px-4 py-2.5 text-xs">{order.contractorName ?? "—"}</td>
-                        <td className="px-4 py-2.5 text-xs">{typeLabel(order.sampleType ?? "")}</td>
-                        <td className="px-4 py-2.5 text-xs">
-                          <Badge
-                            variant="outline"
-                            className="text-xs"
-                            title={((order as any).testNames ?? [])
-                              .filter((n: string) => !!n)
-                              .join("\n")}
-                          >
-                            {((order as any).testCount ?? 0)} {lang === "ar" ? "اختبار" : "tests"}
-                          </Badge>
-                        </td>
-                        <td className="px-4 py-2.5 text-xs text-muted-foreground">
-                          {new Date(order.createdAt).toLocaleDateString(lang === "ar" ? "ar-AE" : "en-AE")}
-                        </td>
-                        <td className="px-4 py-2.5">
-                          <ReceptionOrderActionsCell
-                            order={order}
-                            lang={lang}
-                            canEditSample={canEditSample}
-                            handleEditOrder={handleEditOrder}
-                            onDeletionSuccess={() => refetch()}
-                          />
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-        </div>
-        )}
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-semibold">
+                  {lang === "ar" ? "الأوردرات" : "Orders"} ({filteredOrders.length})
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-0">
+                {filteredOrders.length === 0 ? (
+                  <div className="p-10 text-center">
+                    <Package className="w-10 h-10 mx-auto mb-3 text-muted-foreground opacity-30" />
+                    <p className="text-sm text-muted-foreground">
+                      {lang === "ar" ? "لا توجد أوردرات" : "No orders found"}
+                    </p>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b bg-muted/30">
+                          <th className="text-start px-4 py-2.5 text-xs font-medium text-muted-foreground">{lang === "ar" ? "رقم العينة" : "Sample ID"}</th>
+                          <th className="text-start px-4 py-2.5 text-xs font-medium text-muted-foreground">{lang === "ar" ? "رقم الأوردر" : "Order #"}</th>
+                          <th className="text-start px-4 py-2.5 text-xs font-medium text-muted-foreground">{t("table.contractNo")}</th>
+                          <th className="text-start px-4 py-2.5 text-xs font-medium text-muted-foreground">{t("table.contractor")}</th>
+                          <th className="text-start px-4 py-2.5 text-xs font-medium text-muted-foreground">{lang === "ar" ? "نوع العينة" : "Type"}</th>
+                          <th className="text-start px-4 py-2.5 text-xs font-medium text-muted-foreground">{lang === "ar" ? "الاختبارات" : "Tests"}</th>
+                          <th className="text-start px-4 py-2.5 text-xs font-medium text-muted-foreground">{t("table.receivedAt")}</th>
+                          <th className="text-start px-4 py-2.5 text-xs font-medium text-muted-foreground">{t("table.actions")}</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {filteredOrders.map((order: any) => (
+                          <tr key={order.id} className="border-b last:border-0 hover:bg-muted/20 transition-colors">
+                            <td className="px-4 py-2.5">
+                              <div className="font-mono text-sm font-bold text-primary">{order.sampleCode ?? "—"}</div>
+                              <RetestBadge
+                                retestNumber={order.retestNumber}
+                                originalSampleId={order.originalSampleId}
+                                originalSampleCode={order.originalSampleCode}
+                                retestReason={order.retestReason}
+                                compact
+                              />
+                            </td>
+                            <td className="px-4 py-2.5 font-mono text-xs text-muted-foreground">{order.orderCode}</td>
+                            <td className="px-4 py-2.5 text-xs font-mono text-muted-foreground">{order.contractNumber ?? "—"}</td>
+                            <td className="px-4 py-2.5 text-xs">{order.contractorName ?? "—"}</td>
+                            <td className="px-4 py-2.5 text-xs">{typeLabel(order.sampleType ?? "")}</td>
+                            <td className="px-4 py-2.5 text-xs">
+                              <Badge
+                                variant="outline"
+                                className="text-xs"
+                                title={((order as any).testNames ?? [])
+                                  .filter((n: string) => !!n)
+                                  .join("\n")}
+                              >
+                                {((order as any).testCount ?? 0)} {lang === "ar" ? "اختبار" : "tests"}
+                              </Badge>
+                            </td>
+                            <td className="px-4 py-2.5 text-xs text-muted-foreground">
+                              {new Date(order.createdAt).toLocaleDateString(lang === "ar" ? "ar-AE" : "en-AE")}
+                            </td>
+                            <td className="px-4 py-2.5">
+                              <ReceptionOrderActionsCell
+                                order={order}
+                                lang={lang}
+                                canEditSample={canEditSample}
+                                handleEditOrder={handleEditOrder}
+                                onDeletionSuccess={() => refetch()}
+                              />
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
 
       {/* ─── Edit Order Dialog ─────────────────────────────────────────────── */}
       <Dialog open={editOpen} onOpenChange={(v) => { setEditOpen(v); if (!v) setEditingOrder(null); }}>
