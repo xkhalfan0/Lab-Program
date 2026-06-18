@@ -996,14 +996,6 @@ export default function Reception() {
     return sum + t.unitPrice * t.quantity;
   }, 0);
 
-  const totalSpecimens = selectedTests.reduce((sum, t) => {
-    if (MULTI_SUBTYPE_TESTS.includes(t.testTypeCode) && t.testSubType === "__multi__") {
-      const subtypeMap = multiSubtypes[t.testTypeId] ?? {};
-      return sum + Object.values(subtypeMap).reduce((s, qty) => s + (qty > 0 ? qty : 0), 0);
-    }
-    return sum + (t.quantity > 0 ? t.quantity : 0);
-  }, 0);
-
   const sampleLookupResults = useMemo(() => {
     const q = search.trim().toLowerCase();
     if (!q || !orders?.length) return [];
