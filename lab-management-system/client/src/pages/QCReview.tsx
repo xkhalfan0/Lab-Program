@@ -23,8 +23,8 @@ import { applyClearanceFilters, applySampleFilters, hasActiveListFilters } from 
 import { SAMPLE_TYPE_LABELS } from "@/lib/labTypes";
 import {
   ShieldCheck, CheckCircle, XCircle, RotateCcw, ClipboardCheck,
-  BadgeCheck, FlaskConical, Clock, DollarSign, CheckCircle2,
-  History, ChevronRight, ExternalLink,
+  BadgeCheck, FlaskConical, DollarSign, CheckCircle2,
+  ChevronRight, ExternalLink,
 } from "lucide-react";
 import { useState, useEffect, useMemo, type ReactElement } from "react";
 import { useAuth } from "@/_core/hooks/useAuth";
@@ -43,7 +43,6 @@ import {
 } from "recharts";
 
 // ─── Task state helpers ───────────────────────────────────────────────────────
-type TaskFilter = "all" | "new" | "incomplete" | "completed";
 
 function getClearanceTaskState(req: any): "new" | "incomplete" | "completed" {
   if (req.status !== "pending") return "completed";
@@ -57,26 +56,24 @@ function getSampleTaskState(sample: any): "new" | "incomplete" | "completed" {
   return "completed";
 }
 
-function TaskStateBadge({ state, lang }: { state: "new" | "incomplete" | "completed"; lang: string }) {
-  if (state === "new")
-    return (
-      <Badge className="bg-red-100 text-red-700 border-red-200 gap-1 text-xs">
-        <span className="w-1.5 h-1.5 rounded-full bg-red-500 inline-block animate-pulse" />
-        {lang === "ar" ? "جديدة" : "New"}
-      </Badge>
-    );
-  if (state === "incomplete")
-    return (
-      <Badge className="bg-amber-100 text-amber-700 border-amber-200 gap-1 text-xs">
-        <Clock className="w-3 h-3" />
-        {lang === "ar" ? "غير مكتملة" : "Incomplete"}
-      </Badge>
-    );
+function ClearanceStatusBadge({ status, lang }: { status: string; lang: string }) {
+  const labels: Record<string, { en: string; ar: string; className: string }> = {
+    pending: { en: "Pending QC", ar: "بانتظار QC", className: "bg-amber-100 text-amber-800 border-amber-200" },
+    inventory_ready: { en: "QC Approved", ar: "معتمد QC", className: "bg-blue-100 text-blue-800 border-blue-200" },
+    payment_ordered: { en: "Payment Ordered", ar: "أمر دفع", className: "bg-indigo-100 text-indigo-800 border-indigo-200" },
+    docs_uploaded: { en: "Docs Uploaded", ar: "مستندات مرفوعة", className: "bg-purple-100 text-purple-800 border-purple-200" },
+    certificate_issued: { en: "Certificate Issued", ar: "شهادة صادرة", className: "bg-green-100 text-green-800 border-green-200" },
+    rejected: { en: "Rejected", ar: "مرفوض", className: "bg-red-100 text-red-800 border-red-200" },
+  };
+  const cfg = labels[status] ?? {
+    en: status.replace(/_/g, " "),
+    ar: status,
+    className: "bg-muted text-muted-foreground border-border",
+  };
   return (
-    <Badge className="bg-green-100 text-green-700 border-green-200 gap-1 text-xs">
-      <CheckCircle2 className="w-3 h-3" />
-      {lang === "ar" ? "مُنجزة" : "Completed"}
-    </Badge>
+    <span className={`inline-flex items-center border px-2 py-0.5 rounded-full text-xs font-medium ${cfg.className}`}>
+      {lang === "ar" ? cfg.ar : cfg.en}
+    </span>
   );
 }
 
@@ -143,13 +140,18 @@ function QCReviewActiveSampleCard({
         <div className="space-y-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <p className="font-mono text-sm font-bold text-primary">{sample.sampleCode}</p>
+            <StatusBadge status={sample.status} />
+            {state === "new" && (
+              <Badge className="bg-red-100 text-red-700 border-red-200 gap-1 text-xs">
+                <span className="w-1.5 h-1.5 rounded-full bg-red-500 inline-block animate-pulse" />
+                {lang === "ar" ? "جديدة" : "New"}
+              </Badge>
+            )}
             <RetestBadge
               retestNumber={(sample as { retestNumber?: number }).retestNumber}
               originalSampleId={(sample as { originalSampleId?: number }).originalSampleId}
               compact
             />
-            <TaskStateBadge state={state} lang={lang} />
-            <StatusBadge status={sample.status} />
             {PendingDeletionBadge}
           </div>
           <p className="text-xs text-muted-foreground">
@@ -233,7 +235,6 @@ function QCReviewArchiveSampleCard({
       <CardContent className="p-3 flex items-center justify-between gap-2">
         <div className="flex items-center gap-2 flex-wrap min-w-0">
           <p className="font-mono text-xs font-bold text-primary">{sample.sampleCode}</p>
-          <TaskStateBadge state="completed" lang={lang} />
           <StatusBadge status={sample.status} />
           {PendingDeletionBadge}
         </div>
@@ -255,8 +256,6 @@ function ClearanceQCSection() {
   const [selectedReqId, setSelectedReqId] = useState<number | null>(null);
   const [qcNotes, setQcNotes] = useState("");
   const [reviewOpen, setReviewOpen] = useState(false);
-  const [taskFilter, setTaskFilter] = useState<TaskFilter>("new");
-  const [showHistory, setShowHistory] = useState(false);
   const [listSearch, setListSearch] = useState("");
 
   const { data: requests = [], refetch } = trpc.clearance.list.useQuery();
@@ -282,21 +281,17 @@ function ClearanceQCSection() {
 
   const markQcRead = trpc.clearance.markQcRead.useMutation();
 
-  const newCount = requests.filter(r => getClearanceTaskState(r) === "new").length;
-  const incompleteCount = requests.filter(r => getClearanceTaskState(r) === "incomplete").length;
-  const completedCount = requests.filter(r => getClearanceTaskState(r) === "completed").length;
-
   const clearanceListFilters = useMemo(() => ({ search: listSearch }), [listSearch]);
 
   const filteredRequests = useMemo(() => {
-    const byTask = requests.filter((r) => {
-      if (taskFilter === "all") return true;
-      return getClearanceTaskState(r) === taskFilter;
+    const sorted = [...requests].sort((a, b) => {
+      const aDone = getClearanceTaskState(a) === "completed" ? 1 : 0;
+      const bDone = getClearanceTaskState(b) === "completed" ? 1 : 0;
+      if (aDone !== bDone) return aDone - bDone;
+      return new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime();
     });
-    return applyClearanceFilters(byTask, clearanceListFilters);
-  }, [requests, taskFilter, clearanceListFilters]);
-  const activeRequests = filteredRequests.filter(r => getClearanceTaskState(r) !== "completed");
-  const completedRequests = filteredRequests.filter(r => getClearanceTaskState(r) === "completed");
+    return applyClearanceFilters(sorted, clearanceListFilters);
+  }, [requests, clearanceListFilters]);
 
   const inventory = (selectedReq?.inventoryData ?? []) as any[];
 
@@ -312,28 +307,6 @@ function ClearanceQCSection() {
 
   return (
     <div className="space-y-4">
-      {/* Filter Buttons */}
-      <div className="flex flex-wrap gap-2">
-        <button onClick={() => setTaskFilter("new")}
-          className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs font-medium transition-all ${taskFilter === "new" ? "bg-red-600 text-white border-red-600" : "bg-background text-muted-foreground border-border hover:border-red-400"}`}>
-          <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-          {lang === "ar" ? "جديدة" : "New"}
-          <span className={`px-1.5 py-0.5 rounded-full text-xs font-bold ${taskFilter === "new" ? "bg-white/20 text-white" : "bg-red-100 text-red-700"}`}>{newCount}</span>
-        </button>
-        <button onClick={() => setTaskFilter("incomplete")}
-          className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs font-medium transition-all ${taskFilter === "incomplete" ? "bg-amber-500 text-white border-amber-500" : "bg-background text-muted-foreground border-border hover:border-amber-400"}`}>
-          <Clock className="w-3.5 h-3.5" />
-          {lang === "ar" ? "غير مكتملة" : "Incomplete"}
-          <span className={`px-1.5 py-0.5 rounded-full text-xs font-bold ${taskFilter === "incomplete" ? "bg-white/20 text-white" : "bg-amber-100 text-amber-700"}`}>{incompleteCount}</span>
-        </button>
-        <button onClick={() => setTaskFilter("completed")}
-          className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs font-medium transition-all ${taskFilter === "completed" ? "bg-green-600 text-white border-green-600" : "bg-background text-muted-foreground border-border hover:border-green-400"}`}>
-          <History className="w-3.5 h-3.5" />
-          {lang === "ar" ? "الأرشيف" : "Archive"}
-          <span className={`px-1.5 py-0.5 rounded-full text-xs font-bold ${taskFilter === "completed" ? "bg-white/20 text-white" : "bg-green-100 text-green-700"}`}>{completedCount}</span>
-        </button>
-      </div>
-
       <ListFilterBar
         lang={lang}
         search={listSearch}
@@ -348,28 +321,44 @@ function ClearanceQCSection() {
         resultCount={filteredRequests.length}
       />
 
-      {/* Active Requests */}
-      {activeRequests.length === 0 && taskFilter !== "completed" ? (
+      {filteredRequests.length === 0 ? (
         <Card>
           <CardContent className="p-8 text-center">
             <BadgeCheck className="w-10 h-10 mx-auto mb-3 text-muted-foreground opacity-20" />
             <p className="text-sm text-muted-foreground">
-              {lang === "ar" ? "لا توجد طلبات براءة ذمة بانتظار المراجعة" : "No clearance requests awaiting QC review"}
+              {lang === "ar" ? "لا توجد طلبات براءة ذمة" : "No clearance requests found"}
             </p>
           </CardContent>
         </Card>
       ) : (
         <div className="grid gap-3">
-          {activeRequests.map(req => {
+          {filteredRequests.map(req => {
             const state = getClearanceTaskState(req);
+            const isDone = state === "completed";
             return (
-              <Card key={req.id} className={`border-l-4 ${state === "new" ? "border-l-red-400 bg-red-50/20" : state === "incomplete" ? "border-l-amber-400 bg-amber-50/20" : "border-l-green-400"}`}>
+              <Card
+                key={req.id}
+                className={`border-l-4 cursor-pointer hover:shadow-md transition-shadow ${
+                  isDone
+                    ? "border-l-green-400 opacity-80 hover:opacity-100"
+                    : state === "new"
+                      ? "border-l-red-400 bg-red-50/20"
+                      : "border-l-amber-400 bg-amber-50/20"
+                }`}
+                onClick={() => handleOpenReq(req)}
+              >
                 <CardContent className="p-4">
                   <div className="flex items-start justify-between gap-3">
-                    <div className="space-y-1 flex-1">
+                    <div className="space-y-1 flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-mono text-sm font-bold text-primary">{req.requestCode}</span>
-                        <TaskStateBadge state={state} lang={lang} />
+                        <ClearanceStatusBadge status={req.status} lang={lang} />
+                        {state === "new" && (
+                          <Badge className="bg-red-100 text-red-700 border-red-200 gap-1 text-xs">
+                            <span className="w-1.5 h-1.5 rounded-full bg-red-500 inline-block animate-pulse" />
+                            {lang === "ar" ? "جديدة" : "New"}
+                          </Badge>
+                        )}
                       </div>
                       <p className="text-sm font-medium">{req.contractorName}</p>
                       <p className="text-xs text-muted-foreground">
@@ -397,7 +386,7 @@ function ClearanceQCSection() {
                         </span>
                       </div>
                     </div>
-                    <Button size="sm" className="gap-1.5 bg-blue-600 hover:bg-blue-700 shrink-0" onClick={() => handleOpenReq(req)}>
+                    <Button size="sm" className="gap-1.5 bg-blue-600 hover:bg-blue-700 shrink-0" onClick={(e) => { e.stopPropagation(); handleOpenReq(req); }}>
                       <ClipboardCheck className="w-3.5 h-3.5" />
                       {lang === "ar" ? "مراجعة QC" : "QC Review"}
                     </Button>
@@ -406,36 +395,6 @@ function ClearanceQCSection() {
               </Card>
             );
           })}
-        </div>
-      )}
-
-      {/* Archive (Completed) */}
-      {taskFilter === "completed" && (
-        <div className="space-y-3">
-          {completedRequests.map(req => (
-            <Card key={req.id} className="border-l-4 border-l-green-400 cursor-pointer hover:shadow-sm opacity-80 hover:opacity-100 transition-all" onClick={() => handleOpenReq(req)}>
-              <CardContent className="p-3 flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <div className="flex items-center gap-2">
-                    <span className="font-mono text-xs font-bold text-primary">{req.requestCode}</span>
-                    <TaskStateBadge state="completed" lang={lang} />
-                  </div>
-                  <p className="text-xs text-muted-foreground">{req.contractorName} — {req.contractNumber}</p>
-                  {req.createdAt && (
-                    <p className="text-xs text-muted-foreground/70">
-                      {new Date(req.createdAt).toLocaleDateString(lang === "ar" ? "ar-AE" : "en-AE")}
-                    </p>
-                  )}
-                </div>
-                <ChevronRight className={`w-4 h-4 text-muted-foreground ${lang === "ar" ? "rotate-180" : ""}`} />
-              </CardContent>
-            </Card>
-          ))}
-          {completedRequests.length === 0 && (
-            <div className="text-center py-8 text-sm text-muted-foreground">
-              {lang === "ar" ? "لا توجد نتائج للبحث" : "No results found"}
-            </div>
-          )}
         </div>
       )}
 
@@ -602,8 +561,6 @@ export default function QCReview() {
   const [decision, setDecision] = useState<"approved" | "needs_revision" | "rejected" | null>(null);
 
   const currentUserSignature = user?.name || user?.username || "";
-  const [taskFilter, setTaskFilter] = useState<TaskFilter>("new");
-  const [showHistory, setShowHistory] = useState(false);
   const [loadTimedOut, setLoadTimedOut] = useState(false);
   const [listSearch, setListSearch] = useState("");
   const [sectorFilter, setSectorFilter] = useState("all");
@@ -653,8 +610,6 @@ export default function QCReview() {
   ) ?? [];
 
   const newCount = qcSamples.filter(s => getSampleTaskState(s) === "new").length;
-  const incompleteCount = qcSamples.filter(s => getSampleTaskState(s) === "incomplete").length;
-  const completedCount = qcSamples.filter(s => getSampleTaskState(s) === "completed").length;
   const clearanceNewCount = clearanceRequests.filter(r => getClearanceTaskState(r) === "new").length;
 
   const tabTriggerClass =
@@ -674,14 +629,15 @@ export default function QCReview() {
   );
 
   const filteredSamples = useMemo(() => {
-    const byTask = qcSamples.filter((s) => {
-      if (taskFilter === "all") return true;
-      return getSampleTaskState(s) === taskFilter;
+    const sorted = [...qcSamples].sort((a, b) => {
+      const aDone = getSampleTaskState(a) === "completed" ? 1 : 0;
+      const bDone = getSampleTaskState(b) === "completed" ? 1 : 0;
+      if (aDone !== bDone) return aDone - bDone;
+      return new Date(b.updatedAt ?? b.receivedAt ?? b.createdAt ?? 0).getTime() -
+        new Date(a.updatedAt ?? a.receivedAt ?? a.createdAt ?? 0).getTime();
     });
-    return applySampleFilters(byTask, sampleListFilters);
-  }, [qcSamples, taskFilter, sampleListFilters]);
-  const activeSamples = filteredSamples.filter(s => getSampleTaskState(s) !== "completed");
-  const completedSamples = filteredSamples.filter(s => getSampleTaskState(s) === "completed");
+    return applySampleFilters(sorted, sampleListFilters);
+  }, [qcSamples, sampleListFilters]);
 
   const dist = distributions?.[0];
   const result = results?.[0];
@@ -827,28 +783,6 @@ export default function QCReview() {
           </TabsList>
 
           <TabsContent value="samples" className="mt-4 space-y-4">
-          {/* Filter Buttons */}
-          <div className="flex flex-wrap gap-2">
-            <button onClick={() => setTaskFilter("new")}
-              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs font-medium transition-all ${taskFilter === "new" ? "bg-red-600 text-white border-red-600" : "bg-background text-muted-foreground border-border hover:border-red-400"}`}>
-              <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-              {lang === "ar" ? "جديدة" : "New"}
-              <span className={`px-1.5 py-0.5 rounded-full text-xs font-bold ${taskFilter === "new" ? "bg-white/20 text-white" : "bg-red-100 text-red-700"}`}>{newCount}</span>
-            </button>
-            <button onClick={() => setTaskFilter("incomplete")}
-              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs font-medium transition-all ${taskFilter === "incomplete" ? "bg-amber-500 text-white border-amber-500" : "bg-background text-muted-foreground border-border hover:border-amber-400"}`}>
-              <Clock className="w-3.5 h-3.5" />
-              {lang === "ar" ? "غير مكتملة" : "Incomplete"}
-              <span className={`px-1.5 py-0.5 rounded-full text-xs font-bold ${taskFilter === "incomplete" ? "bg-white/20 text-white" : "bg-amber-100 text-amber-700"}`}>{incompleteCount}</span>
-            </button>
-            <button onClick={() => { setTaskFilter("completed"); setShowHistory(true); }}
-              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs font-medium transition-all ${taskFilter === "completed" ? "bg-green-600 text-white border-green-600" : "bg-background text-muted-foreground border-border hover:border-green-400"}`}>
-              <CheckCircle2 className="w-3.5 h-3.5" />
-              {lang === "ar" ? "مُنجزة" : "Completed"}
-              <span className={`px-1.5 py-0.5 rounded-full text-xs font-bold ${taskFilter === "completed" ? "bg-white/20 text-white" : "bg-green-100 text-green-700"}`}>{completedCount}</span>
-            </button>
-          </div>
-
           <ListFilterBar
             lang={lang}
             search={listSearch}
@@ -871,44 +805,19 @@ export default function QCReview() {
             resultCount={filteredSamples.length}
           />
 
-          {/* Active Samples */}
-          {activeSamples.length === 0 && taskFilter !== "completed" ? (
+          {filteredSamples.length === 0 ? (
             <Card>
               <CardContent className="p-10 text-center">
                 <ShieldCheck className="w-12 h-12 mx-auto mb-3 text-muted-foreground opacity-30" />
-                <p className="text-sm text-muted-foreground">{lang === "ar" ? "لا توجد عينات بانتظار ضبط الجودة" : "No samples awaiting QC review"}</p>
+                <p className="text-sm text-muted-foreground">{lang === "ar" ? "لا توجد عينات" : "No samples found"}</p>
               </CardContent>
             </Card>
           ) : (
             <div className="grid gap-3">
-              {activeSamples.map((sample) => (
-                <QCReviewActiveSampleCard
-                  key={sample.id}
-                  sample={sample}
-                  lang={lang}
-                  onOpen={(s) => {
-                    setSelectedSample(s);
-                    setComments("");
-                    setDecision(null);
-                    setLoadTimedOut(false);
-                  }}
-                  onRefetch={() => refetch()}
-                />
-              ))}
-            </div>
-          )}
-
-          {/* Completed History */}
-          {(taskFilter === "completed" || (taskFilter === "all" && completedSamples.length > 0)) && (
-            <div className="mt-3">
-              <Button variant="ghost" size="sm" className="w-full text-muted-foreground gap-2 text-xs border border-dashed" onClick={() => setShowHistory(v => !v)}>
-                <History className="w-3.5 h-3.5" />
-                {showHistory ? (lang === "ar" ? "إخفاء السجل" : "Hide History") : (lang === "ar" ? "عرض السجل" : "Show History")}
-                <span className="text-muted-foreground/60">({completedSamples.length})</span>
-              </Button>
-              {showHistory && (
-                <div className="grid gap-2 mt-2 opacity-70">
-                  {completedSamples.map((sample) => (
+              {filteredSamples.map((sample) => {
+                const isDone = getSampleTaskState(sample) === "completed";
+                if (isDone) {
+                  return (
                     <QCReviewArchiveSampleCard
                       key={sample.id}
                       sample={sample}
@@ -920,9 +829,23 @@ export default function QCReview() {
                         setLoadTimedOut(false);
                       }}
                     />
-                  ))}
-                </div>
-              )}
+                  );
+                }
+                return (
+                  <QCReviewActiveSampleCard
+                    key={sample.id}
+                    sample={sample}
+                    lang={lang}
+                    onOpen={(s) => {
+                      setSelectedSample(s);
+                      setComments("");
+                      setDecision(null);
+                      setLoadTimedOut(false);
+                    }}
+                    onRefetch={() => refetch()}
+                  />
+                );
+              })}
             </div>
           )}
           </TabsContent>
