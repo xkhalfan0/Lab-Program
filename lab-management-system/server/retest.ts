@@ -34,6 +34,10 @@ import {
   samplesHasRetestColumns,
 } from "./db";
 import { normalizeTestCode } from "./data/official-test-catalog";
+import {
+  getMaxRetestsForTestCode,
+  isTestRetestAllowed,
+} from "./data/test-retest-limits";
 import { generateRetestSampleCode } from "./utils/codeGenerator";
 import { requireRole } from "./_core/requireRole";
 import { labOrderReceptionCreateInputSchema } from "./routers/orders";
@@ -270,8 +274,11 @@ export async function isRetestEligibleSample(
     return false;
   }
 
-  if (opts?.assumeSpecFailed) return true;
-  return sampleHasFailedOutcome(root.id);
+  if (opts?.assumeSpecFailed) {
+    return sampleHasRetestableFailedTests(root.id);
+  }
+  if (!(await sampleHasFailedOutcome(root.id))) return false;
+  return sampleHasRetestableFailedTests(root.id);
 }
 
 export async function assertRetestEligible(
@@ -455,10 +462,14 @@ export async function getRetestSource(rootSampleId: number) {
     tests = built.tests;
   }
 
+  const retestCounts = await getRetestCountsByTestCode(rootSampleId);
+  tests = applyRetestPolicy(tests, retestCounts);
+
   if (tests.length === 0) {
     throw new TRPCError({
       code: "BAD_REQUEST",
-      message: "No tests found on the original sample — check lab order items or distributions",
+      message:
+        "No retestable failed tests remain on this sample (retest limit reached or test type does not allow retest)",
     });
   }
 
@@ -490,6 +501,7 @@ async function buildRetestTestsFromOrder(
 ) {
   const items = await getLabOrderItems(orderId);
   const legacyResults = await getTestResultBySample(sampleId);
+  const specialized = await getSpecializedTestResultsBySample(sampleId);
   const tests = items
     .map((item) => {
       const tt =
@@ -498,10 +510,17 @@ async function buildRetestTestsFromOrder(
       const linkedResult = item.distributionId
         ? legacyResults.find((r) => r.distributionId === item.distributionId)
         : legacyResults[0];
+      const specResult = item.distributionId
+        ? specialized.find((r) => r.distributionId === item.distributionId)
+        : specialized.find(
+            (r) =>
+              normalizeTestCode(r.testTypeCode) === normalizeTestCode(item.testTypeCode)
+          );
       const charts = linkedResult?.chartsData as { complianceStatus?: string } | null;
       const isFailed =
         isSpecFailure(linkedResult?.complianceStatus) ||
-        isSpecFailure(charts?.complianceStatus);
+        isSpecFailure(charts?.complianceStatus) ||
+        (specResult as { overallResult?: string } | undefined)?.overallResult === "fail";
       return {
         testTypeId: tt?.id ?? item.testTypeId,
         testTypeCode: item.testTypeCode,
@@ -525,16 +544,19 @@ async function buildRetestTestsFromDistributions(
   const dists = await getDistributionsBySample(sampleId);
   const legacyResults = await getTestResultBySample(sampleId);
   const concreteGroups = await getConcreteGroupsBySample(sampleId);
+  const specialized = await getSpecializedTestResultsBySample(sampleId);
   const tests = dists
     .map((dist) => {
       const tt = resolveCatalogTestType(dist.testType, allTestTypes);
       const linkedResult = legacyResults.find((r) => r.distributionId === dist.id);
       const charts = linkedResult?.chartsData as { complianceStatus?: string } | null;
       const group = concreteGroups.find((g) => g.distributionId === dist.id);
+      const specResult = specialized.find((r) => r.distributionId === dist.id);
       const isFailed =
         isSpecFailure(linkedResult?.complianceStatus) ||
         isSpecFailure(charts?.complianceStatus) ||
-        isSpecFailure(group?.complianceStatus);
+        isSpecFailure(group?.complianceStatus) ||
+        (specResult as { overallResult?: string } | undefined)?.overallResult === "fail";
       return {
         testTypeId: tt?.id ?? 0,
         testTypeCode: dist.testType,
@@ -549,6 +571,79 @@ async function buildRetestTestsFromDistributions(
     })
     .filter((t) => t.testTypeId > 0);
   return { tests };
+}
+
+/** Count prior retest samples (children of root) that included each test type. */
+export async function getRetestCountsByTestCode(
+  rootSampleId: number
+): Promise<Map<string, number>> {
+  const db = await getDb();
+  const counts = new Map<string, number>();
+  if (!db) return counts;
+
+  const children = await db
+    .select({ id: samples.id })
+    .from(samples)
+    .where(eq(samples.originalSampleId, rootSampleId));
+
+  for (const child of children) {
+    const orders = await getLabOrdersBySampleId(child.id);
+    const codesOnRetest = new Set<string>();
+    for (const order of orders) {
+      const items = await getLabOrderItems(order.id);
+      for (const item of items) {
+        const norm = normalizeTestCode(item.testTypeCode) ?? item.testTypeCode;
+        codesOnRetest.add(norm);
+      }
+    }
+    for (const code of codesOnRetest) {
+      counts.set(code, (counts.get(code) ?? 0) + 1);
+    }
+  }
+  return counts;
+}
+
+type RetestCandidateTest = {
+  testTypeId: number;
+  testTypeCode: string;
+  testTypeName: string;
+  formTemplate: string | null;
+  testSubType: string | null;
+  quantity: number;
+  unitPrice: number;
+  isFailed: boolean;
+  sourceOrderItemId: number | null;
+};
+
+function applyRetestPolicy(
+  tests: RetestCandidateTest[],
+  retestCounts: Map<string, number>
+): RetestCandidateTest[] {
+  return tests.filter(
+    (t) => t.isFailed && isTestRetestAllowed(t.testTypeCode, retestCounts)
+  );
+}
+
+async function loadRetestCandidateTests(
+  rootSampleId: number,
+  allTestTypes: Awaited<ReturnType<typeof getAllTestTypes>>
+): Promise<RetestCandidateTest[]> {
+  const orders = await getLabOrdersBySampleId(rootSampleId);
+  for (const order of orders) {
+    const items = await getLabOrderItems(order.id);
+    if (items.length === 0) continue;
+    const built = await buildRetestTestsFromOrder(rootSampleId, order.id, allTestTypes);
+    if (built.tests.length > 0) return built.tests;
+  }
+  const built = await buildRetestTestsFromDistributions(rootSampleId, allTestTypes);
+  return built.tests;
+}
+
+async function sampleHasRetestableFailedTests(rootSampleId: number): Promise<boolean> {
+  const allTestTypes = await getAllTestTypes();
+  const tests = await loadRetestCandidateTests(rootSampleId, allTestTypes);
+  const retestCounts = await getRetestCountsByTestCode(rootSampleId);
+  return applyRetestPolicy(tests, retestCounts).length > 0;
 }
 
 export async function runRetestCreate(
@@ -573,11 +668,22 @@ export async function runRetestCreate(
 
   const source = await getRetestSource(input.rootSampleId);
   const allowedCodes = new Set(source.tests.map((t) => t.testTypeCode));
+  const retestCounts = await getRetestCountsByTestCode(input.rootSampleId);
   for (const t of input.tests) {
     if (!allowedCodes.has(t.testTypeCode)) {
       throw new TRPCError({
         code: "BAD_REQUEST",
-        message: `Test ${t.testTypeCode} was not on the original order`,
+        message: `Test ${t.testTypeCode} was not on the original order or is not eligible for retest`,
+      });
+    }
+    if (!isTestRetestAllowed(t.testTypeCode, retestCounts)) {
+      const max = getMaxRetestsForTestCode(t.testTypeCode);
+      throw new TRPCError({
+        code: "BAD_REQUEST",
+        message:
+          max <= 0
+            ? `Test ${t.testTypeCode} does not allow retest per official price list`
+            : `Retest limit reached for ${t.testTypeCode} (${max} allowed)`,
       });
     }
   }
