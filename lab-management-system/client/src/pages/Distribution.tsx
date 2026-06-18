@@ -14,8 +14,10 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useDeletionStatus } from "@/hooks/useDeletionStatus";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   AlertCircle,
+  CheckCircle2,
   Clock,
   Eye,
   UserCheck,
@@ -66,6 +68,24 @@ function typeLabel(type: string, lang: string) {
     aggregates: { en: "Aggregates", ar: "ركام" },
   };
   return map[type]?.[lang] ?? type;
+}
+
+type DistributionListTab = "pending" | "distributed";
+
+const tabTriggerClass =
+  "group flex-1 min-w-0 rounded-lg border border-transparent px-4 py-3 text-sm font-semibold transition-all " +
+  "text-muted-foreground hover:text-foreground hover:bg-white/60 " +
+  "data-[state=active]:bg-white data-[state=active]:text-primary data-[state=active]:shadow-sm " +
+  "data-[state=active]:border-slate-200 data-[state=active]:ring-1 data-[state=active]:ring-primary/20 " +
+  "data-[state=active]:[&_svg]:text-primary";
+
+const tabBadgeClass =
+  "ms-2 inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full px-1.5 text-[10px] font-bold " +
+  "bg-slate-200 text-slate-700 group-data-[state=active]:bg-primary/15 group-data-[state=active]:text-primary";
+
+/** Distribution page tabs: pending = no technician assigned yet; distributed = assignment done. */
+function isOrderDistributed(order: any) {
+  return order.status !== "pending";
 }
 
 function TypeCell({ order, lang }: { order: any; lang: string }) {
@@ -416,6 +436,108 @@ function DistributionAllOrdersActionsCell({
   );
 }
 
+function OrdersTable({
+  orders,
+  lang,
+  title,
+  emptyMessage,
+  handleOpenDialog,
+  setLocation,
+  handleOpenEditDialog,
+  onDeletionSuccess,
+}: {
+  orders: any[];
+  lang: string;
+  title: string;
+  emptyMessage: string;
+  handleOpenDialog: (order: any) => void;
+  setLocation: (path: string) => void;
+  handleOpenEditDialog: (order: any) => void;
+  onDeletionSuccess: () => void;
+}) {
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-sm font-semibold">{title}</CardTitle>
+      </CardHeader>
+      <CardContent className="p-0">
+        {orders.length === 0 ? (
+          <div className="p-10 text-center text-sm text-muted-foreground">{emptyMessage}</div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b bg-muted/30">
+                  <th className="text-start px-4 py-2.5 text-xs font-medium text-muted-foreground">{lang === "ar" ? "رقم الأوردر" : "Order #"}</th>
+                  <th className="text-start px-4 py-2.5 text-xs font-medium text-muted-foreground">{lang === "ar" ? "المقاول" : "Contractor"}</th>
+                  <th className="text-start px-4 py-2.5 text-xs font-medium text-muted-foreground">{lang === "ar" ? "النوع" : "Type"}</th>
+                  <th className="text-start px-4 py-2.5 text-xs font-medium text-muted-foreground">{lang === "ar" ? "الاختبارات" : "Tests"}</th>
+                  <th className="text-start px-4 py-2.5 text-xs font-medium text-muted-foreground">{lang === "ar" ? "الفني" : "Technician"}</th>
+                  <th className="text-start px-4 py-2.5 text-xs font-medium text-muted-foreground">{lang === "ar" ? "الحالة" : "Status"}</th>
+                  <th className="text-start px-4 py-2.5 text-xs font-medium text-muted-foreground">{lang === "ar" ? "الإجراء" : "Action"}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {orders.map((order: any) => (
+                  <tr key={order.id} className="border-b last:border-0 hover:bg-muted/20 transition-colors">
+                    <td className="px-4 py-2.5">
+                      <div className="font-mono text-xs font-semibold text-primary">{toText(order.orderCode)}</div>
+                      <RetestBadge
+                        retestNumber={order.retestNumber}
+                        originalSampleId={order.originalSampleId}
+                        originalSampleCode={order.originalSampleCode}
+                        compact
+                      />
+                    </td>
+                    <td className="px-4 py-2.5 text-xs">{toText(order.contractorName)}</td>
+                    <td className="px-4 py-2.5 text-xs">
+                      <TypeCell
+                        order={{ ...order, sampleType: String(order.sampleType ?? ""), sampleSubType: toText(order.sampleSubType) }}
+                        lang={lang}
+                      />
+                    </td>
+                    <td className="px-4 py-2.5">
+                      <div className="flex flex-wrap gap-1">
+                        {(order.items ?? []).length === 0 ? (
+                          <span className="text-xs text-muted-foreground italic">{lang === "ar" ? "لا توجد" : "None"}</span>
+                        ) : (order.items ?? []).filter((item: any) => item && typeof item === "object").map((item: any, idx: number) => (
+                          <TestChip
+                            key={`${order.id}-${item.id || item._id || idx}`}
+                            label={resolveOrderItemTestLabel(item)}
+                            quantity={Number(item.quantity) || undefined}
+                            status={item.status === "completed" ? "completed" : "pending"}
+                          />
+                        ))}
+                      </div>
+                    </td>
+                    <td className="px-4 py-2.5 text-xs text-muted-foreground">
+                      {toText(order.assignedTechnicianName)}
+                    </td>
+                    <td className="px-4 py-2.5">
+                      <DistributionAllOrdersStatusCell order={order} lang={lang} />
+                    </td>
+                    <td className="px-4 py-2.5">
+                      <DistributionAllOrdersActionsCell
+                        order={order}
+                        lang={lang}
+                        handleOpenDialog={handleOpenDialog}
+                        setLocation={setLocation}
+                        handleOpenEditDialog={handleOpenEditDialog}
+                        printDistributionSlip={printDistributionSlip}
+                        onDeletionSuccess={onDeletionSuccess}
+                      />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function Distribution() {
   const { lang } = useLanguage();
   const [selectedOrder, setSelectedOrder] = useState<any>(null);
@@ -425,7 +547,7 @@ export default function Distribution() {
     priority: "normal" as "low" | "normal" | "high" | "urgent",
     notes: "",
   });
-  const [taskFilter, setTaskFilter] = useState<"all" | "active" | "awaiting_review" | "done">("all");
+  const [listTab, setListTab] = useState<DistributionListTab>("pending");
   const [listSearch, setListSearch] = useState("");
   const [sampleTypeFilter, setSampleTypeFilter] = useState("all");
   const [technicianFilter, setTechnicianFilter] = useState("all");
@@ -468,39 +590,24 @@ export default function Distribution() {
     onError: (err) => toast.error(err.message),
   });
   // ─── Filters ───────────────────────────────────────────────────────────────
-  const getSampleStatus = (order: any) => order.sampleStatus ?? order.sample?.status ?? order.status;
-
   const listFilters = useMemo(
     () => ({ search: listSearch, sampleType: sampleTypeFilter, technicianId: technicianFilter }),
     [listSearch, sampleTypeFilter, technicianFilter],
   );
 
-  const filteredOrders = useMemo(() => {
-    const byTask = orders.filter((o: any) => {
-      const sampleStatus = getSampleStatus(o);
-      if (taskFilter === "active") {
-        return sampleStatus === "distributed" || sampleStatus === "testing_in_progress";
-      }
-      if (taskFilter === "awaiting_review") {
-        return sampleStatus === "awaiting_review";
-      }
-      if (taskFilter === "done") {
-        return sampleStatus === "approved" || sampleStatus === "qc_passed" || o.status === "completed";
-      }
-      return true;
-    });
-    return applyOrderFilters(byTask, listFilters);
-  }, [orders, taskFilter, listFilters]);
+  const pendingOrders = useMemo(
+    () => orders.filter((o: any) => !isOrderDistributed(o)),
+    [orders],
+  );
+  const distributedOrders = useMemo(
+    () => orders.filter((o: any) => isOrderDistributed(o)),
+    [orders],
+  );
 
-  const activeOrders = orders.filter((o: any) => {
-    const sampleStatus = getSampleStatus(o);
-    return sampleStatus === "distributed" || sampleStatus === "testing_in_progress";
-  });
-  const awaitingReviewOrders = orders.filter((o: any) => getSampleStatus(o) === "awaiting_review");
-  const doneOrders = orders.filter((o: any) => {
-    const sampleStatus = getSampleStatus(o);
-    return sampleStatus === "approved" || sampleStatus === "qc_passed" || o.status === "completed";
-  });
+  const filteredOrders = useMemo(() => {
+    const byTab = listTab === "pending" ? pendingOrders : distributedOrders;
+    return applyOrderFilters(byTab, listFilters);
+  }, [listTab, pendingOrders, distributedOrders, listFilters]);
 
   // ─── Handlers ──────────────────────────────────────────────────────────────
   const handleOpenDialog = (order: any) => {
@@ -541,14 +648,6 @@ export default function Distribution() {
     }
   };
 
-  // ─── Filter Buttons ────────────────────────────────────────────────────────
-  const filterBtns = [
-    { key: "all", label: lang === "ar" ? "الكل" : "All", count: orders.length, color: "#3b82f6" },
-    { key: "active", label: lang === "ar" ? "نشطة" : "Active", count: activeOrders.length, color: "#f59e0b" },
-    { key: "awaiting_review", label: lang === "ar" ? "في انتظار المراجعة" : "Awaiting Review", count: awaitingReviewOrders.length, color: "#f97316" },
-    { key: "done", label: lang === "ar" ? "مُنجزة" : "Done", count: doneOrders.length, color: "#10b981" },
-  ];
-
   return (
     <DashboardLayout>
       <div className="space-y-5">
@@ -559,37 +658,21 @@ export default function Distribution() {
           </p>
         </div>
 
-        {/* Filter Buttons */}
-        <div className="flex items-center gap-2 flex-wrap">
-          {filterBtns.map((btn) => {
-            const active = taskFilter === btn.key;
-            return (
-              <button
-                key={btn.key}
-                onClick={() => setTaskFilter(btn.key as any)}
-                className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-semibold transition-all"
-                style={{
-                  background: active ? btn.color : "#fff",
-                  border: `1.5px solid ${active ? btn.color : "#e2e8f0"}`,
-                  color: active ? "#fff" : btn.color,
-                  boxShadow: active ? `0 2px 8px ${btn.color}30` : "none",
-                }}
-              >
-                {btn.label}
-                <span
-                  className="px-1.5 py-0.5 rounded-full text-xs font-bold"
-                  style={{
-                    background: active ? "rgba(255,255,255,0.25)" : `${btn.color}15`,
-                    color: active ? "#fff" : btn.color,
-                  }}
-                >
-                  {btn.count}
-                </span>
-              </button>
-            );
-          })}
-        </div>
+        <Tabs value={listTab} onValueChange={(v) => setListTab(v as DistributionListTab)} className="w-full">
+          <TabsList className="w-full h-auto p-1.5 bg-slate-100 border border-slate-200 rounded-xl flex gap-1">
+            <TabsTrigger value="pending" className={tabTriggerClass}>
+              <UserCheck className="w-4 h-4 me-2 shrink-0" />
+              <span className="truncate">{lang === "ar" ? "بانتظار التوزيع" : "To Distribute"}</span>
+              <span className={tabBadgeClass}>{pendingOrders.length}</span>
+            </TabsTrigger>
+            <TabsTrigger value="distributed" className={tabTriggerClass}>
+              <CheckCircle2 className="w-4 h-4 me-2 shrink-0" />
+              <span className="truncate">{lang === "ar" ? "موزّعة" : "Distributed"}</span>
+              <span className={tabBadgeClass}>{distributedOrders.length}</span>
+            </TabsTrigger>
+          </TabsList>
 
+          <div className="mt-4 space-y-4">
         <ListFilterBar
           lang={lang}
           search={listSearch}
@@ -625,81 +708,37 @@ export default function Distribution() {
           resultCount={filteredOrders.length}
         />
 
-        {/* All Orders */}
-        {(taskFilter === "all" || taskFilter === "active" || taskFilter === "awaiting_review" || taskFilter === "done") && (
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-semibold">
-                {lang === "ar" ? "جميع الأوردرات" : "All Orders"}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="p-0">
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b bg-muted/30">
-                      <th className="text-start px-4 py-2.5 text-xs font-medium text-muted-foreground">{lang === "ar" ? "رقم الأوردر" : "Order #"}</th>
-                      <th className="text-start px-4 py-2.5 text-xs font-medium text-muted-foreground">{lang === "ar" ? "المقاول" : "Contractor"}</th>
-                      <th className="text-start px-4 py-2.5 text-xs font-medium text-muted-foreground">{lang === "ar" ? "النوع" : "Type"}</th>
-                      <th className="text-start px-4 py-2.5 text-xs font-medium text-muted-foreground">{lang === "ar" ? "الاختبارات" : "Tests"}</th>
-                      <th className="text-start px-4 py-2.5 text-xs font-medium text-muted-foreground">{lang === "ar" ? "الفني" : "Technician"}</th>
-                      <th className="text-start px-4 py-2.5 text-xs font-medium text-muted-foreground">{lang === "ar" ? "الحالة" : "Status"}</th>
-                      <th className="text-start px-4 py-2.5 text-xs font-medium text-muted-foreground">{lang === "ar" ? "الإجراء" : "Action"}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredOrders.map((order: any) => (
-                        <tr key={order.id} className="border-b last:border-0 hover:bg-muted/20 transition-colors">
-                          <td className="px-4 py-2.5">
-                            <div className="font-mono text-xs font-semibold text-primary">{toText(order.orderCode)}</div>
-                            <RetestBadge
-                              retestNumber={order.retestNumber}
-                              originalSampleId={order.originalSampleId}
-                              originalSampleCode={order.originalSampleCode}
-                              compact
-                            />
-                          </td>
-                          <td className="px-4 py-2.5 text-xs">{toText(order.contractorName)}</td>
-                          <td className="px-4 py-2.5 text-xs"><TypeCell order={{ ...order, sampleType: String(order.sampleType ?? ""), sampleSubType: toText(order.sampleSubType) }} lang={lang} /></td>
-                          <td className="px-4 py-2.5">
-                            <div className="flex flex-wrap gap-1">
-                              {(order.items ?? []).length === 0 ? (
-                                <span className="text-xs text-muted-foreground italic">{lang === "ar" ? "لا توجد" : "None"}</span>
-                              ) : (order.items ?? []).filter((item: any) => item && typeof item === "object").map((item: any, idx: number) => (
-                                <TestChip
-                                  key={`all-${order.id}-${item.id || item._id || idx}`}
-                                  label={resolveOrderItemTestLabel(item)}
-                                  quantity={Number(item.quantity) || undefined}
-                                  status={item.status === "completed" ? "completed" : "pending"}
-                                />
-                              ))}
-                            </div>
-                          </td>
-                          <td className="px-4 py-2.5 text-xs text-muted-foreground">
-                            {toText(order.assignedTechnicianName)}
-                          </td>
-                          <td className="px-4 py-2.5">
-                            <DistributionAllOrdersStatusCell order={order} lang={lang} />
-                          </td>
-                          <td className="px-4 py-2.5">
-                            <DistributionAllOrdersActionsCell
-                              order={order}
-                              lang={lang}
-                              handleOpenDialog={handleOpenDialog}
-                              setLocation={setLocation}
-                              handleOpenEditDialog={handleOpenEditDialog}
-                              printDistributionSlip={printDistributionSlip}
-                              onDeletionSuccess={() => refetch()}
-                            />
-                          </td>
-                        </tr>
-                      ))}
-                  </tbody>
-                </table>
-              </div>
-            </CardContent>
-          </Card>
-        )}
+        <TabsContent value="pending" className="mt-0 space-y-0">
+          <OrdersTable
+            orders={filteredOrders}
+            lang={lang}
+            emptyMessage={
+              lang === "ar" ? "لا توجد أوامر بانتظار التوزيع" : "No orders awaiting distribution"
+            }
+            title={lang === "ar" ? "أوامر بانتظار التوزيع" : "Orders to Distribute"}
+            handleOpenDialog={handleOpenDialog}
+            setLocation={setLocation}
+            handleOpenEditDialog={handleOpenEditDialog}
+            onDeletionSuccess={() => refetch()}
+          />
+        </TabsContent>
+
+        <TabsContent value="distributed" className="mt-0 space-y-0">
+          <OrdersTable
+            orders={filteredOrders}
+            lang={lang}
+            emptyMessage={
+              lang === "ar" ? "لا توجد أوامر موزّعة بعد" : "No distributed orders yet"
+            }
+            title={lang === "ar" ? "الأوامر الموزّعة" : "Distributed Orders"}
+            handleOpenDialog={handleOpenDialog}
+            setLocation={setLocation}
+            handleOpenEditDialog={handleOpenEditDialog}
+            onDeletionSuccess={() => refetch()}
+          />
+        </TabsContent>
+          </div>
+        </Tabs>
       </div>
 
       {/* Distribute Dialog */}

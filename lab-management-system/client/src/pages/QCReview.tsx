@@ -23,7 +23,7 @@ import { applyClearanceFilters, applySampleFilters, hasActiveListFilters } from 
 import { SAMPLE_TYPE_LABELS } from "@/lib/labTypes";
 import {
   ShieldCheck, CheckCircle, XCircle, RotateCcw, ClipboardCheck,
-  BadgeCheck, FlaskConical, DollarSign, CheckCircle2,
+  BadgeCheck, FlaskConical, DollarSign, CheckCircle2, Clock,
   ChevronRight, ExternalLink,
 } from "lucide-react";
 import { useState, useEffect, useMemo, type ReactElement } from "react";
@@ -43,6 +43,18 @@ import {
 } from "recharts";
 
 // ─── Task state helpers ───────────────────────────────────────────────────────
+type QcListTab = "pending" | "done";
+
+const innerTabTriggerClass =
+  "group flex-1 min-w-0 rounded-lg border border-transparent px-3 py-2.5 text-sm font-semibold transition-all " +
+  "text-muted-foreground hover:text-foreground hover:bg-white/60 " +
+  "data-[state=active]:bg-white data-[state=active]:text-primary data-[state=active]:shadow-sm " +
+  "data-[state=active]:border-slate-200 data-[state=active]:ring-1 data-[state=active]:ring-primary/20 " +
+  "data-[state=active]:[&_svg]:text-primary";
+
+const innerTabBadgeClass =
+  "ms-2 inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full px-1.5 text-[10px] font-bold " +
+  "bg-slate-200 text-slate-700 group-data-[state=active]:bg-primary/15 group-data-[state=active]:text-primary";
 
 function getClearanceTaskState(req: any): "new" | "incomplete" | "completed" {
   if (req.status !== "pending") return "completed";
@@ -257,6 +269,7 @@ function ClearanceQCSection() {
   const [qcNotes, setQcNotes] = useState("");
   const [reviewOpen, setReviewOpen] = useState(false);
   const [listSearch, setListSearch] = useState("");
+  const [listTab, setListTab] = useState<QcListTab>("pending");
 
   const { data: requests = [], refetch } = trpc.clearance.list.useQuery();
   const { data: selectedReq } = trpc.clearance.getById.useQuery(
@@ -293,6 +306,16 @@ function ClearanceQCSection() {
     return applyClearanceFilters(sorted, clearanceListFilters);
   }, [requests, clearanceListFilters]);
 
+  const pendingRequests = useMemo(
+    () => filteredRequests.filter(r => getClearanceTaskState(r) !== "completed"),
+    [filteredRequests],
+  );
+  const doneRequests = useMemo(
+    () => filteredRequests.filter(r => getClearanceTaskState(r) === "completed"),
+    [filteredRequests],
+  );
+  const tabRequests = listTab === "pending" ? pendingRequests : doneRequests;
+
   const inventory = (selectedReq?.inventoryData ?? []) as any[];
 
   const handleOpenReq = (req: any) => {
@@ -318,32 +341,44 @@ function ClearanceQCSection() {
         }
         showClear={hasActiveListFilters(clearanceListFilters)}
         onClear={() => setListSearch("")}
-        resultCount={filteredRequests.length}
+        resultCount={tabRequests.length}
       />
 
-      {filteredRequests.length === 0 ? (
+      <Tabs value={listTab} onValueChange={(v) => setListTab(v as QcListTab)} className="w-full">
+        <TabsList className="w-full h-auto p-1 bg-slate-100 border border-slate-200 rounded-lg flex gap-1">
+          <TabsTrigger value="pending" className={innerTabTriggerClass}>
+            <Clock className="w-4 h-4 me-2 shrink-0" />
+            <span className="truncate">{lang === "ar" ? "قيد المراجعة" : "In Review"}</span>
+            <span className={innerTabBadgeClass}>{pendingRequests.length}</span>
+          </TabsTrigger>
+          <TabsTrigger value="done" className={innerTabTriggerClass}>
+            <CheckCircle2 className="w-4 h-4 me-2 shrink-0" />
+            <span className="truncate">{lang === "ar" ? "معتمد QC" : "QC Approved"}</span>
+            <span className={innerTabBadgeClass}>{doneRequests.length}</span>
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="pending" className="mt-3 space-y-3">
+      {pendingRequests.length === 0 ? (
         <Card>
           <CardContent className="p-8 text-center">
             <BadgeCheck className="w-10 h-10 mx-auto mb-3 text-muted-foreground opacity-20" />
             <p className="text-sm text-muted-foreground">
-              {lang === "ar" ? "لا توجد طلبات براءة ذمة" : "No clearance requests found"}
+              {lang === "ar" ? "لا توجد طلبات بانتظار مراجعة QC" : "No clearance requests awaiting QC review"}
             </p>
           </CardContent>
         </Card>
       ) : (
         <div className="grid gap-3">
-          {filteredRequests.map(req => {
+          {pendingRequests.map(req => {
             const state = getClearanceTaskState(req);
-            const isDone = state === "completed";
             return (
               <Card
                 key={req.id}
                 className={`border-l-4 cursor-pointer hover:shadow-md transition-shadow ${
-                  isDone
-                    ? "border-l-green-400 opacity-80 hover:opacity-100"
-                    : state === "new"
-                      ? "border-l-red-400 bg-red-50/20"
-                      : "border-l-amber-400 bg-amber-50/20"
+                  state === "new"
+                    ? "border-l-red-400 bg-red-50/20"
+                    : "border-l-amber-400 bg-amber-50/20"
                 }`}
                 onClick={() => handleOpenReq(req)}
               >
@@ -397,6 +432,48 @@ function ClearanceQCSection() {
           })}
         </div>
       )}
+        </TabsContent>
+
+        <TabsContent value="done" className="mt-3 space-y-3">
+          {doneRequests.length === 0 ? (
+            <Card>
+              <CardContent className="p-8 text-center">
+                <CheckCircle2 className="w-10 h-10 mx-auto mb-3 text-muted-foreground opacity-20" />
+                <p className="text-sm text-muted-foreground">
+                  {lang === "ar" ? "لا توجد طلبات معتمدة بعد" : "No QC-approved clearance requests yet"}
+                </p>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="grid gap-3">
+              {doneRequests.map(req => (
+                <Card
+                  key={req.id}
+                  className="border-l-4 border-l-green-400 cursor-pointer hover:shadow-md transition-shadow opacity-80 hover:opacity-100"
+                  onClick={() => handleOpenReq(req)}
+                >
+                  <CardContent className="p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="space-y-1 flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-mono text-sm font-bold text-primary">{req.requestCode}</span>
+                          <ClearanceStatusBadge status={req.status} lang={lang} />
+                        </div>
+                        <p className="text-sm font-medium">{req.contractorName}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {lang === "ar" ? "رقم العقد:" : "Contract:"} {req.contractNumber}
+                          {req.contractName && ` — ${req.contractName}`}
+                        </p>
+                      </div>
+                      <ChevronRight className={`w-4 h-4 text-muted-foreground shrink-0 ${lang === "ar" ? "rotate-180" : ""}`} />
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
+        </TabsContent>
+      </Tabs>
 
       {/* QC Clearance Review Dialog */}
       <Dialog open={reviewOpen} onOpenChange={o => { if (!o) { setReviewOpen(false); setSelectedReqId(null); } }}>
@@ -562,6 +639,7 @@ export default function QCReview() {
 
   const currentUserSignature = user?.name || user?.username || "";
   const [loadTimedOut, setLoadTimedOut] = useState(false);
+  const [sampleListTab, setSampleListTab] = useState<QcListTab>("pending");
   const [listSearch, setListSearch] = useState("");
   const [sectorFilter, setSectorFilter] = useState("all");
   const [sampleTypeFilter, setSampleTypeFilter] = useState("all");
@@ -638,6 +716,23 @@ export default function QCReview() {
     });
     return applySampleFilters(sorted, sampleListFilters);
   }, [qcSamples, sampleListFilters]);
+
+  const pendingSamples = useMemo(
+    () => filteredSamples.filter(s => getSampleTaskState(s) !== "completed"),
+    [filteredSamples],
+  );
+  const doneSamples = useMemo(
+    () => filteredSamples.filter(s => getSampleTaskState(s) === "completed"),
+    [filteredSamples],
+  );
+  const tabSamples = sampleListTab === "pending" ? pendingSamples : doneSamples;
+
+  const openSample = (s: any) => {
+    setSelectedSample(s);
+    setComments("");
+    setDecision(null);
+    setLoadTimedOut(false);
+  };
 
   const dist = distributions?.[0];
   const result = results?.[0];
@@ -802,52 +897,72 @@ export default function QCReview() {
               setSectorFilter("all");
               setSampleTypeFilter("all");
             }}
-            resultCount={filteredSamples.length}
+            resultCount={tabSamples.length}
           />
 
-          {filteredSamples.length === 0 ? (
-            <Card>
-              <CardContent className="p-10 text-center">
-                <ShieldCheck className="w-12 h-12 mx-auto mb-3 text-muted-foreground opacity-30" />
-                <p className="text-sm text-muted-foreground">{lang === "ar" ? "لا توجد عينات" : "No samples found"}</p>
-              </CardContent>
-            </Card>
-          ) : (
-            <div className="grid gap-3">
-              {filteredSamples.map((sample) => {
-                const isDone = getSampleTaskState(sample) === "completed";
-                if (isDone) {
-                  return (
+          <Tabs value={sampleListTab} onValueChange={(v) => setSampleListTab(v as QcListTab)} className="w-full">
+            <TabsList className="w-full h-auto p-1 bg-slate-100 border border-slate-200 rounded-lg flex gap-1">
+              <TabsTrigger value="pending" className={innerTabTriggerClass}>
+                <Clock className="w-4 h-4 me-2 shrink-0" />
+                <span className="truncate">{lang === "ar" ? "قيد المراجعة" : "In Review"}</span>
+                <span className={innerTabBadgeClass}>{pendingSamples.length}</span>
+              </TabsTrigger>
+              <TabsTrigger value="done" className={innerTabTriggerClass}>
+                <CheckCircle2 className="w-4 h-4 me-2 shrink-0" />
+                <span className="truncate">{lang === "ar" ? "معتمد QC" : "QC Approved"}</span>
+                <span className={innerTabBadgeClass}>{doneSamples.length}</span>
+              </TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="pending" className="mt-3 space-y-3">
+              {pendingSamples.length === 0 ? (
+                <Card>
+                  <CardContent className="p-10 text-center">
+                    <ShieldCheck className="w-12 h-12 mx-auto mb-3 text-muted-foreground opacity-30" />
+                    <p className="text-sm text-muted-foreground">
+                      {lang === "ar" ? "لا توجد عينات بانتظار ضبط الجودة" : "No samples awaiting QC review"}
+                    </p>
+                  </CardContent>
+                </Card>
+              ) : (
+                <div className="grid gap-3">
+                  {pendingSamples.map((sample) => (
+                    <QCReviewActiveSampleCard
+                      key={sample.id}
+                      sample={sample}
+                      lang={lang}
+                      onOpen={openSample}
+                      onRefetch={() => refetch()}
+                    />
+                  ))}
+                </div>
+              )}
+            </TabsContent>
+
+            <TabsContent value="done" className="mt-3 space-y-3">
+              {doneSamples.length === 0 ? (
+                <Card>
+                  <CardContent className="p-10 text-center">
+                    <CheckCircle2 className="w-12 h-12 mx-auto mb-3 text-muted-foreground opacity-30" />
+                    <p className="text-sm text-muted-foreground">
+                      {lang === "ar" ? "لا توجد عينات معتمدة بعد" : "No QC-approved samples yet"}
+                    </p>
+                  </CardContent>
+                </Card>
+              ) : (
+                <div className="grid gap-3">
+                  {doneSamples.map((sample) => (
                     <QCReviewArchiveSampleCard
                       key={sample.id}
                       sample={sample}
                       lang={lang}
-                      onOpen={(s) => {
-                        setSelectedSample(s);
-                        setComments("");
-                        setDecision(null);
-                        setLoadTimedOut(false);
-                      }}
+                      onOpen={openSample}
                     />
-                  );
-                }
-                return (
-                  <QCReviewActiveSampleCard
-                    key={sample.id}
-                    sample={sample}
-                    lang={lang}
-                    onOpen={(s) => {
-                      setSelectedSample(s);
-                      setComments("");
-                      setDecision(null);
-                      setLoadTimedOut(false);
-                    }}
-                    onRefetch={() => refetch()}
-                  />
-                );
-              })}
-            </div>
-          )}
+                  ))}
+                </div>
+              )}
+            </TabsContent>
+          </Tabs>
           </TabsContent>
 
           <TabsContent value="clearance" className="mt-4">
