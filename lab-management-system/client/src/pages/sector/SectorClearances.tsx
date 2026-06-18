@@ -355,45 +355,45 @@ export default function SectorClearances() {
   return (
     <SectorLayout>
       {/* Header */}
-      <div className="mb-4">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+      <div className="mb-6">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-5">
           <div>
-            <h1 className="text-2xl font-bold" style={{ color: "#1e293b" }}>{T.title}</h1>
-            <p className="text-sm mt-1" style={{ color: "#64748b" }}>{T.subtitle}</p>
+            <h1 className="text-3xl font-bold tracking-tight" style={{ color: "#1e293b" }}>{T.title}</h1>
+            <p className="text-base mt-1.5" style={{ color: "#64748b" }}>{T.subtitle}</p>
           </div>
           <button
               onClick={() => { setShowNewRequest(true); setSubmitSuccess(false); setSubmitError(""); }}
-              className="flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium transition-all"
+              className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-base font-semibold transition-all"
               style={{ background: "#3b82f6", color: "#fff", border: "none", cursor: "pointer" }}>
-              <Plus className="w-4 h-4" />
+              <Plus className="w-5 h-5" />
               {T.requestClearance}
             </button>
         </div>
 
         {/* Search */}
-        <div className="relative w-full mb-4">
-          <Search className="absolute top-1/2 -translate-y-1/2 w-4 h-4" style={{
+        <div className="relative w-full mb-5">
+          <Search className="absolute top-1/2 -translate-y-1/2 w-[18px] h-[18px]" style={{
             color: "#94a3b8",
-            [isRtl ? "right" : "left"]: "12px",
+            [isRtl ? "right" : "left"]: "14px",
           }} />
           <input
             type="text"
             value={search}
             onChange={(e) => { setSearch(e.target.value); setPage(1); }}
             placeholder={T.search}
-            className="w-full py-2.5 rounded-xl text-sm outline-none"
+            className="w-full h-11 rounded-xl text-base outline-none"
             style={{
               background: "#fff",
               border: "1px solid #e2e8f0",
-              paddingInlineStart: "36px",
-              paddingInlineEnd: "12px",
+              paddingInlineStart: "42px",
+              paddingInlineEnd: "16px",
               color: "#1e293b",
             }}
           />
         </div>
 
         {/* Filter Buttons */}
-        <div className="flex flex-wrap gap-2 mb-3">
+        <div className="flex flex-wrap gap-2.5 mb-4">
           {/* All Requests */}
           {([
             { key: "all", label: T.allStatuses, filter: () => { setStatusFilter(""); setReadFilter(""); }, isActive: !statusFilter && !readFilter, color: "#3b82f6", count: (data?.clearances ?? []).length },
@@ -404,14 +404,14 @@ export default function SectorClearances() {
             <button
               key={btn.key}
               onClick={() => { btn.filter(); setPage(1); }}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
+              className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all"
               style={{
                 background: btn.isActive ? btn.color : "#fff",
                 border: `1px solid ${btn.isActive ? btn.color : "#e2e8f0"}`,
                 color: btn.isActive ? "#fff" : "#475569",
               }}>
               {btn.label}
-              <span className="px-1.5 py-0.5 rounded-full text-xs font-bold"
+              <span className="px-2 py-0.5 rounded-full text-sm font-bold min-w-[1.5rem] text-center"
                 style={{ background: btn.isActive ? "rgba(255,255,255,0.25)" : "#f1f5f9", color: btn.isActive ? "#fff" : "#64748b" }}>
                 {btn.count}
               </span>
@@ -421,13 +421,13 @@ export default function SectorClearances() {
           {/* Date filter toggle */}
           <button
             onClick={() => setShowDateFilters(v => !v)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
+            className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all"
             style={{
               background: showDateFilters || hasDateFilters ? "#6366f1" : "#fff",
               border: `1px solid ${showDateFilters || hasDateFilters ? "#6366f1" : "#e2e8f0"}`,
               color: showDateFilters || hasDateFilters ? "#fff" : "#475569",
             }}>
-            <Calendar className="w-3.5 h-3.5" />
+            <Calendar className="w-4 h-4" />
             {T.from} / {T.to}
             {hasDateFilters && <span className="w-2 h-2 rounded-full bg-orange-400 inline-block" />}
           </button>
@@ -436,9 +436,9 @@ export default function SectorClearances() {
           {(hasActiveFilters || search) && (
             <button
               onClick={clearFilters}
-              className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium"
+              className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold"
               style={{ background: "#fef3c7", color: "#d97706", border: "1px solid #fde68a" }}>
-              <X className="w-3.5 h-3.5" />
+              <X className="w-4 h-4" />
               {T.clearFilters}
             </button>
           )}
@@ -446,25 +446,25 @@ export default function SectorClearances() {
 
         {/* Date filter panel */}
         {showDateFilters && (
-          <div className="rounded-xl p-4 mb-3 flex flex-wrap gap-4"
+          <div className="rounded-xl p-5 mb-4 flex flex-wrap gap-5"
             style={{ background: "#f8fafc", border: "1px solid #e2e8f0" }}>
-            <div className="flex flex-col gap-1 min-w-[160px]">
-              <label className="text-xs font-medium" style={{ color: "#64748b" }}>{T.from}</label>
+            <div className="flex flex-col gap-2 min-w-[180px]">
+              <label className="text-sm font-medium" style={{ color: "#64748b" }}>{T.from}</label>
               <input
                 type="date"
                 value={dateFrom}
                 onChange={(e) => { setDateFrom(e.target.value); setPage(1); }}
-                className="py-2 px-3 rounded-lg text-sm outline-none"
+                className="h-10 py-2 px-3 rounded-lg text-base outline-none"
                 style={{ background: "#fff", border: "1px solid #e2e8f0", color: "#1e293b" }}
               />
             </div>
-            <div className="flex flex-col gap-1 min-w-[160px]">
-              <label className="text-xs font-medium" style={{ color: "#64748b" }}>{T.to}</label>
+            <div className="flex flex-col gap-2 min-w-[180px]">
+              <label className="text-sm font-medium" style={{ color: "#64748b" }}>{T.to}</label>
               <input
                 type="date"
                 value={dateTo}
                 onChange={(e) => { setDateTo(e.target.value); setPage(1); }}
-                className="py-2 px-3 rounded-lg text-sm outline-none"
+                className="h-10 py-2 px-3 rounded-lg text-base outline-none"
                 style={{ background: "#fff", border: "1px solid #e2e8f0", color: "#1e293b" }}
               />
             </div>
@@ -476,22 +476,22 @@ export default function SectorClearances() {
       <div className="rounded-2xl overflow-hidden bg-white"
         style={{ boxShadow: "0 1px 8px rgba(0,0,0,0.06)", border: "1px solid rgba(0,0,0,0.05)" }}>
         {isLoading ? (
-          <div className="flex items-center justify-center h-40">
-            <Loader2 className="w-8 h-8 animate-spin" style={{ color: "#3b82f6" }} />
+          <div className="flex items-center justify-center h-52">
+            <Loader2 className="w-10 h-10 animate-spin" style={{ color: "#3b82f6" }} />
           </div>
         ) : filtered.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-40 gap-3">
-            <FileCheck2 className="w-10 h-10" style={{ color: "#cbd5e1" }} />
-            <p className="text-sm" style={{ color: "#94a3b8" }}>{T.noData}</p>
+          <div className="flex flex-col items-center justify-center h-52 gap-4">
+            <FileCheck2 className="w-14 h-14" style={{ color: "#cbd5e1" }} />
+            <p className="text-base" style={{ color: "#94a3b8" }}>{T.noData}</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-sm" dir={isRtl ? "rtl" : "ltr"}>
+            <table className="w-full text-base" dir={isRtl ? "rtl" : "ltr"}>
               <thead>
                 <tr style={{ background: "#f8fafc", borderBottom: "1px solid #e2e8f0" }}>
-                  <th className="px-4 py-3 font-semibold text-start w-4" style={{ color: "#475569" }}></th>
+                  <th className="px-5 py-4 font-semibold text-start w-4 text-sm" style={{ color: "#475569" }}></th>
                   {[T.requestCode, T.contractNumber, T.contractName, T.totalTests, T.status, T.issuedAt, T.certificate, ""].map((h) => (
-                    <th key={h} className="px-4 py-3 font-semibold text-start" style={{ color: "#475569", whiteSpace: "nowrap" }}>
+                    <th key={h} className="px-5 py-4 font-semibold text-start text-sm" style={{ color: "#475569", whiteSpace: "nowrap" }}>
                       {h}
                     </th>
                   ))}
@@ -508,72 +508,72 @@ export default function SectorClearances() {
                           ? "rgba(16,185,129,0.04)"
                           : i % 2 === 0 ? "#fff" : "#fafafa",
                       }}>
-                      <td className="px-3 py-3">
-                        {!c.isRead && <div className="w-2 h-2 rounded-full bg-green-500 mx-auto" />}
+                      <td className="px-4 py-4">
+                        {!c.isRead && <div className="w-2.5 h-2.5 rounded-full bg-green-500 mx-auto" />}
                       </td>
-                      <td className="px-4 py-3 font-mono font-medium" style={{ color: "#1e293b" }}>
+                      <td className="px-5 py-4 font-mono font-semibold text-[15px]" style={{ color: "#1e293b" }}>
                         {c.requestCode}
                         {!c.isRead && (
-                          <span className="ms-2 px-1.5 py-0.5 rounded text-xs font-medium"
+                          <span className="ms-2 px-2 py-0.5 rounded text-sm font-medium"
                             style={{ background: "rgba(16,185,129,0.1)", color: "#059669" }}>
                             {T.unread}
                           </span>
                         )}
                       </td>
-                      <td className="px-4 py-3" style={{ color: "#475569" }}>{c.contractNumber ?? "—"}</td>
-                      <td className="px-4 py-3 max-w-[160px] truncate" style={{ color: "#475569" }}>{c.contractName ?? "—"}</td>
-                      <td className="px-4 py-3">
+                      <td className="px-5 py-4" style={{ color: "#475569" }}>{c.contractNumber ?? "—"}</td>
+                      <td className="px-5 py-4 max-w-[200px] truncate" style={{ color: "#475569" }}>{c.contractName ?? "—"}</td>
+                      <td className="px-5 py-4">
                         <div className="text-center">
-                          <div className="font-semibold" style={{ color: "#1e293b" }}>{c.totalTests ?? 0}</div>
-                          <div className="text-xs mt-0.5" style={{ color: "#64748b" }}>
+                          <div className="font-semibold text-lg" style={{ color: "#1e293b" }}>{c.totalTests ?? 0}</div>
+                          <div className="text-sm mt-0.5" style={{ color: "#64748b" }}>
                             <span style={{ color: "#059669" }}>{c.passedTests ?? 0} {T.passed}</span>
                             {" / "}
                             <span style={{ color: "#dc2626" }}>{c.failedTests ?? 0} {T.failed}</span>
                           </div>
                         </div>
                       </td>
-                      <td className="px-4 py-3">
-                        <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium w-fit"
+                      <td className="px-5 py-4">
+                        <span className="flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium w-fit"
                           style={{ background: sc.bg, color: sc.text }}>
-                          {c.status === "issued" ? <CheckCircle2 className="w-3.5 h-3.5" /> : <Clock className="w-3.5 h-3.5" />}
+                          {c.status === "issued" ? <CheckCircle2 className="w-4 h-4" /> : <Clock className="w-4 h-4" />}
                           {T.statuses[c.status ?? "pending"] ?? c.status}
                         </span>
                       </td>
-                      <td className="px-4 py-3 whitespace-nowrap" style={{ color: "#64748b" }}>
+                      <td className="px-5 py-4 whitespace-nowrap text-[15px]" style={{ color: "#64748b" }}>
                         {c.certificateIssuedAt
                           ? new Date(c.certificateIssuedAt).toLocaleDateString("en-US")
                           : "—"}
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="px-5 py-4">
                         {c.certificatePdfUrl ? (
                           <a
                             href={c.certificatePdfUrl}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all"
+                            className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-semibold transition-all"
                             style={{
                               background: "rgba(16,185,129,0.08)",
                               border: "1px solid rgba(16,185,129,0.2)",
                               color: "#059669",
                             }}>
-                            <ExternalLink className="w-3.5 h-3.5" />
+                            <ExternalLink className="w-4 h-4" />
                             {T.download}
                           </a>
                         ) : "—"}
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="px-5 py-4">
                         {!c.isRead && (
                           <button
                             onClick={() => markRead.mutate({ clearanceId: c.id })}
                             disabled={markRead.isPending}
-                            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all"
+                            className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-semibold transition-all"
                             style={{
                               background: "rgba(16,185,129,0.08)",
                               border: "1px solid rgba(16,185,129,0.2)",
                               color: "#059669",
                               cursor: "pointer",
                             }}>
-                            <Eye className="w-3.5 h-3.5" />
+                            <Eye className="w-4 h-4" />
                             {T.markRead}
                           </button>
                         )}
@@ -588,31 +588,31 @@ export default function SectorClearances() {
 
         {/* Pagination */}
         {(data?.total ?? 0) > limit && (
-          <div className="flex items-center justify-between px-4 py-3 border-t" style={{ borderColor: "#e2e8f0" }}>
-            <span className="text-xs" style={{ color: "#64748b" }}>
+          <div className="flex items-center justify-between px-5 py-4 border-t" style={{ borderColor: "#e2e8f0" }}>
+            <span className="text-sm" style={{ color: "#64748b" }}>
               {T.total}: {data?.total}
             </span>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-3">
               <button
                 onClick={() => setPage(p => Math.max(1, p - 1))}
                 disabled={page === 1}
-                className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium"
+                className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold"
                 style={{
                   background: page === 1 ? "#f1f5f9" : "#fff",
                   border: "1px solid #e2e8f0",
                   color: page === 1 ? "#94a3b8" : "#475569",
                   cursor: page === 1 ? "not-allowed" : "pointer",
                 }}>
-                {isRtl ? <ChevronRight className="w-3.5 h-3.5" /> : <ChevronLeft className="w-3.5 h-3.5" />}
+                {isRtl ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
                 {T.prev}
               </button>
-              <span className="text-xs" style={{ color: "#64748b" }}>
+              <span className="text-sm font-medium" style={{ color: "#64748b" }}>
                 {T.page} {page} {T.of} {totalPages}
               </span>
               <button
                 onClick={() => setPage(p => Math.min(totalPages, p + 1))}
                 disabled={page >= totalPages}
-                className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium"
+                className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold"
                 style={{
                   background: page >= totalPages ? "#f1f5f9" : "#fff",
                   border: "1px solid #e2e8f0",
@@ -620,7 +620,7 @@ export default function SectorClearances() {
                   cursor: page >= totalPages ? "not-allowed" : "pointer",
                 }}>
                 {T.next}
-                {isRtl ? <ChevronLeft className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+                {isRtl ? <ChevronLeft className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
               </button>
             </div>
           </div>
@@ -630,24 +630,24 @@ export default function SectorClearances() {
       {/* New Clearance Request Dialog */}
       {showNewRequest && (
         <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: "rgba(0,0,0,0.4)" }}>
-          <div className="rounded-2xl shadow-2xl p-6 w-full max-w-md mx-4" style={{ background: "#fff" }}>
-            <div className="flex items-center justify-between mb-5">
-              <h2 className="text-lg font-bold" style={{ color: "#1e293b" }}>{T.newRequest}</h2>
+          <div className="rounded-2xl shadow-2xl p-7 w-full max-w-lg mx-4" style={{ background: "#fff" }}>
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-xl font-bold" style={{ color: "#1e293b" }}>{T.newRequest}</h2>
               <button onClick={() => setShowNewRequest(false)} style={{ color: "#94a3b8", background: "none", border: "none", cursor: "pointer" }}>
                 <X className="w-5 h-5" />
               </button>
             </div>
 
             {/* Contract selector */}
-            <div className="mb-4">
-              <label className="block text-sm font-medium mb-1.5" style={{ color: "#374151" }}>{T.contractLabel}</label>
+            <div className="mb-5">
+              <label className="block text-base font-medium mb-2" style={{ color: "#374151" }}>{T.contractLabel}</label>
               {(!sectorContracts || sectorContracts.length === 0) ? (
-                <p className="text-sm" style={{ color: "#ef4444" }}>{T.noContracts}</p>
+                <p className="text-base" style={{ color: "#ef4444" }}>{T.noContracts}</p>
               ) : (
                 <select
                   value={selectedContractId}
                   onChange={(e) => setSelectedContractId(e.target.value ? Number(e.target.value) : "")}
-                  className="w-full py-2.5 px-3 rounded-xl text-sm outline-none"
+                  className="w-full h-11 py-2 px-3 rounded-xl text-base outline-none"
                   style={{ background: "#f8fafc", border: "1px solid #e2e8f0", color: "#1e293b" }}>
                   <option value="">{T.selectContract}</option>
                   {sectorContracts.map((c) => (
@@ -660,9 +660,9 @@ export default function SectorClearances() {
             </div>
 
             {/* Contractor letter upload */}
-            <div className="mb-4">
-              <label className="block text-sm font-medium mb-1.5" style={{ color: "#374151" }}>{T.contractorLetter}</label>
-              <p className="text-xs mb-2" style={{ color: "#64748b" }}>{T.contractorLetterHint}</p>
+            <div className="mb-5">
+              <label className="block text-base font-medium mb-2" style={{ color: "#374151" }}>{T.contractorLetter}</label>
+              <p className="text-sm mb-2" style={{ color: "#64748b" }}>{T.contractorLetterHint}</p>
               <input
                 ref={fileInputRef}
                 type="file"
@@ -672,7 +672,7 @@ export default function SectorClearances() {
               />
               <button
                 onClick={() => fileInputRef.current?.click()}
-                className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium w-full transition-all"
+                className="flex items-center gap-2 px-4 py-3 rounded-xl text-base font-medium w-full transition-all"
                 style={{
                   background: contractorLetterFile ? "rgba(16,185,129,0.08)" : "#f8fafc",
                   border: "1px dashed",
@@ -690,14 +690,14 @@ export default function SectorClearances() {
             </div>
 
             {/* Notes */}
-            <div className="mb-5">
-              <label className="block text-sm font-medium mb-1.5" style={{ color: "#374151" }}>{T.notesLabel}</label>
+            <div className="mb-6">
+              <label className="block text-base font-medium mb-2" style={{ color: "#374151" }}>{T.notesLabel}</label>
               <textarea
                 value={requestNotes}
                 onChange={(e) => setRequestNotes(e.target.value)}
                 placeholder={T.notesPlaceholder}
                 rows={3}
-                className="w-full py-2.5 px-3 rounded-xl text-sm outline-none resize-none"
+                className="w-full py-3 px-3 rounded-xl text-base outline-none resize-none"
                 style={{ background: "#f8fafc", border: "1px solid #e2e8f0", color: "#1e293b" }}
               />
             </div>
@@ -714,14 +714,14 @@ export default function SectorClearances() {
             <div className="flex gap-3">
               <button
                 onClick={() => setShowNewRequest(false)}
-                className="flex-1 py-2.5 rounded-xl text-sm font-medium"
+                className="flex-1 h-11 rounded-xl text-base font-semibold"
                 style={{ background: "#f1f5f9", color: "#64748b", border: "none", cursor: "pointer" }}>
                 {T.cancel}
               </button>
               <button
                 onClick={handleSubmitRequest}
                 disabled={!selectedContractId || createRequest.isPending}
-                className="flex-1 py-2.5 rounded-xl text-sm font-medium flex items-center justify-center gap-2"
+                className="flex-1 h-11 rounded-xl text-base font-semibold flex items-center justify-center gap-2"
                 style={{
                   background: !selectedContractId || createRequest.isPending ? "#94a3b8" : "#3b82f6",
                   color: "#fff",
