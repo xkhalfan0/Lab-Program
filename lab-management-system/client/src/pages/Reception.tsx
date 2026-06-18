@@ -678,35 +678,6 @@ export default function Reception() {
     }
   };
 
-  const handleTestSelection = (tt: any, checked: boolean) => {
-    if (!checked) {
-      setSelectedTests(prev => prev.filter(s => s.testTypeId !== tt.id));
-      return;
-    }
-
-    const deps = confirmAndResolveMissingDependencies(tt);
-    if (deps === null) return;
-
-    const newTest = makeSelectedTestFromType(tt);
-    if (newTest.testTypeCode === "CONC_CUBE") {
-      newTest.quantity = MIN_CONC_CUBE_COUNT;
-    }
-    setSelectedTests(prev => {
-      const without = prev.filter(s => s.testTypeId !== tt.id);
-      const ids = new Set(without.map(s => s.testTypeId));
-      const additions = [...deps, newTest].filter(t => !ids.has(t.testTypeId));
-      return syncCbrFromProctor([...without, ...additions]);
-    });
-
-    if (deps.length > 0) {
-      toast.info(
-        lang === "ar"
-          ? `تم إضافة الاختبارات المطلوبة: ${getRequiredTestDisplayNames(deps.map(d => d.testTypeCode))}`
-          : `Added required tests: ${getRequiredTestDisplayNames(deps.map(d => d.testTypeCode))}`,
-      );
-    }
-  };
-
   const toggleBlockSubtype = (testTypeId: number, subtypeValue: string, testTypeName: string, testTypeCode: string, formTemplate: string | undefined, unitPrice: number) => {
     setMultiSubtypes(prev => {
       const current = prev[testTypeId] ?? {};
@@ -763,6 +734,208 @@ export default function Reception() {
     setSelectedTests(prev => prev.map(s =>
       s.testTypeId === testTypeId ? { ...s, quantity: qty } : s
     ));
+  };
+
+  const renderTestSelectionCard = (tt: any) => {
+    const isSelected = selectedTests.some(s => s.testTypeId === tt.id);
+    const selectedItem = selectedTests.find(s => s.testTypeId === tt.id);
+    const subTypes = SUBTYPES_BY_CODE[tt.code] ?? [];
+    const isCasting = CASTING_DATE_TESTS.includes(tt.code);
+
+    return (
+      <div
+        key={tt.id}
+        className={`rounded-xl border-2 p-5 transition-all ${isSelected ? "border-blue-400 bg-blue-50/60" : "border-border bg-card hover:border-blue-200 hover:bg-muted/30"}`}
+      >
+        <div className="flex items-start gap-3">
+          <Checkbox
+            id={`test-${tt.id}`}
+            checked={isSelected}
+            onCheckedChange={() => toggleTest(tt)}
+            className="mt-1"
+          />
+          <label htmlFor={`test-${tt.id}`} className="flex-1 cursor-pointer min-w-0">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <span className="block text-base font-semibold text-foreground">
+                  {testDisplayName(tt.code, tt.nameEn, tt.nameAr)}
+                </span>
+                {tt.code && (
+                  <span className="mt-0.5 block text-sm text-muted-foreground font-mono">{tt.code}</span>
+                )}
+              </div>
+              <div className="flex items-center gap-2 flex-shrink-0">
+                {isSelected && !MULTI_SUBTYPE_TESTS.includes(tt.code) && (
+                  <div className="flex items-center gap-1.5">
+                    {(selectedItem?.quantity ?? 0) < minQtyForTest(tt.code) && (
+                      <span className="inline-flex items-center gap-1 rounded-md border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[10px] text-amber-700 whitespace-nowrap">
+                        <AlertTriangle className="w-3 h-3" />
+                        {lang === "ar"
+                          ? `الحد الأدنى ${minQtyForTest(tt.code)}`
+                          : `Min ${minQtyForTest(tt.code)}`}
+                      </span>
+                    )}
+                    <Input
+                      type="number"
+                      min={minQtyForTest(tt.code)}
+                      max={maxQtyForTest(tt.code)}
+                      value={selectedItem?.quantity ? selectedItem.quantity : ""}
+                      placeholder="—"
+                      onFocus={e => e.currentTarget.select()}
+                      onChange={e => setTestQuantity(tt.id, parseInt(e.target.value, 10) || 0)}
+                      onClick={e => e.stopPropagation()}
+                      className={`h-8 w-16 text-center text-sm ${(selectedItem?.quantity ?? 0) < minQtyForTest(tt.code) ? "border-amber-400 text-amber-700" : ""}`}
+                    />
+                  </div>
+                )}
+                <span className="rounded-lg bg-green-50 px-2.5 py-1 text-sm font-semibold text-green-700 whitespace-nowrap">
+                  {Number(isSelected && selectedItem ? selectedItem.unitPrice : tt.unitPrice).toFixed(0)} {lang === "ar" ? "درهم" : "AED"}
+                </span>
+              </div>
+            </div>
+            {renderTestDependencyHint(tt.code, selectedItem)}
+          </label>
+        </div>
+        {isSelected && getSteelDeferredSubtypeOrderHint(tt.code, lang) && (
+          <p className="mt-2 ms-7 text-sm text-muted-foreground">
+            {getSteelDeferredSubtypeOrderHint(tt.code, lang)}
+          </p>
+        )}
+        {isSelected && MULTI_SUBTYPE_TESTS.includes(tt.code) && (
+          <div className="mt-2 ms-7 space-y-1.5">
+            <p className="text-xs text-muted-foreground font-medium">
+              {tt.code === "CONC_BLOCK"
+                ? (lang === "ar" ? "حدد أنواع البلوكات والكميات:" : "Select block types and quantities:")
+                : (lang === "ar" ? "حدد الأنواع والكميات:" : "Select types and quantities:")}
+            </p>
+            {(SUBTYPES_BY_CODE[tt.code] ?? []).map(st => {
+              const isSubSelected = (multiSubtypes[tt.id] ?? {})[st.value] !== undefined;
+              const qty = (multiSubtypes[tt.id] ?? {})[st.value] ?? 0;
+              return (
+                <div key={st.value} className={`flex items-center gap-2 p-2 rounded-md border transition-colors ${isSubSelected ? "bg-primary/5 border-primary/30" : "border-border"}`}>
+                  <Checkbox
+                    id={`block-${tt.id}-${st.value}`}
+                    checked={isSubSelected}
+                    onCheckedChange={() => toggleBlockSubtype(tt.id, st.value, tt.testTypeName, tt.code, tt.formTemplate, parseFloat(tt.unitPrice ?? "0"))}
+                  />
+                  <label htmlFor={`block-${tt.id}-${st.value}`} className="flex-1 text-xs font-medium cursor-pointer">
+                    {lang === "ar" ? st.labelAr : st.labelEn}
+                  </label>
+                  {isSubSelected && (
+                    <div className="flex items-center gap-1">
+                      <span className="text-xs text-muted-foreground">{lang === "ar" ? "عدد:" : "Qty:"}</span>
+                      <Input
+                        type="number" min={0} max={999}
+                        value={qty ? qty : ""}
+                        placeholder="—"
+                        onFocus={e => e.currentTarget.select()}
+                        onChange={e => setBlockSubtypeQty(tt.id, st.value, parseInt(e.target.value) || 0)}
+                        className={`h-6 w-16 text-center text-xs ${qty === 0 ? "border-amber-400 text-amber-700" : ""}`}
+                      />
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+        {isSelected && subTypes.length > 0 && !isCasting && !MULTI_SUBTYPE_TESTS.includes(tt.code) && (
+          <div className="mt-2 ms-7">
+            {subtypeFor === tt.id ? (
+              <div className="flex flex-wrap gap-1.5">
+                {subTypes.map(st => (
+                  <button key={st.value} type="button"
+                    onClick={() => setTestSubtype(tt.id, st.value)}
+                    className="px-2.5 py-1 text-xs rounded-md border bg-background hover:bg-primary hover:text-primary-foreground hover:border-primary transition-colors">
+                    {lang === "ar" ? st.labelAr : st.labelEn}
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground">
+                  {selectedItem?.testSubType
+                    ? (subTypes.find(s => s.value === selectedItem.testSubType)?.[lang === "ar" ? "labelAr" : "labelEn"] ?? selectedItem.testSubType)
+                    : (lang === "ar" ? "لم يُحدد النوع الفرعي" : "No subtype selected")}
+                </span>
+                <button type="button" onClick={() => setSubtypeFor(tt.id)}
+                  className="text-xs text-primary underline">
+                  {lang === "ar" ? "تغيير" : "Change"}
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+        {isSelected && tt.code === HOT_BIN_REQUIRED_CODE && (() => {
+          const addonTests = allTests.filter(at => HOT_BIN_OPTIONAL_CODES.includes(at.code ?? "") && at.isActive);
+          if (addonTests.length === 0) return null;
+          return (
+            <div className="mt-2 ms-7 space-y-1.5">
+              <p className="text-xs text-muted-foreground font-medium">
+                {lang === "ar" ? "اختبارات إضافية (اختيارية)" : "Optional Add-on Tests"}
+              </p>
+              {addonTests.map((at: any) => {
+                const isAddonSelected = !!hotBinAddons[at.code];
+                const addonQty = selectedTests.find(s => s.testTypeId === at.id)?.quantity ?? 0;
+                return (
+                  <div key={at.id} className={`flex items-center gap-2 p-2 rounded-md border transition-colors ${isAddonSelected ? "bg-blue-50 border-blue-200" : "border-border"}`}>
+                    <Checkbox
+                      id={`addon-${at.id}`}
+                      checked={isAddonSelected}
+                      onCheckedChange={(checked) => {
+                        const enabled = !!checked;
+                        setHotBinAddons(prev => ({ ...prev, [at.code]: enabled }));
+                        if (enabled) {
+                          const addonTest: SelectedTest = {
+                            testTypeId: at.id,
+                            testTypeCode: at.code,
+                            testTypeName: testDisplayName(at.code, at.nameEn, at.nameAr),
+                            formTemplate: at.formTemplate ?? undefined,
+                            testSubType: undefined,
+                            quantity: 0,
+                            unitPrice: parseFloat(at.unitPrice ?? "0"),
+                          };
+                          setSelectedTests(prev => [...prev.filter(s => s.testTypeId !== at.id), addonTest]);
+                        } else {
+                          setSelectedTests(prev => prev.filter(s => s.testTypeId !== at.id));
+                        }
+                      }}
+                    />
+                    <label htmlFor={`addon-${at.id}`} className="flex-1 text-xs cursor-pointer">
+                      <span className="font-medium">{testDisplayName(at.code, at.nameEn, at.nameAr)}</span>
+                      <span className="text-muted-foreground font-mono ms-1">({at.code})</span>
+                    </label>
+                    {isAddonSelected && (
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          className="w-6 h-6 rounded border border-border flex items-center justify-center text-sm hover:bg-muted"
+                          onClick={() => {
+                            const newQty = Math.max(0, addonQty - 1);
+                            setSelectedTests(prev => prev.map(s => s.testTypeId === at.id ? { ...s, quantity: newQty } : s));
+                          }}
+                        >−</button>
+                        <span className={`w-6 text-center text-xs font-mono ${addonQty === 0 ? "text-amber-600 font-bold" : ""}`}>{addonQty}</span>
+                        <button
+                          type="button"
+                          className="w-6 h-6 rounded border border-border flex items-center justify-center text-sm hover:bg-muted"
+                          onClick={() => {
+                            setSelectedTests(prev => prev.map(s => s.testTypeId === at.id ? { ...s, quantity: addonQty + 1 } : s));
+                          }}
+                        >+</button>
+                      </div>
+                    )}
+                    <span className="text-xs font-semibold text-green-700">
+                      {Number(at.unitPrice).toFixed(0)} {lang === "ar" ? "درهم" : "AED"}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })()}
+      </div>
+    );
   };
 
   const isCastingRequired = selectedTests.some(t => CASTING_DATE_TESTS.includes(t.testTypeCode));
@@ -1169,7 +1342,7 @@ export default function Reception() {
                     <FormSection title={lang === "ar" ? "الاختبارات" : "Tests"} className="border-t pt-6">
                       <div className="space-y-4">
                 {form.sampleType === "asphalt" && (
-                  <div className="space-y-4">
+                  <div className="space-y-5">
                     <Label className="flex items-center gap-2 text-base font-semibold text-foreground">
                       <CheckSquare className="w-4 h-4 text-blue-600" />
                       {lang === "ar" ? "اختبارات الأسفلت المطلوبة" : "Required Asphalt Tests"}
@@ -1183,42 +1356,22 @@ export default function Reception() {
 
                     {ASPHALT_TEST_GROUPS.map(group => {
                       const groupTests = allTests.filter((test: any) => test.isActive && (group.tests as readonly string[]).includes(test.code ?? ""));
-                      const bgColor = group.color === "blue" ? "bg-blue-50" : group.color === "green" ? "bg-green-50" : "bg-orange-50";
-                      const borderColor = group.color === "blue" ? "border-blue-200" : group.color === "green" ? "border-green-200" : "border-orange-200";
-                      const textColor = group.color === "blue" ? "text-blue-800" : group.color === "green" ? "text-green-800" : "text-orange-800";
 
                       return (
-                        <div key={group.id} className={`border ${borderColor} rounded-lg p-3 ${bgColor}`}>
-                          <p className={`text-xs font-semibold ${textColor} mb-2 flex items-center gap-2`}>
-                            <span className="w-2 h-2 rounded-full bg-current"></span>
+                        <div key={group.id} className="space-y-2.5">
+                          <p className="text-sm font-semibold text-foreground flex items-center gap-2">
+                            <span className="w-2 h-2 rounded-full bg-primary shrink-0" />
                             {lang === "ar" ? group.label.ar : group.label.en}
                           </p>
-
-                          <div className="space-y-1">
-                            {groupTests.length === 0 ? (
-                              <p className="text-xs text-muted-foreground bg-white rounded p-2">
-                                {lang === "ar" ? "لا توجد اختبارات نشطة في هذه المجموعة." : "No active tests in this group."}
-                              </p>
-                            ) : groupTests.map((test: any) => (
-                              <label key={test.id} className="flex items-center gap-2 p-2 bg-white rounded cursor-pointer hover:shadow-sm transition-shadow">
-                                <input
-                                  type="checkbox"
-                                  checked={selectedTests.some(t => t.testTypeId === test.id)}
-                                  onChange={(e) => handleTestSelection(test, e.target.checked)}
-                                  className="w-4 h-4"
-                                />
-                                <span className="text-sm flex-1">
-                                  <span className="block">
-                                    {testDisplayName(test.code, test.nameEn, test.nameAr)}
-                                  </span>
-                                  {renderTestDependencyHint(test.code)}
-                                </span>
-                                <span className="text-xs text-slate-500 font-mono">
-                                  {Number(test.unitPrice).toFixed(0)} AED
-                                </span>
-                              </label>
-                            ))}
-                          </div>
+                          {groupTests.length === 0 ? (
+                            <p className="text-sm text-muted-foreground rounded-xl border border-dashed border-border p-4 text-center">
+                              {lang === "ar" ? "لا توجد اختبارات نشطة في هذه المجموعة." : "No active tests in this group."}
+                            </p>
+                          ) : (
+                            <div className="space-y-2.5">
+                              {groupTests.map((test: any) => renderTestSelectionCard(test))}
+                            </div>
+                          )}
                         </div>
                       );
                     })}
@@ -1315,207 +1468,7 @@ export default function Reception() {
                                   : "No tests match this category or current filters.")}
                           </p>
                         </div>
-                      ) : filteredTests.map((tt: any) => {
-                        const isSelected = selectedTests.some(s => s.testTypeId === tt.id);
-                        const selectedItem = selectedTests.find(s => s.testTypeId === tt.id);
-                        const subTypes = SUBTYPES_BY_CODE[tt.code] ?? [];
-                        const isCasting = CASTING_DATE_TESTS.includes(tt.code);
-                        return (
-                          <div key={tt.id} className={`rounded-xl border-2 p-5 transition-all ${isSelected ? "border-blue-400 bg-blue-50/60" : "border-border bg-card hover:border-blue-200 hover:bg-muted/30"}`}>
-                            <div className="flex items-start gap-3">
-                              <Checkbox
-                                id={`test-${tt.id}`}
-                                checked={isSelected}
-                                onCheckedChange={() => toggleTest(tt)}
-                                className="mt-1"
-                              />
-                              <label htmlFor={`test-${tt.id}`} className="flex-1 cursor-pointer min-w-0">
-                                <div className="flex items-start justify-between gap-3">
-                                  <div className="min-w-0">
-                                    <span className="block text-base font-semibold text-foreground">
-                                      {testDisplayName(tt.code, tt.nameEn, tt.nameAr)}
-                                    </span>
-                                    {tt.code && (
-                                      <span className="mt-0.5 block text-sm text-muted-foreground font-mono">{tt.code}</span>
-                                    )}
-                                  </div>
-                                  <div className="flex items-center gap-2 flex-shrink-0">
-                                    {isSelected && !MULTI_SUBTYPE_TESTS.includes(tt.code) && (
-                                      <div className="flex items-center gap-1.5">
-                                        {(selectedItem?.quantity ?? 0) < minQtyForTest(tt.code) && (
-                                          <span className="inline-flex items-center gap-1 rounded-md border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[10px] text-amber-700 whitespace-nowrap">
-                                            <AlertTriangle className="w-3 h-3" />
-                                            {lang === "ar"
-                                              ? `الحد الأدنى ${minQtyForTest(tt.code)}`
-                                              : `Min ${minQtyForTest(tt.code)}`}
-                                          </span>
-                                        )}
-                                        <Input
-                                          type="number"
-                                          min={minQtyForTest(tt.code)}
-                                          max={maxQtyForTest(tt.code)}
-                                          value={selectedItem?.quantity ? selectedItem.quantity : ""}
-                                          placeholder="—"
-                                          onFocus={e => e.currentTarget.select()}
-                                          onChange={e => setTestQuantity(tt.id, parseInt(e.target.value, 10) || 0)}
-                                          onClick={e => e.stopPropagation()}
-                                          className={`h-8 w-16 text-center text-sm ${(selectedItem?.quantity ?? 0) < minQtyForTest(tt.code) ? "border-amber-400 text-amber-700" : ""}`}
-                                        />
-                                      </div>
-                                    )}
-                                    <span className="rounded-lg bg-green-50 px-2.5 py-1 text-sm font-semibold text-green-700 whitespace-nowrap">
-                                      {Number(isSelected && selectedItem ? selectedItem.unitPrice : tt.unitPrice).toFixed(0)} {lang === "ar" ? "درهم" : "AED"}
-                                    </span>
-                                  </div>
-                                </div>
-                                {renderTestDependencyHint(tt.code, selectedItem)}
-                              </label>
-                            </div>
-                            {/* Steel tensile: subtype chosen on technician test form */}
-                            {isSelected && getSteelDeferredSubtypeOrderHint(tt.code, lang) && (
-                              <p className="mt-2 ms-7 text-sm text-muted-foreground">
-                                {getSteelDeferredSubtypeOrderHint(tt.code, lang)}
-                              </p>
-                            )}
-                            {/* Multi-subtype UI (blocks, bend diameters, sieve types, …) */}
-                            {isSelected && MULTI_SUBTYPE_TESTS.includes(tt.code) && (
-                              <div className="mt-2 ms-7 space-y-1.5">
-                                <p className="text-xs text-muted-foreground font-medium">
-                                  {tt.code === "CONC_BLOCK"
-                                    ? (lang === "ar" ? "حدد أنواع البلوكات والكميات:" : "Select block types and quantities:")
-                                    : (lang === "ar" ? "حدد الأنواع والكميات:" : "Select types and quantities:")}
-                                </p>
-                                {(SUBTYPES_BY_CODE[tt.code] ?? []).map(st => {
-                                  const isSubSelected = (multiSubtypes[tt.id] ?? {})[st.value] !== undefined;
-                                  const qty = (multiSubtypes[tt.id] ?? {})[st.value] ?? 0;
-                                  return (
-                                    <div key={st.value} className={`flex items-center gap-2 p-2 rounded-md border transition-colors ${isSubSelected ? "bg-primary/5 border-primary/30" : "border-border"}`}>
-                                      <Checkbox
-                                        id={`block-${tt.id}-${st.value}`}
-                                        checked={isSubSelected}
-                                        onCheckedChange={() => toggleBlockSubtype(tt.id, st.value, tt.testTypeName, tt.code, tt.formTemplate, parseFloat(tt.unitPrice ?? "0"))}
-                                      />
-                                      <label htmlFor={`block-${tt.id}-${st.value}`} className="flex-1 text-xs font-medium cursor-pointer">
-                                        {lang === "ar" ? st.labelAr : st.labelEn}
-                                      </label>
-                                      {isSubSelected && (
-                                        <div className="flex items-center gap-1">
-                                          <span className="text-xs text-muted-foreground">{lang === "ar" ? "عدد:" : "Qty:"}</span>
-                                          <Input
-                                            type="number" min={0} max={999}
-                                            value={qty ? qty : ""}
-                                            placeholder="—"
-                                            onFocus={e => e.currentTarget.select()}
-                                            onChange={e => setBlockSubtypeQty(tt.id, st.value, parseInt(e.target.value) || 0)}
-                                            className={`h-6 w-16 text-center text-xs ${qty === 0 ? "border-amber-400 text-amber-700" : ""}`}
-                                          />
-                                        </div>
-                                      )}
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            )}
-                            {/* Subtype selector for regular tests */}
-                            {isSelected && subTypes.length > 0 && !isCasting && !MULTI_SUBTYPE_TESTS.includes(tt.code) && (
-                              <div className="mt-2 ms-7">
-                                {subtypeFor === tt.id ? (
-                                  <div className="flex flex-wrap gap-1.5">
-                                    {subTypes.map(st => (
-                                      <button key={st.value} type="button"
-                                        onClick={() => setTestSubtype(tt.id, st.value)}
-                                        className="px-2.5 py-1 text-xs rounded-md border bg-background hover:bg-primary hover:text-primary-foreground hover:border-primary transition-colors">
-                                        {lang === "ar" ? st.labelAr : st.labelEn}
-                                      </button>
-                                    ))}
-                                  </div>
-                                ) : (
-                                  <div className="flex items-center gap-2">
-                                    <span className="text-xs text-muted-foreground">
-                                      {selectedItem?.testSubType
-                                        ? (subTypes.find(s => s.value === selectedItem.testSubType)?.[lang === "ar" ? "labelAr" : "labelEn"] ?? selectedItem.testSubType)
-                                        : (lang === "ar" ? "لم يُحدد النوع الفرعي" : "No subtype selected")}
-                                    </span>
-                                    <button type="button" onClick={() => setSubtypeFor(tt.id)}
-                                      className="text-xs text-primary underline">
-                                      {lang === "ar" ? "تغيير" : "Change"}
-                                    </button>
-                                  </div>
-                                )}
-                              </div>
-                            )}
-                            {/* Hot Bin optional add-on tests (AGG_SG, AGG_FLAKINESS_ELONGATION) */}
-                            {isSelected && tt.code === HOT_BIN_REQUIRED_CODE && (() => {
-                              const addonTests = allTests.filter(at => HOT_BIN_OPTIONAL_CODES.includes(at.code ?? "") && at.isActive);
-                              if (addonTests.length === 0) return null;
-                              return (
-                                <div className="mt-2 ms-7 space-y-1.5">
-                                  <p className="text-xs text-muted-foreground font-medium">
-                                    {lang === "ar" ? "اختبارات إضافية (اختيارية)" : "Optional Add-on Tests"}
-                                  </p>
-                                  {addonTests.map((at: any) => {
-                                    const isAddonSelected = !!hotBinAddons[at.code];
-                                    const addonQty = selectedTests.find(s => s.testTypeId === at.id)?.quantity ?? 0;
-                                    return (
-                                      <div key={at.id} className={`flex items-center gap-2 p-2 rounded-md border transition-colors ${isAddonSelected ? "bg-blue-50 border-blue-200" : "border-border"}`}>
-                                        <Checkbox
-                                          id={`addon-${at.id}`}
-                                          checked={isAddonSelected}
-                                          onCheckedChange={(checked) => {
-                                            const enabled = !!checked;
-                                            setHotBinAddons(prev => ({ ...prev, [at.code]: enabled }));
-                                            if (enabled) {
-                                              const addonTest: SelectedTest = {
-                                                testTypeId: at.id,
-                                                testTypeCode: at.code,
-                                                testTypeName: testDisplayName(at.code, at.nameEn, at.nameAr),
-                                                formTemplate: at.formTemplate ?? undefined,
-                                                testSubType: undefined,
-                                                quantity: 0,
-                                                unitPrice: parseFloat(at.unitPrice ?? "0"),
-                                              };
-                                              setSelectedTests(prev => [...prev.filter(s => s.testTypeId !== at.id), addonTest]);
-                                            } else {
-                                              setSelectedTests(prev => prev.filter(s => s.testTypeId !== at.id));
-                                            }
-                                          }}
-                                        />
-                                        <label htmlFor={`addon-${at.id}`} className="flex-1 text-xs cursor-pointer">
-                                          <span className="font-medium">{testDisplayName(at.code, at.nameEn, at.nameAr)}</span>
-                                          <span className="text-muted-foreground font-mono ms-1">({at.code})</span>
-                                        </label>
-                                        {isAddonSelected && (
-                                          <div className="flex items-center gap-1">
-                                            <button
-                                              type="button"
-                                              className="w-6 h-6 rounded border border-border flex items-center justify-center text-sm hover:bg-muted"
-                                              onClick={() => {
-                                                const newQty = Math.max(0, addonQty - 1);
-                                                setSelectedTests(prev => prev.map(s => s.testTypeId === at.id ? { ...s, quantity: newQty } : s));
-                                              }}
-                                            >−</button>
-                                            <span className={`w-6 text-center text-xs font-mono ${addonQty === 0 ? "text-amber-600 font-bold" : ""}`}>{addonQty}</span>
-                                            <button
-                                              type="button"
-                                              className="w-6 h-6 rounded border border-border flex items-center justify-center text-sm hover:bg-muted"
-                                              onClick={() => {
-                                                setSelectedTests(prev => prev.map(s => s.testTypeId === at.id ? { ...s, quantity: addonQty + 1 } : s));
-                                              }}
-                                            >+</button>
-                                          </div>
-                                        )}
-                                        <span className="text-xs font-semibold text-blue-700">
-                                          {Number(at.unitPrice).toFixed(0)} {lang === "ar" ? "درهم" : "AED"}
-                                        </span>
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                              );
-                            })()}
-                          </div>
-                        );
-                      })}
+                      ) : filteredTests.map((tt: any) => renderTestSelectionCard(tt))}
                     </div>
                   </div>
                 )}
