@@ -1,6 +1,6 @@
 import DashboardLayout from "@/components/DashboardLayout";
 import { DeletionRequestButton } from "@/components/DeletionRequestButton";
-import { ReceptionRetestPanel } from "@/components/ReceptionRetestPanel";
+import { ReceptionNominalCubeSizePanel, isValidNominalCubeSize } from "@/components/ReceptionNominalCubeSizePanel";
 import { RetestBadge } from "@/components/RetestBadge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -15,9 +15,9 @@ import { trpc } from "@/lib/trpc";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Search, Printer, FileText, Lock, Pencil, X, Trash2, CheckSquare, Package, CalendarIcon, AlertTriangle, ChevronRight } from "lucide-react";
+import { Search, Printer, FileText, Pencil, X, Trash2, CheckSquare, Package, CalendarIcon, AlertTriangle, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useState, useMemo, useEffect, type ReactElement, type ReactNode } from "react";
+import { useState, useMemo, useEffect, useRef, type ReactElement, type ReactNode } from "react";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import { useAuth } from "@/_core/hooks/useAuth";
@@ -331,8 +331,9 @@ export default function Reception() {
   const [asphaltMixSelectionMode, setAsphaltMixSelectionMode] = useState<"batch" | "individual">("batch");
   /** Foamed concrete (CONC_FOAM): age in days from casting to testing, saved on order item metadata → DB as JSON in testSubType */
   const [foamConcreteAge, setFoamConcreteAge] = useState("");
-  /** Reception: CONC_CUBE nominal face size (stored on sample) */
-  const [nominalCubeSize, setNominalCubeSize] = useState("150mm");
+  /** Reception: CONC_CUBE nominal face size (stored on sample) — required when cube test selected */
+  const [nominalCubeSize, setNominalCubeSize] = useState("");
+  const concCubePanelRef = useRef<HTMLDivElement>(null);
 
   const minQtyForTest = (code: string) => (code === "CONC_CUBE" ? MIN_CONC_CUBE_COUNT : 1);
   const maxQtyForTest = (code: string) => (code === "CONC_CUBE" ? MAX_CONC_CUBE_COUNT : 999);
@@ -411,7 +412,7 @@ export default function Reception() {
     setHotBinAddons({});
     setAsphaltMixCourse("");
     setAsphaltMixSelectionMode("batch");
-    setNominalCubeSize("150mm");
+    setNominalCubeSize("");
     setFoamConcreteAge("");
   };
 
@@ -963,6 +964,20 @@ export default function Reception() {
     return (t.quantity ?? 0) < minQtyForTest(t.testTypeCode);
   });
 
+  const hasConcCubeTest = useMemo(
+    () => selectedTests.some((t) => t.testTypeCode === "CONC_CUBE"),
+    [selectedTests],
+  );
+  const missingConcCubeSize = hasConcCubeTest && !isValidNominalCubeSize(nominalCubeSize);
+
+  useEffect(() => {
+    if (!hasConcCubeTest) {
+      setNominalCubeSize("");
+      return;
+    }
+    concCubePanelRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }, [hasConcCubeTest]);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.contractId) {
@@ -987,6 +1002,13 @@ export default function Reception() {
           ? `يجب أن تكون كمية كل اختبار صالحة (مكعبات: ${MIN_CONC_CUBE_COUNT} على الأقل، غير ذلك: 1 على الأقل)`
           : `Each selected test needs a valid quantity (cubes: min ${MIN_CONC_CUBE_COUNT}, others: min 1)`,
       );
+      return;
+    }
+    if (missingConcCubeSize) {
+      toast.error(
+        lang === "ar" ? "يرجى اختيار الحجم الاسمي للمكعب" : "Please select the nominal cube size",
+      );
+      concCubePanelRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
       return;
     }
     if (hasMultipleGroups) {
@@ -1247,8 +1269,8 @@ export default function Reception() {
           <form onSubmit={handleSubmit}>
             <Card>
               <CardContent className="p-0">
-                <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] divide-y lg:divide-y-0 lg:divide-x">
-                  <div className="p-6 lg:p-7 space-y-7">
+                <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] divide-y lg:divide-y-0 lg:divide-x min-h-0">
+                  <div className="p-6 lg:p-7 space-y-7 min-w-0">
                     <FormSection title={lang === "ar" ? "بيانات العينة" : "Sample details"}>
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div className="space-y-2 sm:col-span-2">
@@ -1344,6 +1366,20 @@ export default function Reception() {
 
                     <FormSection title={lang === "ar" ? "الاختبارات" : "Tests"} className="border-t pt-6">
                       <div className="space-y-4">
+                {form.sampleType && (
+                  <div className="rounded-xl border-2 border-border bg-card shadow-sm overflow-hidden">
+                    <div className="flex items-center justify-between gap-2 px-4 py-2.5 bg-muted/50 border-b text-xs text-muted-foreground">
+                      <span>
+                        {lang === "ar" ? "مرّر القائمة لاختيار الاختبارات" : "Scroll the list to choose tests"}
+                      </span>
+                      {selectedTests.length > 0 && (
+                        <span className="font-semibold text-foreground">
+                          {selectedTests.length} {lang === "ar" ? "محدد" : "selected"}
+                        </span>
+                      )}
+                    </div>
+                    <div className="max-h-[min(420px,52vh)] overflow-y-auto overscroll-contain">
+                      <div className="p-4 space-y-4">
                 {form.sampleType === "asphalt" && (
                   <div className="space-y-5">
                     <Label className="flex items-center gap-2 text-base font-semibold text-foreground">
@@ -1476,24 +1512,20 @@ export default function Reception() {
                   </div>
                 )}
 
-                {selectedTests.some(t => t.testTypeCode === "CONC_CUBE") && (
-                  <div className="space-y-3 p-3 border border-blue-200 rounded-lg bg-blue-50/40">
-                    <p className="text-xs font-semibold text-blue-800 flex items-center gap-1">
-                      <Lock className="w-3 h-3" />
-                      {lang === "ar"
-                        ? "يُحدد عند الاستقبال — الفني لا يستطيع التعديل"
-                        : "Set at reception — technician cannot change"}
-                    </p>
-                    <div className="space-y-1.5">
-                      <Label>{lang === "ar" ? "الحجم الاسمي للمكعب" : "Nominal Cube Size"}</Label>
-                      <Select value={nominalCubeSize} onValueChange={setNominalCubeSize}>
-                        <SelectTrigger><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="150mm">150 mm</SelectItem>
-                          <SelectItem value="100mm">100 mm</SelectItem>
-                        </SelectContent>
-                      </Select>
+                      </div>
                     </div>
+                    {hasConcCubeTest && (
+                      <div
+                        ref={concCubePanelRef}
+                        className="border-t-2 border-blue-400 bg-gradient-to-b from-blue-100/90 to-blue-50/95 p-4 md:p-5"
+                      >
+                        <ReceptionNominalCubeSizePanel
+                          lang={lang}
+                          value={nominalCubeSize}
+                          onChange={setNominalCubeSize}
+                        />
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -1529,7 +1561,7 @@ export default function Reception() {
                 </FormSection>
                   </div>
 
-                  <aside className="p-6 lg:p-7 bg-muted/20 space-y-5 lg:sticky lg:top-4 lg:self-start">
+                  <aside className="p-6 lg:p-7 bg-muted/20 space-y-5 lg:sticky lg:top-6 lg:z-10 lg:self-start lg:max-h-[calc(100vh-3rem)] lg:overflow-y-auto">
                     <div className="space-y-2">
                       <p className="text-sm text-muted-foreground">{lang === "ar" ? "رمز العينة" : "Sample code"}</p>
                       <p className="font-mono text-base text-muted-foreground">{lang === "ar" ? "يُولَّد تلقائياً" : "Auto on save"}</p>
@@ -1543,6 +1575,26 @@ export default function Reception() {
                         <span className="text-muted-foreground">{lang === "ar" ? "الاختبارات" : "Tests"}</span>
                         <span className="font-medium">{selectedTests.length || "—"}</span>
                       </div>
+                      {hasConcCubeTest && (
+                        <div
+                          className={cn(
+                            "rounded-lg border-2 p-3 text-sm space-y-1",
+                            missingConcCubeSize
+                              ? "border-amber-400 bg-amber-50"
+                              : "border-blue-300 bg-blue-50",
+                          )}
+                        >
+                          <p className="font-semibold text-blue-950">
+                            {lang === "ar" ? "حجم المكعب" : "Cube size"}
+                            <span className="text-red-500 ms-1">*</span>
+                          </p>
+                          <p className="text-lg font-bold text-blue-800">
+                            {isValidNominalCubeSize(nominalCubeSize)
+                              ? (nominalCubeSize === "100mm" ? "100 mm" : "150 mm")
+                              : (lang === "ar" ? "— اختر أدناه —" : "— select below —")}
+                          </p>
+                        </div>
+                      )}
                       <div className="flex justify-between gap-2 pt-3 border-t text-lg font-semibold">
                         <span>{lang === "ar" ? "الإجمالي" : "Total"}</span>
                         <span className="text-primary">{totalPrice > 0 ? `${totalPrice.toFixed(0)} AED` : "—"}</span>
@@ -1551,7 +1603,19 @@ export default function Reception() {
                     {hasInvalidQtyTests && selectedTests.length > 0 && (
                       <p className="text-sm text-amber-700">{lang === "ar" ? "أصلح الكميات أولاً" : "Fix quantities first"}</p>
                     )}
-                    <Button type="submit" size="lg" className="w-full h-11 text-base font-semibold" disabled={createOrder.isPending || selectedTests.length === 0 || hasInvalidQtyTests}>
+                    {missingConcCubeSize && (
+                      <p className="text-sm text-amber-800 font-medium">
+                        {lang === "ar"
+                          ? "اختر الحجم الاسمي للمكعب أسفل قائمة الاختبارات"
+                          : "Select nominal cube size below the test list"}
+                      </p>
+                    )}
+                    <Button
+                      type="submit"
+                      size="lg"
+                      className="w-full h-11 text-base font-semibold"
+                      disabled={createOrder.isPending || selectedTests.length === 0 || hasInvalidQtyTests || missingConcCubeSize}
+                    >
                       {createOrder.isPending
                         ? (lang === "ar" ? "جاري..." : "Saving...")
                         : (lang === "ar" ? "تسجيل وطباعة" : "Register & print")}

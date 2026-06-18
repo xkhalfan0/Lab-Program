@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Search, FlaskConical, Loader2, Lock } from "lucide-react";
 import { RETEST_REASONS } from "@shared/retestReasons";
+import { ReceptionNominalCubeSizePanel, isValidNominalCubeSize } from "@/components/ReceptionNominalCubeSizePanel";
 import { toast } from "sonner";
 
 type RetestTest = {
@@ -46,7 +47,7 @@ export function ReceptionRetestPanel({ onSuccess, onCancel }: Props) {
   const [notes, setNotes] = useState("");
   const [retestReason, setRetestReason] = useState<string>("");
   const [retestReasonNotes, setRetestReasonNotes] = useState("");
-  const [nominalCubeSize, setNominalCubeSize] = useState("150mm");
+  const [nominalCubeSize, setNominalCubeSize] = useState("");
 
   const isSearching = searchQ.trim().length >= 2;
   const {
@@ -128,7 +129,7 @@ export function ReceptionRetestPanel({ onSuccess, onCancel }: Props) {
         ? new Date(source.header.castingDate).toISOString().slice(0, 10)
         : ""
     );
-    setNominalCubeSize(source.header.nominalCubeSize ?? "150mm");
+    setNominalCubeSize(source.header.nominalCubeSize ?? "");
     setTests(
       source.tests.map((t) => ({
         ...t,
@@ -157,6 +158,11 @@ export function ReceptionRetestPanel({ onSuccess, onCancel }: Props) {
     const selected = tests.filter((t) => t.checked);
     if (!selected.length) {
       toast.error(isAr ? "اختر اختباراً واحداً على الأقل" : "Select at least one test");
+      return;
+    }
+    const needsCubeSize = selected.some((t) => t.testTypeCode === "CONC_CUBE");
+    if (needsCubeSize && !isValidNominalCubeSize(nominalCubeSize)) {
+      toast.error(isAr ? "يرجى اختيار الحجم الاسمي للمكعب" : "Please select the nominal cube size");
       return;
     }
     if (!source) return;
@@ -328,7 +334,7 @@ export function ReceptionRetestPanel({ onSuccess, onCancel }: Props) {
 
             <div>
               <Label className="text-[15px]">{isAr ? "الاختبارات" : "Tests"}</Label>
-              <div className="border rounded-lg divide-y mt-2">
+              <div className="border rounded-lg divide-y mt-2 max-h-64 overflow-y-auto">
                 {tests.map((t) => (
                   <div key={t.testTypeCode} className="flex items-center gap-3 px-4 py-3">
                     <Checkbox checked={t.checked} onCheckedChange={() => toggleTest(t.testTypeCode)} />
@@ -353,6 +359,16 @@ export function ReceptionRetestPanel({ onSuccess, onCancel }: Props) {
               </div>
             </div>
 
+            {tests.some((t) => t.checked && t.testTypeCode === "CONC_CUBE") && (
+              <div className="rounded-xl border-2 border-blue-300 bg-blue-50/80 p-4">
+                <ReceptionNominalCubeSizePanel
+                  lang={lang}
+                  value={nominalCubeSize}
+                  onChange={setNominalCubeSize}
+                />
+              </div>
+            )}
+
             <div>
               <Label className="text-[15px]">{isAr ? "ملاحظات الاستقبال" : "Reception notes"}</Label>
               <Textarea className="mt-1.5 text-base" value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} />
@@ -365,7 +381,13 @@ export function ReceptionRetestPanel({ onSuccess, onCancel }: Props) {
         <Button type="button" variant="outline" className="h-10 px-5" onClick={onCancel}>{isAr ? "إلغاء" : "Cancel"}</Button>
         <Button
           type="button"
-          disabled={!source || !retestReason || createRetest.isPending || !tests.some((t) => t.checked)}
+          disabled={
+            !source
+            || !retestReason
+            || createRetest.isPending
+            || !tests.some((t) => t.checked)
+            || (tests.some((t) => t.checked && t.testTypeCode === "CONC_CUBE") && !isValidNominalCubeSize(nominalCubeSize))
+          }
           onClick={handleSubmit}
           className="gap-2 h-10 px-5 text-base font-semibold"
         >
