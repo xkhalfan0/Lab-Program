@@ -2,6 +2,7 @@ import DashboardLayout from "@/components/DashboardLayout";
 import { DeletionRequestButton } from "@/components/DeletionRequestButton";
 import { RetestBadge } from "@/components/RetestBadge";
 import { StatusBadge } from "@/components/StatusBadge";
+import { TestChip, resolveOrderItemTestLabel } from "@/components/TestDisplay";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -18,8 +19,6 @@ import {
   Clock,
   Eye,
   UserCheck,
-  FlaskConical,
-  CheckCircle2,
   Pencil,
   Printer,
 } from "lucide-react";
@@ -667,19 +666,12 @@ export default function Distribution() {
                               {(order.items ?? []).length === 0 ? (
                                 <span className="text-xs text-muted-foreground italic">{lang === "ar" ? "لا توجد" : "None"}</span>
                               ) : (order.items ?? []).filter((item: any) => item && typeof item === "object").map((item: any, idx: number) => (
-                                <span
+                                <TestChip
                                   key={`all-${order.id}-${item.id || item._id || idx}`}
-                                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border"
-                                  style={{
-                                    background: item.status === "completed" ? "#f0fdf4" : "#f8fafc",
-                                    borderColor: item.status === "completed" ? "#86efac" : "#e2e8f0",
-                                    color: item.status === "completed" ? "#15803d" : "#475569",
-                                  }}
-                                >
-                                  {item.status === "completed" ? <CheckCircle2 className="w-3 h-3" /> : <FlaskConical className="w-3 h-3" />}
-                                  {item.testName && item.testName !== "__multi__" ? String(item.testName) : String(item.testTypeCode ?? "—")}
-                                  {Number(item.quantity) > 1 ? ` ×${item.quantity}` : ""}
-                                </span>
+                                  label={resolveOrderItemTestLabel(item)}
+                                  quantity={Number(item.quantity) || undefined}
+                                  status={item.status === "completed" ? "completed" : "pending"}
+                                />
                               ))}
                             </div>
                           </td>
@@ -739,11 +731,11 @@ export default function Distribution() {
                 <span className="text-muted-foreground">{lang === "ar" ? "الاختبارات:" : "Tests:"}</span>
                 <div className="flex flex-wrap gap-1 mt-1">
                   {(selectedOrder?.items ?? []).filter((item: any) => item && typeof item === "object").map((item: any, idx: number) => (
-                    <span key={`dialog-${selectedOrder?.id}-${item.id || item._id || idx}`} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200">
-                      <FlaskConical className="w-3 h-3" />
-                      {item.testName && item.testName !== "__multi__" ? String(item.testName) : String(item.testTypeCode ?? "—")}
-                      {Number(item.quantity) > 1 ? ` ×${toText(item.quantity)}` : ""}
-                    </span>
+                    <TestChip
+                      key={`dialog-${selectedOrder?.id}-${item.id || item._id || idx}`}
+                      label={resolveOrderItemTestLabel(item)}
+                      quantity={Number(item.quantity) || undefined}
+                    />
                   ))}
                 </div>
               </div>

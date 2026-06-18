@@ -4,6 +4,7 @@ import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { TestCodeBadge, TestPriceBadge } from "@/components/TestDisplay";
 import {
   TEST_CATALOG_CATEGORIES,
   filterCatalogTests,
@@ -27,10 +28,6 @@ type TestCatalogViewProps = {
   onPriceInputChange?: (testId: number, value: string) => void;
   isSavingPrice?: boolean;
 };
-
-function formatPrice(value: string | number | null | undefined): string {
-  return Number(value ?? 0).toFixed(2);
-}
 
 function PriceCell({
   test,
@@ -58,11 +55,7 @@ function PriceCell({
   const isEditing = editingPrice?.testId === test.id;
 
   if (!isAdmin) {
-    return (
-      <span className="font-mono font-semibold text-sm tabular-nums whitespace-nowrap">
-        {formatPrice(test.unitPrice)} <span className="text-xs font-normal text-muted-foreground">AED</span>
-      </span>
-    );
+    return <TestPriceBadge amount={test.unitPrice} lang={lang} decimals={2} />;
   }
 
   if (isEditing && editingPrice) {
@@ -100,9 +93,7 @@ function PriceCell({
 
   return (
     <div className="flex items-center justify-end gap-1.5">
-      <span className="font-mono font-semibold text-sm tabular-nums whitespace-nowrap">
-        {formatPrice(test.unitPrice)} <span className="text-xs font-normal text-muted-foreground">AED</span>
-      </span>
+      <TestPriceBadge amount={test.unitPrice} lang={lang} decimals={2} />
       <Button
         type="button"
         size="sm"
@@ -266,9 +257,7 @@ export function TestCatalogView({
                       <div className="min-w-0 space-y-1">
                         <div className="flex flex-wrap items-center gap-2">
                           <p className="font-medium text-sm leading-snug">{test.nameEn}</p>
-                          <code className="text-[10px] bg-muted px-1.5 py-0.5 rounded font-mono text-muted-foreground">
-                            {test.code}
-                          </code>
+                          <TestCodeBadge code={test.code} variant="inline" />
                         </div>
                         {test.nameAr && (
                           <p className="text-xs text-muted-foreground leading-snug" dir="rtl">

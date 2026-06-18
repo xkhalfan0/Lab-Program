@@ -17,6 +17,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { trpc } from "@/lib/trpc";
+import { TestChip } from "@/components/TestDisplay";
 import { resolveOfficialTestLabel } from "@/lib/officialTestCatalog";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useDeletionStatus } from "@/hooks/useDeletionStatus";
@@ -403,11 +404,15 @@ function TechnicianAssignmentCard({
                   <AlertCircle className="h-4 w-4 shrink-0" />
                   <span>{tx("requiresPrereq", lang)}</span>
                 </div>
-                <ul className="mt-1 list-inside list-disc text-xs text-amber-700">
+                <div className="mt-1.5 flex flex-wrap gap-1">
                   {missingTests.map((test) => (
-                    <li key={test.code}>{lang === "ar" ? test.nameAr : test.nameEn}</li>
+                    <TestChip
+                      key={test.code}
+                      label={lang === "ar" ? test.nameAr : test.nameEn}
+                      status="pending"
+                    />
                   ))}
-                </ul>
+                </div>
                 <p className="mt-1 text-xs text-amber-600">{tx("unlockHint", lang)}</p>
               </div>
             )}

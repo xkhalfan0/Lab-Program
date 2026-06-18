@@ -3,6 +3,20 @@ import { DeletionRequestButton } from "@/components/DeletionRequestButton";
 import { ReceptionNominalCubeSizePanel, isValidNominalCubeSize } from "@/components/ReceptionNominalCubeSizePanel";
 import { ReceptionRetestPanel } from "@/components/ReceptionRetestPanel";
 import { RetestBadge } from "@/components/RetestBadge";
+import {
+  TestDetailIndent,
+  TestGroupHeading,
+  TestListEmpty,
+  TestNameBlock,
+  TestNestedRow,
+  TestOrderQtyRow,
+  TestPriceBadge,
+  TestQtyInput,
+  TestSectionLabel,
+  TestSelectionCard,
+  TestSelectionPanel,
+  TestSelectionRow,
+} from "@/components/TestDisplay";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -744,68 +758,56 @@ export default function Reception() {
     const selectedItem = selectedTests.find(s => s.testTypeId === tt.id);
     const subTypes = SUBTYPES_BY_CODE[tt.code] ?? [];
     const isCasting = CASTING_DATE_TESTS.includes(tt.code);
+    const catalogLang = lang === "ar" ? "ar" : "en";
 
     return (
-      <div
-        key={tt.id}
-        className={`rounded-xl border-2 p-5 transition-all ${isSelected ? "border-blue-400 bg-blue-50/60" : "border-border bg-card hover:border-blue-200 hover:bg-muted/30"}`}
-      >
-        <div className="flex items-start gap-3">
-          <Checkbox
-            id={`test-${tt.id}`}
-            checked={isSelected}
-            onCheckedChange={() => toggleTest(tt)}
-            className="mt-1"
-          />
-          <label htmlFor={`test-${tt.id}`} className="flex-1 cursor-pointer min-w-0">
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <span className="block text-base font-semibold text-foreground">
-                  {testDisplayName(tt.code, tt.nameEn, tt.nameAr)}
-                </span>
-                {tt.code && (
-                  <span className="mt-0.5 block text-sm text-muted-foreground font-mono">{tt.code}</span>
-                )}
-              </div>
-              <div className="flex items-center gap-2 flex-shrink-0">
-                {isSelected && !MULTI_SUBTYPE_TESTS.includes(tt.code) && (
-                  <div className="flex items-center gap-1.5">
-                    {(selectedItem?.quantity ?? 0) < minQtyForTest(tt.code) && (
-                      <span className="inline-flex items-center gap-1 rounded-md border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[10px] text-amber-700 whitespace-nowrap">
-                        <AlertTriangle className="w-3 h-3" />
-                        {lang === "ar"
-                          ? `الحد الأدنى ${minQtyForTest(tt.code)}`
-                          : `Min ${minQtyForTest(tt.code)}`}
-                      </span>
-                    )}
-                    <Input
-                      type="number"
-                      min={minQtyForTest(tt.code)}
-                      max={maxQtyForTest(tt.code)}
-                      value={selectedItem?.quantity ? selectedItem.quantity : ""}
-                      placeholder="—"
-                      onFocus={e => e.currentTarget.select()}
-                      onChange={e => setTestQuantity(tt.id, parseInt(e.target.value, 10) || 0)}
-                      onClick={e => e.stopPropagation()}
-                      className={`h-8 w-16 text-center text-sm ${(selectedItem?.quantity ?? 0) < minQtyForTest(tt.code) ? "border-amber-400 text-amber-700" : ""}`}
-                    />
-                  </div>
-                )}
-                <span className="rounded-lg bg-green-50 px-2.5 py-1 text-sm font-semibold text-green-700 whitespace-nowrap">
-                  {Number(isSelected && selectedItem ? selectedItem.unitPrice : tt.unitPrice).toFixed(0)} {lang === "ar" ? "درهم" : "AED"}
-                </span>
-              </div>
-            </div>
-            {renderTestDependencyHint(tt.code, selectedItem)}
-          </label>
-        </div>
+      <TestSelectionCard key={tt.id} selected={isSelected}>
+        <TestSelectionRow
+          id={`test-${tt.id}`}
+          checked={isSelected}
+          onCheckedChange={() => toggleTest(tt)}
+          name={testDisplayName(tt.code, tt.nameEn, tt.nameAr)}
+          code={tt.code}
+          trailing={
+            <>
+              {isSelected && !MULTI_SUBTYPE_TESTS.includes(tt.code) && (
+                <div className="flex items-center gap-1">
+                  {(selectedItem?.quantity ?? 0) < minQtyForTest(tt.code) && (
+                    <span className="inline-flex items-center gap-0.5 rounded border border-amber-200 bg-amber-50 px-1 py-0.5 text-[10px] text-amber-700 whitespace-nowrap">
+                      <AlertTriangle className="h-3 w-3" />
+                      {lang === "ar"
+                        ? `الحد الأدنى ${minQtyForTest(tt.code)}`
+                        : `Min ${minQtyForTest(tt.code)}`}
+                    </span>
+                  )}
+                  <TestQtyInput
+                    type="number"
+                    min={minQtyForTest(tt.code)}
+                    max={maxQtyForTest(tt.code)}
+                    value={selectedItem?.quantity ? selectedItem.quantity : ""}
+                    placeholder="—"
+                    warning={(selectedItem?.quantity ?? 0) < minQtyForTest(tt.code)}
+                    onFocus={e => e.currentTarget.select()}
+                    onChange={e => setTestQuantity(tt.id, parseInt(e.target.value, 10) || 0)}
+                    onClick={e => e.stopPropagation()}
+                  />
+                </div>
+              )}
+              <TestPriceBadge
+                lang={catalogLang}
+                amount={isSelected && selectedItem ? selectedItem.unitPrice : tt.unitPrice}
+              />
+            </>
+          }
+        />
+        <TestDetailIndent>{renderTestDependencyHint(tt.code, selectedItem)}</TestDetailIndent>
         {isSelected && getSteelDeferredSubtypeOrderHint(tt.code, lang) && (
-          <p className="mt-2 ms-7 text-sm text-muted-foreground">
+          <p className="mt-1.5 ms-7 text-xs text-muted-foreground">
             {getSteelDeferredSubtypeOrderHint(tt.code, lang)}
           </p>
         )}
         {isSelected && MULTI_SUBTYPE_TESTS.includes(tt.code) && (
-          <div className="mt-2 ms-7 space-y-1.5">
+          <div className="mt-1.5 ms-7 space-y-1">
             <p className="text-xs text-muted-foreground font-medium">
               {tt.code === "CONC_BLOCK"
                 ? (lang === "ar" ? "حدد أنواع البلوكات والكميات:" : "Select block types and quantities:")
@@ -815,7 +817,7 @@ export default function Reception() {
               const isSubSelected = (multiSubtypes[tt.id] ?? {})[st.value] !== undefined;
               const qty = (multiSubtypes[tt.id] ?? {})[st.value] ?? 0;
               return (
-                <div key={st.value} className={`flex items-center gap-2 p-2 rounded-md border transition-colors ${isSubSelected ? "bg-primary/5 border-primary/30" : "border-border"}`}>
+                <TestNestedRow key={st.value} selected={isSubSelected}>
                   <Checkbox
                     id={`block-${tt.id}-${st.value}`}
                     checked={isSubSelected}
@@ -827,23 +829,24 @@ export default function Reception() {
                   {isSubSelected && (
                     <div className="flex items-center gap-1">
                       <span className="text-xs text-muted-foreground">{lang === "ar" ? "عدد:" : "Qty:"}</span>
-                      <Input
+                      <TestQtyInput
                         type="number" min={0} max={999}
                         value={qty ? qty : ""}
                         placeholder="—"
+                        warning={qty === 0}
                         onFocus={e => e.currentTarget.select()}
                         onChange={e => setBlockSubtypeQty(tt.id, st.value, parseInt(e.target.value) || 0)}
-                        className={`h-6 w-16 text-center text-xs ${qty === 0 ? "border-amber-400 text-amber-700" : ""}`}
+                        className="h-6 w-16"
                       />
                     </div>
                   )}
-                </div>
+                </TestNestedRow>
               );
             })}
           </div>
         )}
         {isSelected && subTypes.length > 0 && !isCasting && !MULTI_SUBTYPE_TESTS.includes(tt.code) && (
-          <div className="mt-2 ms-7">
+          <div className="mt-1.5 ms-7">
             {subtypeFor === tt.id ? (
               <div className="flex flex-wrap gap-1.5">
                 {subTypes.map(st => (
@@ -873,7 +876,7 @@ export default function Reception() {
           const addonTests = allTests.filter(at => HOT_BIN_OPTIONAL_CODES.includes(at.code ?? "") && at.isActive);
           if (addonTests.length === 0) return null;
           return (
-            <div className="mt-2 ms-7 space-y-1.5">
+            <div className="mt-1.5 ms-7 space-y-1">
               <p className="text-xs text-muted-foreground font-medium">
                 {lang === "ar" ? "اختبارات إضافية (اختيارية)" : "Optional Add-on Tests"}
               </p>
@@ -881,7 +884,7 @@ export default function Reception() {
                 const isAddonSelected = !!hotBinAddons[at.code];
                 const addonQty = selectedTests.find(s => s.testTypeId === at.id)?.quantity ?? 0;
                 return (
-                  <div key={at.id} className={`flex items-center gap-2 p-2 rounded-md border transition-colors ${isAddonSelected ? "bg-blue-50 border-blue-200" : "border-border"}`}>
+                  <TestNestedRow key={at.id} selected={isAddonSelected}>
                     <Checkbox
                       id={`addon-${at.id}`}
                       checked={isAddonSelected}
@@ -904,9 +907,12 @@ export default function Reception() {
                         }
                       }}
                     />
-                    <label htmlFor={`addon-${at.id}`} className="flex-1 text-xs cursor-pointer">
-                      <span className="font-medium">{testDisplayName(at.code, at.nameEn, at.nameAr)}</span>
-                      <span className="text-muted-foreground font-mono ms-1">({at.code})</span>
+                    <label htmlFor={`addon-${at.id}`} className="flex-1 min-w-0 cursor-pointer">
+                      <TestNameBlock
+                        name={testDisplayName(at.code, at.nameEn, at.nameAr)}
+                        code={at.code}
+                        nameClassName="text-xs"
+                      />
                     </label>
                     {isAddonSelected && (
                       <div className="flex items-center gap-1">
@@ -918,7 +924,7 @@ export default function Reception() {
                             setSelectedTests(prev => prev.map(s => s.testTypeId === at.id ? { ...s, quantity: newQty } : s));
                           }}
                         >−</button>
-                        <span className={`w-6 text-center text-xs font-mono ${addonQty === 0 ? "text-amber-600 font-bold" : ""}`}>{addonQty}</span>
+                        <span className={`w-6 text-center text-xs font-mono tabular-nums ${addonQty === 0 ? "text-amber-600 font-bold" : ""}`}>{addonQty}</span>
                         <button
                           type="button"
                           className="w-6 h-6 rounded border border-border flex items-center justify-center text-sm hover:bg-muted"
@@ -928,16 +934,14 @@ export default function Reception() {
                         >+</button>
                       </div>
                     )}
-                    <span className="text-xs font-semibold text-green-700">
-                      {Number(at.unitPrice).toFixed(0)} {lang === "ar" ? "درهم" : "AED"}
-                    </span>
-                  </div>
+                    <TestPriceBadge lang={catalogLang} amount={at.unitPrice} />
+                  </TestNestedRow>
                 );
               })}
             </div>
           );
         })()}
-      </div>
+      </TestSelectionCard>
     );
   };
 
@@ -1392,47 +1396,46 @@ export default function Reception() {
                     <FormSection title={lang === "ar" ? "الاختبارات" : "Tests"} className="border-t pt-6">
                       <div className="space-y-4">
                 {form.sampleType && (
-                  <div className="rounded-xl border-2 border-border bg-card shadow-sm overflow-hidden">
-                    <div className="flex items-center justify-between gap-2 px-4 py-2.5 bg-muted/50 border-b text-xs text-muted-foreground">
-                      <span>
-                        {lang === "ar" ? "مرّر القائمة لاختيار الاختبارات" : "Scroll the list to choose tests"}
-                      </span>
-                      {selectedTests.length > 0 && (
-                        <span className="font-semibold text-foreground">
-                          {selectedTests.length} {lang === "ar" ? "محدد" : "selected"}
-                        </span>
-                      )}
-                    </div>
-                    <div className="max-h-[min(420px,52vh)] overflow-y-auto overscroll-contain">
-                      <div className="p-4 space-y-4">
+                  <TestSelectionPanel
+                    hint={lang === "ar" ? "مرّر القائمة لاختيار الاختبارات" : "Scroll the list to choose tests"}
+                    selectedCount={selectedTests.length}
+                    selectedLabel={lang === "ar" ? "محدد" : "selected"}
+                    footer={
+                      hasConcCubeTest ? (
+                        <div
+                          ref={concCubePanelRef}
+                          className="border-t border-blue-300 bg-gradient-to-b from-blue-100/90 to-blue-50/95 p-4 md:p-5"
+                        >
+                          <ReceptionNominalCubeSizePanel
+                            lang={lang}
+                            value={nominalCubeSize}
+                            onChange={setNominalCubeSize}
+                          />
+                        </div>
+                      ) : undefined
+                    }
+                  >
                 {form.sampleType === "asphalt" && (
-                  <div className="space-y-5">
-                    <Label className="flex items-center gap-2 text-base font-semibold text-foreground">
-                      <CheckSquare className="w-4 h-4 text-blue-600" />
+                  <div className="space-y-4">
+                    <TestSectionLabel
+                      icon={<CheckSquare className="w-4 h-4 text-primary" />}
+                      required
+                    >
                       {lang === "ar" ? "اختبارات الأسفلت المطلوبة" : "Required Asphalt Tests"}
-                      <span className="text-red-500">*</span>
-                      {selectedTests.length > 0 && (
-                        <span className="ms-1 inline-flex items-center rounded-full bg-blue-600 px-2.5 py-0.5 text-xs font-medium text-white">
-                          {selectedTests.length} {lang === "ar" ? "محدد" : "selected"}
-                        </span>
-                      )}
-                    </Label>
+                    </TestSectionLabel>
 
                     {ASPHALT_TEST_GROUPS.map(group => {
                       const groupTests = allTests.filter((test: any) => test.isActive && (group.tests as readonly string[]).includes(test.code ?? ""));
 
                       return (
-                        <div key={group.id} className="space-y-2.5">
-                          <p className="text-sm font-semibold text-foreground flex items-center gap-2">
-                            <span className="w-2 h-2 rounded-full bg-primary shrink-0" />
-                            {lang === "ar" ? group.label.ar : group.label.en}
-                          </p>
+                        <div key={group.id} className="space-y-2">
+                          <TestGroupHeading label={lang === "ar" ? group.label.ar : group.label.en} />
                           {groupTests.length === 0 ? (
-                            <p className="text-sm text-muted-foreground rounded-xl border border-dashed border-border p-4 text-center">
+                            <TestListEmpty>
                               {lang === "ar" ? "لا توجد اختبارات نشطة في هذه المجموعة." : "No active tests in this group."}
-                            </p>
+                            </TestListEmpty>
                           ) : (
-                            <div className="space-y-2.5">
+                            <div className="space-y-1.5">
                               {groupTests.map((test: any) => renderTestSelectionCard(test))}
                             </div>
                           )}
@@ -1508,20 +1511,16 @@ export default function Reception() {
                 {form.sampleType &&
                   form.sampleType !== "asphalt" &&
                   (
-                  <div className="space-y-3">
-                    <Label className="flex items-center gap-2 text-base font-semibold text-foreground">
-                      <CheckSquare className="w-4 h-4 text-blue-600" />
+                  <div className="space-y-2">
+                    <TestSectionLabel
+                      icon={<CheckSquare className="w-4 h-4 text-primary" />}
+                      required
+                    >
                       {lang === "ar" ? "الاختبارات المطلوبة" : "Required Tests"}
-                      <span className="text-red-500">*</span>
-                      {selectedTests.length > 0 && (
-                        <span className="ms-1 inline-flex items-center rounded-full bg-blue-600 px-2.5 py-0.5 text-xs font-medium text-white">
-                          {selectedTests.length} {lang === "ar" ? "محدد" : "selected"}
-                        </span>
-                      )}
-                    </Label>
-                    <div className="space-y-2.5">
+                    </TestSectionLabel>
+                    <div className="space-y-1.5">
                       {filteredTests.length === 0 ? (
-                        <div className="rounded-xl border-2 border-dashed border-border p-8 text-sm text-muted-foreground text-center space-y-1">
+                        <TestListEmpty>
                           <p>
                             {allTests.filter(t => t.isActive).length === 0
                               ? (lang === "ar"
@@ -1531,27 +1530,13 @@ export default function Reception() {
                                   ? "لا توجد اختبارات مطابقة لهذا التصنيف أو المرشحات الحالية."
                                   : "No tests match this category or current filters.")}
                           </p>
-                        </div>
+                        </TestListEmpty>
                       ) : filteredTests.map((tt: any) => renderTestSelectionCard(tt))}
                     </div>
                   </div>
                 )}
 
-                      </div>
-                    </div>
-                    {hasConcCubeTest && (
-                      <div
-                        ref={concCubePanelRef}
-                        className="border-t-2 border-blue-400 bg-gradient-to-b from-blue-100/90 to-blue-50/95 p-4 md:p-5"
-                      >
-                        <ReceptionNominalCubeSizePanel
-                          lang={lang}
-                          value={nominalCubeSize}
-                          onChange={setNominalCubeSize}
-                        />
-                      </div>
-                    )}
-                  </div>
+                  </TestSelectionPanel>
                 )}
 
                 {selectedTests.some(t => t.testTypeCode === "CONC_FOAM") && (
@@ -1839,31 +1824,24 @@ export default function Reception() {
               {editingOrder.items.length > 0 && (
                 <div className="space-y-1.5">
                   <Label>{lang === "ar" ? "كمية كل اختبار" : "Test Quantities (QTY)"}</Label>
-                  <div className="border rounded-md divide-y">
+                  <div className="rounded-lg border divide-y">
                     {editingOrder.items.map((item) => (
-                      <div key={item.id} className="flex items-center justify-between px-3 py-2">
-                        <span className="text-sm flex-1">
-                          {item.testTypeName}
-                          {item.testSubType && item.testSubType !== "__multi__" && (
-                            <span className="ml-1 text-xs text-muted-foreground">({item.testSubType})</span>
-                          )}
-                        </span>
-                        <div className="flex items-center gap-1">
-                          <Button size="sm" variant="outline" className="h-6 w-6 p-0"
-                            onClick={() => {
-                              const newQty = Math.max(1, item.quantity - 1);
-                              setEditingOrder(o => o ? { ...o, items: o.items.map(i => i.id === item.id ? { ...i, quantity: newQty } : i) } : o);
-                              updateItemQty.mutate({ itemId: item.id, quantity: newQty });
-                            }}>−</Button>
-                          <span className="w-8 text-center text-sm font-medium">{item.quantity}</span>
-                          <Button size="sm" variant="outline" className="h-6 w-6 p-0"
-                            onClick={() => {
-                              const newQty = item.quantity + 1;
-                              setEditingOrder(o => o ? { ...o, items: o.items.map(i => i.id === item.id ? { ...i, quantity: newQty } : i) } : o);
-                              updateItemQty.mutate({ itemId: item.id, quantity: newQty });
-                            }}>+</Button>
-                        </div>
-                      </div>
+                      <TestOrderQtyRow
+                        key={item.id}
+                        name={item.testTypeName}
+                        subLabel={item.testSubType}
+                        quantity={item.quantity}
+                        onDecrement={() => {
+                          const newQty = Math.max(1, item.quantity - 1);
+                          setEditingOrder(o => o ? { ...o, items: o.items.map(i => i.id === item.id ? { ...i, quantity: newQty } : i) } : o);
+                          updateItemQty.mutate({ itemId: item.id, quantity: newQty });
+                        }}
+                        onIncrement={() => {
+                          const newQty = item.quantity + 1;
+                          setEditingOrder(o => o ? { ...o, items: o.items.map(i => i.id === item.id ? { ...i, quantity: newQty } : i) } : o);
+                          updateItemQty.mutate({ itemId: item.id, quantity: newQty });
+                        }}
+                      />
                     ))}
                   </div>
                 </div>

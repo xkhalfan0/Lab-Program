@@ -4,13 +4,19 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Search, FlaskConical, Loader2, Lock } from "lucide-react";
 import { RETEST_REASONS } from "@shared/retestReasons";
 import { ReceptionNominalCubeSizePanel, isValidNominalCubeSize } from "@/components/ReceptionNominalCubeSizePanel";
+import {
+  TestPriceBadge,
+  TestQtyInput,
+  TestSelectionCard,
+  TestSelectionPanel,
+  TestSelectionRow,
+} from "@/components/TestDisplay";
 import { toast } from "sonner";
 
 type RetestTest = {
@@ -334,28 +340,46 @@ export function ReceptionRetestPanel({ onSuccess, onCancel }: Props) {
 
             <div>
               <Label className="text-[15px]">{isAr ? "الاختبارات" : "Tests"}</Label>
-              <div className="border rounded-lg divide-y mt-2 max-h-64 overflow-y-auto">
-                {tests.map((t) => (
-                  <div key={t.testTypeCode} className="flex items-center gap-3 px-4 py-3">
-                    <Checkbox checked={t.checked} onCheckedChange={() => toggleTest(t.testTypeCode)} />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-base font-medium truncate">{t.testTypeName}</p>
-                      {t.isFailed && (
-                        <Badge variant="destructive" className="text-[10px] mt-0.5">
-                          {isAr ? "فاشل" : "Failed"}
-                        </Badge>
-                      )}
-                    </div>
-                    <Input
-                      type="number"
-                      min={1}
-                      className="w-16 h-9 text-sm"
-                      value={t.quantity}
-                      onChange={(e) => setQty(t.testTypeCode, Number(e.target.value))}
-                      disabled={!t.checked}
-                    />
+              <div className="mt-2">
+                <TestSelectionPanel
+                  hint={isAr ? "اختر الاختبارات لإعادة الفحص" : "Select tests to retest"}
+                  selectedCount={tests.filter((t) => t.checked).length}
+                  selectedLabel={isAr ? "محدد" : "selected"}
+                >
+                  <div className="space-y-1.5">
+                    {tests.map((t) => (
+                      <TestSelectionCard key={t.testTypeCode} selected={t.checked}>
+                        <TestSelectionRow
+                          id={`retest-${t.testTypeCode}`}
+                          checked={t.checked}
+                          onCheckedChange={() => toggleTest(t.testTypeCode)}
+                          name={t.testTypeName}
+                          code={t.testTypeCode}
+                          trailing={
+                            <>
+                              <TestQtyInput
+                                type="number"
+                                min={1}
+                                value={t.quantity}
+                                disabled={!t.checked}
+                                onChange={(e) => setQty(t.testTypeCode, Number(e.target.value))}
+                                onClick={(e) => e.stopPropagation()}
+                              />
+                              <TestPriceBadge lang={lang} amount={t.unitPrice} />
+                            </>
+                          }
+                        />
+                        {t.isFailed && (
+                          <div className="ms-7 mt-1">
+                            <Badge variant="destructive" className="text-[10px]">
+                              {isAr ? "فاشل" : "Failed"}
+                            </Badge>
+                          </div>
+                        )}
+                      </TestSelectionCard>
+                    ))}
                   </div>
-                ))}
+                </TestSelectionPanel>
               </div>
             </div>
 
