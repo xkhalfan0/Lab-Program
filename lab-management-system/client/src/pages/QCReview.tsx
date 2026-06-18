@@ -10,6 +10,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
@@ -304,13 +305,6 @@ function ClearanceQCSection() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-2 mb-1">
-        <BadgeCheck className="w-5 h-5 text-green-600" />
-        <h2 className="text-base font-semibold">
-          {lang === "ar" ? "طلبات شهادة براءة الذمة — مراجعة QC" : "Clearance Requests — QC Review"}
-        </h2>
-      </div>
-
       {/* Filter Buttons */}
       <div className="flex flex-wrap gap-2">
         <button onClick={() => setTaskFilter("new")}
@@ -622,12 +616,12 @@ export default function QCReview() {
   const currentUserSignature = user?.name || user?.username || "";
   const [taskFilter, setTaskFilter] = useState<TaskFilter>("new");
   const [showHistory, setShowHistory] = useState(false);
-  const [archiveSearch, setArchiveSearch] = useState("");
   const [loadTimedOut, setLoadTimedOut] = useState(false);
 
   const selectedSampleId = Number(selectedSample?.id ?? 0);
 
   const { data: samples, refetch } = trpc.samples.list.useQuery();
+  const { data: clearanceRequests = [] } = trpc.clearance.list.useQuery();
   const { data: results, isLoading: isLegacyResultsLoading, refetch: refetchLegacyResults } = trpc.testResults.bySample.useQuery(
     { sampleId: selectedSampleId },
     { enabled: selectedSampleId > 0 }
@@ -670,6 +664,10 @@ export default function QCReview() {
   const newCount = qcSamples.filter(s => getSampleTaskState(s) === "new").length;
   const incompleteCount = qcSamples.filter(s => getSampleTaskState(s) === "incomplete").length;
   const completedCount = qcSamples.filter(s => getSampleTaskState(s) === "completed").length;
+  const clearanceNewCount = clearanceRequests.filter(r => getClearanceTaskState(r) === "new").length;
+
+  const tabTriggerClass =
+    "rounded-none border-b-2 border-transparent px-4 py-2.5 text-sm font-medium data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none";
 
   const filteredSamples = qcSamples.filter(s => {
     if (taskFilter === "all") return true;
@@ -795,20 +793,31 @@ export default function QCReview() {
           </p>
         </div>
 
-        {/* ── Clearance QC Section ── */}
-        <ClearanceQCSection />
+        <Tabs defaultValue="samples" className="w-full">
+          <TabsList className="w-full justify-start border-b rounded-none h-auto p-0 bg-transparent">
+            <TabsTrigger value="samples" className={tabTriggerClass}>
+              <ShieldCheck className="w-4 h-4 me-2 shrink-0" />
+              {lang === "ar" ? "فحص جودة نتائج العينات" : "Sample Results Quality Check"}
+              {newCount > 0 && (
+                <span className="ms-2 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1.5 text-[10px] font-bold text-white">
+                  {newCount}
+                </span>
+              )}
+            </TabsTrigger>
+            <TabsTrigger value="clearance" className={tabTriggerClass}>
+              <BadgeCheck className="w-4 h-4 me-2 shrink-0" />
+              {lang === "ar" ? "طلبات شهادة براءة الذمة — مراجعة QC" : "Clearance Requests — QC Review"}
+              {clearanceNewCount > 0 && (
+                <span className="ms-2 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1.5 text-[10px] font-bold text-white">
+                  {clearanceNewCount}
+                </span>
+              )}
+            </TabsTrigger>
+          </TabsList>
 
-        {/* ── Divider ── */}
-        <div className="border-t pt-4">
-          <div className="flex items-center gap-2 mb-4">
-            <ShieldCheck className="w-5 h-5 text-blue-600" />
-            <h2 className="text-base font-semibold">
-              {lang === "ar" ? "تأكيد نتائج العينات" : "Sample Results Confirmation"}
-            </h2>
-          </div>
-
+          <TabsContent value="samples" className="mt-4 space-y-4">
           {/* Filter Buttons */}
-          <div className="flex flex-wrap gap-2 mb-4">
+          <div className="flex flex-wrap gap-2">
             <button onClick={() => setTaskFilter("new")}
               className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs font-medium transition-all ${taskFilter === "new" ? "bg-red-600 text-white border-red-600" : "bg-background text-muted-foreground border-border hover:border-red-400"}`}>
               <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
@@ -847,7 +856,6 @@ export default function QCReview() {
                   onOpen={(s) => {
                     setSelectedSample(s);
                     setComments("");
-                    setSignature("");
                     setDecision(null);
                     setLoadTimedOut(false);
                   }}
@@ -884,7 +892,12 @@ export default function QCReview() {
               )}
             </div>
           )}
-        </div>
+          </TabsContent>
+
+          <TabsContent value="clearance" className="mt-4">
+            <ClearanceQCSection />
+          </TabsContent>
+        </Tabs>
       </div>
 
       {/* QC Review Dialog */}
