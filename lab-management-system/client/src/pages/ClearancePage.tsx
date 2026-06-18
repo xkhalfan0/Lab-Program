@@ -1,4 +1,6 @@
-import { useState } from "react";
+import { ListFilterBar } from "@/components/ListFilterBar";
+import { applyClearanceFilters, hasActiveListFilters } from "@/lib/listFilters";
+import { useState, useMemo } from "react";
 import { trpc } from "@/lib/trpc";
 import { History } from "lucide-react";
 import DashboardLayout from "@/components/DashboardLayout";
@@ -974,6 +976,7 @@ export default function ClearancePage() {
   const [detailOpen, setDetailOpen] = useState(false);
   const [taskFilter, setTaskFilter] = useState<TaskFilter>("all");
   const [showHistory, setShowHistory] = useState(false);
+  const [listSearch, setListSearch] = useState("");
 
   const { data: requests = [], refetch } = trpc.clearance.list.useQuery();
   const markAccountantRead = trpc.clearance.markAccountantRead.useMutation();
@@ -996,10 +999,15 @@ export default function ClearancePage() {
   const incompleteCount = requests.filter(r => getClearanceTaskState(r) === "incomplete").length;
   const completedCount = requests.filter(r => getClearanceTaskState(r) === "completed").length;
 
-  const filteredRequests = requests.filter(r => {
-    if (taskFilter === "all") return true;
-    return getClearanceTaskState(r) === taskFilter;
-  });
+  const listFilters = useMemo(() => ({ search: listSearch }), [listSearch]);
+
+  const filteredRequests = useMemo(() => {
+    const byTask = requests.filter((r) => {
+      if (taskFilter === "all") return true;
+      return getClearanceTaskState(r) === taskFilter;
+    });
+    return applyClearanceFilters(byTask, listFilters);
+  }, [requests, taskFilter, listFilters]);
   const activeRequests = filteredRequests.filter(r => getClearanceTaskState(r) !== "completed");
   const completedRequests = filteredRequests.filter(r => getClearanceTaskState(r) === "completed");
 
@@ -1054,6 +1062,20 @@ export default function ClearancePage() {
             <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${taskFilter === "completed" ? "bg-white/20 text-white" : "bg-green-100 text-green-700"}`}>{completedCount}</span>
           </button>
         </div>
+
+        <ListFilterBar
+          lang={l}
+          search={listSearch}
+          onSearchChange={setListSearch}
+          searchPlaceholder={
+            l === "ar"
+              ? "بحث برقم الطلب، العقد، المقاول، أو المشروع..."
+              : "Search by request, contract, contractor, or project..."
+          }
+          showClear={hasActiveListFilters(listFilters)}
+          onClear={() => setListSearch("")}
+          resultCount={filteredRequests.length}
+        />
 
         {/* Active Requests */}
         <Card>

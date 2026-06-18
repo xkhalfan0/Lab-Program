@@ -314,6 +314,7 @@ export default function Reception() {
   const [search, setSearch] = useState("");
   const [showOrderHistory, setShowOrderHistory] = useState(false);
   const [sectorFilter, setSectorFilter] = useState<string>("all");
+  const [sampleTypeFilter, setSampleTypeFilter] = useState<string>("all");
   const [form, setForm] = useState(emptyForm());
   const [selectedTests, setSelectedTests] = useState<SelectedTest[]>([]);
   // For subtype selection per test
@@ -1116,10 +1117,12 @@ export default function Reception() {
   const filteredOrders = orders?.filter((o: any) => {
     const matchSearch =
       (o.orderCode ?? "").toLowerCase().includes(search.toLowerCase()) ||
+      (o.sampleCode ?? "").toLowerCase().includes(search.toLowerCase()) ||
       (o.contractorName ?? "").toLowerCase().includes(search.toLowerCase()) ||
       (o.contractNumber ?? "").toLowerCase().includes(search.toLowerCase());
     const matchSector = sectorFilter === "all" || (o as any).sector === sectorFilter;
-    return matchSearch && matchSector;
+    const matchType = sampleTypeFilter === "all" || o.sampleType === sampleTypeFilter;
+    return matchSearch && matchSector && matchType;
   }) ?? [];
 
   const typeLabel = (type: string) => {
@@ -1590,6 +1593,24 @@ export default function Reception() {
               onClick={() => setSectorFilter(sec.sectorKey)}
               className={`px-2.5 py-0.5 rounded-full text-xs border ${sectorFilter === sec.sectorKey ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground"}`}>
               {lang === "ar" ? sec.nameAr : sec.nameEn}
+            </button>
+          ))}
+        </div>
+
+        {/* Sample type filter */}
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <span className="text-xs text-muted-foreground">{lang === "ar" ? "النوع:" : "Type:"}</span>
+          <button
+            onClick={() => setSampleTypeFilter("all")}
+            className={`px-2.5 py-0.5 rounded-full text-xs border ${sampleTypeFilter === "all" ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground"}`}>
+            {lang === "ar" ? "الكل" : "All"}
+          </button>
+          {CATEGORIES.map((cat) => (
+            <button
+              key={cat.value}
+              onClick={() => setSampleTypeFilter(cat.value)}
+              className={`px-2.5 py-0.5 rounded-full text-xs border ${sampleTypeFilter === cat.value ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground"}`}>
+              {lang === "ar" ? cat.labelAr : cat.labelEn}
             </button>
           ))}
         </div>

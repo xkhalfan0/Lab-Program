@@ -1,7 +1,7 @@
 /**
  * Supervisor + QC operational dashboard
  */
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useLocation } from "wouter";
 import {
   FlaskConical, Clock, AlertTriangle, CheckCircle2,
@@ -16,6 +16,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import DashboardLayout from "@/components/DashboardLayout";
+import { ListFilterBar } from "@/components/ListFilterBar";
+import { matchesListSearch, hasActiveListFilters } from "@/lib/listFilters";
 import { StatusBadge } from "@/components/StatusBadge";
 import { SAMPLE_TYPE_LABELS } from "@/lib/labTypes";
 
@@ -51,6 +53,8 @@ export default function SupervisorDashboard() {
   const [appliedFrom, setAppliedFrom] = useState(todayStr);
   const [appliedTo, setAppliedTo] = useState(todayStr);
   const [sectorFilter, setSectorFilter] = useState<string>("all");
+  const [listSearch, setListSearch] = useState("");
+  const [sampleTypeFilter, setSampleTypeFilter] = useState("all");
 
   const { data: kpis, isLoading: kpisLoading, refetch } = trpc.dashboard.kpis.useQuery({ period });
   const { data: alerts, isLoading: alertsLoading } = trpc.dashboard.alerts.useQuery();
@@ -71,9 +75,21 @@ export default function SupervisorDashboard() {
     return s ? (isAr ? s.ar : s.en) : val;
   }
 
-  const dailySamples = (sectorFilter === "all"
-    ? dailyData?.samples
-    : dailyData?.samples?.filter(s => (s as { sector?: string }).sector === sectorFilter)) ?? [];
+  const dailySamples = useMemo(() => {
+    const base = (sectorFilter === "all"
+      ? dailyData?.samples
+      : dailyData?.samples?.filter(s => (s as { sector?: string }).sector === sectorFilter)) ?? [];
+
+    return base.filter((sample) => {
+      if (sampleTypeFilter !== "all" && sample.sampleType !== sampleTypeFilter) return false;
+      return matchesListSearch(listSearch, [
+        sample.sampleCode,
+        sample.contractNumber,
+        sample.contractorName,
+        sample.contractName,
+      ]);
+    });
+  }, [dailyData?.samples, sectorFilter, sampleTypeFilter, listSearch]);
   const dailySummary = dailyData?.summary;
   const isSingleDay = appliedFrom === appliedTo;
 
@@ -258,6 +274,24 @@ export default function SupervisorDashboard() {
               </button>
             ))}
           </div>
+          <ListFilterBar
+            lang={lang}
+            search={listSearch}
+            onSearchChange={setListSearch}
+            searchPlaceholder={
+              isAr
+                ? "بحث برمز العينة، العقد، أو المقاول..."
+                : "Search by sample code, contract, or contractor..."
+            }
+            sampleType={sampleTypeFilter}
+            onSampleTypeChange={setSampleTypeFilter}
+            showClear={hasActiveListFilters({ search: listSearch, sampleType: sampleTypeFilter })}
+            onClear={() => {
+              setListSearch("");
+              setSampleTypeFilter("all");
+            }}
+            resultCount={dailySamples.length}
+          />
         </CardHeader>
         <CardContent className="px-4 pb-4 space-y-4">
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">

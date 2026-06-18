@@ -17,6 +17,8 @@ import { trpc } from "@/lib/trpc";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useDeletionStatus } from "@/hooks/useDeletionStatus";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { ListFilterBar } from "@/components/ListFilterBar";
+import { applySampleFilters, hasActiveListFilters } from "@/lib/listFilters";
 import { SAMPLE_TYPE_LABELS } from "@/lib/labTypes";
 import {
   CheckSquare,
@@ -346,7 +348,9 @@ export default function ManagerReview() {
   const [decision, setDecision] = useState<"approved" | "needs_revision" | "rejected" | null>(null);
   const [taskFilter, setTaskFilter] = useState<TaskFilter>("new");
   const [showHistory, setShowHistory] = useState(false);
-  const [archiveSearch, setArchiveSearch] = useState("");
+  const [listSearch, setListSearch] = useState("");
+  const [sectorFilter, setSectorFilter] = useState("all");
+  const [sampleTypeFilter, setSampleTypeFilter] = useState("all");
 
   const currentUserSignature = user?.name || user?.username || "";
 
@@ -404,11 +408,19 @@ export default function ManagerReview() {
   const incompleteCount = reviewSamples.filter(s => getSampleTaskState(s) === "incomplete").length;
   const completedCount = reviewSamples.filter(s => getSampleTaskState(s) === "completed").length;
 
+  const listFilters = useMemo(
+    () => ({ search: listSearch, sector: sectorFilter, sampleType: sampleTypeFilter }),
+    [listSearch, sectorFilter, sampleTypeFilter],
+  );
+
   // Filtered list
-  const filteredSamples = sortedReviewSamples.filter(s => {
-    if (taskFilter === "all") return true;
-    return getSampleTaskState(s) === taskFilter;
-  });
+  const filteredSamples = useMemo(() => {
+    const byTask = sortedReviewSamples.filter((s) => {
+      if (taskFilter === "all") return true;
+      return getSampleTaskState(s) === taskFilter;
+    });
+    return applySampleFilters(byTask, listFilters);
+  }, [sortedReviewSamples, taskFilter, listFilters]);
 
   const activeSamples = filteredSamples.filter(s => getSampleTaskState(s) !== "completed");
   const awaitingReviewSamples = activeSamples.filter(s => s.status === "awaiting_review");
@@ -574,6 +586,28 @@ export default function ManagerReview() {
           </button>
         </div>
 
+        <ListFilterBar
+          lang={lang}
+          search={listSearch}
+          onSearchChange={setListSearch}
+          searchPlaceholder={
+            lang === "ar"
+              ? "بحث برمز العينة، العقد، المقاول، أو المشروع..."
+              : "Search by sample code, contract, contractor, or project..."
+          }
+          sector={sectorFilter}
+          onSectorChange={setSectorFilter}
+          sampleType={sampleTypeFilter}
+          onSampleTypeChange={setSampleTypeFilter}
+          showClear={hasActiveListFilters(listFilters)}
+          onClear={() => {
+            setListSearch("");
+            setSectorFilter("all");
+            setSampleTypeFilter("all");
+          }}
+          resultCount={filteredSamples.length}
+        />
+
         {/* ── Active Tasks ──────────────────────────────────────────────── */}
         {activeSamples.length === 0 && taskFilter !== "completed" ? (
           <Card>
@@ -642,33 +676,7 @@ export default function ManagerReview() {
         {/* ── Archive (Completed) ──────────────────────────────────────────── */}
         {taskFilter === "completed" && (
           <div className="space-y-3">
-            <div className="relative">
-              <input
-                type="text"
-                value={archiveSearch}
-                onChange={e => setArchiveSearch(e.target.value)}
-                placeholder={lang === "ar" ? "بحث برقم المشروع أو اسم المقاول..." : "Search by project number or contractor..."}
-                className="w-full border rounded-lg px-4 py-2.5 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/30"
-              />
-              {archiveSearch && (
-                <button
-                  onClick={() => setArchiveSearch("")}
-                  className="absolute end-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground text-lg leading-none"
-                >×</button>
-              )}
-            </div>
-            {completedSamples
-              .filter(s => {
-                if (!archiveSearch.trim()) return true;
-                const q = archiveSearch.toLowerCase();
-                return (
-                  s.sampleCode?.toLowerCase().includes(q) ||
-                  s.contractorName?.toLowerCase().includes(q) ||
-                  (s as any).contractNumber?.toLowerCase().includes(q) ||
-                  (s as any).projectName?.toLowerCase().includes(q)
-                );
-              })
-              .map((sample) => (
+            {completedSamples.map((sample) => (
                 <ManagerReviewArchiveSampleCard
                   key={sample.id}
                   sample={sample}
@@ -676,16 +684,7 @@ export default function ManagerReview() {
                   onOpen={handleOpenSample}
                 />
               ))}
-            {completedSamples.filter(s => {
-              if (!archiveSearch.trim()) return true;
-              const q = archiveSearch.toLowerCase();
-              return (
-                s.sampleCode?.toLowerCase().includes(q) ||
-                s.contractorName?.toLowerCase().includes(q) ||
-                (s as any).contractNumber?.toLowerCase().includes(q) ||
-                (s as any).projectName?.toLowerCase().includes(q)
-              );
-            }).length === 0 && (
+            {completedSamples.length === 0 && (
               <div className="text-center py-8 text-sm text-muted-foreground">
                 {lang === "ar" ? "لا توجد نتائج للبحث" : "No results found"}
               </div>

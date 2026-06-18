@@ -1,3 +1,5 @@
+import { ListFilterBar } from "@/components/ListFilterBar";
+import { matchesListSearch, hasActiveListFilters } from "@/lib/listFilters";
 import React, { useState } from "react";
 import DashboardLayout from "@/components/DashboardLayout";
 import { DeletionImpactDisplay } from "@/components/DeletionImpactDisplay";
@@ -58,6 +60,7 @@ export default function AdminDeletionRequests() {
   const [, setLocation] = useLocation();
   const { lang } = useLanguage();
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('pending');
+  const [listSearch, setListSearch] = useState("");
   const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set());
   const [rejectModalOpen, setRejectModalOpen] = useState(false);
   const [selectedRequest, setSelectedRequest] = useState<number | null>(null);
@@ -100,9 +103,19 @@ export default function AdminDeletionRequests() {
   // Filter requests
   const filteredRequests = React.useMemo(() => {
     if (!requests || statusFilter === 'deleted_samples') return [];
-    if (statusFilter === 'all') return requests;
-    return requests.filter((req) => req.status === statusFilter);
-  }, [requests, statusFilter]);
+    const byStatus =
+      statusFilter === 'all' ? requests : requests.filter((req) => req.status === statusFilter);
+    return byStatus.filter((req) =>
+      matchesListSearch(listSearch, [
+        req.id,
+        req.targetTable,
+        req.reason,
+        req.requester?.name,
+        req.requester?.email,
+        req.reviewComment,
+      ]),
+    );
+  }, [requests, statusFilter, listSearch]);
 
   // Toggle row expansion
   const toggleRow = (id: number) => {
@@ -350,6 +363,22 @@ export default function AdminDeletionRequests() {
             </span>
           </button>
         </div>
+
+        {statusFilter !== 'deleted_samples' && (
+          <ListFilterBar
+            lang={lang}
+            search={listSearch}
+            onSearchChange={setListSearch}
+            searchPlaceholder={
+              lang === "ar"
+                ? "بحث برقم الطلب، الجدول، السبب، أو مقدم الطلب..."
+                : "Search by request ID, table, reason, or requester..."
+            }
+            showClear={hasActiveListFilters({ search: listSearch })}
+            onClear={() => setListSearch("")}
+            resultCount={filteredRequests.length}
+          />
+        )}
 
         {statusFilter === 'deleted_samples' ? (
           deletedLoading ? (

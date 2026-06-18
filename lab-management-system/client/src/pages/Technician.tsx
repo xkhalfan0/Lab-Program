@@ -1,4 +1,6 @@
 import DashboardLayout from "@/components/DashboardLayout";
+import { ListFilterBar } from "@/components/ListFilterBar";
+import { matchesListSearch, hasActiveListFilters } from "@/lib/listFilters";
 import { RetestBadge } from "@/components/RetestBadge";
 import { DeletionRequestButton } from "@/components/DeletionRequestButton";
 import { Button } from "@/components/ui/button";
@@ -549,6 +551,8 @@ export default function Technician() {
   const [unit, setUnit] = useState("MPa");
   const [testNotes, setTestNotes] = useState("");
   const [filterTab, setFilterTab] = useState<"all" | "active" | "completed">("all");
+  const [listSearch, setListSearch] = useState("");
+  const [sampleTypeFilter, setSampleTypeFilter] = useState("all");
 
   const utils = trpc.useUtils();
   const { data: assignments = [], refetch } = trpc.distributions.myAssignments.useQuery();
@@ -640,19 +644,37 @@ export default function Technician() {
     return list;
   }, [enrichedTasks]);
 
+  const filteredTasks = useMemo(() => {
+    return sortedTasks.filter((dist) => {
+      const sample = allSamples.find((s: any) => s.id === dist.sampleId);
+      if (sampleTypeFilter !== "all" && sample?.sampleType !== sampleTypeFilter) return false;
+      return matchesListSearch(listSearch, [
+        dist.sampleCode,
+        sample?.sampleCode,
+        sample?.contractorName,
+        sample?.contractNumber,
+        dist.orderCode,
+        dist.testName,
+        dist.testNameEn,
+        dist.testNameAr,
+        dist.testType,
+      ]);
+    });
+  }, [sortedTasks, allSamples, listSearch, sampleTypeFilter]);
+
   const counts = useMemo(() => {
-    const active = sortedTasks.filter((d) => d.status !== "completed").length;
-    const completed = sortedTasks.filter((d) => d.status === "completed").length;
-    return { all: sortedTasks.length, active, completed };
-  }, [sortedTasks]);
+    const active = filteredTasks.filter((d) => d.status !== "completed").length;
+    const completed = filteredTasks.filter((d) => d.status === "completed").length;
+    return { all: filteredTasks.length, active, completed };
+  }, [filteredTasks]);
 
   const activeList = useMemo(
-    () => sortedTasks.filter((d) => d.status !== "completed"),
-    [sortedTasks]
+    () => filteredTasks.filter((d) => d.status !== "completed"),
+    [filteredTasks]
   );
   const completedList = useMemo(
-    () => sortedTasks.filter((d) => d.status === "completed"),
-    [sortedTasks]
+    () => filteredTasks.filter((d) => d.status === "completed"),
+    [filteredTasks]
   );
 
   const submitResults = trpc.testResults.submit.useMutation({
@@ -834,6 +856,25 @@ export default function Technician() {
           {tabBtn("active", "tabActive", counts.active)}
           {tabBtn("completed", "tabCompleted", counts.completed)}
         </div>
+
+        <ListFilterBar
+          lang={lang}
+          search={listSearch}
+          onSearchChange={setListSearch}
+          searchPlaceholder={
+            lang === "ar"
+              ? "بحث برمز العينة، العقد، المقاول، أو نوع الاختبار..."
+              : "Search by sample code, contract, contractor, or test..."
+          }
+          sampleType={sampleTypeFilter}
+          onSampleTypeChange={setSampleTypeFilter}
+          showClear={hasActiveListFilters({ search: listSearch, sampleType: sampleTypeFilter })}
+          onClear={() => {
+            setListSearch("");
+            setSampleTypeFilter("all");
+          }}
+          resultCount={filteredTasks.length}
+        />
 
         {filterTab === "all" && (
           <div className="space-y-8">

@@ -23,6 +23,8 @@ import {
   Pencil,
   Printer,
 } from "lucide-react";
+import { ListFilterBar } from "@/components/ListFilterBar";
+import { applyOrderFilters, hasActiveListFilters } from "@/lib/listFilters";
 import { useMemo, useState, type ReactElement } from "react";
 import { toast } from "sonner";
 import { useLocation } from "wouter";
@@ -425,6 +427,9 @@ export default function Distribution() {
     notes: "",
   });
   const [taskFilter, setTaskFilter] = useState<"all" | "active" | "awaiting_review" | "done">("all");
+  const [listSearch, setListSearch] = useState("");
+  const [sampleTypeFilter, setSampleTypeFilter] = useState("all");
+  const [technicianFilter, setTechnicianFilter] = useState("all");
   const [, setLocation] = useLocation();
 
   // ─── Data ──────────────────────────────────────────────────────────────────
@@ -466,19 +471,27 @@ export default function Distribution() {
   // ─── Filters ───────────────────────────────────────────────────────────────
   const getSampleStatus = (order: any) => order.sampleStatus ?? order.sample?.status ?? order.status;
 
-  const filteredOrders = orders.filter((o: any) => {
-    const sampleStatus = getSampleStatus(o);
-    if (taskFilter === "active") {
-      return sampleStatus === "distributed" || sampleStatus === "testing_in_progress";
-    }
-    if (taskFilter === "awaiting_review") {
-      return sampleStatus === "awaiting_review";
-    }
-    if (taskFilter === "done") {
-      return sampleStatus === "approved" || sampleStatus === "qc_passed" || o.status === "completed";
-    }
-    return true;
-  });
+  const listFilters = useMemo(
+    () => ({ search: listSearch, sampleType: sampleTypeFilter, technicianId: technicianFilter }),
+    [listSearch, sampleTypeFilter, technicianFilter],
+  );
+
+  const filteredOrders = useMemo(() => {
+    const byTask = orders.filter((o: any) => {
+      const sampleStatus = getSampleStatus(o);
+      if (taskFilter === "active") {
+        return sampleStatus === "distributed" || sampleStatus === "testing_in_progress";
+      }
+      if (taskFilter === "awaiting_review") {
+        return sampleStatus === "awaiting_review";
+      }
+      if (taskFilter === "done") {
+        return sampleStatus === "approved" || sampleStatus === "qc_passed" || o.status === "completed";
+      }
+      return true;
+    });
+    return applyOrderFilters(byTask, listFilters);
+  }, [orders, taskFilter, listFilters]);
 
   const activeOrders = orders.filter((o: any) => {
     const sampleStatus = getSampleStatus(o);
@@ -577,6 +590,41 @@ export default function Distribution() {
             );
           })}
         </div>
+
+        <ListFilterBar
+          lang={lang}
+          search={listSearch}
+          onSearchChange={setListSearch}
+          searchPlaceholder={
+            lang === "ar"
+              ? "بحث برقم الأوردر، العينة، العقد، أو المقاول..."
+              : "Search by order, sample, contract, or contractor..."
+          }
+          sampleType={sampleTypeFilter}
+          onSampleTypeChange={setSampleTypeFilter}
+          selectFilters={[
+            {
+              id: "technician",
+              value: technicianFilter,
+              onChange: setTechnicianFilter,
+              placeholder: lang === "ar" ? "الفني" : "Technician",
+              options: [
+                { value: "all", label: lang === "ar" ? "جميع الفنيين" : "All technicians" },
+                ...technicians.map((tech: any) => ({
+                  value: String(tech.id),
+                  label: tech.name,
+                })),
+              ],
+            },
+          ]}
+          showClear={hasActiveListFilters(listFilters)}
+          onClear={() => {
+            setListSearch("");
+            setSampleTypeFilter("all");
+            setTechnicianFilter("all");
+          }}
+          resultCount={filteredOrders.length}
+        />
 
         {/* All Orders */}
         {(taskFilter === "all" || taskFilter === "active" || taskFilter === "awaiting_review" || taskFilter === "done") && (

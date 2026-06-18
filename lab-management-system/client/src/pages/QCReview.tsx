@@ -18,13 +18,15 @@ import { trpc } from "@/lib/trpc";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useDeletionStatus } from "@/hooks/useDeletionStatus";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { ListFilterBar } from "@/components/ListFilterBar";
+import { applyClearanceFilters, applySampleFilters, hasActiveListFilters } from "@/lib/listFilters";
 import { SAMPLE_TYPE_LABELS } from "@/lib/labTypes";
 import {
   ShieldCheck, CheckCircle, XCircle, RotateCcw, ClipboardCheck,
   BadgeCheck, FlaskConical, Clock, DollarSign, CheckCircle2,
   History, ChevronRight, ExternalLink,
 } from "lucide-react";
-import { useState, useEffect, type ReactElement } from "react";
+import { useState, useEffect, useMemo, type ReactElement } from "react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { toast } from "sonner";
 import {
@@ -255,7 +257,7 @@ function ClearanceQCSection() {
   const [reviewOpen, setReviewOpen] = useState(false);
   const [taskFilter, setTaskFilter] = useState<TaskFilter>("new");
   const [showHistory, setShowHistory] = useState(false);
-  const [archiveSearch, setArchiveSearch] = useState("");
+  const [listSearch, setListSearch] = useState("");
 
   const { data: requests = [], refetch } = trpc.clearance.list.useQuery();
   const { data: selectedReq } = trpc.clearance.getById.useQuery(
@@ -284,10 +286,15 @@ function ClearanceQCSection() {
   const incompleteCount = requests.filter(r => getClearanceTaskState(r) === "incomplete").length;
   const completedCount = requests.filter(r => getClearanceTaskState(r) === "completed").length;
 
-  const filteredRequests = requests.filter(r => {
-    if (taskFilter === "all") return true;
-    return getClearanceTaskState(r) === taskFilter;
-  });
+  const clearanceListFilters = useMemo(() => ({ search: listSearch }), [listSearch]);
+
+  const filteredRequests = useMemo(() => {
+    const byTask = requests.filter((r) => {
+      if (taskFilter === "all") return true;
+      return getClearanceTaskState(r) === taskFilter;
+    });
+    return applyClearanceFilters(byTask, clearanceListFilters);
+  }, [requests, taskFilter, clearanceListFilters]);
   const activeRequests = filteredRequests.filter(r => getClearanceTaskState(r) !== "completed");
   const completedRequests = filteredRequests.filter(r => getClearanceTaskState(r) === "completed");
 
@@ -326,6 +333,20 @@ function ClearanceQCSection() {
           <span className={`px-1.5 py-0.5 rounded-full text-xs font-bold ${taskFilter === "completed" ? "bg-white/20 text-white" : "bg-green-100 text-green-700"}`}>{completedCount}</span>
         </button>
       </div>
+
+      <ListFilterBar
+        lang={lang}
+        search={listSearch}
+        onSearchChange={setListSearch}
+        searchPlaceholder={
+          lang === "ar"
+            ? "بحث برقم الطلب، العقد، المقاول، أو المشروع..."
+            : "Search by request, contract, contractor, or project..."
+        }
+        showClear={hasActiveListFilters(clearanceListFilters)}
+        onClear={() => setListSearch("")}
+        resultCount={filteredRequests.length}
+      />
 
       {/* Active Requests */}
       {activeRequests.length === 0 && taskFilter !== "completed" ? (
@@ -391,31 +412,7 @@ function ClearanceQCSection() {
       {/* Archive (Completed) */}
       {taskFilter === "completed" && (
         <div className="space-y-3">
-          <div className="relative">
-            <input
-              type="text"
-              value={archiveSearch}
-              onChange={e => setArchiveSearch(e.target.value)}
-              placeholder={lang === "ar" ? "بحث برقم العقد أو اسم المقاول..." : "Search by contract number or contractor..."}
-              className="w-full border rounded-lg px-4 py-2.5 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/30"
-            />
-            {archiveSearch && (
-              <button onClick={() => setArchiveSearch("")}
-                className="absolute end-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground text-lg leading-none">×</button>
-            )}
-          </div>
-          {completedRequests
-            .filter(req => {
-              if (!archiveSearch.trim()) return true;
-              const q = archiveSearch.toLowerCase();
-              return (
-                req.requestCode?.toLowerCase().includes(q) ||
-                req.contractorName?.toLowerCase().includes(q) ||
-                req.contractNumber?.toLowerCase().includes(q) ||
-                req.contractName?.toLowerCase().includes(q)
-              );
-            })
-            .map(req => (
+          {completedRequests.map(req => (
             <Card key={req.id} className="border-l-4 border-l-green-400 cursor-pointer hover:shadow-sm opacity-80 hover:opacity-100 transition-all" onClick={() => handleOpenReq(req)}>
               <CardContent className="p-3 flex items-center justify-between">
                 <div className="space-y-0.5">
@@ -434,16 +431,7 @@ function ClearanceQCSection() {
               </CardContent>
             </Card>
           ))}
-          {completedRequests.filter(req => {
-            if (!archiveSearch.trim()) return true;
-            const q = archiveSearch.toLowerCase();
-            return (
-              req.requestCode?.toLowerCase().includes(q) ||
-              req.contractorName?.toLowerCase().includes(q) ||
-              req.contractNumber?.toLowerCase().includes(q) ||
-              req.contractName?.toLowerCase().includes(q)
-            );
-          }).length === 0 && (
+          {completedRequests.length === 0 && (
             <div className="text-center py-8 text-sm text-muted-foreground">
               {lang === "ar" ? "لا توجد نتائج للبحث" : "No results found"}
             </div>
@@ -617,6 +605,9 @@ export default function QCReview() {
   const [taskFilter, setTaskFilter] = useState<TaskFilter>("new");
   const [showHistory, setShowHistory] = useState(false);
   const [loadTimedOut, setLoadTimedOut] = useState(false);
+  const [listSearch, setListSearch] = useState("");
+  const [sectorFilter, setSectorFilter] = useState("all");
+  const [sampleTypeFilter, setSampleTypeFilter] = useState("all");
 
   const selectedSampleId = Number(selectedSample?.id ?? 0);
 
@@ -667,12 +658,28 @@ export default function QCReview() {
   const clearanceNewCount = clearanceRequests.filter(r => getClearanceTaskState(r) === "new").length;
 
   const tabTriggerClass =
-    "rounded-none border-b-2 border-transparent px-4 py-2.5 text-sm font-medium data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none";
+    "group flex-1 min-w-0 rounded-lg border border-transparent px-4 py-3 text-sm font-semibold transition-all " +
+    "text-muted-foreground hover:text-foreground hover:bg-white/60 " +
+    "data-[state=active]:bg-white data-[state=active]:text-primary data-[state=active]:shadow-sm " +
+    "data-[state=active]:border-slate-200 data-[state=active]:ring-1 data-[state=active]:ring-primary/20 " +
+    "data-[state=active]:[&_svg]:text-primary";
 
-  const filteredSamples = qcSamples.filter(s => {
-    if (taskFilter === "all") return true;
-    return getSampleTaskState(s) === taskFilter;
-  });
+  const tabBadgeClass =
+    "ms-2 inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full px-1.5 text-[10px] font-bold " +
+    "bg-red-100 text-red-700 group-data-[state=active]:bg-red-500 group-data-[state=active]:text-white";
+
+  const sampleListFilters = useMemo(
+    () => ({ search: listSearch, sector: sectorFilter, sampleType: sampleTypeFilter }),
+    [listSearch, sectorFilter, sampleTypeFilter],
+  );
+
+  const filteredSamples = useMemo(() => {
+    const byTask = qcSamples.filter((s) => {
+      if (taskFilter === "all") return true;
+      return getSampleTaskState(s) === taskFilter;
+    });
+    return applySampleFilters(byTask, sampleListFilters);
+  }, [qcSamples, taskFilter, sampleListFilters]);
   const activeSamples = filteredSamples.filter(s => getSampleTaskState(s) !== "completed");
   const completedSamples = filteredSamples.filter(s => getSampleTaskState(s) === "completed");
 
@@ -794,21 +801,25 @@ export default function QCReview() {
         </div>
 
         <Tabs defaultValue="samples" className="w-full">
-          <TabsList className="w-full justify-start border-b rounded-none h-auto p-0 bg-transparent">
+          <TabsList className="w-full h-auto p-1.5 bg-slate-100 border border-slate-200 rounded-xl flex gap-1">
             <TabsTrigger value="samples" className={tabTriggerClass}>
               <ShieldCheck className="w-4 h-4 me-2 shrink-0" />
-              {lang === "ar" ? "فحص جودة نتائج العينات" : "Sample Results Quality Check"}
+              <span className="truncate">
+                {lang === "ar" ? "فحص جودة نتائج العينات" : "Sample Results Quality Check"}
+              </span>
               {newCount > 0 && (
-                <span className="ms-2 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1.5 text-[10px] font-bold text-white">
+                <span className={tabBadgeClass}>
                   {newCount}
                 </span>
               )}
             </TabsTrigger>
             <TabsTrigger value="clearance" className={tabTriggerClass}>
               <BadgeCheck className="w-4 h-4 me-2 shrink-0" />
-              {lang === "ar" ? "طلبات شهادة براءة الذمة — مراجعة QC" : "Clearance Requests — QC Review"}
+              <span className="truncate">
+                {lang === "ar" ? "طلبات شهادة براءة الذمة — مراجعة QC" : "Clearance Requests — QC Review"}
+              </span>
               {clearanceNewCount > 0 && (
-                <span className="ms-2 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1.5 text-[10px] font-bold text-white">
+                <span className={tabBadgeClass}>
                   {clearanceNewCount}
                 </span>
               )}
@@ -837,6 +848,28 @@ export default function QCReview() {
               <span className={`px-1.5 py-0.5 rounded-full text-xs font-bold ${taskFilter === "completed" ? "bg-white/20 text-white" : "bg-green-100 text-green-700"}`}>{completedCount}</span>
             </button>
           </div>
+
+          <ListFilterBar
+            lang={lang}
+            search={listSearch}
+            onSearchChange={setListSearch}
+            searchPlaceholder={
+              lang === "ar"
+                ? "بحث برمز العينة، العقد، المقاول، أو المشروع..."
+                : "Search by sample code, contract, contractor, or project..."
+            }
+            sector={sectorFilter}
+            onSectorChange={setSectorFilter}
+            sampleType={sampleTypeFilter}
+            onSampleTypeChange={setSampleTypeFilter}
+            showClear={hasActiveListFilters(sampleListFilters)}
+            onClear={() => {
+              setListSearch("");
+              setSectorFilter("all");
+              setSampleTypeFilter("all");
+            }}
+            resultCount={filteredSamples.length}
+          />
 
           {/* Active Samples */}
           {activeSamples.length === 0 && taskFilter !== "completed" ? (

@@ -1,5 +1,7 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { trpc } from "@/lib/trpc";
+import { ListFilterBar } from "@/components/ListFilterBar";
+import { matchesListSearch, hasActiveListFilters } from "@/lib/listFilters";
 import { effectiveUserRole } from "@/lib/labTypes";
 import DashboardLayout from "@/components/DashboardLayout";
 import { Button } from "@/components/ui/button";
@@ -277,6 +279,18 @@ export default function UserManagement() {
   const [showPassword, setShowPassword] = useState(false);
   const [activeTab, setActiveTab] = useState("info");
   const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null);
+  const [listSearch, setListSearch] = useState("");
+  const [roleFilter, setRoleFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
+
+  const filteredUsers = useMemo(() => {
+    return users.filter((u) => {
+      if (roleFilter !== "all" && effectiveUserRole(u.role) !== roleFilter) return false;
+      if (statusFilter === "active" && !u.isActive) return false;
+      if (statusFilter === "inactive" && u.isActive) return false;
+      return matchesListSearch(listSearch, [u.name, (u as { username?: string }).username, u.role]);
+    });
+  }, [users, listSearch, roleFilter, statusFilter]);
 
   const openCreate = () => {
     setEditingUser(null);
@@ -406,15 +420,57 @@ export default function UserManagement() {
         {/* Users Table */}
         <Card className="border-0 shadow-sm">
           <CardHeader className="pb-3">
-            <CardTitle className="text-base">{lang === "ar" ? `جميع المستخدمين (${users.length})` : `All Users (${users.length})`}</CardTitle>
+            <CardTitle className="text-base">{lang === "ar" ? `جميع المستخدمين (${filteredUsers.length})` : `All Users (${filteredUsers.length})`}</CardTitle>
           </CardHeader>
           <CardContent className="p-0">
+            <div className="px-6 pb-4">
+              <ListFilterBar
+                lang={lang}
+                search={listSearch}
+                onSearchChange={setListSearch}
+                searchPlaceholder={
+                  lang === "ar" ? "بحث بالاسم أو اسم المستخدم..." : "Search by name or username..."
+                }
+                selectFilters={[
+                  {
+                    id: "role",
+                    value: roleFilter,
+                    onChange: setRoleFilter,
+                    placeholder: lang === "ar" ? "الدور" : "Role",
+                    options: [
+                      { value: "all", label: lang === "ar" ? "جميع الأدوار" : "All roles" },
+                      ...Object.entries(ROLE_LABELS).map(([value, label]) => ({ value, label })),
+                    ],
+                  },
+                  {
+                    id: "status",
+                    value: statusFilter,
+                    onChange: setStatusFilter,
+                    placeholder: lang === "ar" ? "الحالة" : "Status",
+                    options: [
+                      { value: "all", label: lang === "ar" ? "الكل" : "All" },
+                      { value: "active", label: lang === "ar" ? "نشط" : "Active" },
+                      { value: "inactive", label: lang === "ar" ? "معطل" : "Disabled" },
+                    ],
+                  },
+                ]}
+                showClear={
+                  Boolean(listSearch.trim()) || roleFilter !== "all" || statusFilter !== "all"
+                }
+                onClear={() => {
+                  setListSearch("");
+                  setRoleFilter("all");
+                  setStatusFilter("all");
+                }}
+                resultCount={filteredUsers.length}
+              />
+            </div>
             {isLoading ? (
               <div className="p-8 text-center text-slate-400">{lang === "ar" ? "جاري التحميل..." : "Loading..."}</div>
-            ) : users.length === 0 ? (
+            ) : filteredUsers.length === 0 ? (
               <div className="p-8 text-center text-slate-400">
                 <Users className="w-12 h-12 mx-auto mb-3 opacity-30" />
-                <p className="font-medium">{lang === "ar" ? "لا يوجد مستخدمون بعد" : "No users yet"}</p>
+                <p className="font-medium">{lang === "ar" ? "لا توجد نتائج" : "No users match your filters"}</p>
               </div>
             ) : (
               <div className="overflow-x-auto">
@@ -431,7 +487,7 @@ export default function UserManagement() {
                     </tr>
                   </thead>
                   <tbody>
-                    {users.map(u => (
+                    {filteredUsers.map(u => (
                       <tr key={u.id} className="border-b last:border-0 hover:bg-slate-50/50 transition-colors">
                         <td className="px-6 py-3 font-medium text-slate-900">{u.name ?? "—"}</td>
                         <td className="px-4 py-3 font-mono text-xs text-slate-600">{(u as any).username ?? "—"}</td>
