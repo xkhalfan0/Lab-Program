@@ -17,6 +17,7 @@ import {
   formatSummaryValue,
   renderFormData,
 } from "@/pages/tests/SpecializedTestReport";
+import { ReportSignatures, pickReviewSignatures } from "@/components/reports/ReportSignatures";
 import {
   Loader2,
   Printer,
@@ -187,16 +188,6 @@ function computeBatchStatus(passCount: number, total: number, completedCount: nu
   };
 }
 
-function SignatureBox({ label, name }: { label: string; name?: string }) {
-  return (
-    <td className="signature-column align-top text-center border border-gray-300 px-2 py-2 text-xs w-1/3">
-      <p className="text-gray-600 text-[10px] font-bold uppercase mb-1">{label}</p>
-      <div className="signature-line border-b border-gray-800 min-h-[28px] mb-1 mx-1" />
-      {name ? <p className="text-xs font-semibold text-gray-800">{name}</p> : null}
-    </td>
-  );
-}
-
 function BatchStatusPanel({
   status,
   passCount,
@@ -326,6 +317,16 @@ export default function BatchReport() {
   const passCount = evaluatableSections.filter(s => s.overallResult === "pass").length;
   const batchStatus = computeBatchStatus(passCount, total, completedCount);
   const testedBy = sections.map(s => s.testedBy).find(Boolean);
+  const batchSignatures = useMemo(() => {
+    const sig = pickReviewSignatures(sections.flatMap(s => s.sibling.specializedTestResults ?? []));
+    if (!sig.testedBy && testedBy) sig.testedBy = testedBy;
+    return sig;
+  }, [sections, testedBy]);
+  const signatureLabels = {
+    tested: isAr ? "الفاحص" : "Tested By",
+    reviewed: isAr ? "المراجع" : "Reviewed By",
+    approved: isAr ? "المعتمد" : "Approved By",
+  };
 
   const isLoading = sampleLoading || siblingsLoading;
 
@@ -412,8 +413,7 @@ export default function BatchReport() {
             className="lab-print-root mx-auto bg-white shadow-lg print:shadow-none"
             style={{
               width: "210mm",
-              minHeight: "297mm",
-              padding: "15mm 15mm 20mm 15mm",
+              padding: "10mm 12mm 12mm 12mm",
               fontFamily: "Arial, sans-serif",
               fontSize: "10px",
             }}
@@ -620,20 +620,10 @@ export default function BatchReport() {
               })}
             </div>
 
-            <div className="mt-6 pt-4 border-t border-gray-300">
-              <table className="signatures-table w-full border-collapse text-xs">
-                <tbody>
-                  <tr>
-                    <SignatureBox label={isAr ? "\u0627\u0644\u0641\u0627\u062d\u0635" : "Tested By"} name={testedBy} />
-                    <SignatureBox label={isAr ? "\u0627\u0644\u0645\u0631\u0627\u062c\u0639" : "Reviewed By"} />
-                    <SignatureBox label={isAr ? "\u0627\u0644\u0645\u0639\u062a\u0645\u062f" : "Approved By"} />
-                  </tr>
-                </tbody>
-              </table>
-            </div>
+            <ReportSignatures sig={batchSignatures} labels={signatureLabels} />
 
             <div
-              className="mt-6 pt-3 border-t border-gray-200 flex justify-between text-gray-400"
+              className="mt-4 pt-2 border-t border-gray-200 flex justify-between text-gray-400"
               style={{ fontSize: "8px" }}
             >
               <span>

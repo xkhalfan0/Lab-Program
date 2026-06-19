@@ -10,6 +10,7 @@ import { Loader2, Printer, X, CheckCircle, XCircle, Globe, Download } from "luci
 import { Button } from "@/components/ui/button";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { FlexibleResultsTable, type Column, formDataToKeyValueRows, keyValueColumns } from "@/components/reports/FlexibleResultsTable";
+import { ReportSignatures, pickReviewSignatures } from "@/components/reports/ReportSignatures";
 import { formatCalendarDate } from "@/lib/dateFormat";
 import { calculateFinalBlend, formatDisplaySieveMm } from "@/pages/tests/SieveAnalysis";
 import {
@@ -2973,55 +2974,56 @@ function renderInterlock(fd: any, isAr: boolean) {
   return (
     <div className="text-xs">
       {/* Test Info */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-4">
-        <div className="bg-blue-50 border border-blue-200 rounded p-2">
+      <div className="report-info-grid grid grid-cols-2 md:grid-cols-4 gap-1.5 mb-2">
+        <div className="bg-blue-50 border border-blue-200 rounded p-1.5">
           <p className="text-blue-600 font-semibold">{isAr ? "النوع" : "Block Type"}</p>
           <p className="font-bold text-blue-800">{blockTypeLabel}</p>
         </div>
         {commonThickness != null && commonThickness !== "" && (
-          <div className="bg-gray-50 border border-gray-200 rounded p-2">
+          <div className="bg-gray-50 border border-gray-200 rounded p-1.5">
             <p className="text-gray-500 font-semibold">{isAr ? "السماكة (مم)" : "Thickness (mm)"}</p>
             <p className="font-bold text-gray-800">{String(commonThickness)}</p>
           </div>
         )}
         {commonArea != null && commonArea !== "" && (
-          <div className="bg-gray-50 border border-gray-200 rounded p-2">
+          <div className="bg-gray-50 border border-gray-200 rounded p-1.5">
             <p className="text-gray-500 font-semibold">{isAr ? "المساحة (مم²)" : "Area (mm²)"}</p>
             <p className="font-bold text-gray-800">{String(commonArea)}</p>
           </div>
         )}
-        <div className="bg-slate-50 border border-slate-200 rounded p-2">
+        <div className="bg-slate-50 border border-slate-200 rounded p-1.5">
           <p className="text-slate-500 font-semibold">{isAr ? "عامل التصحيح CF" : "Correction factor CF"}</p>
           <p className="font-bold text-slate-800 font-mono">{Number(cfSaved).toFixed(2)}</p>
         </div>
         {fd.manufacturer && (
-          <div className="bg-gray-50 border border-gray-200 rounded p-2">
+          <div className="bg-gray-50 border border-gray-200 rounded p-1.5">
             <p className="text-gray-500 font-semibold">{isAr ? "المصنّع" : "Manufacturer"}</p>
             <p className="font-bold text-gray-800">{fd.manufacturer}</p>
           </div>
         )}
         {fd.blockShape && (
-          <div className="bg-gray-50 border border-gray-200 rounded p-2">
+          <div className="bg-gray-50 border border-gray-200 rounded p-1.5">
             <p className="text-gray-500 font-semibold">{isAr ? "الشكل" : "Shape"}</p>
             <p className="font-bold text-gray-800">{fd.blockShape}</p>
           </div>
         )}
         {fd.blockColor && (
-          <div className="bg-gray-50 border border-gray-200 rounded p-2">
+          <div className="bg-gray-50 border border-gray-200 rounded p-1.5">
             <p className="text-gray-500 font-semibold">{isAr ? "اللون" : "Color"}</p>
             <p className="font-bold text-gray-800">{fd.blockColor}</p>
           </div>
         )}
         {fd.mtsReference && (
-          <div className="bg-gray-50 border border-gray-200 rounded p-2">
+          <div className="bg-gray-50 border border-gray-200 rounded p-1.5">
             <p className="text-gray-500 font-semibold">{isAr ? "مرجع التقديم" : "Material Submittal Ref."}</p>
             <p className="font-bold text-gray-800">{fd.mtsReference}</p>
           </div>
         )}
       </div>
+      <div className="report-results-tail">
       {/* Results Table */}
       {blocks.length > 0 && (
-        <div className="mb-3">
+        <div className="mb-2">
           <FlexibleResultsTable
             columns={[
               { header: headers[0], field: "blockRef", align: "center", render: (v) => <span className="font-mono">{String(v ?? "")}</span> },
@@ -3084,7 +3086,7 @@ function renderInterlock(fd: any, isAr: boolean) {
       )}
       {/* Summary */}
       <div className="flex justify-end">
-        <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded text-xs font-bold border ${
+        <div className={`inline-flex items-center gap-2 px-2 py-1 rounded text-xs font-bold border ${
           overallResult === "pass" ? "bg-green-50 border-green-300 text-green-800" :
           overallResult === "fail" ? "bg-red-50 border-red-300 text-red-800" :
           "bg-gray-50 border-gray-300 text-gray-700"
@@ -3093,6 +3095,7 @@ function renderInterlock(fd: any, isAr: boolean) {
           &nbsp;/&nbsp;
           {isAr ? "المطلوب:" : "Required:"} {spec.requiredStrength ?? "—"} N/mm²
         </div>
+      </div>
       </div>
     </div>
   );
@@ -4089,7 +4092,7 @@ export default function SpecializedTestReport({ sectorResultId }: SpecializedTes
           <div
             ref={printRef}
             className="lab-print-root mx-auto bg-white shadow-lg print:shadow-none"
-            style={{ width: "210mm", minHeight: "297mm", padding: "15mm", fontFamily: "Arial, sans-serif", fontSize: "10px" }}
+            style={{ width: "210mm", padding: "10mm", fontFamily: "Arial, sans-serif", fontSize: "10px" }}
           >
             <div className="border-b-2 border-gray-900 pb-2 mb-4">
               <h1 className="text-[15px] font-extrabold">{isAr ? "تقرير نتائج الاختبار" : "Test results report"}</h1>
@@ -4150,10 +4153,12 @@ export default function SpecializedTestReport({ sectorResultId }: SpecializedTes
   const formData = result.formData as any ?? {};
   const summaryValues = result.summaryValues as any ?? {};
   const isPassed = result.overallResult === "pass";
-  const managerSignedBy = legacyResult?.managerReviewedByName ?? result?.managerReviewedByName;
-  const managerSignedAt = legacyResult?.managerReviewedAt ?? result?.managerReviewedAt;
-  const qcSignedBy = legacyResult?.qcReviewedByName ?? result?.qcReviewedByName;
-  const qcSignedAt = legacyResult?.qcReviewedAt ?? result?.qcReviewedAt;
+  const reportSignatures = pickReviewSignatures([result, legacyResult]);
+  const signatureLabels = {
+    tested: isAr ? "الفاحص" : "Tested By",
+    reviewed: isAr ? "المراجع" : "Reviewed By",
+    approved: isAr ? "المعتمد" : "Approved By",
+  };
   const isMarshallDensityReport =
     result.formTemplate === "asphalt_marshall_density" ||
     result.testTypeCode === "ASPH_MARSHALL_DENSITY" ||
@@ -4214,11 +4219,11 @@ export default function SpecializedTestReport({ sectorResultId }: SpecializedTes
       <div className="bg-gray-200 print:bg-white min-h-screen py-6 print:py-0" dir={isAr ? "rtl" : "ltr"}>
         <div
           ref={printRef}
-          className="lab-print-root mx-auto bg-white shadow-lg print:shadow-none"
-          style={{ width: "210mm", minHeight: "297mm", padding: "15mm 15mm 20mm 15mm", fontFamily: "Arial, sans-serif", fontSize: "10px" }}
+          className="lab-print-root mx-auto bg-white shadow-lg print:shadow-none report-page"
+          style={{ width: "210mm", padding: "10mm 12mm 12mm 12mm", fontFamily: "Arial, sans-serif", fontSize: "10px" }}
         >
           {/* Header */}
-          <div className="mb-5">
+          <div className="mb-3">
             <div className="border-t-4 border-gray-900 pt-3 flex justify-between items-center">
               <div>
                 <h1 className="text-[16px] font-extrabold text-gray-900 leading-snug">
@@ -4244,17 +4249,17 @@ export default function SpecializedTestReport({ sectorResultId }: SpecializedTes
               </div>
             </div>
             {/* Document title bar */}
-            <div className="bg-gray-900 text-white text-center py-2 mt-3 mb-4">
-              <p className="text-[14px] font-bold">
+            <div className="bg-gray-900 text-white text-center py-1.5 mt-2 mb-2">
+              <p className="text-[13px] font-bold">
                 {isAr ? "تقرير نتيجة الفحص" : "Laboratory Test Report"}
               </p>
-              <p className="text-[10px] text-gray-300 mt-0.5 tracking-wider uppercase">
+              <p className="text-[9px] text-gray-300 mt-0.5 tracking-wider uppercase">
                 {isAr ? "Laboratory Test Report" : "تقرير نتيجة الفحص"}
               </p>
             </div>
             {/* Pass/Fail badge */}
             <div className={`flex ${isAr ? "justify-start" : "justify-end"}`}>
-              <div className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-bold ${isPassed ? "bg-green-100 text-green-800 border border-green-300" : "bg-red-100 text-red-800 border border-red-300"}`}>
+              <div className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-bold ${isPassed ? "bg-green-100 text-green-800 border border-green-300" : "bg-red-100 text-red-800 border border-red-300"}`}>
                 {isPassed ? <CheckCircle size={14} /> : <XCircle size={14} />}
                 {isPassed
                   ? (isAr ? "مطابق — PASS" : "PASS — مطابق")
@@ -4264,7 +4269,7 @@ export default function SpecializedTestReport({ sectorResultId }: SpecializedTes
           </div>
 
           {/* Sample Info */}
-          <div className="border border-gray-200 rounded mb-5 overflow-hidden">
+          <div className="border border-gray-200 rounded mb-3 overflow-hidden">
             {/* Reference numbers bar */}
             <table className="metadata-table w-full border-collapse text-xs bg-gray-50">
               <tbody>
@@ -4328,9 +4333,9 @@ export default function SpecializedTestReport({ sectorResultId }: SpecializedTes
           </div>
 
           {/* Summary Values */}
-          {summaryValues && Object.keys(summaryValues).length > 0 && (
-            <div className="mb-5">
-              <h3 className="text-xs font-bold text-gray-700 uppercase border-b border-gray-300 pb-1 mb-3">
+          {summaryValues && Object.keys(summaryValues).length > 0 && result.formTemplate !== "interlock" && (
+            <div className="mb-3">
+              <h3 className="text-xs font-bold text-gray-700 uppercase border-b border-gray-300 pb-1 mb-2">
                 {isAr ? "ملخص النتائج" : "Summary Results"}
               </h3>
               <table className="metadata-table w-full border-collapse text-xs">
@@ -4366,8 +4371,8 @@ export default function SpecializedTestReport({ sectorResultId }: SpecializedTes
           {batchDists && batchDists.length > 1 ? (
             <BatchResultsSection batchDists={batchDists ?? []} distId={distIdForRender} isAr={isAr} prefetchedBatchResults={sectorBatchResults} />
           ) : (
-            <div className="mb-5">
-              <h3 className="text-xs font-bold text-gray-700 uppercase border-b border-gray-300 pb-1 mb-3">
+            <div className="mb-3">
+              <h3 className="text-xs font-bold text-gray-700 uppercase border-b border-gray-300 pb-1 mb-2">
                 {isAr ? "النتائج التفصيلية" : "Detailed Results"}
               </h3>
               {renderFormData(result.formTemplate, formData, isAr, {
@@ -4390,28 +4395,10 @@ export default function SpecializedTestReport({ sectorResultId }: SpecializedTes
           )}
 
           {/* Signatures */}
-          <div className="mt-8 pt-4 border-t border-gray-300">
-            <table className="signatures-table w-full border-collapse text-xs">
-              <tbody>
-                <tr>
-                  <SignatureBox label={isAr ? "الفاحص" : "Tested By"} name={result.testedBy} />
-                  <SignatureBox
-                    label={isAr ? "المراجع" : "Reviewed By"}
-                    name={managerSignedBy ?? undefined}
-                    date={managerSignedAt ? fmtDate(managerSignedAt) : undefined}
-                  />
-                  <SignatureBox
-                    label={isAr ? "المعتمد" : "Approved By"}
-                    name={qcSignedBy ?? undefined}
-                    date={qcSignedAt ? fmtDate(qcSignedAt) : undefined}
-                  />
-                </tr>
-              </tbody>
-            </table>
-          </div>
+          <ReportSignatures sig={reportSignatures} labels={signatureLabels} />
 
           {/* Footer */}
-          <div className="mt-6 pt-3 border-t border-gray-200 flex justify-between text-gray-400" style={{ fontSize: "8px" }}>
+          <div className="mt-4 pt-2 border-t border-gray-200 flex justify-between text-gray-400" style={{ fontSize: "8px" }}>
             <span>Construction Materials &amp; Engineering Laboratory — مختبر الإنشاءات والمواد الهندسية</span>
             <span>{isAr ? "تاريخ الإنشاء:" : "Generated:"} {new Date().toLocaleString(isAr ? "ar-AE" : "en-GB")}</span>
           </div>
@@ -4429,18 +4416,6 @@ export default function SpecializedTestReport({ sectorResultId }: SpecializedTes
         }
       `}</style>
     </>
-  );
-}
-
-function SignatureBox({ label, name, date }: { label: string; name?: string | null; date?: string }) {
-  return (
-    <td className="signature-column align-top text-center border border-gray-300 px-2 py-2 text-xs">
-      <p className="text-[10px] font-bold text-gray-700 uppercase mb-1">{label}</p>
-      <div className="signature-line border-b border-gray-800 min-h-[28px] mb-1 mx-1 flex items-end justify-center pb-0.5">
-        {name ? <span className="text-gray-700 text-xs font-semibold">{name}</span> : null}
-      </div>
-      {date ? <p className="text-gray-400 text-[9px] mt-1">{date}</p> : null}
-    </td>
   );
 }
 

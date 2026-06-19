@@ -383,8 +383,12 @@ input[type="number"] {
   .print-break-after  { page-break-after: always; }
   .print-no-break     { page-break-inside: avoid; }
 
-  /* Tables should not break mid-row */
-  tr { page-break-inside: avoid; }
+  /* Keep metadata/signature rows intact; data tables may break across pages */
+  table.metadata-table tr,
+  table.signatures-table tr,
+  .print-no-break {
+    page-break-inside: avoid;
+  }
 
   /* Remove shadows for cleaner print */
   * {

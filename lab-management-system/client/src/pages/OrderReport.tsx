@@ -10,6 +10,7 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { Button } from "@/components/ui/button";
 import { Loader2, Printer, Download, Globe, X, CheckCircle, XCircle } from "lucide-react";
 import { generatePdfFromElement } from "@/lib/pdf";
+import { ReportSignatures, pickReviewSignatures } from "@/components/reports/ReportSignatures";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function fmtDate(val: Date | string | null | undefined, lang: string): string {
@@ -118,23 +119,6 @@ const SECTOR_LABELS: Record<string, { ar: string; en: string }> = {
 function sectorLabel(val: string | null | undefined, lang: string) {
   if (!val) return "—";
   return SECTOR_LABELS[val]?.[lang as "ar" | "en"] ?? val;
-}
-
-// ─── SignatureBox ─────────────────────────────────────────────────────────────
-function SignatureBox({ label, name, date }: { label: string; name?: string | null; date?: string | null }) {
-  return (
-    <td className="signature-column align-top text-center border border-gray-400 rounded-sm p-2 text-xs min-h-[70px]">
-      <p className="text-[9px] font-bold text-gray-600 uppercase tracking-wide mb-2">{label}</p>
-      <div className="signature-line flex items-center justify-center min-h-[32px] mb-1">
-        {name ? (
-          <p className="text-xs font-bold text-gray-800 italic">{name}</p>
-        ) : (
-          <div className="w-full border-b border-dashed border-gray-400 mb-1" />
-        )}
-      </div>
-      {date ? <p className="text-[9px] text-gray-500 mt-1">{date}</p> : null}
-    </td>
-  );
 }
 
 // ─── Concrete Cubes Section ───────────────────────────────────────────────────
@@ -366,7 +350,7 @@ function TestSection({ item, distWithResult, lang, index }: {
   const testedBy = specResult?.testedBy ?? concreteGroups[0]?.testedBy ?? null;
 
   return (
-    <div className="mb-6 border border-gray-400 rounded overflow-hidden" style={{ pageBreakInside: "avoid" }}>
+    <div className="mb-6 border border-gray-400 rounded overflow-hidden">
       {/* Section header */}
       <div className="bg-gray-800 text-white px-4 py-2 flex items-center justify-between">
         <div className="flex items-center gap-3">
@@ -458,20 +442,21 @@ function TestSection({ item, distWithResult, lang, index }: {
           </div>
         )}
 
-        {/* Mini signatures for this test */}
-        {(testedBy || managerName || qcName) && (
-          <div className="mt-4 pt-3 border-t border-gray-200">
-            <table className="signatures-table w-full border-collapse text-xs">
-              <tbody>
-                <tr>
-                  <SignatureBox label={t("testedBy", lang)} name={testedBy} />
-                  <SignatureBox label={t("reviewedBy", lang)} name={managerName} date={fmtDate(managerDate, lang)} />
-                  <SignatureBox label={t("approvedBy", lang)} name={qcName} date={fmtDate(qcDate, lang)} />
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        )}
+        <ReportSignatures
+          sig={{
+            testedBy,
+            reviewedBy: managerName,
+            reviewedAt: managerDate,
+            approvedBy: qcName,
+            approvedAt: qcDate,
+          }}
+          labels={{
+            tested: t("testedBy", lang),
+            reviewed: t("reviewedBy", lang),
+            approved: t("approvedBy", lang),
+          }}
+          className="mt-3 pt-2 border-t border-gray-200 report-signatures-block print-no-break"
+        />
       </div>
     </div>
   );
@@ -539,7 +524,7 @@ export default function OrderReport() {
     );
   }
 
-  const { order, items, sample, distsWithResults, reviews } = data;
+  const { order, items, sample, distsWithResults } = data;
 
   // Build a map from distributionId → distWithResult
   const distMap = new Map<number, typeof distsWithResults[0]>();
@@ -547,10 +532,13 @@ export default function OrderReport() {
     distMap.set(dwr.dist.id, dwr);
   }
 
-  // Collect all reviewer signatures for the overall report
-  const allManagerNames = reviews.filter((r: any) => r.reviewType === "manager_review").map((r: any) => r.reviewerId);
-  const managerReview = reviews.find((r: any) => r.reviewType === "manager_review");
-  const qcReview = reviews.find((r: any) => r.reviewType === "qc_review");
+  const overallSigs = pickReviewSignatures(distsWithResults.map((d) => d.specResult ?? d.legacyResult));
+  if (!overallSigs.testedBy) {
+    overallSigs.testedBy =
+      distsWithResults[0]?.specResult?.testedBy ??
+      distsWithResults[0]?.concreteGroups?.[0]?.testedBy ??
+      null;
+  }
 
   // Overall pass/fail
   const allResults: Array<"pass" | "fail" | "pending"> = distsWithResults.map(dwr => {
@@ -604,7 +592,7 @@ export default function OrderReport() {
         <div
           ref={printRef}
           className="lab-print-root mx-auto bg-white shadow-lg print:shadow-none"
-          style={{ width: "210mm", minHeight: "297mm", padding: "12mm 15mm 18mm 15mm", fontFamily: "Arial, sans-serif", fontSize: "10px" }}
+          style={{ width: "210mm", padding: "10mm 12mm 12mm 12mm", fontFamily: "Arial, sans-serif", fontSize: "10px" }}
         >
           {/* ── Header ── */}
           <div className="mb-5">
@@ -788,35 +776,20 @@ export default function OrderReport() {
             );
           })}
 
-          {/* ── Overall Signatures ── */}
-          <div className="mt-6 pt-4 border-t-2 border-gray-400">
-            <h3 className="text-xs font-bold text-gray-700 uppercase mb-4 text-center tracking-wide">
-              {t("signatures", lang)}
-            </h3>
-            <table className="signatures-table w-full border-collapse text-xs">
-              <tbody>
-                <tr>
-                  <SignatureBox
-                    label={t("testedBy", lang)}
-                    name={distsWithResults[0]?.specResult?.testedBy ?? distsWithResults[0]?.concreteGroups?.[0]?.testedBy ?? null}
-                  />
-                  <SignatureBox
-                    label={t("reviewedBy", lang)}
-                    name={managerReview ? (managerReview as any).signature ?? null : null}
-                    date={managerReview ? fmtDate((managerReview as any).reviewedAt, lang) : null}
-                  />
-                  <SignatureBox
-                    label={t("approvedBy", lang)}
-                    name={qcReview ? (qcReview as any).signature ?? null : null}
-                    date={qcReview ? fmtDate((qcReview as any).reviewedAt, lang) : null}
-                  />
-                </tr>
-              </tbody>
-            </table>
-          </div>
+          <ReportSignatures
+            sig={overallSigs}
+            labels={{
+              tested: t("testedBy", lang),
+              reviewed: t("reviewedBy", lang),
+              approved: t("approvedBy", lang),
+            }}
+            showTitle
+            title={t("signatures", lang)}
+            className="mt-4 pt-3 border-t-2 border-gray-400 report-signatures-block print-no-break"
+          />
 
           {/* ── Footer ── */}
-          <div className="mt-6 pt-3 border-t border-gray-200 flex justify-between text-gray-400" style={{ fontSize: "8px" }}>
+          <div className="mt-4 pt-2 border-t border-gray-200 flex justify-between text-gray-400" style={{ fontSize: "8px" }}>
             <span>{t("footer", lang)}</span>
             <span>{isAr ? "تاريخ الإنشاء:" : "Generated:"} {new Date().toLocaleString(isAr ? "ar-AE" : "en-GB")}</span>
           </div>

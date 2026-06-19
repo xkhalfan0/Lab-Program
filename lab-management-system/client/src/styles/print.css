@@ -90,18 +90,25 @@
   td.signature-column,
   th.signature-column {
     border: 1px solid #000 !important;
-    padding: 20px 10px !important;
+    padding: 6px 8px !important;
     text-align: center !important;
     vertical-align: top !important;
-    width: 33.333%;
   }
 
   .signature-line {
-    min-height: 28px;
+    min-height: 20px;
   }
 
-  tr {
+  table.metadata-table tr,
+  table.signatures-table tr,
+  .print-no-break {
     page-break-inside: avoid;
+    break-inside: avoid;
+  }
+
+  table.lab-results-table tr {
+    page-break-inside: auto !important;
+    break-inside: auto !important;
   }
 
   h1,
@@ -112,9 +119,15 @@
   }
 
   .report-page {
-    page-break-inside: avoid;
+    page-break-inside: auto;
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
+  }
+
+  .report-signatures-block,
+  .report-results-tail {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
   }
 
   /* Sieve blend report (under .lab-print-root) — preserve tinted cells for PDF */
@@ -194,6 +207,30 @@
   .lab-print-root .bg-blue-50.border.border-blue-200.rounded-md {
     padding: 6pt !important;
     margin-bottom: 8pt !important;
+  }
+
+  .lab-print-root .report-info-grid {
+    gap: 4pt !important;
+    margin-bottom: 6pt !important;
+  }
+
+  .lab-print-root .report-info-grid > div {
+    padding: 3pt 4pt !important;
+  }
+
+  .lab-print-root table.lab-results-table th,
+  .lab-print-root table.lab-results-table td {
+    padding: 2pt 3pt !important;
+    line-height: 1.15;
+  }
+
+  .lab-print-root .mb-5 {
+    margin-bottom: 8pt !important;
+  }
+
+  .lab-print-root h3 {
+    margin-bottom: 3pt !important;
+    padding-bottom: 2pt !important;
   }
 
   .lab-print-root .space-y-6 > * + * {

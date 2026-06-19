@@ -12,6 +12,7 @@ import {
   evaluateCubePass,
   evaluateGroupPass,
 } from "@shared/concreteCubeBs1881";
+import { ReportSignatures } from "@/components/reports/ReportSignatures";
 
 // --- Lab print branding (override via Vite env for deployment-specific details) ---
 const LAB_PRINT_BRANDING = {
@@ -84,27 +85,7 @@ function fmtDate(d: Date | string | null | undefined): string {
   return formatCalendarDate(d) === "—" ? "" : formatCalendarDate(d);
 }
 
-function SignatureBox({
-  label,
-  name,
-  date,
-}: {
-  label: string;
-  name?: string | null;
-  date?: string;
-}) {
-  return (
-    <td className="signature-column align-top text-center border border-gray-300 px-2 py-2 text-xs">
-      <p className="text-[10px] font-bold text-gray-700 uppercase mb-1">{label}</p>
-      <div className="signature-line border-b border-gray-800 min-h-[28px] mb-1 mx-1 flex items-end justify-center pb-0.5">
-        {name ? <span className="text-gray-700 text-xs font-semibold">{name}</span> : null}
-      </div>
-      {date ? <p className="text-gray-400 text-[9px] mt-1">{date}</p> : null}
-    </td>
-  );
-}
-
-// ─── Concrete compliance helpers (age-based) ────────────────────────────────────────────
+// --- Concrete compliance helpers (age-based) ---
 // Concrete strength percentage guidelines (approximate):
 // 1d=16%, 3d=40%, 7d=65%, 14d=90%, 28d=99%, 56d+=105%
 function getRequiredStrengthReport(targetMpa: number, actualAge: number): number {
@@ -349,9 +330,8 @@ function ReportPage({
       style={{
         fontFamily: "Arial, sans-serif",
         fontSize: "10px",
-        minHeight: "297mm",
         width: "210mm",
-        padding: "15mm 15mm 20mm 15mm",
+        padding: "10mm 12mm 12mm 12mm",
       }}
     >
       <div className="mb-5">
@@ -611,27 +591,23 @@ function ReportPage({
       </div>
 
       {/* Signatures */}
-      <div className="mt-8 pt-4 border-t border-gray-300">
-        <table className="signatures-table w-full border-collapse text-xs">
-          <tbody>
-            <tr>
-              <SignatureBox label={ar ? "الفاحص" : "Tested By"} name={testedDisplay} />
-              <SignatureBox
-                label={ar ? "المراجع" : "Reviewed By"}
-                name={managerReviewedByName ?? undefined}
-                date={managerSignedAt ? formatCalendarDate(managerSignedAt) : undefined}
-              />
-              <SignatureBox
-                label={ar ? "المعتمد" : "Approved By"}
-                name={qcReviewedByName ?? undefined}
-                date={qcSignedAt ? formatCalendarDate(qcSignedAt) : undefined}
-              />
-            </tr>
-          </tbody>
-        </table>
-      </div>
+      <ReportSignatures
+        sig={{
+          testedBy: testedDisplay || null,
+          testedAt: testedSignedAt ?? null,
+          reviewedBy: managerReviewedByName ?? null,
+          reviewedAt: managerSignedAt ?? null,
+          approvedBy: qcReviewedByName ?? null,
+          approvedAt: qcSignedAt ?? null,
+        }}
+        labels={{
+          tested: ar ? "الفاحص" : "Tested By",
+          reviewed: ar ? "المراجع" : "Reviewed By",
+          approved: ar ? "المعتمد" : "Approved By",
+        }}
+      />
 
-      <div className="mt-6 pt-3 border-t border-gray-200 flex justify-between text-gray-400" style={{ fontSize: "8px" }}>
+      <div className="mt-4 pt-2 border-t border-gray-200 flex justify-between text-gray-400" style={{ fontSize: "8px" }}>
         <span>
           Construction Materials &amp; Engineering Laboratory — مختبر الإنشاءات والمواد الهندسية
         </span>
@@ -787,7 +763,7 @@ export default function ConcreteReport() {
           .print\\:shadow-none { box-shadow: none !important; }
           .print\\:py-0 { padding-top: 0 !important; padding-bottom: 0 !important; }
           .print\\:page-break-before { page-break-before: always; }
-          .report-page { page-break-inside: avoid; }
+          .report-page { page-break-inside: auto; }
         }
       `}</style>
     </>

@@ -10,6 +10,7 @@ import { Loader2, Printer, X, CheckCircle, XCircle, Globe, Download } from "luci
 import { Button } from "@/components/ui/button";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { FlexibleResultsTable, type Column } from "@/components/reports/FlexibleResultsTable";
+import { ReportSignatures, pickReviewSignatures } from "@/components/reports/ReportSignatures";
 
 import { formatCalendarDate } from "@/lib/dateFormat";
 
@@ -21,17 +22,6 @@ function fmt(v: any, dec = 2) {
 }
 function fmtDate(d?: string | Date | null) {
   return formatCalendarDate(d);
-}
-
-function SignatureBox({ label, name, date }: { label: string; name?: string; date?: string }) {
-  return (
-    <td className="signature-column align-top text-center border border-gray-300 px-2 py-2 text-xs">
-      <p className="text-gray-600 text-[10px] font-bold uppercase mb-1">{label}</p>
-      <div className="signature-line border-b border-gray-800 min-h-[28px] mb-1 mx-1" />
-      {name ? <p className="text-xs font-semibold text-gray-800">{name}</p> : null}
-      {date ? <p className="text-[9px] text-gray-500 mt-1">{date}</p> : null}
-    </td>
-  );
 }
 
 // ─── Block Section Renderer ───────────────────────────────────────────────────
@@ -191,6 +181,12 @@ export default function BatchBlockReport() {
   // Get shared info from first sample
   const firstSample = batchData[0]?.sample;
   const allResults = batchData.flatMap(b => b.testResults);
+  const batchSignatures = pickReviewSignatures(allResults);
+  const signatureLabels = {
+    tested: isAr ? "الفاحص" : "Tested By",
+    reviewed: isAr ? "المراجع" : "Reviewed By",
+    approved: isAr ? "المعتمد" : "Approved By",
+  };
   const overallBatchResult = allResults.every(r => r.overallResult === "pass") ? "pass"
     : allResults.some(r => r.overallResult === "fail") ? "fail"
     : "pending";
@@ -228,7 +224,7 @@ export default function BatchBlockReport() {
         <div
           ref={printRef}
           className="lab-print-root mx-auto bg-white shadow-lg print:shadow-none"
-          style={{ width: "210mm", minHeight: "297mm", padding: "15mm 15mm 20mm 15mm", fontFamily: "Arial, sans-serif", fontSize: "10px" }}
+          style={{ width: "210mm", padding: "10mm 12mm 12mm 12mm", fontFamily: "Arial, sans-serif", fontSize: "10px" }}
         >
           {/* Header */}
           <div className="mb-5">
@@ -349,21 +345,10 @@ export default function BatchBlockReport() {
             })}
           </div>
 
-          {/* Signatures */}
-          <div className="mt-8 pt-4 border-t border-gray-300">
-            <table className="signatures-table w-full border-collapse text-xs">
-              <tbody>
-                <tr>
-                  <SignatureBox label={isAr ? "الفاحص" : "Tested By"} name={allResults[0]?.testedBy ?? undefined} />
-                  <SignatureBox label={isAr ? "المراجع" : "Reviewed By"} />
-                  <SignatureBox label={isAr ? "المعتمد" : "Approved By"} />
-                </tr>
-              </tbody>
-            </table>
-          </div>
+          <ReportSignatures sig={batchSignatures} labels={signatureLabels} />
 
           {/* Footer */}
-          <div className="mt-6 pt-3 border-t border-gray-200 flex justify-between text-gray-400" style={{ fontSize: "8px" }}>
+          <div className="mt-4 pt-2 border-t border-gray-200 flex justify-between text-gray-400" style={{ fontSize: "8px" }}>
             <span>Construction Materials &amp; Engineering Laboratory — مختبر الإنشاءات والمواد الهندسية</span>
             <span>{isAr ? "تاريخ الإنشاء:" : "Generated:"} {new Date().toLocaleString(isAr ? "ar-AE" : "en-GB")}</span>
           </div>
