@@ -19,6 +19,11 @@ import {
   formatSummaryValue,
   renderFormData,
 } from "@/pages/tests/SpecializedTestReport";
+import {
+  REPORT_META_LABEL_CLASS,
+  REPORT_META_VALUE_CLASS,
+  REPORT_REF_LABEL_CLASS,
+} from "@/lib/reportFormatting";
 import { ReportSignatures, pickReviewSignatures } from "@/components/reports/ReportSignatures";
 import {
   Loader2,
@@ -468,25 +473,25 @@ export default function BatchReport() {
                 <tbody>
                   <tr>
                     <td className="border border-gray-200 px-2 py-2 text-center w-1/4">
-                      <span className="text-gray-400 text-[10px] uppercase block mb-1">
+                      <span className={REPORT_REF_LABEL_CLASS}>
                         {isAr ? "\u0631\u0642\u0645 \u0627\u0644\u0639\u064a\u0646\u0629" : "Sample No."}
                       </span>
                       <span className="font-mono font-bold text-sm">{sample?.sampleCode ?? EM_DASH}</span>
                     </td>
                     <td className="border border-gray-200 px-2 py-2 text-center w-1/4">
-                      <span className="text-gray-400 text-[10px] uppercase block mb-1">
+                      <span className={REPORT_REF_LABEL_CLASS}>
                         {inspectionRefLabel(isAr ? "ar" : "en")}
                       </span>
                       <span className="font-mono font-bold text-sm">{formatInspectionReference(sample?.referenceNo)}</span>
                     </td>
                     <td className="border border-gray-200 px-2 py-2 text-center w-1/4">
-                      <span className="text-gray-400 text-[10px] uppercase block mb-1">
+                      <span className={REPORT_REF_LABEL_CLASS}>
                         {isAr ? "\u0627\u0644\u0645\u0642\u0627\u0648\u0644" : "Contractor"}
                       </span>
                       <span className="font-semibold text-[11px]">{sample?.contractorName ?? EM_DASH}</span>
                     </td>
                     <td className="border border-gray-200 px-2 py-2 text-center w-1/4">
-                      <span className="text-gray-400 text-[10px] uppercase block mb-1">
+                      <span className={REPORT_REF_LABEL_CLASS}>
                         {isAr ? "\u0627\u0644\u0645\u0634\u0631\u0648\u0639" : "Project"}
                       </span>
                       <span className="font-semibold text-[11px]">{sample?.contractName ?? EM_DASH}</span>
@@ -530,7 +535,6 @@ export default function BatchReport() {
                         </h2>
                         <p className="text-[9px] text-gray-500 mt-0.5">
                           {isAr ? "\u0627\u0644\u0645\u0639\u064a\u0627\u0631" : "Standard"}: {standard}
-                          {sibling.distributionCode ? ` \u00b7 ${sibling.distributionCode}` : ""}
                         </p>
                       </div>
                       {isInformationalBatchTest(sibling.testType) ? (
@@ -564,19 +568,19 @@ export default function BatchReport() {
                                   const [a, b] = [pair[0], pair[1]];
                                   return (
                                     <tr key={ri}>
-                                      <td className="border border-gray-200 px-2 py-1 text-gray-500 w-[22%]">
+                                      <td className={REPORT_META_LABEL_CLASS}>
                                         {formatSummaryLabel(a[0], formTemplate ?? "", isAr)}
                                       </td>
-                                      <td className="border border-gray-200 px-2 py-1 font-bold text-gray-900 w-[28%]">
-                                        {formatSummaryValue(a[0], a[1], isAr)}
+                                      <td className={`${REPORT_META_VALUE_CLASS} font-bold`}>
+                                        {formatSummaryValue(a[0], a[1], isAr, formTemplate ?? "")}
                                       </td>
                                       {b ? (
                                         <>
-                                          <td className="border border-gray-200 px-2 py-1 text-gray-500 w-[22%]">
+                                          <td className={REPORT_META_LABEL_CLASS}>
                                             {formatSummaryLabel(b[0], formTemplate ?? "", isAr)}
                                           </td>
-                                          <td className="border border-gray-200 px-2 py-1 font-bold text-gray-900 w-[28%]">
-                                            {formatSummaryValue(b[0], b[1], isAr)}
+                                          <td className={`${REPORT_META_VALUE_CLASS} font-bold`}>
+                                            {formatSummaryValue(b[0], b[1], isAr, formTemplate ?? "")}
                                           </td>
                                         </>
                                       ) : (

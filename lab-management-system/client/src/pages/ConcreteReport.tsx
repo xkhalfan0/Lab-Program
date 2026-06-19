@@ -7,6 +7,12 @@ import { generatePdfFromElement } from "@/lib/pdf";
 import { formatCalendarDate, formatReportDate } from "@/lib/dateFormat";
 import { ReportPrintNote } from "@/components/reports/ReportPrintNote";
 import { formatInspectionReference, inspectionRefLabel } from "@/lib/inspectionReference";
+import {
+  REPORT_META_LABEL_CLASS,
+  REPORT_META_VALUE_CLASS,
+  REPORT_REF_LABEL_CLASS,
+  REPORT_REF_VALUE_CLASS,
+} from "@/lib/reportFormatting";
 import { useLanguage } from "@/contexts/LanguageContext";
 import {
   calcActualAgeDays,
@@ -183,6 +189,8 @@ function ReportPage({
   testedByName,
   managerReviewedByName,
   qcReviewedByName,
+  managerNotes,
+  qcNotes,
   lang,
   pageIndex,
   totalPages,
@@ -197,6 +205,8 @@ function ReportPage({
   testedByName?: string | null;
   managerReviewedByName?: string | null;
   qcReviewedByName?: string | null;
+  managerNotes?: string | null;
+  qcNotes?: string | null;
   lang: "en" | "ar";
   pageIndex: number;
   totalPages: number;
@@ -306,7 +316,7 @@ function ReportPage({
     [ar ? "الهبوط" : "Slump", group.slump ? `${group.slump} mm` : "—"],
     [ar ? "حجم المكعب الاسمي" : "Nominal Cube Size", group.nominalCubeSize ?? "150mm"],
     [ar ? "تاريخ الصب" : "Date of Casting", fmtDate(distCastingDate ?? group.batchDateTime) || "—"],
-    [ar ? "عدد المكعبات" : "Number of Cubes", String(cubes.length || "—")],
+    [ar ? "عدد العينات" : "Sample count", String(cubes.length || "—")],
   ];
 
   const detailLeft: [string, string][] = [
@@ -320,7 +330,7 @@ function ReportPage({
     [ar ? "اسم المشروع" : "Project Name", String(distribution?.contractName ?? group.projectName ?? "—")],
     [ar ? "القطاع" : "Sector", distribution?.sector ? String(distribution.sector).replace("_", " ").toUpperCase() : "—"],
     [ar ? "موقع العينة" : "Sample Location", String(distribution?.sampleLocation ?? group.location ?? "—")],
-    [ar ? "تاريخ الفحص" : "Test Date", fmtDate(testDate) || "—"],
+    [ar ? "تاريخ الفحص" : "Test date", fmtDate(testDate) || "—"],
     [ar ? "تاريخ التقرير" : "Report Date", reportDateStr],
   ];
   const detailRows = Math.max(detailLeft.length, detailRight.length);
@@ -359,8 +369,8 @@ function ReportPage({
         <table className="metadata-table w-full border-collapse text-xs bg-gray-50">
           <tbody>
             <tr>
-              <td className="border border-gray-200 px-2 py-2 text-center align-top w-1/4">
-                <span className="text-gray-400 text-[10px] uppercase tracking-wide block mb-1">
+              <td className="border border-gray-200 px-2 py-2 text-center align-top w-1/3">
+                <span className={REPORT_REF_LABEL_CLASS}>
                   {ar ? "رقم العينة" : "Sample No."}
                 </span>
                 <span className="font-mono font-bold text-gray-900 text-sm">
@@ -375,25 +385,19 @@ function ReportPage({
                   </span>
                 )}
               </td>
-              <td className="border border-gray-200 px-2 py-2 text-center align-top w-1/4">
-                <span className="text-gray-400 text-[10px] uppercase tracking-wide block mb-1">
-                  {ar ? "رقم التوزيع" : "Distribution No."}
-                </span>
-                <span className="font-mono font-bold text-blue-700 text-sm">{refNo}</span>
-              </td>
-              <td className="border border-gray-200 px-2 py-2 text-center align-top w-1/4">
-                <span className="text-gray-400 text-[10px] uppercase tracking-wide block mb-1">
+              <td className="border border-gray-200 px-2 py-2 text-center align-top w-1/3">
+                <span className={REPORT_REF_LABEL_CLASS}>
                   {inspectionRefLabel(lang)}
                 </span>
                 <span className="font-mono font-bold text-gray-900 text-sm">
                   {formatInspectionReference((distribution as { referenceNo?: string | null })?.referenceNo)}
                 </span>
               </td>
-              <td className="border border-gray-200 px-2 py-2 text-center align-top w-1/4">
-                <span className="text-gray-400 text-[10px] uppercase tracking-wide block mb-1">
+              <td className="border border-gray-200 px-2 py-2 text-center align-top w-1/3">
+                <span className={REPORT_REF_LABEL_CLASS}>
                   {ar ? "تاريخ الاستلام" : "Received Date"}
                 </span>
-                <span className="font-semibold text-gray-900">
+                <span className={REPORT_REF_VALUE_CLASS}>
                   {formatCalendarDate(distribution?.receivedAt)}
                 </span>
               </td>
@@ -407,10 +411,10 @@ function ReportPage({
               const R = detailRight[i];
               return (
                 <tr key={i}>
-                  <td className="border border-gray-200 px-2 py-1 text-gray-500 w-[18%]">{L?.[0] ?? ""}</td>
-                  <td className="border border-gray-200 px-2 py-1 font-medium text-gray-900 w-[32%]">{L?.[1] ?? ""}</td>
-                  <td className="border border-gray-200 px-2 py-1 text-gray-500 w-[18%]">{R?.[0] ?? ""}</td>
-                  <td className="border border-gray-200 px-2 py-1 font-medium text-gray-900 w-[32%]">{R?.[1] ?? ""}</td>
+                  <td className={REPORT_META_LABEL_CLASS}>{L?.[0] ?? ""}</td>
+                  <td className={REPORT_META_VALUE_CLASS}>{L?.[1] ?? ""}</td>
+                  <td className={REPORT_META_LABEL_CLASS}>{R?.[0] ?? ""}</td>
+                  <td className={REPORT_META_VALUE_CLASS}>{R?.[1] ?? ""}</td>
                 </tr>
               );
             })}
@@ -430,12 +434,12 @@ function ReportPage({
               const b = summaryPairs[ri * 2 + 1];
               return (
                 <tr key={ri}>
-                  <td className="border border-gray-200 px-2 py-1 text-gray-500 w-[22%]">{a[0]}</td>
-                  <td className="border border-gray-200 px-2 py-1 font-bold text-gray-900 w-[28%]">{a[1]}</td>
+                  <td className={REPORT_META_LABEL_CLASS}>{a[0]}</td>
+                  <td className={`${REPORT_META_VALUE_CLASS} font-bold`}>{a[1]}</td>
                   {b ? (
                     <>
-                      <td className="border border-gray-200 px-2 py-1 text-gray-500 w-[22%]">{b[0]}</td>
-                      <td className="border border-gray-200 px-2 py-1 font-bold text-gray-900 w-[28%]">{b[1]}</td>
+                      <td className={REPORT_META_LABEL_CLASS}>{b[0]}</td>
+                      <td className={`${REPORT_META_VALUE_CLASS} font-bold`}>{b[1]}</td>
                     </>
                   ) : (
                     <td className="border border-gray-200 px-2 py-1" colSpan={2} />
@@ -607,8 +611,10 @@ function ReportPage({
           testedAt: testedSignedAt ?? null,
           reviewedBy: managerReviewedByName ?? null,
           reviewedAt: managerSignedAt ?? null,
+          reviewedNotes: managerNotes ?? null,
           approvedBy: qcReviewedByName ?? null,
           approvedAt: qcSignedAt ?? null,
+          approvedNotes: qcNotes ?? null,
         }}
         labels={{
           tested: ar ? "الفاحص" : "Tested By",
@@ -752,6 +758,8 @@ export default function ConcreteReport() {
                 testedByName={distributionAny?.technicianName ?? testResultAny?.testedBy ?? group?.testedBy}
                 managerReviewedByName={testResultAny?.managerReviewedByName ?? null}
                 qcReviewedByName={testResultAny?.qcReviewedByName ?? null}
+                managerNotes={testResultAny?.managerNotes ?? null}
+                qcNotes={testResultAny?.qcNotes ?? null}
                 lang={lang}
                 pageIndex={idx}
                 totalPages={arr.length}

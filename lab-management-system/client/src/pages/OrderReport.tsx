@@ -19,6 +19,10 @@ import {
   formatSummaryValue,
   renderFormData,
 } from "@/pages/tests/SpecializedTestReport";
+import {
+  REPORT_META_LABEL_CLASS,
+  REPORT_META_VALUE_CLASS,
+} from "@/lib/reportFormatting";
 
 const SUMMARY_SKIP_KEYS = new Set([
   "overallResult",
@@ -254,19 +258,19 @@ function SpecializedSection({ specResult, lang }: { specResult: any; lang: strin
                 const [a, b] = [pair[0], pair[1]];
                 return (
                   <tr key={ri}>
-                    <td className="border border-gray-200 px-2 py-1 text-gray-500 w-[18%]">
+                    <td className={REPORT_META_LABEL_CLASS}>
                       {formatSummaryLabel(a[0], formTemplate, isAr)}
                     </td>
-                    <td className="border border-gray-200 px-2 py-1 font-semibold text-gray-900 w-[32%]">
-                      {formatSummaryValue(a[0], a[1], isAr)}
+                    <td className={REPORT_META_VALUE_CLASS}>
+                      {formatSummaryValue(a[0], a[1], isAr, formTemplate)}
                     </td>
                     {b ? (
                       <>
-                        <td className="border border-gray-200 px-2 py-1 text-gray-500 w-[18%]">
+                        <td className={REPORT_META_LABEL_CLASS}>
                           {formatSummaryLabel(b[0], formTemplate, isAr)}
                         </td>
-                        <td className="border border-gray-200 px-2 py-1 font-semibold text-gray-900 w-[32%]">
-                          {formatSummaryValue(b[0], b[1], isAr)}
+                        <td className={REPORT_META_VALUE_CLASS}>
+                          {formatSummaryValue(b[0], b[1], isAr, formTemplate)}
                         </td>
                       </>
                     ) : (
@@ -407,35 +411,28 @@ function TestSection({ item, distWithResult, lang, index }: {
       </table>
 
       <div className="p-4">
-        {/* Distribution info */}
-        {dist && (
+        {dist && (dist.standardRef || dist.notes) ? (
           <table className="metadata-table w-full border-collapse text-[10px] mb-4 pb-3 border-b border-gray-200">
             <tbody>
-              <tr>
-                <td className="border border-gray-200 px-2 py-1 text-gray-500 w-[18%]">{isAr ? "رمز التوزيع" : "Distribution Code"}</td>
-                <td className="border border-gray-200 px-2 py-1 font-semibold text-gray-900 w-[32%]">{safeText(dist.distributionCode)}</td>
-                <td className="border border-gray-200 px-2 py-1 text-gray-500 w-[18%]">{isAr ? "تاريخ التكليف" : "Assigned Date"}</td>
-                <td className="border border-gray-200 px-2 py-1 font-semibold text-gray-900 w-[32%]">{fmtDate(dist.createdAt, lang)}</td>
-              </tr>
               {dist.standardRef ? (
                 <tr>
-                  <td className="border border-gray-200 px-2 py-1 text-gray-500">{isAr ? "المعيار" : "Standard"}</td>
-                  <td className="border border-gray-200 px-2 py-1 font-semibold text-gray-900" colSpan={3}>
+                  <td className={REPORT_META_LABEL_CLASS}>{isAr ? "المعيار" : "Standard"}</td>
+                  <td className={REPORT_META_VALUE_CLASS} colSpan={3}>
                     {safeText(dist.standardRef)}
                   </td>
                 </tr>
               ) : null}
               {dist.notes ? (
                 <tr>
-                  <td className="border border-gray-200 px-2 py-1 text-gray-500 align-top">{t("notes", lang)}</td>
-                  <td className="border border-gray-200 px-2 py-1 font-semibold text-gray-900" colSpan={3}>
+                  <td className={`${REPORT_META_LABEL_CLASS} align-top`}>{t("notes", lang)}</td>
+                  <td className={REPORT_META_VALUE_CLASS} colSpan={3}>
                     {safeText(dist.notes)}
                   </td>
                 </tr>
               ) : null}
             </tbody>
           </table>
-        )}
+        ) : null}
 
         {/* Test results */}
         {concreteGroups.length > 0 ? (
@@ -693,12 +690,12 @@ export default function OrderReport() {
                     const [a, b] = [pair[0], pair[1]];
                     return (
                       <tr key={ri}>
-                        <td className="border border-gray-200 px-2 py-1.5 text-gray-500 w-[18%]">{a[0]}</td>
-                        <td className="border border-gray-200 px-2 py-1.5 font-semibold text-gray-900 w-[32%]">{safeText(a[1])}</td>
+                        <td className={REPORT_META_LABEL_CLASS}>{a[0]}</td>
+                        <td className={REPORT_META_VALUE_CLASS}>{safeText(a[1])}</td>
                         {b ? (
                           <>
-                            <td className="border border-gray-200 px-2 py-1.5 text-gray-500 w-[18%]">{b[0]}</td>
-                            <td className="border border-gray-200 px-2 py-1.5 font-semibold text-gray-900 w-[32%]">{safeText(b[1])}</td>
+                            <td className={REPORT_META_LABEL_CLASS}>{b[0]}</td>
+                            <td className={REPORT_META_VALUE_CLASS}>{safeText(b[1])}</td>
                           </>
                         ) : (
                           <td className="border border-gray-200 px-2 py-1.5" colSpan={2} />
@@ -709,8 +706,8 @@ export default function OrderReport() {
                 })()}
                 {order.notes ? (
                   <tr>
-                    <td className="border border-gray-200 px-2 py-1.5 text-gray-500 align-top">{t("notes", lang)}</td>
-                    <td className="border border-gray-200 px-2 py-1.5 font-semibold text-gray-900" colSpan={3}>
+                    <td className={`${REPORT_META_LABEL_CLASS} align-top`}>{t("notes", lang)}</td>
+                    <td className={REPORT_META_VALUE_CLASS} colSpan={3}>
                       {safeText(order.notes)}
                     </td>
                   </tr>

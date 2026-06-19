@@ -14,6 +14,14 @@ import { ReportSignatures, pickReviewSignatures } from "@/components/reports/Rep
 import { ReportPrintNote } from "@/components/reports/ReportPrintNote";
 import { formatCalendarDate, formatReportDate } from "@/lib/dateFormat";
 import { formatInspectionReference, inspectionRefLabel, reportDocNo } from "@/lib/inspectionReference";
+import {
+  formatReportSummaryLabel,
+  formatReportSummaryValue,
+  REPORT_META_LABEL_CLASS,
+  REPORT_META_VALUE_CLASS,
+  REPORT_REF_LABEL_CLASS,
+  REPORT_REF_VALUE_CLASS,
+} from "@/lib/reportFormatting";
 import { calculateFinalBlend, formatDisplaySieveMm } from "@/pages/tests/SieveAnalysis";
 import {
   formatBlendPct,
@@ -3461,76 +3469,19 @@ function renderConcreteCubes(fd: any, isAr: boolean) {
 }
 
 export function formatSummaryLabel(key: string, formTemplate: string, isAr: boolean): string {
-  const L = (en: string, ar: string) => (isAr ? ar : en);
-  const common: Record<string, string> = {
-    count: L("Count", "العدد"),
-    testDate: L("Test Date", "تاريخ الفحص"),
-    avgStrength: L("Avg. Strength (N/mm²)", "متوسط المقاومة (N/mm²)"),
-    required: L("Required (N/mm²)", "المطلوب (N/mm²)"),
-    blockType: L("Block Type", "نوع البلوك"),
-    standard: L("Standard", "المعيار"),
-    overallResult: L("Overall Result", "النتيجة الإجمالية"),
-  };
-  if (common[key]) return common[key];
-  const maps: Record<string, Record<string, string>> = {
-    agg_specific_gravity: {
-      aggType: L("Aggregate Type", "نوع الركام"),
-      avgApparentSg: L("Average Apparent SG", "متوسط الكثافة الظاهرية"),
-      avgSg: L("Average Apparent SG", "متوسط الكثافة الظاهرية"),
-      avgAbsorption: L("Average Water Absorption (%)", "متوسط امتصاص الماء (%)"),
-      overallResult: L("Overall Result", "النتيجة الإجمالية"),
-    },
-    soil_cbr: {
-      mdd: L("MDD (Mg/m³)", "MDD (Mg/m³)"),
-      omc: L("OMC (%)", "OMC (%)"),
-      standard: L("Standard", "المعيار"),
-      cbrAt95Mdd: L("CBR @ 95% MDD", "CBR @ 95% MDD"),
-      cbrAt98Mdd: L("CBR @ 98% MDD", "CBR @ 98% MDD"),
-      cbrAt100Mdd: L("CBR @ 100% MDD", "CBR @ 100% MDD"),
-      retained20mm: L("% Retained on 20 mm", "% محتجز على 20 مم"),
-      finalCBR: L("Final CBR", "CBR النهائي"),
-      cbrMin: L("Required CBR", "CBR المطلوب"),
-    },
-    soil_proctor: {
-      mdd: L("MDD (Mg/m³)", "MDD (Mg/m³)"),
-      omc: L("OMC (%)", "OMC (%)"),
-      testMethod: L("Test Method", "طريقة الاختبار"),
-      cbrStandard: L("Linked CBR Standard", "معيار CBR المرتبط"),
-    },
-  };
-  return maps[formTemplate]?.[key] ?? key.replace(/_/g, " ");
+  return formatReportSummaryLabel(key, formTemplate, isAr);
 }
 
-export function formatSummaryValue(key: string, value: unknown, isAr: boolean): string {
-  if (value == null || value === "") return "—";
-  if (key === "testDate" && typeof value === "string") {
-    try {
-      return new Date(value).toLocaleDateString(isAr ? "ar-AE" : "en-GB");
-    } catch {
-      return String(value);
-    }
-  }
-  if (key === "blockType" && typeof value === "object" && value !== null) {
-    const o = value as { label?: string; name?: string; code?: string };
-    return o.label ?? o.name ?? o.code ?? "—";
-  }
-  if (key === "overallResult") {
-    const v = String(value).toLowerCase();
-    if (v === "pass") return isAr ? "مطابق" : "PASS";
-    if (v === "fail") return isAr ? "غير مطابق" : "FAIL";
-    if (v === "pending") return isAr ? "قيد الانتظار" : "Pending";
-  }
-  if (/^cbrAt\d+Mdd$/i.test(key)) {
-    const n = Number(value);
-    return Number.isFinite(n) ? String(Math.round(n)) : "—";
-  }
-  if (key === "finalCBR") {
-    const n = Number(value);
-    return Number.isFinite(n) ? String(Math.round(n)) : "—";
-  }
-  if (key === "avgApparentSg" || key === "avgSg") return formatSgDisplay(value);
-  if (key === "avgAbsorption") return formatAbsorptionDisplay(value);
-  return String(value);
+export function formatSummaryValue(
+  key: string,
+  value: unknown,
+  isAr: boolean,
+  formTemplate = "default",
+): string {
+  return formatReportSummaryValue(key, value, formTemplate, isAr, {
+    formatSg: formatSgDisplay,
+    formatAbsorption: formatAbsorptionDisplay,
+  });
 }
 
 function sgPassFailLabel(result: string | undefined, isAr: boolean): string {
@@ -4123,9 +4074,6 @@ export default function SpecializedTestReport({ sectorResultId }: SpecializedTes
                 {(dist as any)?.sampleCode && (
                   <span className="font-mono me-3">{isAr ? "العينة:" : "Sample:"} {(dist as any).sampleCode}</span>
                 )}
-                {dist?.distributionCode && (
-                  <span className="font-mono">{isAr ? "التوزيع:" : "Distribution:"} {dist.distributionCode}</span>
-                )}
               </p>
             </div>
             <div className="grid grid-cols-2 gap-2 mb-4 text-[11px]">
@@ -4304,8 +4252,8 @@ export default function SpecializedTestReport({ sectorResultId }: SpecializedTes
             <table className="metadata-table w-full border-collapse text-xs bg-gray-50">
               <tbody>
                 <tr>
-                  <td className="border border-gray-200 px-2 py-2 text-center align-top w-1/4">
-                    <span className="text-gray-400 text-[10px] uppercase tracking-wide block mb-1">{isAr ? "رقم العينة" : "Sample No."}</span>
+                  <td className="border border-gray-200 px-2 py-2 text-center align-top w-1/3">
+                    <span className={REPORT_REF_LABEL_CLASS}>{isAr ? "رقم العينة" : "Sample No."}</span>
                     <span className="font-mono font-bold text-gray-900 text-sm">{(dist as any)?.sampleCode ?? "—"}</span>
                     {(dist as any)?.retestNumber != null && (
                       <span className="block text-[10px] text-amber-700 mt-0.5">
@@ -4316,17 +4264,13 @@ export default function SpecializedTestReport({ sectorResultId }: SpecializedTes
                       </span>
                     )}
                   </td>
-                  <td className="border border-gray-200 px-2 py-2 text-center align-top w-1/4">
-                    <span className="text-gray-400 text-[10px] uppercase tracking-wide block mb-1">{isAr ? "رقم التوزيع" : "Distribution No."}</span>
-                    <span className="font-mono font-bold text-blue-700 text-sm">{(dist as any)?.distributionCode ?? `DIST-${String(distIdForRender).padStart(6, "0")}`}</span>
-                  </td>
-                  <td className="border border-gray-200 px-2 py-2 text-center align-top w-1/4">
-                    <span className="text-gray-400 text-[10px] uppercase tracking-wide block mb-1">{inspectionRefLabel(isAr ? "ar" : "en")}</span>
+                  <td className="border border-gray-200 px-2 py-2 text-center align-top w-1/3">
+                    <span className={REPORT_REF_LABEL_CLASS}>{inspectionRefLabel(isAr ? "ar" : "en")}</span>
                     <span className="font-mono font-bold text-gray-900 text-sm">{formatInspectionReference((dist as any)?.referenceNo)}</span>
                   </td>
-                  <td className="border border-gray-200 px-2 py-2 text-center align-top w-1/4">
-                    <span className="text-gray-400 text-[10px] uppercase tracking-wide block mb-1">{isAr ? "تاريخ الاستلام" : "Received Date"}</span>
-                    <span className="font-semibold text-gray-900">{fmtDate((dist as any)?.receivedAt)}</span>
+                  <td className="border border-gray-200 px-2 py-2 text-center align-top w-1/3">
+                    <span className={REPORT_REF_LABEL_CLASS}>{isAr ? "تاريخ الاستلام" : "Received Date"}</span>
+                    <span className={REPORT_REF_VALUE_CLASS}>{fmtDate((dist as any)?.receivedAt)}</span>
                   </td>
                 </tr>
               </tbody>
@@ -4345,7 +4289,7 @@ export default function SpecializedTestReport({ sectorResultId }: SpecializedTes
                     [isAr ? "اسم المشروع" : "Project Name", String((dist as any)?.contractName ?? result.projectName ?? "—")],
                     [isAr ? "القطاع" : "Sector", (dist as any)?.sector ? String((dist as any).sector).replace("_", " ").toUpperCase() : "—"],
                     [isAr ? "موقع العينة" : "Sample Location", String((dist as any)?.sampleLocation ?? "—")],
-                    [isAr ? "تاريخ الفحص" : "Test Date", fmtDate(result.testDate)],
+                    [isAr ? "تاريخ الفحص" : "Test date", fmtDate(result.testDate)],
                     [isAr ? "تاريخ التقرير" : "Report Date", reportDateStr],
                   ];
                   const n = Math.max(detailLeft.length, detailRight.length);
@@ -4354,10 +4298,10 @@ export default function SpecializedTestReport({ sectorResultId }: SpecializedTes
                     const R = detailRight[i];
                     return (
                       <tr key={i}>
-                        <td className="border border-gray-200 px-2 py-1 text-gray-500 w-[18%]">{L?.[0] ?? ""}</td>
-                        <td className="border border-gray-200 px-2 py-1 font-medium text-gray-900 w-[32%]">{L?.[1] ?? ""}</td>
-                        <td className="border border-gray-200 px-2 py-1 text-gray-500 w-[18%]">{R?.[0] ?? ""}</td>
-                        <td className="border border-gray-200 px-2 py-1 font-medium text-gray-900 w-[32%]">{R?.[1] ?? ""}</td>
+                        <td className={REPORT_META_LABEL_CLASS}>{L?.[0] ?? ""}</td>
+                        <td className={REPORT_META_VALUE_CLASS}>{L?.[1] ?? ""}</td>
+                        <td className={REPORT_META_LABEL_CLASS}>{R?.[0] ?? ""}</td>
+                        <td className={REPORT_META_VALUE_CLASS}>{R?.[1] ?? ""}</td>
                       </tr>
                     );
                   });
@@ -4382,12 +4326,12 @@ export default function SpecializedTestReport({ sectorResultId }: SpecializedTes
                       const [a, b] = [pair[0], pair[1]];
                       return (
                         <tr key={ri}>
-                          <td className="border border-gray-200 px-2 py-1 text-gray-500 w-[22%]">{formatSummaryLabel(a[0], result.formTemplate, isAr)}</td>
-                          <td className="border border-gray-200 px-2 py-1 font-bold text-gray-900 w-[28%]">{formatSummaryValue(a[0], a[1], isAr)}</td>
+                          <td className={REPORT_META_LABEL_CLASS}>{formatSummaryLabel(a[0], result.formTemplate, isAr)}</td>
+                          <td className={`${REPORT_META_VALUE_CLASS} font-bold`}>{formatSummaryValue(a[0], a[1], isAr, result.formTemplate)}</td>
                           {b ? (
                             <>
-                              <td className="border border-gray-200 px-2 py-1 text-gray-500 w-[22%]">{formatSummaryLabel(b[0], result.formTemplate, isAr)}</td>
-                              <td className="border border-gray-200 px-2 py-1 font-bold text-gray-900 w-[28%]">{formatSummaryValue(b[0], b[1], isAr)}</td>
+                              <td className={REPORT_META_LABEL_CLASS}>{formatSummaryLabel(b[0], result.formTemplate, isAr)}</td>
+                              <td className={`${REPORT_META_VALUE_CLASS} font-bold`}>{formatSummaryValue(b[0], b[1], isAr, result.formTemplate)}</td>
                             </>
                           ) : (
                             <td className="border border-gray-200 px-2 py-1" colSpan={2} />
@@ -4505,7 +4449,6 @@ function BatchResultsSection({
                 <span className="text-xs font-bold text-gray-800 uppercase">
                   {isAr ? `النوع ${idx + 1}:` : `Type ${idx + 1}:`} {testLabel}
                 </span>
-                <span className="text-xs text-gray-500 font-mono">{dist.distributionCode}</span>
               </div>
               {result && (
                 <span

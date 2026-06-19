@@ -141,7 +141,7 @@ const T_EN = {
   contractName: "Contract Name",
   contractorName: "Contractor",
   testType: "Test Type",
-  testDate: "Test Date",
+  testDate: "Test date",
   testedBy: "Tested By",
   overallResult: "Overall Result",
   status: "Status",

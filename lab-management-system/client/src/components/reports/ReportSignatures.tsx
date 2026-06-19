@@ -5,16 +5,20 @@ export type ReportSignatureData = {
   testedAt?: Date | string | null;
   reviewedBy?: string | null;
   reviewedAt?: Date | string | null;
+  reviewedNotes?: string | null;
   approvedBy?: string | null;
   approvedAt?: Date | string | null;
+  approvedNotes?: string | null;
 };
 
 type SignatureSource = {
   testedBy?: string | null;
   managerReviewedByName?: string | null;
   managerReviewedAt?: Date | string | null;
+  managerNotes?: string | null;
   qcReviewedByName?: string | null;
   qcReviewedAt?: Date | string | null;
+  qcNotes?: string | null;
 } | null | undefined;
 
 const PENDING = {
@@ -35,8 +39,10 @@ export function pickReviewSignatures(sources: SignatureSource[]): ReportSignatur
   let testedBy: string | null = null;
   let reviewedBy: string | null = null;
   let reviewedAt: Date | string | null = null;
+  let reviewedNotes: string | null = null;
   let approvedBy: string | null = null;
   let approvedAt: Date | string | null = null;
+  let approvedNotes: string | null = null;
 
   for (const s of sources) {
     if (!s) continue;
@@ -45,13 +51,15 @@ export function pickReviewSignatures(sources: SignatureSource[]): ReportSignatur
       reviewedBy = s.managerReviewedByName.trim();
       reviewedAt = s.managerReviewedAt ?? null;
     }
+    if (!reviewedNotes && s.managerNotes?.trim()) reviewedNotes = s.managerNotes.trim();
     if (!approvedBy && s.qcReviewedByName?.trim()) {
       approvedBy = s.qcReviewedByName.trim();
       approvedAt = s.qcReviewedAt ?? null;
     }
+    if (!approvedNotes && s.qcNotes?.trim()) approvedNotes = s.qcNotes.trim();
   }
 
-  return { testedBy, reviewedBy, reviewedAt, approvedBy, approvedAt };
+  return { testedBy, reviewedBy, reviewedAt, reviewedNotes, approvedBy, approvedAt, approvedNotes };
 }
 
 function fmtSigDate(d?: Date | string | null) {
@@ -90,6 +98,7 @@ export function ReportSignatures({
       label: labels.reviewed,
       name: sig.reviewedBy?.trim() || null,
       date: fmtSigDate(sig.reviewedAt),
+      notes: sig.reviewedNotes?.trim() || null,
       pending: pending.reviewed,
     },
     {
@@ -97,6 +106,7 @@ export function ReportSignatures({
       label: labels.approved,
       name: sig.approvedBy?.trim() || null,
       date: fmtSigDate(sig.approvedAt),
+      notes: sig.approvedNotes?.trim() || null,
       pending: pending.approved,
     },
   ];
@@ -123,6 +133,11 @@ export function ReportSignatures({
                   )}
                 </div>
                 {s.date ? <p className="text-gray-400 text-[8px] mt-0.5">{s.date}</p> : null}
+                {s.notes ? (
+                  <p className="text-gray-600 text-[8px] mt-1 px-0.5 whitespace-pre-wrap text-start leading-snug italic border-t border-gray-200 pt-1">
+                    {s.notes}
+                  </p>
+                ) : null}
               </td>
             ))}
           </tr>

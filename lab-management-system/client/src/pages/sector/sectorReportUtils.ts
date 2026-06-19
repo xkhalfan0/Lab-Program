@@ -1,21 +1,26 @@
 /** Shared helpers for sector test-result display and PDF/HTML reports. */
 
+import {
+  formatReportSummaryLabel,
+  formatReportSummaryValue,
+} from "@/lib/reportFormatting";
+
 const FIELD_LABELS: Record<string, { ar: string; en: string }> = {
   blockSpec: { ar: "مواصفات البلوك", en: "Block Specification" },
   blockType: { ar: "نوع البلوك", en: "Block Type" },
-  avgStrength: { ar: "متوسط المقاومة", en: "Average Strength" },
-  required: { ar: "المطلوب", en: "Required" },
-  count: { ar: "العدد", en: "Count" },
-  testDate: { ar: "تاريخ الفحص", en: "Test Date" },
+  avgStrength: { ar: "متوسط المقاومة", en: "Average strength" },
+  required: { ar: "المقاومة المطلوبة", en: "Required strength" },
+  count: { ar: "عدد العينات", en: "Sample count" },
+  testDate: { ar: "تاريخ الفحص", en: "Test date" },
   overallResult: { ar: "النتيجة", en: "Overall Result" },
   blocks: { ar: "نتائج البلوكات", en: "Block Results" },
   cubes: { ar: "نتائج المكعبات", en: "Cube Results" },
   specimens: { ar: "العينات", en: "Specimens" },
-  strengthMpa: { ar: "المقاومة (MPa)", en: "Strength (MPa)" },
-  widthMm: { ar: "العرض (mm)", en: "Width (mm)" },
-  lengthMm: { ar: "الطول (mm)", en: "Length (mm)" },
-  heightMm: { ar: "الارتفاع (mm)", en: "Height (mm)" },
-  grossAreaMm2: { ar: "المساحة (mm²)", en: "Area (mm²)" },
+  strengthMpa: { ar: "المقاومة", en: "Strength (N/mm²)" },
+  widthMm: { ar: "العرض", en: "Width (mm)" },
+  lengthMm: { ar: "الطول", en: "Length (mm)" },
+  heightMm: { ar: "الارتفاع", en: "Height (mm)" },
+  grossAreaMm2: { ar: "المساحة", en: "Area (mm²)" },
   result: { ar: "النتيجة", en: "Result" },
   id: { ar: "#", en: "#" },
   code: { ar: "الرمز", en: "Code" },
@@ -23,23 +28,39 @@ const FIELD_LABELS: Record<string, { ar: string; en: string }> = {
   standard: { ar: "المعيار", en: "Standard" },
 };
 
-export function reportFontLinks(): string {
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function reportFontLinks(): string {
   return `<link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">`;
 }
 
-function labelFor(key: string, lang: string): string {
+function labelFor(key: string, lang: string, formTemplate = "default"): string {
+  const tableColumnKeys = new Set([
+    "strengthMpa", "widthMm", "lengthMm", "heightMm", "grossAreaMm2",
+    "blocks", "cubes", "specimens", "blockSpec", "result", "id", "code", "size",
+  ]);
   const mapped = FIELD_LABELS[key];
-  if (mapped) return lang === "ar" ? mapped.ar : mapped.en;
-  return key.replace(/([A-Z])/g, " $1").replace(/_/g, " ").trim();
+  if (mapped && tableColumnKeys.has(key)) {
+    return lang === "ar" ? mapped.ar : mapped.en;
+  }
+  return formatReportSummaryLabel(key, formTemplate, lang === "ar");
 }
 
-function formatScalar(value: unknown, lang: string): string {
+function formatScalar(value: unknown, lang: string, key?: string): string {
   if (value === null || value === undefined || value === "") return "—";
   if (typeof value === "boolean") return value ? (lang === "ar" ? "نعم" : "Yes") : lang === "ar" ? "لا" : "No";
-  if (typeof value === "number") return Number.isInteger(value) ? String(value) : value.toFixed(2);
-  if (typeof value === "string") {
+  let display: string;
+  if (typeof value === "number") {
+    display = Number.isInteger(value) ? String(value) : value.toFixed(2);
+  } else if (typeof value === "string") {
     if (/^\d{4}-\d{2}-\d{2}/.test(value)) {
       try {
         return new Date(value).toLocaleDateString(lang === "ar" ? "ar-AE" : "en-GB");
@@ -50,9 +71,21 @@ function formatScalar(value: unknown, lang: string): string {
     if (value === "pass") return lang === "ar" ? "ناجح" : "Pass";
     if (value === "fail") return lang === "ar" ? "راسب" : "Fail";
     if (value === "pending") return lang === "ar" ? "قيد المراجعة" : "Pending";
-    return value;
+    display = value;
+  } else {
+    display = String(value);
   }
-  return String(value);
+  const cellUnits: Record<string, string> = {
+    strengthMpa: "N/mm²",
+    widthMm: "mm",
+    lengthMm: "mm",
+    heightMm: "mm",
+    grossAreaMm2: "mm²",
+  };
+  if (key && cellUnits[key]) {
+    return display.includes(cellUnits[key]) ? display : `${display} ${cellUnits[key]}`;
+  }
+  return display;
 }
 
 function formatObjectSummary(obj: Record<string, unknown>, lang: string): string {
@@ -72,7 +105,7 @@ function isRecordArray(arr: unknown[]): arr is Record<string, unknown>[] {
   return arr.length > 0 && typeof arr[0] === "object" && arr[0] !== null && !Array.isArray(arr[0]);
 }
 
-function buildArrayTable(rows: Record<string, unknown>[], lang: string): string {
+function buildArrayTable(rows: Record<string, unknown>[], lang: string, formTemplate = "default"): string {
   const cols = Array.from(
     new Set(rows.flatMap((r) => Object.keys(r).filter((k) => !k.startsWith("_"))))
   ).filter((k) => !["blockSpec"].includes(k));
@@ -85,12 +118,12 @@ function buildArrayTable(rows: Record<string, unknown>[], lang: string): string 
 
   if (ordered.length === 0) return "";
 
-  const thead = ordered.map((c) => `<th>${labelFor(c, lang)}</th>`).join("");
+  const thead = ordered.map((c) => `<th>${labelFor(c, lang, formTemplate)}</th>`).join("");
   const tbody = rows
-    .map((row) => `<tr>${ordered.map((c) => `<td>${formatScalar(row[c], lang)}</td>`).join("")}</tr>`)
+    .map((row) => `<tr>${ordered.map((c) => `<td>${formatScalar(row[c], lang, c)}</td>`).join("")}</tr>`)
     .join("");
 
-  return `<table class="data-table" style="width:100%;border-collapse:collapse;font-size:11px;margin-top:4px"><thead><tr>${ordered.map((c) => `<th style="background:#1e40af;color:#fff;padding:6px 8px;text-align:${lang === "ar" ? "right" : "left"}">${labelFor(c, lang)}</th>`).join("")}</tr></thead><tbody>${tbody}</tbody></table>`;
+  return `<table class="data-table" style="width:100%;border-collapse:collapse;font-size:11px;margin-top:4px"><thead><tr>${ordered.map((c) => `<th style="background:#1e40af;color:#fff;padding:6px 8px;text-align:${lang === "ar" ? "right" : "left"}">${labelFor(c, lang, formTemplate)}</th>`).join("")}</tr></thead><tbody>${tbody}</tbody></table>`;
 }
 
 const SKIP_SUMMARY_KEYS = new Set([
@@ -111,33 +144,42 @@ const SKIP_SUMMARY_KEYS = new Set([
 export function pickMainSummaryEntries(
   summary: Record<string, unknown> | null | undefined,
   lang: string,
-  max = 6
+  max = 6,
+  formTemplate = "default",
 ) {
-  return formatSummaryEntries(summary, lang)
+  return formatSummaryEntries(summary, lang, formTemplate)
     .filter((e) => !e.isTable && !SKIP_SUMMARY_KEYS.has(e.key))
     .slice(0, max);
 }
 
-export function formatSummaryEntries(summary: Record<string, unknown> | null | undefined, lang: string) {
+export function formatSummaryEntries(
+  summary: Record<string, unknown> | null | undefined,
+  lang: string,
+  formTemplate = "default",
+) {
   if (!summary) return [];
   return Object.entries(summary)
     .filter(([, v]) => v !== null && v !== undefined && v !== "")
     .map(([k, v]) => ({
       key: k,
-      label: labelFor(k, lang),
+      label: labelFor(k, lang, formTemplate),
       value: typeof v === "object" && v !== null && !Array.isArray(v)
         ? formatObjectSummary(v as Record<string, unknown>, lang)
-        : formatScalar(v, lang),
+        : formatReportSummaryValue(k, v, formTemplate, lang === "ar"),
       isTable: Array.isArray(v) && isRecordArray(v as unknown[]),
       tableHtml: Array.isArray(v) && isRecordArray(v as unknown[])
-        ? buildArrayTable(v as Record<string, unknown>[], lang)
+        ? buildArrayTable(v as Record<string, unknown>[], lang, formTemplate)
         : undefined,
     }));
 }
 
 const SKIP_FORM_KEYS = new Set(["blocks", "cubes", "specimens", "rows", "fractions", "readings"]);
 
-export function formatFormSections(formData: Record<string, unknown> | null | undefined, lang: string) {
+export function formatFormSections(
+  formData: Record<string, unknown> | null | undefined,
+  lang: string,
+  formTemplate = "default",
+) {
   if (!formData) return { fields: [] as { label: string; value: string }[], tables: [] as { title: string; html: string }[] };
 
   const fields: { label: string; value: string }[] = [];
@@ -147,18 +189,18 @@ export function formatFormSections(formData: Record<string, unknown> | null | un
     if (value === null || value === undefined || value === "") continue;
 
     if (Array.isArray(value) && isRecordArray(value)) {
-      tables.push({ title: labelFor(key, lang), html: buildArrayTable(value, lang) });
+      tables.push({ title: labelFor(key, lang, formTemplate), html: buildArrayTable(value, lang, formTemplate) });
       continue;
     }
 
     if (SKIP_FORM_KEYS.has(key)) continue;
 
     if (typeof value === "object" && !Array.isArray(value)) {
-      fields.push({ label: labelFor(key, lang), value: formatObjectSummary(value as Record<string, unknown>, lang) });
+      fields.push({ label: labelFor(key, lang, formTemplate), value: formatObjectSummary(value as Record<string, unknown>, lang) });
       continue;
     }
 
-    fields.push({ label: labelFor(key, lang), value: formatScalar(value, lang) });
+    fields.push({ label: labelFor(key, lang, formTemplate), value: formatScalar(value, lang) });
   }
 
   return { fields, tables };
@@ -176,8 +218,9 @@ export function buildSectorResultReportHtml(
   const font = lang === "ar" ? "'Tajawal', 'Noto Sans Arabic', Arial, sans-serif" : "'Inter', Arial, sans-serif";
   const align = lang === "ar" ? "right" : "left";
 
-  const summary = formatSummaryEntries(r.summaryValues as Record<string, unknown>, lang);
-  const form = formatFormSections(r.formData as Record<string, unknown>, lang);
+  const formTemplate = String(r.formTemplate ?? "default");
+  const summary = formatSummaryEntries(r.summaryValues as Record<string, unknown>, lang, formTemplate);
+  const form = formatFormSections(r.formData as Record<string, unknown>, lang, formTemplate);
 
   const summaryRows = summary
     .filter((e) => !e.isTable)
@@ -213,8 +256,8 @@ ${reportFontLinks()}
   .section-title { font-size: 12px; font-weight: 700; color: #1e40af; margin-bottom: 8px; padding-bottom: 4px; border-bottom: 1px solid #e2e8f0; text-transform: uppercase; letter-spacing: 0.04em; }
   .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
   .field { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 8px 10px; }
-  .field-label { font-size: 10px; color: #64748b; margin-bottom: 2px; }
-  .field-value { font-size: 12px; font-weight: 600; color: #0f172a; }
+  .field-label { font-size: 11px; font-weight: 700; color: #475569; margin-bottom: 3px; }
+  .field-value { font-size: 13px; font-weight: 600; color: #0f172a; }
   .result-badge { display: inline-block; padding: 4px 14px; border-radius: 999px; font-weight: 700; font-size: 13px; }
   .pass { background: #dcfce7; color: #166534; }
   .fail { background: #fee2e2; color: #991b1b; }
@@ -224,7 +267,7 @@ ${reportFontLinks()}
   table.data-table tr:nth-child(even) td { background: #f8fafc; }
   table.kv { width: 100%; border-collapse: collapse; font-size: 11px; }
   table.kv td { padding: 5px 8px; border: 1px solid #e2e8f0; vertical-align: top; }
-  table.kv td:first-child { width: 38%; color: #64748b; background: #f8fafc; }
+  table.kv td:first-child { width: 38%; color: #475569; background: #f8fafc; font-weight: 700; font-size: 11px; }
   .signatures { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 20px; }
   .sig { border: 1px solid #e2e8f0; border-radius: 6px; padding: 10px; text-align: center; }
   .sig-title { font-size: 10px; color: #64748b; margin-bottom: 6px; }
@@ -263,11 +306,13 @@ ${r.notes ? `<div class="section"><div class="section-title">${labels.notes}</di
 <div class="signatures">
   <div class="sig">
     <div class="sig-title">${labels.managerReview}</div>
-    ${r.managerReviewedByName ? `<div class="sig-name">${r.managerReviewedByName}</div><div style="font-size:10px;color:#64748b;margin-top:4px">${r.managerReviewedAt ? new Date(r.managerReviewedAt).toLocaleDateString(lang === "ar" ? "ar-AE" : "en-GB") : ""}</div>` : `<div style="height:24px"></div>`}
+    ${r.managerReviewedByName ? `<div class="sig-name">${escapeHtml(r.managerReviewedByName)}</div><div style="font-size:10px;color:#64748b;margin-top:4px">${r.managerReviewedAt ? new Date(r.managerReviewedAt).toLocaleDateString(lang === "ar" ? "ar-AE" : "en-GB") : ""}</div>` : `<div style="height:24px"></div>`}
+    ${r.managerNotes ? `<div style="font-size:9px;color:#475569;margin-top:6px;font-style:italic;white-space:pre-wrap">${escapeHtml(String(r.managerNotes))}</div>` : ""}
   </div>
   <div class="sig">
     <div class="sig-title">${labels.qcReview}</div>
-    ${r.qcReviewedByName ? `<div class="sig-name">${r.qcReviewedByName}</div><div style="font-size:10px;color:#64748b;margin-top:4px">${r.qcReviewedAt ? new Date(r.qcReviewedAt).toLocaleDateString(lang === "ar" ? "ar-AE" : "en-GB") : ""}</div>` : `<div style="height:24px"></div>`}
+    ${r.qcReviewedByName ? `<div class="sig-name">${escapeHtml(r.qcReviewedByName)}</div><div style="font-size:10px;color:#64748b;margin-top:4px">${r.qcReviewedAt ? new Date(r.qcReviewedAt).toLocaleDateString(lang === "ar" ? "ar-AE" : "en-GB") : ""}</div>` : `<div style="height:24px"></div>`}
+    ${r.qcNotes ? `<div style="font-size:9px;color:#475569;margin-top:6px;font-style:italic;white-space:pre-wrap">${escapeHtml(String(r.qcNotes))}</div>` : ""}
   </div>
 </div>
 
