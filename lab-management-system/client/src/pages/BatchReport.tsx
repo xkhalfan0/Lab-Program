@@ -10,8 +10,9 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { PassFailBadge, ResultBanner } from "@/components/PassFailBadge";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { formatCalendarDate } from "@/lib/dateFormat";
+import { formatCalendarDate, formatReportDate } from "@/lib/dateFormat";
 import { formatInspectionReference, inspectionRefLabel } from "@/lib/inspectionReference";
+import { ReportPrintNote } from "@/components/reports/ReportPrintNote";
 import { getOfficialTestDisplayName } from "@/lib/officialTestCatalog";
 import {
   formatSummaryLabel,
@@ -328,6 +329,7 @@ export default function BatchReport() {
     reviewed: isAr ? "المراجع" : "Reviewed By",
     approved: isAr ? "المعتمد" : "Approved By",
   };
+  const reportDateStr = formatReportDate(batchSignatures.approvedAt);
 
   const isLoading = sampleLoading || siblingsLoading;
 
@@ -442,7 +444,7 @@ export default function BatchReport() {
                 <div className="text-[11px] text-gray-600 space-y-0.5 text-end">
                   <div className="flex gap-1 justify-end">
                     <span className="text-gray-500">{isAr ? ":\u0627\u0644\u062a\u0627\u0631\u064a\u062e" : "Date:"}</span>
-                    <span>{formatCalendarDate(new Date())}</span>
+                    <span>{reportDateStr}</span>
                   </div>
                   <div className="flex gap-1 justify-end">
                     <span className="text-gray-500">{isAr ? ":\u0631\u0642\u0645 \u0627\u0644\u0637\u0644\u0628" : "Order:"}</span>
@@ -630,17 +632,16 @@ export default function BatchReport() {
             <ReportSignatures sig={batchSignatures} labels={signatureLabels} lang={isAr ? "ar" : "en"} />
 
             <div
-              className="mt-4 pt-2 border-t border-gray-200 flex justify-between text-gray-400"
+              className="mt-4 pt-2 border-t border-gray-200"
               style={{ fontSize: "8px" }}
             >
-              <span>
-                Construction Materials &amp; Engineering Laboratory {EM_DASH}{" "}
-                {"\u0645\u062e\u062a\u0628\u0631 \u0627\u0644\u0625\u0646\u0634\u0627\u0621\u0627\u062a \u0648\u0627\u0644\u0645\u0648\u0627\u062f \u0627\u0644\u0647\u0646\u062f\u0633\u064a\u0629"}
-              </span>
-              <span>
-                {isAr ? "\u062a\u0627\u0631\u064a\u062e \u0627\u0644\u0625\u0646\u0634\u0627\u0621:" : "Generated:"}{" "}
-                {new Date().toLocaleString(isAr ? "ar-AE" : "en-GB")}
-              </span>
+              <div className="flex justify-between text-gray-400">
+                <span>
+                  Construction Materials &amp; Engineering Laboratory {EM_DASH}{" "}
+                  {"\u0645\u062e\u062a\u0628\u0631 \u0627\u0644\u0625\u0646\u0634\u0627\u0621\u0627\u062a \u0648\u0627\u0644\u0645\u0648\u0627\u062f \u0627\u0644\u0647\u0646\u062f\u0633\u064a\u0629"}
+                </span>
+              </div>
+              <ReportPrintNote lang={isAr ? "ar" : "en"} />
             </div>
           </div>
         )}

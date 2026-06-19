@@ -4,7 +4,8 @@ import { useRef, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Printer, X, Download, Loader2, CheckCircle, XCircle } from "lucide-react";
 import { generatePdfFromElement } from "@/lib/pdf";
-import { formatCalendarDate } from "@/lib/dateFormat";
+import { formatCalendarDate, formatReportDate } from "@/lib/dateFormat";
+import { ReportPrintNote } from "@/components/reports/ReportPrintNote";
 import { formatInspectionReference, inspectionRefLabel } from "@/lib/inspectionReference";
 import { useLanguage } from "@/contexts/LanguageContext";
 import {
@@ -284,7 +285,7 @@ function ReportPage({
 
   const isPassed = avgPass ?? group.complianceStatus === "pass";
   const testDate = cubes.find(c => c.dateTested)?.dateTested ?? null;
-  const reportDateStr = formatCalendarDate(new Date());
+  const reportDateStr = formatReportDate(qcSignedAt);
   const testedDisplay = (testedByName ?? group.testedBy ?? "").trim() || undefined;
   const avgDisplay = avg !== null ? (Math.round(avg * 2) / 2).toFixed(1) : "—";
   const requiredDisplay = requiredMpa != null ? requiredMpa.toFixed(1) : "—";
@@ -617,15 +618,16 @@ function ReportPage({
         lang={lang}
       />
 
-      <div className="mt-4 pt-2 border-t border-gray-200 flex justify-between text-gray-400" style={{ fontSize: "8px" }}>
-        <span>
-          Construction Materials &amp; Engineering Laboratory — مختبر الإنشاءات والمواد الهندسية
-        </span>
-        <span>
-          {ar ? "تاريخ الإنشاء:" : "Generated:"}{" "}
-          {new Date().toLocaleString(ar ? "ar-AE" : "en-GB")}
-          {totalPages > 1 ? ` · ${ar ? "صفحة" : "Page"} ${pageIndex + 1}/${totalPages}` : ""}
-        </span>
+      <div className="mt-4 pt-2 border-t border-gray-200" style={{ fontSize: "8px" }}>
+        <div className="flex justify-between text-gray-400">
+          <span>
+            Construction Materials &amp; Engineering Laboratory — مختبر الإنشاءات والمواد الهندسية
+          </span>
+          {totalPages > 1 ? (
+            <span>{ar ? "صفحة" : "Page"} {pageIndex + 1}/{totalPages}</span>
+          ) : null}
+        </div>
+        <ReportPrintNote lang={lang} />
       </div>
     </div>
   );

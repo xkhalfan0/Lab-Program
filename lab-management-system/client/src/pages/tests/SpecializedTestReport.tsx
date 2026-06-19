@@ -11,7 +11,8 @@ import { Button } from "@/components/ui/button";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { FlexibleResultsTable, type Column, formDataToKeyValueRows, keyValueColumns } from "@/components/reports/FlexibleResultsTable";
 import { ReportSignatures, pickReviewSignatures } from "@/components/reports/ReportSignatures";
-import { formatCalendarDate } from "@/lib/dateFormat";
+import { ReportPrintNote } from "@/components/reports/ReportPrintNote";
+import { formatCalendarDate, formatReportDate } from "@/lib/dateFormat";
 import { formatInspectionReference, inspectionRefLabel, reportDocNo } from "@/lib/inspectionReference";
 import { calculateFinalBlend, formatDisplaySieveMm } from "@/pages/tests/SieveAnalysis";
 import {
@@ -4176,6 +4177,7 @@ export default function SpecializedTestReport({ sectorResultId }: SpecializedTes
   const summaryValues = result.summaryValues as any ?? {};
   const isPassed = result.overallResult === "pass";
   const reportSignatures = pickReviewSignatures([result, legacyResult]);
+  const reportDateStr = formatReportDate(reportSignatures.approvedAt);
   const signatureLabels = {
     tested: isAr ? "الفاحص" : "Tested By",
     reviewed: isAr ? "المراجع" : "Reviewed By",
@@ -4272,7 +4274,7 @@ export default function SpecializedTestReport({ sectorResultId }: SpecializedTes
                 </div>
                 <div className="flex gap-1">
                   <span className="text-gray-500">{isAr ? ":التاريخ" : "Date:"}</span>
-                  <span>{formatCalendarDate(new Date())}</span>
+                  <span>{reportDateStr}</span>
                 </div>
               </div>
             </div>
@@ -4344,7 +4346,7 @@ export default function SpecializedTestReport({ sectorResultId }: SpecializedTes
                     [isAr ? "القطاع" : "Sector", (dist as any)?.sector ? String((dist as any).sector).replace("_", " ").toUpperCase() : "—"],
                     [isAr ? "موقع العينة" : "Sample Location", String((dist as any)?.sampleLocation ?? "—")],
                     [isAr ? "تاريخ الفحص" : "Test Date", fmtDate(result.testDate)],
-                    [isAr ? "تاريخ التقرير" : "Report Date", fmtDate(new Date())],
+                    [isAr ? "تاريخ التقرير" : "Report Date", reportDateStr],
                   ];
                   const n = Math.max(detailLeft.length, detailRight.length);
                   return Array.from({ length: n }, (_, i) => {
@@ -4430,9 +4432,11 @@ export default function SpecializedTestReport({ sectorResultId }: SpecializedTes
           <ReportSignatures sig={reportSignatures} labels={signatureLabels} lang={isAr ? "ar" : "en"} />
 
           {/* Footer */}
-          <div className="mt-4 pt-2 border-t border-gray-200 flex justify-between text-gray-400" style={{ fontSize: "8px" }}>
-            <span>Construction Materials &amp; Engineering Laboratory — مختبر الإنشاءات والمواد الهندسية</span>
-            <span>{isAr ? "تاريخ الإنشاء:" : "Generated:"} {new Date().toLocaleString(isAr ? "ar-AE" : "en-GB")}</span>
+          <div className="mt-4 pt-2 border-t border-gray-200" style={{ fontSize: "8px" }}>
+            <div className="flex justify-between text-gray-400">
+              <span>Construction Materials &amp; Engineering Laboratory — مختبر الإنشاءات والمواد الهندسية</span>
+            </div>
+            <ReportPrintNote lang={isAr ? "ar" : "en"} />
           </div>
         </div>
       </div>

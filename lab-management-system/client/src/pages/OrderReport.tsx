@@ -11,7 +11,9 @@ import { Button } from "@/components/ui/button";
 import { Loader2, Printer, Download, Globe, X, CheckCircle, XCircle } from "lucide-react";
 import { generatePdfFromElement } from "@/lib/pdf";
 import { ReportSignatures, pickReviewSignatures } from "@/components/reports/ReportSignatures";
+import { ReportPrintNote } from "@/components/reports/ReportPrintNote";
 import { formatInspectionReference } from "@/lib/inspectionReference";
+import { formatReportDate } from "@/lib/dateFormat";
 import {
   formatSummaryLabel,
   formatSummaryValue,
@@ -575,6 +577,7 @@ export default function OrderReport() {
   const overallPass = hasAnyResult && allResults.every(r => r === "pass" || r === "pending");
   const overallFail = allResults.some(r => r === "fail");
   const overallStatus = !hasAnyResult ? "pending" : overallPass ? "pass" : overallFail ? "fail" : "pending";
+  const reportDateStr = formatReportDate(overallSigs.approvedAt);
 
   return (
     <>
@@ -632,7 +635,7 @@ export default function OrderReport() {
                 </div>
                 <div className="flex gap-1">
                   <span className="text-gray-500">{isAr ? "التاريخ:" : "Date:"}</span>
-                  <span>{fmtDate(new Date(), lang)}</span>
+                  <span>{reportDateStr}</span>
                 </div>
                 <div className="flex gap-1">
                   <span className="text-gray-500">{isAr ? "عدد الاختبارات:" : "Tests:"}</span>
@@ -682,7 +685,7 @@ export default function OrderReport() {
                     [t("sector", lang), sectorLabel(sample?.sector, lang)],
                     ...(order.castingDate ? [[t("castingDate", lang), fmtDate(order.castingDate, lang)]] as [string, unknown][] : []),
                     [t("receivedAt", lang), fmtDate(sample?.receivedAt ?? order.createdAt, lang)],
-                    [t("reportDate", lang), fmtDate(new Date(), lang)],
+                    [t("reportDate", lang), reportDateStr],
                   ];
                   const rows: typeof pairs[] = [];
                   for (let i = 0; i < pairs.length; i += 2) rows.push(pairs.slice(i, i + 2));
@@ -811,9 +814,11 @@ export default function OrderReport() {
           />
 
           {/* ── Footer ── */}
-          <div className="mt-4 pt-2 border-t border-gray-200 flex justify-between text-gray-400" style={{ fontSize: "8px" }}>
-            <span>{t("footer", lang)}</span>
-            <span>{isAr ? "تاريخ الإنشاء:" : "Generated:"} {new Date().toLocaleString(isAr ? "ar-AE" : "en-GB")}</span>
+          <div className="mt-4 pt-2 border-t border-gray-200" style={{ fontSize: "8px" }}>
+            <div className="flex justify-between text-gray-400">
+              <span>{t("footer", lang)}</span>
+            </div>
+            <ReportPrintNote lang={isAr ? "ar" : "en"} />
           </div>
         </div>
       </div>

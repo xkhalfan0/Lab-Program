@@ -12,8 +12,9 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { FlexibleResultsTable, type Column } from "@/components/reports/FlexibleResultsTable";
 import { ReportSignatures, pickReviewSignatures } from "@/components/reports/ReportSignatures";
 
-import { formatCalendarDate } from "@/lib/dateFormat";
+import { formatCalendarDate, formatReportDate } from "@/lib/dateFormat";
 import { formatInspectionReference, inspectionRefLabel } from "@/lib/inspectionReference";
+import { ReportPrintNote } from "@/components/reports/ReportPrintNote";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function fmt(v: any, dec = 2) {
@@ -192,6 +193,7 @@ export default function BatchBlockReport() {
     : allResults.some(r => r.overallResult === "fail") ? "fail"
     : "pending";
   const isPassed = overallBatchResult === "pass";
+  const reportDateStr = formatReportDate(batchSignatures.approvedAt);
 
   return (
     <>
@@ -249,7 +251,7 @@ export default function BatchBlockReport() {
                 </div>
                 <div className="flex gap-1">
                   <span className="text-gray-500">{isAr ? ":التاريخ" : "Date:"}</span>
-                  <span>{formatCalendarDate(new Date())}</span>
+                  <span>{reportDateStr}</span>
                 </div>
               </div>
             </div>
@@ -353,9 +355,11 @@ export default function BatchBlockReport() {
           <ReportSignatures sig={batchSignatures} labels={signatureLabels} lang={isAr ? "ar" : "en"} />
 
           {/* Footer */}
-          <div className="mt-4 pt-2 border-t border-gray-200 flex justify-between text-gray-400" style={{ fontSize: "8px" }}>
-            <span>Construction Materials &amp; Engineering Laboratory — مختبر الإنشاءات والمواد الهندسية</span>
-            <span>{isAr ? "تاريخ الإنشاء:" : "Generated:"} {new Date().toLocaleString(isAr ? "ar-AE" : "en-GB")}</span>
+          <div className="mt-4 pt-2 border-t border-gray-200" style={{ fontSize: "8px" }}>
+            <div className="flex justify-between text-gray-400">
+              <span>Construction Materials &amp; Engineering Laboratory — مختبر الإنشاءات والمواد الهندسية</span>
+            </div>
+            <ReportPrintNote lang={isAr ? "ar" : "en"} />
           </div>
         </div>
       </div>

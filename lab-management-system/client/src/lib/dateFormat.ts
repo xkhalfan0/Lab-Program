@@ -39,3 +39,21 @@ export function formatDateMedium(
     year: "numeric",
   }).format(d);
 }
+
+/** Report issue date — QC approval date (falls back to em dash if not approved). */
+export function formatReportDate(
+  approvedAt: Date | string | number | null | undefined,
+): string {
+  return formatCalendarDate(approvedAt);
+}
+
+/** Footer print timestamp (when the PDF/print was generated). */
+export function formatPrintTimestamp(lang: "en" | "ar"): string {
+  return new Date().toLocaleString(lang === "ar" ? "ar-AE" : "en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
