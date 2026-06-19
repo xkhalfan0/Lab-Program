@@ -4,12 +4,12 @@
  */
 
 export const REPORT_META_LABEL_CLASS =
-  "border border-gray-200 px-2 py-1.5 text-gray-700 w-[18%] text-[11px] font-bold";
+  "border border-gray-200 px-2 py-1.5 text-gray-900 w-[18%] text-[11px] font-bold print:text-black";
 export const REPORT_META_VALUE_CLASS =
-  "border border-gray-200 px-2 py-1.5 font-semibold text-gray-900 w-[32%] text-[12px]";
+  "border border-gray-200 px-2 py-1.5 font-semibold text-gray-900 w-[32%] text-[12px] print:text-black";
 export const REPORT_REF_LABEL_CLASS =
-  "text-gray-600 text-[11px] font-bold tracking-wide block mb-1";
-export const REPORT_REF_VALUE_CLASS = "font-semibold text-gray-900 text-[13px]";
+  "text-gray-900 text-[11px] font-bold tracking-wide block mb-1 print:text-black";
+export const REPORT_REF_VALUE_CLASS = "font-semibold text-gray-900 text-[13px] print:text-black";
 
 type RequiredSpec = { labelEn: string; labelAr: string; unit: string };
 

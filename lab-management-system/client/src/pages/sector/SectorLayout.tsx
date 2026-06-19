@@ -147,7 +147,7 @@ export function SectorLayout({ children }: { children: React.ReactNode }) {
     <div dir={isRtl ? "rtl" : "ltr"} className="min-h-screen bg-slate-50">
       <Toaster position="bottom-right" duration={2500} closeButton richColors />
       <header className="sticky top-0 z-50 border-b border-white/10 bg-gradient-to-r from-slate-900 via-slate-800 to-blue-950 shadow-lg shadow-slate-900/20">
-        <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-4 px-4 lg:px-6">
+        <div className="flex h-16 w-full items-center justify-between gap-4 px-4 lg:px-8">
           <div className="flex items-center gap-3">
             <button
               type="button"
@@ -283,7 +283,7 @@ export function SectorLayout({ children }: { children: React.ReactNode }) {
         </div>
       )}
 
-      <main className="mx-auto max-w-7xl px-4 py-6 lg:px-6 lg:py-8">{children}</main>
+      <main className="w-full px-4 py-6 lg:px-8 lg:py-8">{children}</main>
     </div>
   );
 }

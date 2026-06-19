@@ -4201,18 +4201,18 @@ export default function SpecializedTestReport({ sectorResultId }: SpecializedTes
                 <h1 className="text-[16px] font-extrabold text-gray-900 leading-snug">
                   {isAr ? "مختبر الإنشاءات والمواد الهندسية" : "Construction Materials & Engineering Laboratory"}
                 </h1>
-                <p className="text-[11px] text-gray-500 mt-0.5">
+                <p className="text-[11px] text-gray-900 mt-0.5">
                   {isAr ? "Construction Materials & Engineering Laboratory" : "مختبر الإنشاءات والمواد الهندسية"}
                 </p>
               </div>
               <div className="flex flex-col items-center px-4 border-x border-gray-300">
                 <div className="w-11 h-11 rounded-full border-2 border-gray-800 flex items-center justify-center text-lg font-black">م</div>
-                <span className="text-[9px] text-gray-400 mt-0.5 tracking-widest">LAB</span>
+                <span className="text-[9px] text-gray-800 mt-0.5 tracking-widest">LAB</span>
               </div>
-              <div className="text-[11px] text-gray-600 space-y-0.5">
+              <div className="text-[11px] text-gray-900 space-y-0.5">
                 <div className="flex gap-1">
-                  <span className="text-gray-500">{isAr ? ":رقم الوثيقة" : "Doc No.:"}</span>
-                  <span className="font-mono font-bold text-gray-800">
+                  <span className="text-gray-900 font-semibold">{isAr ? ":رقم الوثيقة" : "Doc No.:"}</span>
+                  <span className="font-mono font-bold text-gray-900">
                     {reportDocNo({
                       distributionCode: (dist as any)?.distributionCode,
                       distributionId: distIdForRender,
@@ -4221,7 +4221,7 @@ export default function SpecializedTestReport({ sectorResultId }: SpecializedTes
                   </span>
                 </div>
                 <div className="flex gap-1">
-                  <span className="text-gray-500">{isAr ? ":التاريخ" : "Date:"}</span>
+                  <span className="text-gray-900 font-semibold">{isAr ? ":التاريخ" : "Date:"}</span>
                   <span>{reportDateStr}</span>
                 </div>
               </div>
@@ -4313,7 +4313,7 @@ export default function SpecializedTestReport({ sectorResultId }: SpecializedTes
           {/* Summary Values */}
           {summaryValues && Object.keys(summaryValues).length > 0 && result.formTemplate !== "interlock" && (
             <div className="mb-3">
-              <h3 className="text-xs font-bold text-gray-700 uppercase border-b border-gray-300 pb-1 mb-2">
+              <h3 className="text-xs font-bold text-gray-900 uppercase border-b border-gray-300 pb-1 mb-2">
                 {isAr ? "ملخص النتائج" : "Summary Results"}
               </h3>
               <table className="metadata-table w-full border-collapse text-xs">
@@ -4350,7 +4350,7 @@ export default function SpecializedTestReport({ sectorResultId }: SpecializedTes
             <BatchResultsSection batchDists={batchDists ?? []} distId={distIdForRender} isAr={isAr} prefetchedBatchResults={sectorBatchResults} />
           ) : (
             <div className="mb-3">
-              <h3 className="text-xs font-bold text-gray-700 uppercase border-b border-gray-300 pb-1 mb-2">
+              <h3 className="text-xs font-bold text-gray-900 uppercase border-b border-gray-300 pb-1 mb-2">
                 {isAr ? "النتائج التفصيلية" : "Detailed Results"}
               </h3>
               {renderFormData(result.formTemplate, formData, isAr, {
@@ -4365,7 +4365,7 @@ export default function SpecializedTestReport({ sectorResultId }: SpecializedTes
           {/* Notes */}
           {result.notes && (
             <div className="mb-5">
-              <h3 className="text-xs font-bold text-gray-700 uppercase border-b border-gray-300 pb-1 mb-2">
+              <h3 className="text-xs font-bold text-gray-900 uppercase border-b border-gray-300 pb-1 mb-2">
                 {isAr ? "ملاحظات" : "Notes"}
               </h3>
               <p className="text-xs text-gray-700 bg-gray-50 border rounded p-3">{result.notes}</p>
@@ -4431,7 +4431,7 @@ function BatchResultsSection({
 
   return (
     <div className="mb-5 space-y-6">
-      <h3 className="text-xs font-bold text-gray-700 uppercase border-b border-gray-300 pb-1 mb-3">
+      <h3 className="text-xs font-bold text-gray-900 uppercase border-b border-gray-300 pb-1 mb-3">
         {isAr ? "النتائج التفصيلية — دفعة متعددة الأنواع" : "Detailed Results — Multi-Type Batch"}
       </h3>
       {batchDists.map((dist, idx) => {

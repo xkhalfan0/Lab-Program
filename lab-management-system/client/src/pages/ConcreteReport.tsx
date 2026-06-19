@@ -147,7 +147,7 @@ function LabReportHeader({
           <h1 className="text-[16px] font-extrabold text-gray-900 leading-snug">
             {ar ? labNameAr : labNameEn}
           </h1>
-          <p className="text-[11px] text-gray-500 mt-0.5">
+          <p className="text-[11px] text-gray-900 mt-0.5">
             {ar ? labNameEn : labNameAr}
           </p>
         </div>
@@ -155,15 +155,15 @@ function LabReportHeader({
           <div className="w-11 h-11 rounded-full border-2 border-gray-800 flex items-center justify-center text-lg font-black">
             م
           </div>
-          <span className="text-[9px] text-gray-400 mt-0.5 tracking-widest">LAB</span>
+          <span className="text-[9px] text-gray-800 mt-0.5 tracking-widest">LAB</span>
         </div>
-        <div className="text-[11px] text-gray-600 space-y-0.5">
+        <div className="text-[11px] text-gray-900 space-y-0.5">
           <div className="flex gap-1">
-            <span className="text-gray-500">{ar ? ":رقم الوثيقة" : "Doc No.:"}</span>
-            <span className="font-mono font-bold text-gray-800">{refNo}</span>
+            <span className="text-gray-900 font-semibold">{ar ? ":رقم الوثيقة" : "Doc No.:"}</span>
+            <span className="font-mono font-bold text-gray-900">{refNo}</span>
           </div>
           <div className="flex gap-1">
-            <span className="text-gray-500">{ar ? ":التاريخ" : "Date:"}</span>
+            <span className="text-gray-900 font-semibold">{ar ? ":التاريخ" : "Date:"}</span>
             <span>{reportDateStr}</span>
           </div>
         </div>
@@ -424,7 +424,7 @@ function ReportPage({
 
       {/* Summary Results */}
       <div className="mb-5">
-        <h3 className="text-xs font-bold text-gray-700 uppercase border-b border-gray-300 pb-1 mb-3">
+        <h3 className="text-xs font-bold text-gray-900 uppercase border-b border-gray-300 pb-1 mb-3">
           {ar ? "ملخص النتائج" : "Summary Results"}
         </h3>
         <table className="metadata-table w-full border-collapse text-xs">
@@ -453,7 +453,7 @@ function ReportPage({
 
       {/* Detailed Results */}
       <div className="mb-5">
-        <h3 className="text-xs font-bold text-gray-700 uppercase border-b border-gray-300 pb-1 mb-3">
+        <h3 className="text-xs font-bold text-gray-900 uppercase border-b border-gray-300 pb-1 mb-3">
           {ar ? "النتائج التفصيلية" : "Detailed Results"}
         </h3>
 
@@ -592,7 +592,7 @@ function ReportPage({
 
       {/* Notes */}
       <div className="mb-5">
-        <h3 className="text-xs font-bold text-gray-700 uppercase border-b border-gray-300 pb-1 mb-2">
+        <h3 className="text-xs font-bold text-gray-900 uppercase border-b border-gray-300 pb-1 mb-2">
           {ar ? "ملاحظات" : "Notes"}
         </h3>
         <p

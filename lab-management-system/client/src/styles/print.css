@@ -263,6 +263,52 @@
     font-size: 7pt !important;
   }
 
+  /*
+   * Grey/slate muted text → solid black for legible print & PDF output.
+   * Pass/fail accent colors (green, red, emerald, amber, blue badges) are preserved.
+   */
+  .lab-print-root .text-gray-400,
+  .lab-print-root .text-gray-500,
+  .lab-print-root .text-gray-600,
+  .lab-print-root .text-gray-700,
+  .lab-print-root .text-slate-400,
+  .lab-print-root .text-slate-500,
+  .lab-print-root .text-slate-600,
+  .lab-print-root .text-slate-700,
+  .lab-print-root .text-slate-800,
+  .report-page .text-gray-400,
+  .report-page .text-gray-500,
+  .report-page .text-gray-600,
+  .report-page .text-gray-700,
+  .report-page .text-slate-400,
+  .report-page .text-slate-500,
+  .report-page .text-slate-600,
+  .report-page .text-slate-700,
+  .report-page .text-slate-800,
+  table.metadata-table td,
+  table.metadata-table th,
+  table.signatures-table td,
+  table.signatures-table th {
+    color: #000 !important;
+  }
+
+  .lab-print-root h1,
+  .lab-print-root h2,
+  .lab-print-root h3,
+  .lab-print-root h4,
+  .report-page h1,
+  .report-page h2,
+  .report-page h3,
+  .report-page h4 {
+    color: #000 !important;
+  }
+
+  /* Dark title bar: keep white text on dark background */
+  .lab-print-root .bg-gray-900,
+  .lab-print-root .bg-gray-900 * {
+    color: #fff !important;
+  }
+
   * {
     box-shadow: none !important;
     text-shadow: none !important;

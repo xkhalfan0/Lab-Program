@@ -902,7 +902,7 @@ export default function SectorInbox() {
 
   return (
     <SectorLayout>
-      <div className="max-w-3xl mx-auto space-y-6" dir={isRtl ? "rtl" : "ltr"}>
+      <div className="w-full space-y-6" dir={isRtl ? "rtl" : "ltr"}>
         {/* Header */}
         <div className="flex items-start justify-between gap-4">
           <div className="flex items-center gap-3">

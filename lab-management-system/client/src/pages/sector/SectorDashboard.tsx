@@ -425,7 +425,7 @@ export default function SectorDashboard() {
 
   return (
     <SectorLayout>
-      <div className="mx-auto max-w-4xl space-y-6" dir={isRtl ? "rtl" : "ltr"}>
+      <div className="w-full space-y-6" dir={isRtl ? "rtl" : "ltr"}>
         {sectorName && (
           <p className="text-sm font-medium text-slate-500">
             {isRtl ? `قطاع ${sectorName}` : `${sectorName} Sector`}

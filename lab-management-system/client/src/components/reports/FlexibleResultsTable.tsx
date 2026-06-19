@@ -153,7 +153,7 @@ function renderStatus(value: unknown): ReactNode {
   if (isFailLike(value)) {
     return <span className="text-red-800 font-semibold">{s}</span>;
   }
-  return <span className="text-slate-700">{s}</span>;
+  return <span className="text-gray-900">{s}</span>;
 }
 
 function renderCell(col: Column, row: Record<string, unknown>): ReactNode {

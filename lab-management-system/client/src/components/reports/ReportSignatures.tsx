@@ -114,7 +114,7 @@ export function ReportSignatures({
   return (
     <div className={className}>
       {showTitle && title ? (
-        <h3 className="text-xs font-bold text-gray-700 uppercase mb-3 text-center tracking-wide">{title}</h3>
+        <h3 className="text-xs font-bold text-gray-900 uppercase mb-3 text-center tracking-wide">{title}</h3>
       ) : null}
       <table className="signatures-table w-full border-collapse text-xs">
         <tbody>
@@ -124,17 +124,17 @@ export function ReportSignatures({
                 key={s.key}
                 className="signature-column align-top text-center border border-gray-300 px-2 py-1.5 text-xs w-1/3"
               >
-                <p className="text-[9px] font-bold text-gray-700 uppercase mb-0.5">{s.label}</p>
+                <p className="text-[9px] font-bold text-gray-900 uppercase mb-0.5">{s.label}</p>
                 <div className="signature-line border-b border-gray-800 min-h-[22px] mb-0.5 mx-1 flex items-end justify-center pb-0.5">
                   {s.name ? (
-                    <span className="text-gray-700 text-xs font-semibold">{s.name}</span>
+                    <span className="text-gray-900 text-xs font-semibold">{s.name}</span>
                   ) : (
-                    <span className="text-gray-400 text-[9px] italic font-normal">{s.pending}</span>
+                    <span className="text-gray-700 text-[9px] italic font-normal">{s.pending}</span>
                   )}
                 </div>
-                {s.date ? <p className="text-gray-400 text-[8px] mt-0.5">{s.date}</p> : null}
+                {s.date ? <p className="text-gray-800 text-[8px] mt-0.5">{s.date}</p> : null}
                 {s.notes ? (
-                  <p className="text-gray-600 text-[8px] mt-1 px-0.5 whitespace-pre-wrap text-start leading-snug italic border-t border-gray-200 pt-1">
+                  <p className="text-gray-900 text-[8px] mt-1 px-0.5 whitespace-pre-wrap text-start leading-snug italic border-t border-gray-200 pt-1">
                     {s.notes}
                   </p>
                 ) : null}

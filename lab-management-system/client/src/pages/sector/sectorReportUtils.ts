@@ -250,14 +250,14 @@ ${reportFontLinks()}
   body { font-family: ${font}; direction: ${dir}; margin: 0; padding: 20px; color: #0f172a; font-size: 12px; line-height: 1.5; }
   .header { text-align: center; border-bottom: 3px solid #1e40af; padding-bottom: 14px; margin-bottom: 20px; }
   .lab-name { font-size: 20px; font-weight: 700; color: #1e40af; }
-  .report-title { font-size: 14px; color: #475569; margin-top: 4px; }
-  .report-id { font-size: 11px; color: #64748b; margin-top: 4px; }
+  .report-title { font-size: 14px; color: #000; margin-top: 4px; }
+  .report-id { font-size: 11px; color: #000; margin-top: 4px; }
   .section { margin-bottom: 16px; }
   .section-title { font-size: 12px; font-weight: 700; color: #1e40af; margin-bottom: 8px; padding-bottom: 4px; border-bottom: 1px solid #e2e8f0; text-transform: uppercase; letter-spacing: 0.04em; }
   .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
   .field { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 8px 10px; }
-  .field-label { font-size: 11px; font-weight: 700; color: #475569; margin-bottom: 3px; }
-  .field-value { font-size: 13px; font-weight: 600; color: #0f172a; }
+  .field-label { font-size: 11px; font-weight: 700; color: #000; margin-bottom: 3px; }
+  .field-value { font-size: 13px; font-weight: 600; color: #000; }
   .result-badge { display: inline-block; padding: 4px 14px; border-radius: 999px; font-weight: 700; font-size: 13px; }
   .pass { background: #dcfce7; color: #166534; }
   .fail { background: #fee2e2; color: #991b1b; }
@@ -267,10 +267,11 @@ ${reportFontLinks()}
   table.data-table tr:nth-child(even) td { background: #f8fafc; }
   table.kv { width: 100%; border-collapse: collapse; font-size: 11px; }
   table.kv td { padding: 5px 8px; border: 1px solid #e2e8f0; vertical-align: top; }
-  table.kv td:first-child { width: 38%; color: #475569; background: #f8fafc; font-weight: 700; font-size: 11px; }
+  table.kv td:first-child { width: 38%; color: #000; background: #f8fafc; font-weight: 700; font-size: 11px; }
+  table.kv td { color: #000; }
   .signatures { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 20px; }
   .sig { border: 1px solid #e2e8f0; border-radius: 6px; padding: 10px; text-align: center; }
-  .sig-title { font-size: 10px; color: #64748b; margin-bottom: 6px; }
+  .sig-title { font-size: 10px; color: #000; margin-bottom: 6px; }
   .sig-name { font-size: 12px; font-weight: 600; color: #1e40af; }
   .footer { text-align: center; margin-top: 20px; padding-top: 10px; border-top: 1px solid #e2e8f0; font-size: 10px; color: #94a3b8; }
   @media print { body { padding: 0; } }
