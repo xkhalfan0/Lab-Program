@@ -1,8 +1,13 @@
 import DashboardLayout from "@/components/DashboardLayout";
 import { DeletionRequestButton } from "@/components/DeletionRequestButton";
 import { ReceptionContractorFormUpload } from "@/components/ReceptionContractorFormUpload";
+import { ContractorFormViewButton } from "@/components/ContractorFormViewButton";
 import { readFileAsBase64 } from "@/lib/sampleFileUpload";
 import { ReceptionRetestPanel } from "@/components/ReceptionRetestPanel";
+import {
+  ReceptionNominalCubeSizePanel,
+  isValidNominalCubeSize,
+} from "@/components/ReceptionNominalCubeSizePanel";
 import { RetestBadge } from "@/components/RetestBadge";
 import {
   TestDetailIndent,
@@ -33,7 +38,7 @@ import { trpc } from "@/lib/trpc";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Search, Printer, FileText, Pencil, X, Trash2, CheckSquare, Package, CalendarIcon, AlertTriangle, ClipboardList } from "lucide-react";
+import { Search, Printer, FileText, Pencil, X, Trash2, CheckSquare, Package, CalendarIcon, AlertTriangle, ClipboardList, PackagePlus, RotateCcw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState, useMemo, useEffect, useRef, type ReactElement, type ReactNode } from "react";
 import { format } from "date-fns";
@@ -278,6 +283,13 @@ function ReceptionOrderActionsCell({
         >
           <Printer className="w-3.5 h-3.5" />
         </Button>
+      )}
+      {wrapDisabledAction(
+        <ContractorFormViewButton
+          sampleId={sampleId}
+          lang={lang}
+          disabled={hasPendingDeletion}
+        />,
       )}
       {canEditSample &&
         order.status === "pending" &&
@@ -1268,30 +1280,80 @@ export default function Reception() {
           </TabsList>
 
           <TabsContent value="register" className="mt-4 space-y-5">
-            <div className="flex items-center justify-end">
-              <div className="inline-flex rounded-lg border bg-muted/40 p-1">
+            {/* Registration mode — first decision on this tab */}
+            <div className="space-y-2">
+              <p className="text-sm font-semibold text-foreground">
+                {lang === "ar" ? "نوع التسجيل" : "Registration type"}
+                <span className="text-red-500 ms-1">*</span>
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {lang === "ar"
+                  ? "اختر ما إذا كنت تسجّل عينة جديدة لأول مرة، أو طلب إعادة اختبار مرتبط بعينة سابقة."
+                  : "Choose whether this is a brand-new sample or a retest linked to a previous sample."}
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {([
-                  { id: "new" as const, labelAr: "عينة جديدة", labelEn: "New" },
-                  { id: "retest" as const, labelAr: "إعادة", labelEn: "Retest" },
-                ]).map(({ id, labelAr, labelEn }) => (
-                  <button
-                    key={id}
-                    type="button"
-                    onClick={() => setReceptionMode(id)}
-                    className={cn(
-                      "rounded-md px-4 py-2 text-sm font-medium transition-colors",
-                      receptionMode === id
-                        ? "bg-background text-foreground shadow-sm"
-                        : "text-muted-foreground hover:text-foreground"
-                    )}
-                  >
-                    {lang === "ar" ? labelAr : labelEn}
-                  </button>
-                ))}
+                  {
+                    id: "new" as const,
+                    icon: PackagePlus,
+                    titleAr: "عينة جديدة",
+                    titleEn: "New sample",
+                    descAr: "تسجيل عينة لأول مرة — اختر المادة والاختبارات كالمعتاد.",
+                    descEn: "First-time registration — pick material, tests, and print the receipt.",
+                  },
+                  {
+                    id: "retest" as const,
+                    icon: RotateCcw,
+                    titleAr: "إعادة اختبار",
+                    titleEn: "Retest",
+                    descAr: "عينة جديدة مرتبطة بعينة سابقة (فشل، شك، أو طلب المقاول).",
+                    descEn: "New order tied to a prior sample (failed result, doubt, or contractor request).",
+                  },
+                ]).map(({ id, icon: Icon, titleAr, titleEn, descAr, descEn }) => {
+                  const active = receptionMode === id;
+                  return (
+                    <button
+                      key={id}
+                      type="button"
+                      onClick={() => setReceptionMode(id)}
+                      aria-pressed={active}
+                      className={cn(
+                        "relative flex items-start gap-3 rounded-xl border-2 p-4 text-start transition-all",
+                        active
+                          ? "border-primary bg-primary/5 shadow-sm ring-2 ring-primary/20"
+                          : "border-slate-200 bg-white hover:border-primary/40 hover:bg-slate-50/80"
+                      )}
+                    >
+                      <div
+                        className={cn(
+                          "flex h-10 w-10 shrink-0 items-center justify-center rounded-lg",
+                          active ? "bg-primary text-primary-foreground" : "bg-slate-100 text-slate-600"
+                        )}
+                      >
+                        <Icon className="h-5 w-5" />
+                      </div>
+                      <div className="min-w-0 flex-1 space-y-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-semibold text-[15px]">{lang === "ar" ? titleAr : titleEn}</span>
+                          {active && (
+                            <Badge className="bg-primary/15 text-primary border-primary/30 text-[10px] px-1.5 py-0">
+                              {lang === "ar" ? "محدّد" : "Selected"}
+                            </Badge>
+                          )}
+                        </div>
+                        <p className="text-xs text-muted-foreground leading-relaxed">
+                          {lang === "ar" ? descAr : descEn}
+                        </p>
+                      </div>
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
-            {/* Search — sample lookup */}
+            {/* Search — sample lookup (new registration only) */}
+            {receptionMode === "new" && (
+            <>
             <div className="relative">
               <Search className="absolute start-3.5 top-1/2 -translate-y-1/2 w-[18px] h-[18px] text-muted-foreground" />
               <Input
@@ -1325,10 +1387,23 @@ export default function Reception() {
                 ))}
               </div>
             )}
+            </>
+            )}
 
         {receptionMode === "retest" ? (
-          <Card>
-            <CardContent className="p-6">
+          <Card className="border-amber-200/80 bg-gradient-to-br from-amber-50/40 to-white">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base flex items-center gap-2">
+                <RotateCcw className="w-4 h-4 text-amber-700" />
+                {lang === "ar" ? "تسجيل إعادة اختبار" : "Register a retest"}
+              </CardTitle>
+              <p className="text-xs text-muted-foreground font-normal">
+                {lang === "ar"
+                  ? "ابحث عن العينة الأصلية، اختر الاختبارات المراد إعادتها، ثم سجّل الطلب."
+                  : "Find the original sample, pick which tests to repeat, then register the new order."}
+              </p>
+            </CardHeader>
+            <CardContent className="pt-0">
               <ReceptionRetestPanel
                 onSuccess={() => { setReceptionMode("new"); refetch(); }}
                 onCancel={() => setReceptionMode("new")}

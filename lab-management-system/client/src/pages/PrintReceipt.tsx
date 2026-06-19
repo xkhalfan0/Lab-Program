@@ -5,7 +5,7 @@
 import { useParams } from "wouter";
 import { useEffect, useMemo, type ReactNode } from "react";
 import { trpc } from "@/lib/trpc";
-import { Loader2, Printer, X, XCircle } from "lucide-react";
+import { Loader2, Printer, X, XCircle, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SAMPLE_TYPE_LABELS } from "@/lib/labTypes";
 
@@ -43,6 +43,13 @@ const T = {
   totalPrice: { ar: "إجمالي الرسوم", en: "Total Fees" },
   contractorForm: { ar: "نموذج المقاول", en: "Contractor Form" },
   viewFile: { ar: "عرض الملف", en: "View file" },
+  viewForm: { ar: "عرض نموذج المقاول", en: "View contractor form" },
+  printWithForm: { ar: "طباعة الوصل + النموذج", en: "Print receipt + form" },
+  formPrintHint: {
+    ar: "النموذج مرفق رقمياً — استخدم «عرض نموذج المقاول» لطباعته منفصلاً.",
+    en: "Form stored digitally — use “View contractor form” to print it separately.",
+  },
+  digitalAttachment: { ar: "مرفق رقمي", en: "digital attachment" },
   notes: { ar: "ملاحظات", en: "Notes" },
   printedAt: { ar: "طُبع في", en: "Printed at" },
 } as const;
@@ -250,9 +257,38 @@ export default function PrintReceipt({ sectorSampleId }: { sectorSampleId?: numb
         <span className="text-sm font-medium">
           {tx("toolbarTitle", lang)} — {sample.sampleCode}
         </span>
-        <Button onClick={() => window.print()} className="bg-blue-600 hover:bg-blue-700 gap-2">
-          <Printer className="w-4 h-4" /> {tx("print", lang)}
-        </Button>
+        <div className="flex items-center gap-2">
+          {contractorForm?.fileUrl ? (
+            <>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="text-white hover:text-white hover:bg-slate-700 gap-1.5 text-xs"
+                onClick={() => window.open(contractorForm.fileUrl, "_blank", "noopener,noreferrer")}
+              >
+                <FileText className="w-3.5 h-3.5" />
+                {tx("viewForm", lang)}
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="text-white hover:text-white hover:bg-slate-700 gap-1.5 text-xs"
+                onClick={() => {
+                  window.print();
+                  window.open(contractorForm.fileUrl, "_blank", "noopener,noreferrer");
+                }}
+              >
+                <Printer className="w-3.5 h-3.5" />
+                {tx("printWithForm", lang)}
+              </Button>
+            </>
+          ) : null}
+          <Button onClick={() => window.print()} className="bg-blue-600 hover:bg-blue-700 gap-2">
+            <Printer className="w-4 h-4" /> {tx("print", lang)}
+          </Button>
+        </div>
       </div>
 
       <div className="bg-gray-200 print:bg-white min-h-screen py-6 print:py-0">
@@ -406,14 +442,22 @@ export default function PrintReceipt({ sectorSampleId }: { sectorSampleId?: numb
                 <tr style={{ borderBottom: "1px solid #e5e7eb" }}>
                   {th("contractorForm")}
                   <td colSpan={3} style={{ padding: "5px 8px" }}>
-                    <a
-                      href={contractorForm.fileUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      style={{ color: "#1d4ed8", fontWeight: 600, textDecoration: "underline" }}
-                    >
-                      {contractorForm.fileName} — {tx("viewFile", lang)}
-                    </a>
+                    <span className="print:hidden">
+                      <a
+                        href={contractorForm.fileUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{ color: "#1d4ed8", fontWeight: 600, textDecoration: "underline" }}
+                      >
+                        {contractorForm.fileName} — {tx("viewFile", lang)}
+                      </a>
+                    </span>
+                    <span className="hidden print:inline" style={{ color: "#374151" }}>
+                      {contractorForm.fileName}{" "}
+                      <span style={{ color: "#9ca3af", fontSize: "8px" }}>
+                        ({tx("digitalAttachment", lang)})
+                      </span>
+                    </span>
                   </td>
                 </tr>
               )}

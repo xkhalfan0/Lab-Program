@@ -62,10 +62,26 @@ function getClearanceTaskState(req: any): "new" | "incomplete" | "completed" {
   return "new";
 }
 
+const QC_DONE_SAMPLE_STATUSES = new Set(["qc_passed", "qc_failed", "clearance_issued"]);
+
 function getSampleTaskState(sample: any): "new" | "incomplete" | "completed" {
+  if (QC_DONE_SAMPLE_STATUSES.has(sample.status)) return "completed";
   if (sample.status === "approved") return "new";
   if (sample.status === "revision_requested") return "incomplete";
   return "completed";
+}
+
+function isQcReviewComplete(
+  sample: { status?: string } | null | undefined,
+  qcReview: { decision?: string } | null | undefined,
+  legacyResult: { qcReviewedAt?: Date | string | null } | null | undefined,
+  specializedResult: { qcReviewedAt?: Date | string | null } | null | undefined,
+): boolean {
+  if (sample?.status && QC_DONE_SAMPLE_STATUSES.has(sample.status)) return true;
+  if (qcReview) return true;
+  if (legacyResult?.qcReviewedAt) return true;
+  if (specializedResult?.qcReviewedAt) return true;
+  return false;
 }
 
 function ClearanceStatusBadge({ status, lang }: { status: string; lang: string }) {
@@ -746,6 +762,7 @@ export default function QCReview() {
   );
   const managerReview = reviews?.find((r) => r.reviewType === "manager_review");
   const qcExistingReview = reviews?.find((r) => r.reviewType === "qc_review");
+  const isQcAlreadyDone = isQcReviewComplete(selectedSample, qcExistingReview, result, specializedResult);
 
   const overallCompliance = specializedResult
     ? (specializedResult.overallResult ?? "pending")
@@ -812,6 +829,14 @@ export default function QCReview() {
   };
 
   const handleReview = () => {
+    if (isQcAlreadyDone) {
+      toast.info(
+        lang === "ar"
+          ? "تمت مراجعة ضبط الجودة لهذه العينة مسبقاً."
+          : "This sample has already completed QC review."
+      );
+      return;
+    }
     if (dialogSamplePending) {
       toast.warning(
         lang === "ar"
@@ -1140,17 +1165,50 @@ export default function QCReview() {
                 </div>
               )}
 
-              {/* Prior QC review (if re-opened) */}
-              {qcExistingReview && (
+              {/* QC review record (read-only when already completed) */}
+              {isQcAlreadyDone && (
                 <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3 text-xs space-y-1">
-                  <p className="font-semibold text-emerald-800">{lang === "ar" ? "مراجعة ضبط الجودة السابقة" : "Previous QC Review"}</p>
-                  <p><span className="text-muted-foreground">{lang === "ar" ? "القرار:" : "Decision:"}</span> <span className="font-medium capitalize">{qcExistingReview.decision.replace(/_/g, " ")}</span></p>
-                  {qcExistingReview.signature && (
-                    <p><span className="text-muted-foreground">{lang === "ar" ? "موقع من:" : "Signed by:"}</span> <span className="font-semibold">{qcExistingReview.signature}</span></p>
+                  <p className="font-semibold text-emerald-800">
+                    {lang === "ar" ? "تمت مراجعة ضبط الجودة" : "QC Review Completed"}
+                  </p>
+                  {qcExistingReview ? (
+                    <>
+                      <p>
+                        <span className="text-muted-foreground">{lang === "ar" ? "القرار:" : "Decision:"}</span>{" "}
+                        <span className="font-medium capitalize">{qcExistingReview.decision.replace(/_/g, " ")}</span>
+                      </p>
+                      {qcExistingReview.comments && (
+                        <p>
+                          <span className="text-muted-foreground">{lang === "ar" ? "الملاحظات:" : "Notes:"}</span>{" "}
+                          {qcExistingReview.comments}
+                        </p>
+                      )}
+                      {(qcExistingReview.signature || specializedResult?.qcReviewedByName || result?.qcReviewedByName) && (
+                        <p>
+                          <span className="text-muted-foreground">{lang === "ar" ? "موقع من:" : "Signed by:"}</span>{" "}
+                          <span className="font-semibold">
+                            {qcExistingReview.signature || specializedResult?.qcReviewedByName || result?.qcReviewedByName}
+                          </span>
+                          {(qcExistingReview.createdAt || specializedResult?.qcReviewedAt || result?.qcReviewedAt) && (
+                            <span className="text-muted-foreground ms-2">
+                              · {new Date(qcExistingReview.createdAt || specializedResult?.qcReviewedAt || result?.qcReviewedAt!).toLocaleDateString(lang === "ar" ? "ar-AE" : "en-GB")}
+                            </span>
+                          )}
+                        </p>
+                      )}
+                    </>
+                  ) : (
+                    <p className="text-emerald-900/80">
+                      {lang === "ar"
+                        ? "تم اعتماد هذه العينة مسبقاً. لا يلزم إجراء إضافي."
+                        : "This sample has already been QC approved. No further action is required."}
+                    </p>
                   )}
                 </div>
               )}
 
+              {!isQcAlreadyDone && (
+              <>
               {/* QC attestation */}
               <div className="rounded-lg border border-blue-200 bg-blue-50/60 p-3.5 space-y-2">
                 <p className="text-xs font-semibold text-blue-900">
@@ -1299,6 +1357,16 @@ export default function QCReview() {
                   </Button>
                 </div>
               </div>
+              </>
+              )}
+
+              {isQcAlreadyDone && (
+                <div className="flex justify-end pt-2">
+                  <Button variant="outline" onClick={() => setSelectedSample(null)}>
+                    {lang === "ar" ? "إغلاق" : "Close"}
+                  </Button>
+                </div>
+              )}
             </div>
           ) : (
             <div className="p-8 text-center text-sm text-muted-foreground">

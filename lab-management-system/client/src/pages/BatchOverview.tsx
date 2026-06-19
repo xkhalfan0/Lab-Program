@@ -157,7 +157,8 @@ export default function BatchOverview() {
     return isAr ? "\u0642\u064a\u062f \u0627\u0644\u0627\u0646\u062a\u0638\u0627\u0631" : "Pending";
   };
 
-  const isLoading = sampleLoading || siblingsLoading;
+  const isSingleTestBatch = !siblingsLoading && sorted.length === 1;
+  const isLoading = siblingsLoading || (sampleLoading && !isSingleTestBatch);
 
   return (
     <DashboardLayout>

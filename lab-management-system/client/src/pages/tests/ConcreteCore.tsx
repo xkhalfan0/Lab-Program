@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { useParams, useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { redirectAfterTestSave } from "@/lib/batchHelpers";
@@ -12,7 +12,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Plus, Trash2, Send, FlaskConical, Info, Printer, UserCheck } from "lucide-react";
+import { Send, FlaskConical, Info, Printer, UserCheck } from "lucide-react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { useLanguage } from "@/contexts/LanguageContext";
 
@@ -140,6 +140,11 @@ function newRow(index: number): CoreRow {
   };
 }
 
+function rowsFromQuantity(quantity: number | null | undefined): CoreRow[] {
+  const n = Math.max(1, Math.min(999, Number(quantity) || 1));
+  return Array.from({ length: n }, (_, i) => newRow(i));
+}
+
 function computeRow(row: CoreRow, specifiedCubeStrength: number): CoreRow {
   const d = parseFloat(row.diameter);
   const l = parseFloat(row.length);
@@ -203,10 +208,18 @@ export default function ConcreteCore() {
   const distId = parseInt(distributionId ?? "0");
 
   const { data: dist } = trpc.distributions.get.useQuery({ id: distId }, { enabled: !!distId });
-  const { data: existing } = trpc.specializedTests.getByDistribution.useQuery(
+  const { data: existing, isFetched: existingFetched } = trpc.specializedTests.getByDistribution.useQuery(
     { distributionId: distId },
     { enabled: !!distId }
   );
+
+  const initFromDistRef = useRef(false);
+
+  useEffect(() => {
+    initFromDistRef.current = false;
+  }, [distId]);
+
+  const coreCount = Math.max(1, Math.min(999, Number(dist?.quantity) || 1));
 
   const [specifiedStrength, setSpecifiedStrength] = useState("30");
   const [coreType, setCoreType] = useState("Drilled Core");
@@ -215,7 +228,7 @@ export default function ConcreteCore() {
   const [castDate, setCastDate] = useState("");
   const [testDate, setTestDate] = useState(() => new Date().toISOString().split("T")[0]);
   const [notes, setNotes] = useState("");
-  const [rows, setRows] = useState<CoreRow[]>([newRow(0), newRow(1), newRow(2)]);
+  const [rows, setRows] = useState<CoreRow[]>([]);
   const [saving, setSaving] = useState(false);
 
   const { lang } = useLanguage();
@@ -268,6 +281,16 @@ export default function ConcreteCore() {
        if (existing.status === "submitted") setSubmitted(true);
   }, [existing]);
 
+  // Row count fixed to reception/distribution quantity when no saved cores yet
+  useEffect(() => {
+    if (!dist || !existingFetched) return;
+    const fd = existing?.formData as { cores?: unknown[] } | undefined;
+    if (Array.isArray(fd?.cores) && fd.cores.length > 0) return;
+    if (initFromDistRef.current) return;
+    setRows(rowsFromQuantity(dist.quantity));
+    initFromDistRef.current = true;
+  }, [dist, existingFetched, existing?.formData]);
+
   const ageDays =
     castDate && testDate
       ? Math.round((new Date(testDate).getTime() - new Date(castDate).getTime()) / (1000 * 60 * 60 * 24))
@@ -287,9 +310,6 @@ export default function ConcreteCore() {
     setRows(prev => prev.map(r => r.id === id ? { ...r, [field]: value } : r));
   }, []);
 
-  const addRow = () => setRows(prev => [...prev, newRow(prev.length)]);
-  const removeRow = (id: string) => setRows(prev => prev.filter(r => r.id !== id));
-
   const handleSave = async (status: "draft" | "submitted") => {
     if (!dist?.sampleId) {
       toast.error(lang === "ar" ? "معرف العينة مفقود" : "Sample ID missing");
@@ -304,6 +324,14 @@ export default function ConcreteCore() {
     }
     if (status === "submitted" && validRows.length === 0) {
       toast.error(ar ? "الرجاء إدخال نتيجة لب واحدة على الأقل" : "Please enter at least one core result");
+      return;
+    }
+    if (status === "submitted" && validRows.length < coreCount) {
+      toast.error(
+        ar
+          ? `الرجاء إدخال نتائج لجميع اللبابات (${coreCount}) حسب الكمية المسجلة في الاستلام`
+          : `Please enter results for all ${coreCount} core(s) registered at reception`,
+      );
       return;
     }
     setSaving(true);
@@ -332,6 +360,7 @@ export default function ConcreteCore() {
           avgEqStrength: avgEqStrength.toFixed(2),
           required: (specStr * 0.85).toFixed(1),
           coreCount: validRows.length,
+          registeredQuantity: coreCount,
         },
         notes,
         status,
@@ -509,13 +538,13 @@ export default function ConcreteCore() {
         {/* Cores Table */}
         <Card>
           <CardHeader className="pb-3">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-2 flex-wrap">
               <CardTitle className="text-base">{ar ? "نتائج اختبار اللب" : "Core Test Results"}</CardTitle>
-              {!submitted && (
-                <Button variant="outline" size="sm" onClick={addRow}>
-                  <Plus size={14} className="mr-1" /> {ar ? "إضافة عينة" : "Add Core"}
-                </Button>
-              )}
+              <span className="text-xs font-medium text-slate-500 bg-slate-100 border border-slate-200 rounded-full px-2.5 py-1">
+                {ar
+                  ? `${coreCount} لب — الكمية من الاستلام (لا يمكن الإضافة أو الحذف)`
+                  : `${coreCount} core(s) — quantity from reception (fixed)`}
+              </span>
             </div>
           </CardHeader>
           <CardContent>
@@ -538,7 +567,6 @@ export default function ConcreteCore() {
                     { en: "Core Str. (N/mm²)", ar: "قوة اللب (نيوتن/مم²)" },
                     { en: "Eq. Cube Str. (N/mm²)", ar: "قوة المكعب المكافئة (نيوتن/مم²)" },
                     { en: "Result", ar: "النتيجة" },
-                    { en: "", ar: "" },
                   ].map(h => (
                     <th
                       key={h.en}
@@ -640,19 +668,6 @@ export default function ConcreteCore() {
                       {row.result && row.result !== "pending" ? (
                         <PassFailBadge result={row.result} size="sm" />
                       ) : "—"}
-                    </td>
-                    <td className="border border-slate-200 px-1 py-1 text-center">
-                      {!submitted && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-8 w-8 p-0 text-red-600 hover:text-red-700"
-                          onClick={() => removeRow(row.id)}
-                          disabled={rows.length <= 1}
-                        >
-                          <Trash2 size={12} />
-                        </Button>
-                      )}
                     </td>
                   </tr>
                 ))}

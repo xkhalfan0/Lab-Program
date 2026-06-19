@@ -47,11 +47,22 @@ export function getBatchRoute(sampleId: number, orderId: number): string {
 
 export function redirectAfterTestSave(
   setLocation: (path: string) => void,
-  dist: { sampleId?: number; orderId?: number } | null | undefined,
+  dist:
+    | ({
+        id?: number;
+        sampleId?: number;
+        orderId?: number;
+      } & Parameters<typeof isBatchDistribution>[0])
+    | null
+    | undefined,
 ): void {
-  if (dist?.orderId && dist.sampleId) {
+  if (isBatchDistribution(dist) && dist?.sampleId && dist?.orderId) {
     setLocation(getBatchRoute(dist.sampleId, dist.orderId));
-  } else {
-    setLocation("/technician");
+    return;
   }
+  if (dist?.id) {
+    setLocation(`/test-report/${dist.id}`);
+    return;
+  }
+  setLocation("/technician");
 }
