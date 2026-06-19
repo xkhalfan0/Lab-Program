@@ -43,6 +43,7 @@ import SectorResults from "./pages/sector/SectorResults";
 import SectorClearances from "./pages/sector/SectorClearances";
 import SectorNotifications from "./pages/sector/SectorNotifications";
 import SectorTestReportPage from "./pages/sector/SectorTestReportPage";
+import SectorReceiptPage from "./pages/sector/SectorReceiptPage";
 import { Loader2 } from "lucide-react";
 import { useEffect } from "react";
 import { effectiveUserRole } from "./lib/labTypes";
@@ -322,6 +323,7 @@ function Router() {
       <Route path="/sector/inbox">{() => <SectorPage component={SectorInboxRedirect} />}</Route>
       <Route path="/sector/dashboard">{() => <SectorPage component={SectorDashboard} />}</Route>
       <Route path="/sector/samples">{() => <SectorPage component={SectorSamples} />}</Route>
+      <Route path="/sector/receipt/:sampleId">{() => <SectorPage component={SectorReceiptPage} />}</Route>
       <Route path="/sector/results">{() => <SectorPage component={SectorResults} />}</Route>
       <Route path="/sector/test-report/:resultId">{() => <SectorPage component={SectorTestReportPage} />}</Route>
       <Route path="/sector/clearances">{() => <SectorPage component={SectorClearances} />}</Route>

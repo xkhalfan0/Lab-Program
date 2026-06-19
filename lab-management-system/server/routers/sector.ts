@@ -20,6 +20,8 @@ import {
   getSpecializedTestResultById,
   getDistributionsByBatch,
   getSpecializedTestResultsBySample,
+  getAttachmentsBySample,
+  getLabOrderItems,
 } from "../db";
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
@@ -390,13 +392,40 @@ export const sectorRouter = router({
           contractorName: s.contractorName,
           sampleType: s.sampleType,
           quantity: s.quantity,
-          condition: s.condition,
-          status: s.status,
           receivedAt: s.receivedAt,
         })),
         total: Number(countRow[0]?.count ?? 0),
         statusSummary,
       };
+    }),
+
+  /** Reception receipt data for a sample owned by this sector. */
+  getReceiptBundle: sectorProcedure
+    .input(z.object({ sampleId: z.number() }))
+    .query(async ({ ctx, input }) => {
+      const sample = await getSampleById(input.sampleId);
+      if (!sample || sample.sector !== ctx.sectorKey) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Sample not found for this sector" });
+      }
+
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+
+      const orderRows = await db
+        .select()
+        .from(labOrders)
+        .where(and(eq(labOrders.sampleId, input.sampleId), isNull(labOrders.deletedAt)));
+
+      const orders = await Promise.all(
+        orderRows.map(async (order) => ({
+          ...order,
+          items: await getLabOrderItems(order.id),
+        })),
+      );
+
+      const attachments = await getAttachmentsBySample(input.sampleId);
+
+      return { sample, orders, attachments };
     }),
 
   // ── Test results (approved only) ───────────────────────────────────────────

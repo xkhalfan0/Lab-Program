@@ -116,27 +116,38 @@ function ValueTd({ children, mono }: { children: ReactNode; mono?: boolean }) {
   );
 }
 
-export default function PrintReceipt() {
+export default function PrintReceipt({ sectorSampleId }: { sectorSampleId?: number } = {}) {
   const { id } = useParams<{ id: string }>();
-  const sampleId = parseInt(id ?? "0");
+  const sampleId = sectorSampleId ?? parseInt(id ?? "0");
+  const isSectorMode = sectorSampleId != null && sectorSampleId > 0;
   const lang: Lang =
     typeof window !== "undefined" &&
     new URLSearchParams(window.location.search).get("lang") === "en"
       ? "en"
       : "ar";
 
-  const { data: sample, isLoading } = trpc.samples.get.useQuery(
+  const { data: sectorBundle, isLoading: sectorLoading, isError: sectorError } = trpc.sector.getReceiptBundle.useQuery(
+    { sampleId: sectorSampleId! },
+    { enabled: isSectorMode },
+  );
+
+  const { data: labSample, isLoading: labLoading } = trpc.samples.get.useQuery(
     { id: sampleId },
-    { enabled: sampleId > 0 },
+    { enabled: sampleId > 0 && !isSectorMode },
   );
-  const { data: orders } = trpc.orders.bySample.useQuery(
+  const { data: labOrders } = trpc.orders.bySample.useQuery(
     { sampleId },
-    { enabled: sampleId > 0 },
+    { enabled: sampleId > 0 && !isSectorMode },
   );
-  const { data: attachments = [] } = trpc.attachments.bySample.useQuery(
+  const { data: labAttachments = [] } = trpc.attachments.bySample.useQuery(
     { sampleId },
-    { enabled: sampleId > 0 },
+    { enabled: sampleId > 0 && !isSectorMode },
   );
+
+  const sample = isSectorMode ? sectorBundle?.sample : labSample;
+  const orders = isSectorMode ? sectorBundle?.orders : labOrders;
+  const attachments = isSectorMode ? (sectorBundle?.attachments ?? []) : labAttachments;
+  const isLoading = isSectorMode ? sectorLoading : labLoading;
 
   const contractorForm = attachments.find(
     (a: { attachmentType?: string }) => a.attachmentType === "contractor_form",
@@ -179,6 +190,7 @@ export default function PrintReceipt() {
 
   const handleClose = () => {
     if (window.opener) window.close();
+    else if (isSectorMode) window.location.href = "/sector/samples";
     else window.history.back();
   };
 
@@ -201,7 +213,13 @@ export default function PrintReceipt() {
     return (
       <div className="flex flex-col items-center justify-center h-screen gap-4">
         <XCircle className="text-red-400" size={40} />
-        <p className="text-slate-600 font-medium">{tx("notFound", lang)}</p>
+        <p className="text-slate-600 font-medium">
+          {isSectorMode && sectorError
+            ? lang === "ar"
+              ? "تعذّر تحميل وصل الاستلام"
+              : "Could not load this receipt."
+            : tx("notFound", lang)}
+        </p>
         <Button variant="outline" onClick={handleClose}>
           {tx("close", lang)}
         </Button>
