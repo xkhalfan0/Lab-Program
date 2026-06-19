@@ -124,7 +124,7 @@ export async function generatePdfFromElement(
       max-width: 100% !important;
       min-height: auto !important;
       margin: 0 !important;
-      padding: 10mm !important;
+      padding: 0 !important;
       box-shadow: none !important;
     }
     /* Keep wide content (tables, charts, images) inside the sheet */

@@ -45,16 +45,34 @@ import {
 // ─── Task state helpers ───────────────────────────────────────────────────────
 type QcListTab = "pending" | "done";
 
+/** Primary workspace sections — full-width segment control */
+const mainTabListClass =
+  "w-full h-auto p-1.5 bg-white border border-slate-200 rounded-xl shadow-sm flex gap-1.5";
+
+const mainTabTriggerClass =
+  "group flex-1 min-w-0 rounded-lg px-4 py-3.5 text-base font-bold transition-all " +
+  "text-slate-600 hover:text-slate-900 hover:bg-slate-50 " +
+  "data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md " +
+  "data-[state=active]:hover:bg-primary/90 data-[state=active]:[&_svg]:text-primary-foreground";
+
+const mainTabBadgeClass =
+  "ms-2 inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full px-1.5 text-[10px] font-bold " +
+  "bg-red-500 text-white ring-2 ring-white group-data-[state=active]:ring-primary/40";
+
+/** Sub-filters within a section — compact underline tabs */
+const innerTabListClass =
+  "w-full h-auto p-0 bg-transparent border-0 border-b border-slate-200 rounded-none flex gap-1";
+
 const innerTabTriggerClass =
-  "group flex-1 min-w-0 rounded-lg border border-transparent px-3 py-2.5 text-sm font-semibold transition-all " +
-  "text-muted-foreground hover:text-foreground hover:bg-white/60 " +
-  "data-[state=active]:bg-white data-[state=active]:text-primary data-[state=active]:shadow-sm " +
-  "data-[state=active]:border-slate-200 data-[state=active]:ring-1 data-[state=active]:ring-primary/20 " +
+  "group relative flex-1 min-w-0 rounded-none border-0 bg-transparent px-3 pb-2.5 pt-1 text-sm font-medium shadow-none " +
+  "text-muted-foreground hover:text-foreground " +
+  "data-[state=active]:bg-transparent data-[state=active]:text-primary data-[state=active]:shadow-none " +
+  "data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:font-semibold " +
   "data-[state=active]:[&_svg]:text-primary";
 
 const innerTabBadgeClass =
-  "ms-2 inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full px-1.5 text-[10px] font-bold " +
-  "bg-slate-200 text-slate-700 group-data-[state=active]:bg-primary/15 group-data-[state=active]:text-primary";
+  "ms-1.5 inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full px-1.5 text-[10px] font-semibold " +
+  "bg-slate-100 text-slate-600 group-data-[state=active]:bg-primary/10 group-data-[state=active]:text-primary";
 
 function getClearanceTaskState(req: any): "new" | "incomplete" | "completed" {
   if (req.status !== "pending") return "completed";
@@ -361,7 +379,7 @@ function ClearanceQCSection() {
       />
 
       <Tabs value={listTab} onValueChange={(v) => setListTab(v as QcListTab)} className="w-full">
-        <TabsList className="w-full h-auto p-1 bg-slate-100 border border-slate-200 rounded-lg flex gap-1">
+        <TabsList className={innerTabListClass}>
           <TabsTrigger value="pending" className={innerTabTriggerClass}>
             <Clock className="w-4 h-4 me-2 shrink-0" />
             <span className="truncate">{lang === "ar" ? "قيد المراجعة" : "In Review"}</span>
@@ -706,17 +724,6 @@ export default function QCReview() {
   const newCount = qcSamples.filter(s => getSampleTaskState(s) === "new").length;
   const clearanceNewCount = clearanceRequests.filter(r => getClearanceTaskState(r) === "new").length;
 
-  const tabTriggerClass =
-    "group flex-1 min-w-0 rounded-lg border border-transparent px-4 py-3 text-sm font-semibold transition-all " +
-    "text-muted-foreground hover:text-foreground hover:bg-white/60 " +
-    "data-[state=active]:bg-white data-[state=active]:text-primary data-[state=active]:shadow-sm " +
-    "data-[state=active]:border-slate-200 data-[state=active]:ring-1 data-[state=active]:ring-primary/20 " +
-    "data-[state=active]:[&_svg]:text-primary";
-
-  const tabBadgeClass =
-    "ms-2 inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full px-1.5 text-[10px] font-bold " +
-    "bg-red-100 text-red-700 group-data-[state=active]:bg-red-500 group-data-[state=active]:text-white";
-
   const sampleListFilters = useMemo(
     () => ({ search: listSearch, sector: sectorFilter, sampleType: sampleTypeFilter }),
     [listSearch, sectorFilter, sampleTypeFilter],
@@ -877,25 +884,25 @@ export default function QCReview() {
         </div>
 
         <Tabs defaultValue="samples" className="w-full">
-          <TabsList className="w-full h-auto p-1.5 bg-slate-100 border border-slate-200 rounded-xl flex gap-1">
-            <TabsTrigger value="samples" className={tabTriggerClass}>
-              <ShieldCheck className="w-4 h-4 me-2 shrink-0" />
+          <TabsList className={mainTabListClass}>
+            <TabsTrigger value="samples" className={mainTabTriggerClass}>
+              <ShieldCheck className="w-5 h-5 me-2 shrink-0" />
               <span className="truncate">
                 {lang === "ar" ? "فحص جودة نتائج العينات" : "Sample Results Quality Check"}
               </span>
               {newCount > 0 && (
-                <span className={tabBadgeClass}>
+                <span className={mainTabBadgeClass}>
                   {newCount}
                 </span>
               )}
             </TabsTrigger>
-            <TabsTrigger value="clearance" className={tabTriggerClass}>
-              <BadgeCheck className="w-4 h-4 me-2 shrink-0" />
+            <TabsTrigger value="clearance" className={mainTabTriggerClass}>
+              <BadgeCheck className="w-5 h-5 me-2 shrink-0" />
               <span className="truncate">
                 {lang === "ar" ? "طلبات شهادة براءة الذمة — مراجعة QC" : "Clearance Requests — QC Review"}
               </span>
               {clearanceNewCount > 0 && (
-                <span className={tabBadgeClass}>
+                <span className={mainTabBadgeClass}>
                   {clearanceNewCount}
                 </span>
               )}
@@ -926,14 +933,14 @@ export default function QCReview() {
           />
 
           <Tabs value={sampleListTab} onValueChange={(v) => setSampleListTab(v as QcListTab)} className="w-full">
-            <TabsList className="w-full h-auto p-1 bg-slate-100 border border-slate-200 rounded-lg flex gap-1">
+            <TabsList className={innerTabListClass}>
               <TabsTrigger value="pending" className={innerTabTriggerClass}>
-                <Clock className="w-4 h-4 me-2 shrink-0" />
+                <Clock className="w-3.5 h-3.5 me-1.5 shrink-0" />
                 <span className="truncate">{lang === "ar" ? "قيد المراجعة" : "In Review"}</span>
                 <span className={innerTabBadgeClass}>{pendingSamples.length}</span>
               </TabsTrigger>
               <TabsTrigger value="done" className={innerTabTriggerClass}>
-                <CheckCircle2 className="w-4 h-4 me-2 shrink-0" />
+                <CheckCircle2 className="w-3.5 h-3.5 me-1.5 shrink-0" />
                 <span className="truncate">{lang === "ar" ? "معتمد QC" : "QC Approved"}</span>
                 <span className={innerTabBadgeClass}>{doneSamples.length}</span>
               </TabsTrigger>

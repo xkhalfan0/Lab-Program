@@ -609,8 +609,8 @@ export default function OrderReport() {
       <div className="bg-gray-200 print:bg-white min-h-screen py-6 print:py-0" dir={isAr ? "rtl" : "ltr"}>
         <div
           ref={printRef}
-          className="lab-print-root mx-auto bg-white shadow-lg print:shadow-none"
-          style={{ width: "210mm", padding: "10mm 12mm 12mm 12mm", fontFamily: "Arial, sans-serif", fontSize: "10px" }}
+          className="lab-print-root mx-auto bg-white shadow-lg print:shadow-none report-page px-12 py-10"
+          style={{ width: "210mm", fontFamily: "Arial, sans-serif", fontSize: "10px" }}
         >
           {/* ── Header ── */}
           <LabReportHeader
@@ -776,6 +776,7 @@ export default function OrderReport() {
             );
           })}
 
+          <div className="report-page-tail">
           <ReportSignatures
             sig={overallSigs}
             labels={{
@@ -786,7 +787,7 @@ export default function OrderReport() {
             lang={isAr ? "ar" : "en"}
             showTitle
             title={t("signatures", lang)}
-            className="mt-4 pt-3 border-t-2 border-gray-400 report-signatures-block print-no-break"
+            className="mt-4 pt-3 border-t-2 border-gray-400 report-signatures-block"
           />
 
           {/* ── Footer ── */}
@@ -795,6 +796,7 @@ export default function OrderReport() {
               <span>{t("footer", lang)}</span>
             </div>
             <ReportPrintNote lang={isAr ? "ar" : "en"} />
+          </div>
           </div>
         </div>
       </div>

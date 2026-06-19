@@ -30,7 +30,6 @@ import {
   Clock,
   Building2,
   Calendar,
-  FileText,
   Package,
   AlertCircle,
 } from "lucide-react";
@@ -63,7 +62,6 @@ const T = {
   sectionDone:   { ar: "اختبارات مكتملة",         en: "Completed tests" },
   emptyView:   { ar: "لا توجد اختبارات في هذا العرض", en: "No tests in this view" },
   startTest:   { ar: "بدء الاختبار",              en: "Start test" },
-  viewReport:  { ar: "عرض التقرير",               en: "View report" },
   partOf:      { ar: "ضمن الطلب",                 en: "Part of" },
   received:    { ar: "تاريخ الاستلام",            en: "Received" },
   sampleCode:  { ar: "رمز العينة",               en: "Sample code" },
@@ -249,18 +247,6 @@ function priorityRank(p: string | null | undefined): number {
   }
 }
 
-function reportUrlForDistribution(dist: any): string {
-  const id = dist.id;
-  const testType = dist.testType ?? "";
-  if (testType === "CONC_CUBE" || testType === "concrete" || testType === "concrete_compression") {
-    return `/concrete-report/${id}`;
-  }
-  if (isSpecializedTestType(testType)) {
-    return `/test-report/${id}`;
-  }
-  return `/test-report/${id}`;
-}
-
 function wrapDisabledWithTooltip(
   hasPendingDeletion: boolean,
   DisabledWarning: React.ReactNode,
@@ -289,7 +275,6 @@ function TechnicianAssignmentCard({
   prerequisitesLocked,
   missingTests,
   onStartTest,
-  onViewReport,
   onDeletionSuccess,
 }: {
   dist: any;
@@ -300,7 +285,6 @@ function TechnicianAssignmentCard({
   prerequisitesLocked: boolean;
   missingTests: MissingPrerequisiteTest[];
   onStartTest: () => void;
-  onViewReport: () => void;
   onDeletionSuccess: () => void;
 }) {
   const distId = resolveDistributionId(dist);
@@ -410,12 +394,7 @@ function TechnicianAssignmentCard({
           </div>
         </div>
         <div className="flex shrink-0 flex-wrap items-center gap-2 sm:flex-col sm:items-end">
-          {isCompleted ? (
-            <Button type="button" variant="outline" size="sm" className="gap-1.5" onClick={onViewReport}>
-              <FileText className="h-4 w-4" />
-              {tx("viewReport", lang)}
-            </Button>
-          ) : (
+          {!isCompleted &&
             wrapDisabledWithTooltip(
               startDisabled,
               prerequisitesLocked ? (
@@ -432,8 +411,7 @@ function TechnicianAssignmentCard({
               >
                 {tx("startTest", lang)}
               </Button>
-            )
-          )}
+            )}
           {distId > 0 &&
             (combinedPending ? (
               <Tooltip>
@@ -786,7 +764,6 @@ export default function Technician() {
         prerequisitesLocked={prerequisitesLocked}
         missingTests={missingTests}
         onStartTest={() => openTestFlow(dist)}
-        onViewReport={() => window.open(reportUrlForDistribution(dist), "_blank")}
         onDeletionSuccess={() => {
           refetch();
           refetchOrders();

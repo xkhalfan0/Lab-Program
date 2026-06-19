@@ -118,14 +118,77 @@
     page-break-after: avoid;
   }
 
+  .lab-print-root:has(.report-page) {
+    padding: 0 !important;
+  }
+
   .report-page {
     page-break-inside: auto;
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
+    box-sizing: border-box !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    padding: 6mm 8mm !important;
+    min-height: 285mm;
+    display: flex !important;
+    flex-direction: column !important;
+  }
+
+  /* Single-page reports: footer block sits at bottom; multi-page: flows naturally */
+  .report-page-body {
+    flex: 1 1 auto;
+  }
+
+  .report-page-tail {
+    flex-shrink: 0;
+    margin-top: auto;
+    page-break-before: avoid;
+    break-before: avoid-page;
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+
+  .report-page .mb-5 {
+    margin-bottom: 6pt !important;
+  }
+
+  .report-page .mb-3 {
+    margin-bottom: 4pt !important;
+  }
+
+  .report-page .grid.grid-cols-3 {
+    gap: 3pt !important;
+    margin-bottom: 4pt !important;
+  }
+
+  .report-page .grid.grid-cols-3 > div {
+    padding: 4pt !important;
+  }
+
+  .report-page .grid.grid-cols-3 .text-xl {
+    font-size: 12pt !important;
+    line-height: 1.2 !important;
+  }
+
+  .report-page table th,
+  .report-page table td {
+    padding: 2pt 3pt !important;
+    line-height: 1.15 !important;
+  }
+
+  .report-page .report-signatures-block {
+    margin-top: 6pt !important;
+    padding-top: 4pt !important;
   }
 
   .report-signatures-block,
   .report-results-tail {
+    page-break-inside: auto;
+    break-inside: auto;
+  }
+
+  .report-page-tail .report-signatures-block {
     page-break-inside: avoid !important;
     break-inside: avoid !important;
   }

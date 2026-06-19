@@ -72,7 +72,7 @@ export function ReportSignatures({
   sig,
   labels,
   lang = "en",
-  className = "mt-4 pt-3 border-t border-gray-300 report-signatures-block print-no-break",
+  className = "mt-4 pt-3 border-t border-gray-300 report-signatures-block",
   showTitle = false,
   title,
 }: {

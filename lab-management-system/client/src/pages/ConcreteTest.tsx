@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, type ReactNode } from "react";
-import { useParams, useLocation } from "wouter";
+import { useParams } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
 import DashboardLayout from "@/components/DashboardLayout";
@@ -13,7 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { toast } from "sonner";
 import { useLanguage } from "@/contexts/LanguageContext";
 import {
-  Plus, Trash2, Save, Send, Printer, ChevronDown, ChevronUp,
+  Plus, Trash2, Save, Send, ChevronDown, ChevronUp,
   FlaskConical, CheckCircle, AlertTriangle, XCircle, Info, Lock
 } from "lucide-react";
 import {
@@ -1161,7 +1161,6 @@ export default function ConcreteTest() {
   const { distributionId } = useParams<{ distributionId: string }>();
   const distId = parseInt(distributionId ?? "0");
   const { user } = useAuth();
-  const [, navigate] = useLocation();
   const [newAge, setNewAge] = useState("28");
   const [showAddAge, setShowAddAge] = useState(false);
   const [nominalCubeSize, setNominalCubeSize] = useState("150mm");
@@ -1218,21 +1217,16 @@ export default function ConcreteTest() {
     }
   };
 
-  const handlePrintReport = () => {
-    navigate(`/concrete-report/${distId}`);
-  };
-
   if (!distId) return <DashboardLayout><div className="p-8 text-center text-gray-500">Invalid distribution ID</div></DashboardLayout>;
 
   return (
     <DashboardLayout>
       <div className="p-6 max-w-6xl mx-auto">
         {/* Page Header */}
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">
-              Concrete Compression Test
-            </h1>
+        <div className="mb-6">
+          <h1 className="text-2xl font-bold text-gray-900">
+            Concrete Compression Test
+          </h1>
             {distribution && (
               <p className="text-sm text-gray-500 mt-1">
                 Distribution: <strong>{distribution.distributionCode}</strong> &nbsp;|&nbsp;
@@ -1240,12 +1234,6 @@ export default function ConcreteTest() {
                 Test: <strong>{distribution.testName}</strong>
               </p>
             )}
-          </div>
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={handlePrintReport} disabled={groups.length === 0}>
-              <Printer className="w-4 h-4 mr-2" /> View Report
-            </Button>
-          </div>
         </div>
 
         {/* Sample Info Card */}

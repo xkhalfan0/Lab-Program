@@ -25,6 +25,7 @@ import {
   REPORT_INFO_LABEL_CLASS,
   REPORT_INFO_VALUE_CLASS,
   REPORT_DUPLICATE_METADATA_KEYS,
+  resolveReportStandardDisplay,
 } from "@/lib/reportFormatting";
 import { calculateFinalBlend, formatDisplaySieveMm } from "@/pages/tests/SieveAnalysis";
 import {
@@ -4145,11 +4146,16 @@ export default function SpecializedTestReport({ sectorResultId }: SpecializedTes
       : isAr
         ? ((dist as any)?.testNameAr ?? dist?.testName ?? result.testTypeCode)
         : ((dist as any)?.testNameEn ?? dist?.testName ?? result.testTypeCode);
-  const standardDisplay = isMarshallDensityReport
-    ? "ASTM D 2726"
-    : isMarshallStabilityReport
-      ? "ASTM D 6927"
-      : String((dist as any)?.standardRef ?? "—");
+  const standardDisplay = resolveReportStandardDisplay({
+    formData,
+    dist: dist as { standardRef?: string | null; testType?: string | null } | null,
+    testTypeCode: result.testTypeCode,
+    override: isMarshallDensityReport
+      ? "ASTM D 2726"
+      : isMarshallStabilityReport
+        ? "ASTM D 6927"
+        : null,
+  });
 
   return (
     <>
@@ -4186,8 +4192,8 @@ export default function SpecializedTestReport({ sectorResultId }: SpecializedTes
       <div className="bg-gray-200 print:bg-white min-h-screen py-6 print:py-0" dir={isAr ? "rtl" : "ltr"}>
         <div
           ref={printRef}
-          className="lab-print-root mx-auto bg-white shadow-lg print:shadow-none report-page"
-          style={{ width: "210mm", padding: "10mm 12mm 12mm 12mm", fontFamily: "Arial, sans-serif", fontSize: "10px" }}
+          className="lab-print-root mx-auto bg-white shadow-lg print:shadow-none report-page px-12 py-10"
+          style={{ width: "210mm", fontFamily: "Arial, sans-serif", fontSize: "10px" }}
         >
           {/* Header */}
           <LabReportHeader
@@ -4326,9 +4332,10 @@ export default function SpecializedTestReport({ sectorResultId }: SpecializedTes
             </div>
           )}
 
-          {/* Notes */}
+          {/* Notes + signatures + footer — kept together at page bottom */}
+          <div className="report-page-tail">
           {result.notes && (
-            <div className="mb-5">
+            <div className="mb-5 print:mb-2">
               <h3 className="text-xs font-bold text-gray-900 uppercase border-b border-gray-300 pb-1 mb-2">
                 {isAr ? "ملاحظات" : "Notes"}
               </h3>
@@ -4336,15 +4343,14 @@ export default function SpecializedTestReport({ sectorResultId }: SpecializedTes
             </div>
           )}
 
-          {/* Signatures */}
           <ReportSignatures sig={reportSignatures} labels={signatureLabels} lang={isAr ? "ar" : "en"} />
 
-          {/* Footer */}
           <div className="mt-4 pt-2 border-t border-gray-200" style={{ fontSize: "8px" }}>
             <div className="flex justify-between text-gray-400">
               <span>Construction Materials &amp; Engineering Laboratory — مختبر الإنشاءات والمواد الهندسية</span>
             </div>
             <ReportPrintNote lang={isAr ? "ar" : "en"} />
+          </div>
           </div>
         </div>
       </div>

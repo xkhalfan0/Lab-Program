@@ -3,6 +3,8 @@
  * Units in report values are always shown in English (N/mm², mm, kN, %, …).
  */
 
+import { getOfficialTestByCode } from "@/lib/officialTestCatalog";
+
 export const REPORT_META_LABEL_CLASS =
   "border border-gray-200 px-2 py-1.5 text-gray-900 w-[18%] text-[11px] font-bold print:text-black";
 export const REPORT_META_VALUE_CLASS =
@@ -208,4 +210,45 @@ export function formatReportSummaryValue(
 /** Format flat form-data keys for generic report tables. */
 export function formatReportPropertyLabel(key: string, isAr: boolean): string {
   return formatReportSummaryLabel(key, "default", isAr);
+}
+
+/** Resolve standard text for the metadata table (not duplicated in summary / detail cards). */
+export function resolveReportStandardDisplay(opts: {
+  formData?: Record<string, unknown> | null;
+  dist?: { standardRef?: string | null; testType?: string | null } | null;
+  testTypeCode?: string | null;
+  override?: string | null;
+}): string {
+  if (opts.override?.trim()) return opts.override.trim();
+
+  const fd = (opts.formData ?? {}) as Record<string, unknown>;
+  const blockSpec = fd.blockSpec as { standard?: string } | undefined;
+  const spec = fd.spec as { standard?: string } | undefined;
+
+  const candidates: unknown[] = [
+    blockSpec?.standard,
+    spec?.standard,
+    fd.standard,
+    fd.blendStandard,
+    fd.sieveStandard === "ASTM"
+      ? "ASTM C33 / C136"
+      : fd.sieveStandard === "BS"
+        ? "BS 882 / BS EN 12620"
+        : null,
+    fd.cbrStandard,
+    opts.dist?.standardRef,
+  ];
+
+  for (const c of candidates) {
+    const s = c != null ? String(c).trim() : "";
+    if (s && s !== "—") return s;
+  }
+
+  const code = opts.testTypeCode ?? opts.dist?.testType;
+  if (code) {
+    const official = getOfficialTestByCode(code);
+    if (official?.standardRef?.trim()) return official.standardRef.trim();
+  }
+
+  return "—";
 }

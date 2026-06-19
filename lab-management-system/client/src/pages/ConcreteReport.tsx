@@ -272,15 +272,15 @@ function ReportPage({
 
   return (
     <div
-      className="report-page bg-white flex flex-col"
+      className="report-page bg-white flex flex-col px-12 py-10"
       dir={ar ? "rtl" : "ltr"}
       style={{
         fontFamily: "Arial, sans-serif",
         fontSize: "10px",
         width: "210mm",
-        padding: "10mm 12mm 12mm 12mm",
       }}
     >
+      <div className="report-page-body">
       <div className="mb-5">
         <LabReportHeader
           lang={lang}
@@ -530,9 +530,11 @@ function ReportPage({
             : "Fracture: SF — Satisfactory, USF — Unsatisfactory. Strength per BS 1881 Part 116."}
         </p>
       </div>
+      </div>
 
+      <div className="report-page-tail">
       {/* Notes */}
-      <div className="mb-5">
+      <div className="mb-5 print:mb-2">
         <h3 className="text-xs font-bold text-gray-900 uppercase border-b border-gray-300 pb-1 mb-2">
           {ar ? "ملاحظات" : "Notes"}
         </h3>
@@ -575,6 +577,7 @@ function ReportPage({
           ) : null}
         </div>
         <ReportPrintNote lang={lang} />
+      </div>
       </div>
     </div>
   );
