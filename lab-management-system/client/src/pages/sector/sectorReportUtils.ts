@@ -138,6 +138,7 @@ const SKIP_SUMMARY_KEYS = new Set([
   "fractions",
   "readings",
   "blockSpec",
+  "standard",
 ]);
 
 /** Scalar summary fields only — for the compact result preview (no tables). */
@@ -268,11 +269,12 @@ ${reportFontLinks()}
   table.kv { width: 100%; border-collapse: collapse; font-size: 11px; }
   table.kv td { padding: 5px 8px; border: 1px solid #e2e8f0; vertical-align: top; }
   table.kv td:first-child { width: 38%; color: #000; background: #f8fafc; font-weight: 700; font-size: 11px; }
-  table.kv td { color: #000; }
+  table.kv td:last-child { color: #000; font-weight: 400; }
   .signatures { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 20px; }
   .sig { border: 1px solid #e2e8f0; border-radius: 6px; padding: 10px; text-align: center; }
   .sig-title { font-size: 10px; color: #000; margin-bottom: 6px; }
   .sig-name { font-size: 12px; font-weight: 600; color: #1e40af; }
+  .sig-date { font-size: 10px; color: #000; margin-top: 4px; font-weight: 400; }
   .footer { text-align: center; margin-top: 20px; padding-top: 10px; border-top: 1px solid #e2e8f0; font-size: 10px; color: #94a3b8; }
   @media print { body { padding: 0; } }
 </style></head><body>
@@ -307,12 +309,12 @@ ${r.notes ? `<div class="section"><div class="section-title">${labels.notes}</di
 <div class="signatures">
   <div class="sig">
     <div class="sig-title">${labels.managerReview}</div>
-    ${r.managerReviewedByName ? `<div class="sig-name">${escapeHtml(r.managerReviewedByName)}</div><div style="font-size:10px;color:#64748b;margin-top:4px">${r.managerReviewedAt ? new Date(r.managerReviewedAt).toLocaleDateString(lang === "ar" ? "ar-AE" : "en-GB") : ""}</div>` : `<div style="height:24px"></div>`}
+    ${r.managerReviewedByName ? `<div class="sig-name">${escapeHtml(r.managerReviewedByName)}</div><div class="sig-date">${r.managerReviewedAt ? new Date(r.managerReviewedAt).toLocaleDateString(lang === "ar" ? "ar-AE" : "en-GB") : ""}</div>` : `<div style="height:24px"></div>`}
     ${r.managerNotes ? `<div style="font-size:9px;color:#475569;margin-top:6px;font-style:italic;white-space:pre-wrap">${escapeHtml(String(r.managerNotes))}</div>` : ""}
   </div>
   <div class="sig">
     <div class="sig-title">${labels.qcReview}</div>
-    ${r.qcReviewedByName ? `<div class="sig-name">${escapeHtml(r.qcReviewedByName)}</div><div style="font-size:10px;color:#64748b;margin-top:4px">${r.qcReviewedAt ? new Date(r.qcReviewedAt).toLocaleDateString(lang === "ar" ? "ar-AE" : "en-GB") : ""}</div>` : `<div style="height:24px"></div>`}
+    ${r.qcReviewedByName ? `<div class="sig-name">${escapeHtml(r.qcReviewedByName)}</div><div class="sig-date">${r.qcReviewedAt ? new Date(r.qcReviewedAt).toLocaleDateString(lang === "ar" ? "ar-AE" : "en-GB") : ""}</div>` : `<div style="height:24px"></div>`}
     ${r.qcNotes ? `<div style="font-size:9px;color:#475569;margin-top:6px;font-style:italic;white-space:pre-wrap">${escapeHtml(String(r.qcNotes))}</div>` : ""}
   </div>
 </div>

@@ -13,6 +13,7 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { formatCalendarDate, formatReportDate } from "@/lib/dateFormat";
 import { formatInspectionReference, inspectionRefLabel } from "@/lib/inspectionReference";
 import { ReportPrintNote } from "@/components/reports/ReportPrintNote";
+import { LabReportHeader } from "@/components/reports/LabReportHeader";
 import { getOfficialTestDisplayName } from "@/lib/officialTestCatalog";
 import {
   formatSummaryLabel,
@@ -36,7 +37,7 @@ import {
 } from "lucide-react";
 
 const EM_DASH = "\u2014";
-const SUMMARY_SKIP_KEYS = new Set(["overallResult", "overallPass", "passesSpec"]);
+const SUMMARY_SKIP_KEYS = new Set(["overallResult", "overallPass", "passesSpec", "standard"]);
 
 /** Proctor supplies MDD/OMC only — no pass/fail; batch verdict uses CBR (and similar) tests only. */
 const INFORMATIONAL_BATCH_TESTS = new Set(["SOIL_PROCTOR"]);
@@ -426,47 +427,16 @@ export default function BatchReport() {
               fontSize: "10px",
             }}
           >
-            <div className="mb-5">
-              <div className="border-t-4 border-gray-900 pt-3 flex justify-between items-center gap-3">
-                <div>
-                  <h1 className="text-[16px] font-extrabold text-gray-900 leading-snug">
-                    {isAr
-                      ? "\u0645\u062e\u062a\u0628\u0631 \u0627\u0644\u0625\u0646\u0634\u0627\u0621\u0627\u062a \u0648\u0627\u0644\u0645\u0648\u0627\u062f \u0627\u0644\u0647\u0646\u062f\u0633\u064a\u0629"
-                      : "Construction Materials & Engineering Laboratory"}
-                  </h1>
-                  <p className="text-[11px] text-gray-500 mt-0.5">
-                    {isAr
-                      ? "Construction Materials & Engineering Laboratory"
-                      : "\u0645\u062e\u062a\u0628\u0631 \u0627\u0644\u0625\u0646\u0634\u0627\u0621\u0627\u062a \u0648\u0627\u0644\u0645\u0648\u0627\u062f \u0627\u0644\u0647\u0646\u062f\u0633\u064a\u0629"}
-                  </p>
-                </div>
-                <div className="flex flex-col items-center px-4 border-x border-gray-300 shrink-0">
-                  <div className="w-11 h-11 rounded-full border-2 border-gray-800 flex items-center justify-center text-lg font-black">
-                    {"\u0645"}
-                  </div>
-                  <span className="text-[9px] text-gray-400 mt-0.5 tracking-widest">LAB</span>
-                </div>
-                <div className="text-[11px] text-gray-600 space-y-0.5 text-end">
-                  <div className="flex gap-1 justify-end">
-                    <span className="text-gray-500">{isAr ? ":\u0627\u0644\u062a\u0627\u0631\u064a\u062e" : "Date:"}</span>
-                    <span>{reportDateStr}</span>
-                  </div>
-                  <div className="flex gap-1 justify-end">
-                    <span className="text-gray-500">{isAr ? ":\u0631\u0642\u0645 \u0627\u0644\u0637\u0644\u0628" : "Order:"}</span>
-                    <span className="font-mono font-bold">{orderId}</span>
-                  </div>
-                </div>
-              </div>
-              <div className="bg-gray-900 text-white text-center py-2 mt-3 mb-2">
-                <p className="text-[14px] font-bold">
-                  {isAr ? "\u062a\u0642\u0631\u064a\u0631 \u0627\u0644\u062d\u0632\u0645\u0629 \u0627\u0644\u0645\u062c\u0645\u0639" : "Combined Batch Test Report"}
-                </p>
-                <p className="text-[10px] text-gray-300 mt-0.5">
-                  {isAr ? `${total} \u0627\u062e\u062a\u0628\u0627\u0631\u0627\u062a` : `${total} tests`}
-                </p>
-              </div>
-              <BatchStatusPanel status={batchStatus} passCount={passCount} total={total} isAr={isAr} />
-            </div>
+            <LabReportHeader
+              lang={isAr ? "ar" : "en"}
+              docNo={String(orderId)}
+              docLabel={isAr ? "رقم الطلب:" : "Order:"}
+              reportDate={reportDateStr}
+              titlePrimary={isAr ? "تقرير الحزمة المجمع" : "Combined Batch Test Report"}
+              titleSecondary={isAr ? `${total} اختبارات` : `${total} tests`}
+              className="mb-5"
+            />
+            <BatchStatusPanel status={batchStatus} passCount={passCount} total={total} isAr={isAr} />
 
             <div className="border border-gray-200 rounded mb-5 overflow-hidden">
               <table className="metadata-table w-full border-collapse text-xs bg-gray-50">
@@ -571,7 +541,7 @@ export default function BatchReport() {
                                       <td className={REPORT_META_LABEL_CLASS}>
                                         {formatSummaryLabel(a[0], formTemplate ?? "", isAr)}
                                       </td>
-                                      <td className={`${REPORT_META_VALUE_CLASS} font-bold`}>
+                                      <td className={REPORT_META_VALUE_CLASS}>
                                         {formatSummaryValue(a[0], a[1], isAr, formTemplate ?? "")}
                                       </td>
                                       {b ? (
@@ -579,7 +549,7 @@ export default function BatchReport() {
                                           <td className={REPORT_META_LABEL_CLASS}>
                                             {formatSummaryLabel(b[0], formTemplate ?? "", isAr)}
                                           </td>
-                                          <td className={`${REPORT_META_VALUE_CLASS} font-bold`}>
+                                          <td className={REPORT_META_VALUE_CLASS}>
                                             {formatSummaryValue(b[0], b[1], isAr, formTemplate ?? "")}
                                           </td>
                                         </>

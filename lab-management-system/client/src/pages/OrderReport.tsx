@@ -12,6 +12,7 @@ import { Loader2, Printer, Download, Globe, X, CheckCircle, XCircle } from "luci
 import { generatePdfFromElement } from "@/lib/pdf";
 import { ReportSignatures, pickReviewSignatures } from "@/components/reports/ReportSignatures";
 import { ReportPrintNote } from "@/components/reports/ReportPrintNote";
+import { LabReportHeader } from "@/components/reports/LabReportHeader";
 import { formatInspectionReference } from "@/lib/inspectionReference";
 import { formatReportDate } from "@/lib/dateFormat";
 import {
@@ -34,6 +35,7 @@ const SUMMARY_SKIP_KEYS = new Set([
   "specimens",
   "readings",
   "fractions",
+  "standard",
 ]);
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -611,54 +613,31 @@ export default function OrderReport() {
           style={{ width: "210mm", padding: "10mm 12mm 12mm 12mm", fontFamily: "Arial, sans-serif", fontSize: "10px" }}
         >
           {/* ── Header ── */}
-          <div className="mb-5">
-            <div className="border-t-4 border-gray-900 pt-3 flex justify-between items-center">
-              <div>
-                <h1 className="text-[16px] font-extrabold text-gray-900 leading-snug">
-                  {isAr ? "مختبر الإنشاءات والمواد الهندسية" : "Construction Materials & Engineering Laboratory"}
-                </h1>
-                <p className="text-[11px] text-gray-500 mt-0.5">
-                  {isAr ? "Construction Materials & Engineering Laboratory" : "مختبر الإنشاءات والمواد الهندسية"}
-                </p>
-              </div>
-              <div className="flex flex-col items-center px-4 border-x border-gray-300">
-                <div className="w-11 h-11 rounded-full border-2 border-gray-800 flex items-center justify-center text-lg font-black">م</div>
-                <span className="text-[9px] text-gray-400 mt-0.5 tracking-widest">LAB</span>
-              </div>
-              <div className="text-[11px] text-gray-600 space-y-0.5">
-                <div className="flex gap-1">
-                  <span className="text-gray-500">{isAr ? "رقم الوثيقة:" : "Doc No.:"}</span>
-                  <span className="font-mono font-bold text-gray-800">{safeText(order.orderCode)}</span>
-                </div>
-                <div className="flex gap-1">
-                  <span className="text-gray-500">{isAr ? "التاريخ:" : "Date:"}</span>
-                  <span>{reportDateStr}</span>
-                </div>
-                <div className="flex gap-1">
-                  <span className="text-gray-500">{isAr ? "عدد الاختبارات:" : "Tests:"}</span>
-                  <span className="font-bold">{items.length}</span>
-                </div>
+          <LabReportHeader
+            lang={isAr ? "ar" : "en"}
+            docNo={safeText(order.orderCode)}
+            reportDate={reportDateStr}
+            titlePrimary={t("title", lang)}
+            titleSecondary={isAr ? "Unified Laboratory Test Report" : "تقرير الاختبارات الموحد"}
+            metaExtra={[
+              {
+                label: isAr ? "عدد الاختبارات:" : "Tests:",
+                value: String(items.length),
+              },
+            ]}
+            className="mb-5"
+          />
+          {/* Overall pass/fail badge */}
+          {overallStatus !== "pending" && (
+            <div className={`flex ${isAr ? "justify-start" : "justify-end"} mb-3`}>
+              <div className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-bold border ${overallStatus === "pass" ? "bg-green-100 text-green-800 border-green-300" : "bg-red-100 text-red-800 border-red-300"}`}>
+                {overallStatus === "pass" ? <CheckCircle size={14} /> : <XCircle size={14} />}
+                {overallStatus === "pass"
+                  ? (isAr ? "مطابق — PASS" : "PASS — مطابق")
+                  : (isAr ? "غير مطابق — FAIL" : "FAIL — غير مطابق")}
               </div>
             </div>
-            {/* Title bar */}
-            <div className="bg-gray-900 text-white text-center py-2 mt-3 mb-4">
-              <p className="text-[14px] font-bold">{t("title", lang)}</p>
-              <p className="text-[10px] text-gray-300 mt-0.5 tracking-wider uppercase">
-                {isAr ? "Unified Laboratory Test Report" : "تقرير الاختبارات الموحد"}
-              </p>
-            </div>
-            {/* Overall pass/fail badge */}
-            {overallStatus !== "pending" && (
-              <div className={`flex ${isAr ? "justify-start" : "justify-end"} mb-3`}>
-                <div className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-bold border ${overallStatus === "pass" ? "bg-green-100 text-green-800 border-green-300" : "bg-red-100 text-red-800 border-red-300"}`}>
-                  {overallStatus === "pass" ? <CheckCircle size={14} /> : <XCircle size={14} />}
-                  {overallStatus === "pass"
-                    ? (isAr ? "مطابق — PASS" : "PASS — مطابق")
-                    : (isAr ? "غير مطابق — FAIL" : "FAIL — غير مطابق")}
-                </div>
-              </div>
-            )}
-          </div>
+          )}
 
           {/* ── Order Info ── */}
           <div className="border border-gray-300 rounded mb-5 overflow-hidden">

@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { FlexibleResultsTable, type Column, formDataToKeyValueRows, keyValueColumns } from "@/components/reports/FlexibleResultsTable";
 import { ReportSignatures, pickReviewSignatures } from "@/components/reports/ReportSignatures";
+import { LabReportHeader } from "@/components/reports/LabReportHeader";
 import { ReportPrintNote } from "@/components/reports/ReportPrintNote";
 import { formatCalendarDate, formatReportDate } from "@/lib/dateFormat";
 import { formatInspectionReference, inspectionRefLabel, reportDocNo } from "@/lib/inspectionReference";
@@ -21,6 +22,9 @@ import {
   REPORT_META_VALUE_CLASS,
   REPORT_REF_LABEL_CLASS,
   REPORT_REF_VALUE_CLASS,
+  REPORT_INFO_LABEL_CLASS,
+  REPORT_INFO_VALUE_CLASS,
+  REPORT_DUPLICATE_METADATA_KEYS,
 } from "@/lib/reportFormatting";
 import { calculateFinalBlend, formatDisplaySieveMm } from "@/pages/tests/SieveAnalysis";
 import {
@@ -308,39 +312,35 @@ function renderConcreteBlocks(fd: any, isAr: boolean) {
 
   return (
     <div className="text-xs space-y-3">
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-2 report-info-grid">
         <div className="bg-blue-50 border border-blue-200 rounded p-2">
-          <p className="text-blue-600 font-semibold">{isAr ? "نوع البلوك" : "Block Type"}</p>
-          <p className="font-bold text-blue-800">{spec.label ?? fd.blockType ?? "—"}</p>
+          <p className={REPORT_INFO_LABEL_CLASS}>{isAr ? "نوع البلوك" : "Block Type"}</p>
+          <p className={REPORT_INFO_VALUE_CLASS}>{spec.label ?? fd.blockType ?? "—"}</p>
         </div>
         <div className="bg-gray-50 border rounded p-2">
-          <p className="text-gray-500 font-semibold">{isAr ? "الحجم" : "Size"}</p>
-          <p className="font-bold">{spec.size ?? "—"}</p>
+          <p className={REPORT_INFO_LABEL_CLASS}>{isAr ? "الحجم" : "Size"}</p>
+          <p className={REPORT_INFO_VALUE_CLASS}>{spec.size ?? "—"}</p>
         </div>
         <div className="bg-amber-50 border border-amber-200 rounded p-2">
-          <p className="text-amber-700 font-semibold">{isAr ? "المقاومة المطلوبة" : "Required Strength"}</p>
-          <p className="font-bold">{spec.requiredStrength != null ? `${spec.requiredStrength} N/mm²` : "—"}</p>
-        </div>
-        <div className="bg-gray-50 border rounded p-2">
-          <p className="text-gray-500 font-semibold">{isAr ? "المعيار" : "Standard"}</p>
-          <p className="font-bold">BS EN 772-1</p>
+          <p className={REPORT_INFO_LABEL_CLASS}>{isAr ? "المقاومة المطلوبة" : "Required Strength"}</p>
+          <p className={REPORT_INFO_VALUE_CLASS}>{spec.requiredStrength != null ? `${spec.requiredStrength} N/mm²` : "—"}</p>
         </div>
         {fd.manufacturer && (
           <div className="bg-gray-50 border rounded p-2">
-            <p className="text-gray-500 font-semibold">{isAr ? "المصنع / المصدر" : "Manufacturer / Source"}</p>
-            <p className="font-bold">{fd.manufacturer}</p>
+            <p className={REPORT_INFO_LABEL_CLASS}>{isAr ? "المصنع / المصدر" : "Manufacturer / Source"}</p>
+            <p className={REPORT_INFO_VALUE_CLASS}>{fd.manufacturer}</p>
           </div>
         )}
         {fd.mtsReference && (
           <div className="bg-gray-50 border rounded p-2">
-            <p className="text-gray-500 font-semibold">{isAr ? "مرجع التقديم" : "Material Submittal Ref."}</p>
-            <p className="font-bold">{fd.mtsReference}</p>
+            <p className={REPORT_INFO_LABEL_CLASS}>{isAr ? "مرجع التقديم" : "Material Submittal Ref."}</p>
+            <p className={REPORT_INFO_VALUE_CLASS}>{fd.mtsReference}</p>
           </div>
         )}
         {fd.batchNo && (
           <div className="bg-gray-50 border rounded p-2">
-            <p className="text-gray-500 font-semibold">{isAr ? "الدفعة" : "Batch No."}</p>
-            <p className="font-bold">{fd.batchNo}</p>
+            <p className={REPORT_INFO_LABEL_CLASS}>{isAr ? "الدفعة" : "Batch No."}</p>
+            <p className={REPORT_INFO_VALUE_CLASS}>{fd.batchNo}</p>
           </div>
         )}
       </div>
@@ -435,11 +435,11 @@ function steelResultBadge(value: unknown, isAr: boolean) {
 function SteelSpecBand({ items }: { items: [string, string][] }) {
   if (!items.length) return null;
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 text-xs mb-1">
+    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 text-xs mb-1 report-info-grid">
       {items.map(([label, value], i) => (
         <div key={i} className="bg-slate-50 border border-slate-200 rounded px-2 py-1.5 text-center">
-          <p className="text-slate-500 font-semibold leading-tight">{label}</p>
-          <p className="font-bold text-slate-900 leading-tight mt-0.5">{value}</p>
+          <p className={REPORT_INFO_LABEL_CLASS}>{label}</p>
+          <p className={REPORT_INFO_VALUE_CLASS}>{value}</p>
         </div>
       ))}
     </div>
@@ -506,7 +506,6 @@ function renderSteelAnchorBolt(fd: any, isAr: boolean) {
     boltLabel ? [isAr ? "نوع البرغي" : "Bolt Type", String(boltLabel)] : undefined,
     fd?.concreteGrade ? [isAr ? "درجة الخرسانة" : "Concrete Grade", String(fd.concreteGrade)] : undefined,
     fd?.embedmentDepth ? [isAr ? "عمق التثبيت (مم)" : "Embedment (mm)", String(fd.embedmentDepth)] : undefined,
-    [isAr ? "المعيار" : "Standard", "BS EN ISO 898-1"],
   ];
   return (
     <div className="space-y-3">
@@ -1835,10 +1834,6 @@ function renderSoilCBR(fd: any, isAr: boolean) {
           <div className="font-semibold">{layerLabel ?? "—"}{cbrMin != null ? ` (≥ ${cbrMin}%)` : ""}</div>
         </div>
         <div className="border rounded p-2">
-          <div className="text-slate-500">{L("Standard", "المعيار")}</div>
-          <div className="font-semibold">{fd.summaryValues?.standard ?? fd.standard ?? "—"}</div>
-        </div>
-        <div className="border rounded p-2">
           <div className="text-slate-500">{L("Soaking Period", "فترة النقع")}</div>
           <div className="font-semibold">{fd.soakingPeriod != null ? `${fd.soakingPeriod} ${L("hrs", "ساعة")}` : "—"}</div>
         </div>
@@ -3127,7 +3122,6 @@ function renderConcreteBeam(fd: any, isAr: boolean, castingDateMs?: number | nul
   const specifiedStrength = fd.specifiedStrength;
   const minMOR = fd.minMOR;
   const avgMOR = fd.avgMOR;
-  const standard = fd.standard ?? "ASTM C 78";
   const requiredAge = fd.requiredAge ?? null;
 
   const BEAM_SIZE_LABELS: Record<string, string> = {
@@ -3269,10 +3263,6 @@ function renderConcreteBeam(fd: any, isAr: boolean, castingDateMs?: number | nul
             <p className="font-bold text-gray-800 text-[11px]">{fd.sampleLocation}</p>
           </div>
         )}
-        <div className="bg-gray-50 border border-gray-200 rounded p-2 text-center">
-          <p className="text-gray-500 font-semibold">{isAr ? "المعيار" : "Standard"}</p>
-          <p className="font-bold text-gray-800 text-[11px]">{standard}</p>
-        </div>
         <div className="bg-blue-50 border border-blue-200 rounded p-2 text-center">
           <p className="text-blue-600 font-semibold">{isAr ? "منطقة الكسر (جميع الكمرات)" : "Fracture Zone (all beams)"}</p>
           <p className="font-bold text-blue-800 text-[11px]">{fractureZoneSummaryLabel(reportFractureZone, isAr)}</p>
@@ -4126,6 +4116,11 @@ export default function SpecializedTestReport({ sectorResultId }: SpecializedTes
   const isPassed = result.overallResult === "pass";
   const reportSignatures = pickReviewSignatures([result, legacyResult]);
   const reportDateStr = formatReportDate(reportSignatures.approvedAt);
+  const docNo = reportDocNo({
+    distributionCode: (dist as any)?.distributionCode,
+    distributionId: distIdForRender,
+    receivedAt: (dist as any)?.receivedAt,
+  });
   const signatureLabels = {
     tested: isAr ? "الفاحص" : "Tested By",
     reviewed: isAr ? "المراجع" : "Reviewed By",
@@ -4195,54 +4190,21 @@ export default function SpecializedTestReport({ sectorResultId }: SpecializedTes
           style={{ width: "210mm", padding: "10mm 12mm 12mm 12mm", fontFamily: "Arial, sans-serif", fontSize: "10px" }}
         >
           {/* Header */}
-          <div className="mb-3">
-            <div className="border-t-4 border-gray-900 pt-3 flex justify-between items-center">
-              <div>
-                <h1 className="text-[16px] font-extrabold text-gray-900 leading-snug">
-                  {isAr ? "مختبر الإنشاءات والمواد الهندسية" : "Construction Materials & Engineering Laboratory"}
-                </h1>
-                <p className="text-[11px] text-gray-900 mt-0.5">
-                  {isAr ? "Construction Materials & Engineering Laboratory" : "مختبر الإنشاءات والمواد الهندسية"}
-                </p>
-              </div>
-              <div className="flex flex-col items-center px-4 border-x border-gray-300">
-                <div className="w-11 h-11 rounded-full border-2 border-gray-800 flex items-center justify-center text-lg font-black">م</div>
-                <span className="text-[9px] text-gray-800 mt-0.5 tracking-widest">LAB</span>
-              </div>
-              <div className="text-[11px] text-gray-900 space-y-0.5">
-                <div className="flex gap-1">
-                  <span className="text-gray-900 font-semibold">{isAr ? ":رقم الوثيقة" : "Doc No.:"}</span>
-                  <span className="font-mono font-bold text-gray-900">
-                    {reportDocNo({
-                      distributionCode: (dist as any)?.distributionCode,
-                      distributionId: distIdForRender,
-                      receivedAt: (dist as any)?.receivedAt,
-                    })}
-                  </span>
-                </div>
-                <div className="flex gap-1">
-                  <span className="text-gray-900 font-semibold">{isAr ? ":التاريخ" : "Date:"}</span>
-                  <span>{reportDateStr}</span>
-                </div>
-              </div>
-            </div>
-            {/* Document title bar */}
-            <div className="bg-gray-900 text-white text-center py-1.5 mt-2 mb-2">
-              <p className="text-[13px] font-bold">
-                {isAr ? "تقرير نتيجة الفحص" : "Laboratory Test Report"}
-              </p>
-              <p className="text-[9px] text-gray-300 mt-0.5 tracking-wider uppercase">
-                {isAr ? "Laboratory Test Report" : "تقرير نتيجة الفحص"}
-              </p>
-            </div>
-            {/* Pass/Fail badge */}
-            <div className={`flex ${isAr ? "justify-start" : "justify-end"}`}>
-              <div className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-bold ${isPassed ? "bg-green-100 text-green-800 border border-green-300" : "bg-red-100 text-red-800 border border-red-300"}`}>
-                {isPassed ? <CheckCircle size={14} /> : <XCircle size={14} />}
-                {isPassed
-                  ? (isAr ? "مطابق — PASS" : "PASS — مطابق")
-                  : (isAr ? "غير مطابق — FAIL" : "FAIL — غير مطابق")}
-              </div>
+          <LabReportHeader
+            lang={isAr ? "ar" : "en"}
+            docNo={docNo}
+            reportDate={reportDateStr}
+            titlePrimary={isAr ? "تقرير نتيجة الفحص" : "Laboratory Test Report"}
+            titleSecondary={isAr ? "Laboratory Test Report" : "تقرير نتيجة الفحص"}
+            className="mb-3"
+          />
+          {/* Pass/Fail badge */}
+          <div className={`flex ${isAr ? "justify-start" : "justify-end"} mb-2`}>
+            <div className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-bold ${isPassed ? "bg-green-100 text-green-800 border border-green-300" : "bg-red-100 text-red-800 border border-red-300"}`}>
+              {isPassed ? <CheckCircle size={14} /> : <XCircle size={14} />}
+              {isPassed
+                ? (isAr ? "مطابق — PASS" : "PASS — مطابق")
+                : (isAr ? "غير مطابق — FAIL" : "FAIL — غير مطابق")}
             </div>
           </div>
 
@@ -4254,7 +4216,7 @@ export default function SpecializedTestReport({ sectorResultId }: SpecializedTes
                 <tr>
                   <td className="border border-gray-200 px-2 py-2 text-center align-top w-1/3">
                     <span className={REPORT_REF_LABEL_CLASS}>{isAr ? "رقم العينة" : "Sample No."}</span>
-                    <span className="font-mono font-bold text-gray-900 text-sm">{(dist as any)?.sampleCode ?? "—"}</span>
+                    <span className="font-mono font-normal text-gray-900 text-sm">{(dist as any)?.sampleCode ?? "—"}</span>
                     {(dist as any)?.retestNumber != null && (
                       <span className="block text-[10px] text-amber-700 mt-0.5">
                         {isAr ? `إعادة ${(dist as any).retestNumber}` : `Retest ${(dist as any).retestNumber}`}
@@ -4266,7 +4228,7 @@ export default function SpecializedTestReport({ sectorResultId }: SpecializedTes
                   </td>
                   <td className="border border-gray-200 px-2 py-2 text-center align-top w-1/3">
                     <span className={REPORT_REF_LABEL_CLASS}>{inspectionRefLabel(isAr ? "ar" : "en")}</span>
-                    <span className="font-mono font-bold text-gray-900 text-sm">{formatInspectionReference((dist as any)?.referenceNo)}</span>
+                    <span className="font-mono font-normal text-gray-900 text-sm">{formatInspectionReference((dist as any)?.referenceNo)}</span>
                   </td>
                   <td className="border border-gray-200 px-2 py-2 text-center align-top w-1/3">
                     <span className={REPORT_REF_LABEL_CLASS}>{isAr ? "تاريخ الاستلام" : "Received Date"}</span>
@@ -4319,7 +4281,9 @@ export default function SpecializedTestReport({ sectorResultId }: SpecializedTes
               <table className="metadata-table w-full border-collapse text-xs">
                 <tbody>
                   {(() => {
-                    const entries = Object.entries(summaryValues);
+                    const entries = Object.entries(summaryValues).filter(
+                      ([k]) => !REPORT_DUPLICATE_METADATA_KEYS.has(k),
+                    );
                     const rows: Array<typeof entries> = [];
                     for (let i = 0; i < entries.length; i += 2) rows.push(entries.slice(i, i + 2));
                     return rows.map((pair, ri) => {
@@ -4327,11 +4291,11 @@ export default function SpecializedTestReport({ sectorResultId }: SpecializedTes
                       return (
                         <tr key={ri}>
                           <td className={REPORT_META_LABEL_CLASS}>{formatSummaryLabel(a[0], result.formTemplate, isAr)}</td>
-                          <td className={`${REPORT_META_VALUE_CLASS} font-bold`}>{formatSummaryValue(a[0], a[1], isAr, result.formTemplate)}</td>
+                          <td className={REPORT_META_VALUE_CLASS}>{formatSummaryValue(a[0], a[1], isAr, result.formTemplate)}</td>
                           {b ? (
                             <>
                               <td className={REPORT_META_LABEL_CLASS}>{formatSummaryLabel(b[0], result.formTemplate, isAr)}</td>
-                              <td className={`${REPORT_META_VALUE_CLASS} font-bold`}>{formatSummaryValue(b[0], b[1], isAr, result.formTemplate)}</td>
+                              <td className={REPORT_META_VALUE_CLASS}>{formatSummaryValue(b[0], b[1], isAr, result.formTemplate)}</td>
                             </>
                           ) : (
                             <td className="border border-gray-200 px-2 py-1" colSpan={2} />

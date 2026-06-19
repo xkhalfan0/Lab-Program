@@ -21,19 +21,7 @@ import {
   evaluateGroupPass,
 } from "@shared/concreteCubeBs1881";
 import { ReportSignatures } from "@/components/reports/ReportSignatures";
-
-// --- Lab print branding (override via Vite env for deployment-specific details) ---
-const LAB_PRINT_BRANDING = {
-  nameEn:
-    (import.meta.env.VITE_LAB_NAME as string | undefined)?.trim() ||
-    "Construction Materials & Engineering Laboratory",
-  nameAr: (import.meta.env.VITE_LAB_NAME_AR as string | undefined)?.trim() || "",
-  address: (import.meta.env.VITE_LAB_ADDRESS as string | undefined)?.trim() || "",
-  phone: (import.meta.env.VITE_LAB_PHONE as string | undefined)?.trim() || "",
-  email: (import.meta.env.VITE_LAB_EMAIL as string | undefined)?.trim() || "",
-  accreditation: (import.meta.env.VITE_LAB_ACCREDITATION as string | undefined)?.trim() || "",
-  logoUrl: (import.meta.env.VITE_LAB_LOGO_URL as string | undefined)?.trim() || "/logo.png",
-};
+import { LabReportHeader } from "@/components/reports/LabReportHeader";
 
 /** Same marker as ConcreteTest — hidden JSON suffix must never appear on printed reports. */
 const AGE_META_MARKER = "\n__AGE_META__:";
@@ -125,59 +113,6 @@ function extractTargetFromClass(classStr: string | null | undefined): number | n
   if (!classStr) return null;
   const m = classStr.match(/C(\d+)/i);
   return m ? parseFloat(m[1]) : null;
-}
-
-function LabReportHeader({
-  lang,
-  refNo,
-  reportDateStr,
-}: {
-  lang: "en" | "ar";
-  refNo: string;
-  reportDateStr: string;
-}) {
-  const ar = lang === "ar";
-  const labNameAr = LAB_PRINT_BRANDING.nameAr || "مختبر الإنشاءات والمواد الهندسية";
-  const labNameEn = LAB_PRINT_BRANDING.nameEn;
-
-  return (
-    <header className="mb-5">
-      <div className="border-t-4 border-gray-900 pt-3 flex justify-between items-center">
-        <div>
-          <h1 className="text-[16px] font-extrabold text-gray-900 leading-snug">
-            {ar ? labNameAr : labNameEn}
-          </h1>
-          <p className="text-[11px] text-gray-900 mt-0.5">
-            {ar ? labNameEn : labNameAr}
-          </p>
-        </div>
-        <div className="flex flex-col items-center px-4 border-x border-gray-300">
-          <div className="w-11 h-11 rounded-full border-2 border-gray-800 flex items-center justify-center text-lg font-black">
-            م
-          </div>
-          <span className="text-[9px] text-gray-800 mt-0.5 tracking-widest">LAB</span>
-        </div>
-        <div className="text-[11px] text-gray-900 space-y-0.5">
-          <div className="flex gap-1">
-            <span className="text-gray-900 font-semibold">{ar ? ":رقم الوثيقة" : "Doc No.:"}</span>
-            <span className="font-mono font-bold text-gray-900">{refNo}</span>
-          </div>
-          <div className="flex gap-1">
-            <span className="text-gray-900 font-semibold">{ar ? ":التاريخ" : "Date:"}</span>
-            <span>{reportDateStr}</span>
-          </div>
-        </div>
-      </div>
-      <div className="bg-gray-900 text-white text-center py-2 mt-3 mb-4">
-        <p className="text-[14px] font-bold">
-          {ar ? "تقرير نتيجة الفحص" : "Laboratory Test Report"}
-        </p>
-        <p className="text-[10px] text-gray-300 mt-0.5 tracking-wider uppercase">
-          {ar ? "Laboratory Test Report" : "تقرير نتيجة الفحص"}
-        </p>
-      </div>
-    </header>
-  );
 }
 
 // ─── Single Report Page (one age group = one page) ────────────────────────────
@@ -347,7 +282,13 @@ function ReportPage({
       }}
     >
       <div className="mb-5">
-        <LabReportHeader lang={lang} refNo={refNo} reportDateStr={reportDateStr} />
+        <LabReportHeader
+          lang={lang}
+          docNo={refNo}
+          reportDate={reportDateStr}
+          titlePrimary={ar ? "تقرير نتيجة الفحص" : "Laboratory Test Report"}
+          titleSecondary={ar ? "Laboratory Test Report" : "تقرير نتيجة الفحص"}
+        />
         <div className={`flex ${ar ? "justify-start" : "justify-end"}`}>
           <div
             className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-bold ${
@@ -373,7 +314,7 @@ function ReportPage({
                 <span className={REPORT_REF_LABEL_CLASS}>
                   {ar ? "رقم العينة" : "Sample No."}
                 </span>
-                <span className="font-mono font-bold text-gray-900 text-sm">
+                <span className="font-mono font-normal text-gray-900 text-sm">
                   {distribution?.sampleCode ?? "—"}
                 </span>
                 {(distribution as { retestNumber?: number })?.retestNumber != null && (
@@ -389,7 +330,7 @@ function ReportPage({
                 <span className={REPORT_REF_LABEL_CLASS}>
                   {inspectionRefLabel(lang)}
                 </span>
-                <span className="font-mono font-bold text-gray-900 text-sm">
+                <span className="font-mono font-normal text-gray-900 text-sm">
                   {formatInspectionReference((distribution as { referenceNo?: string | null })?.referenceNo)}
                 </span>
               </td>
@@ -435,11 +376,11 @@ function ReportPage({
               return (
                 <tr key={ri}>
                   <td className={REPORT_META_LABEL_CLASS}>{a[0]}</td>
-                  <td className={`${REPORT_META_VALUE_CLASS} font-bold`}>{a[1]}</td>
+                  <td className={REPORT_META_VALUE_CLASS}>{a[1]}</td>
                   {b ? (
                     <>
                       <td className={REPORT_META_LABEL_CLASS}>{b[0]}</td>
-                      <td className={`${REPORT_META_VALUE_CLASS} font-bold`}>{b[1]}</td>
+                      <td className={REPORT_META_VALUE_CLASS}>{b[1]}</td>
                     </>
                   ) : (
                     <td className="border border-gray-200 px-2 py-1" colSpan={2} />
@@ -597,7 +538,7 @@ function ReportPage({
         </h3>
         <p
           className={`text-xs border rounded p-3 ${
-            userRemarks ? "text-gray-700 bg-gray-50" : "text-gray-500 bg-gray-50 italic"
+            userRemarks ? "text-gray-900 bg-gray-50" : "text-gray-900 bg-gray-50"
           }`}
         >
           {remarksDisplay}
@@ -625,7 +566,7 @@ function ReportPage({
       />
 
       <div className="mt-4 pt-2 border-t border-gray-200" style={{ fontSize: "8px" }}>
-        <div className="flex justify-between text-gray-400">
+        <div className="flex justify-between text-gray-900">
           <span>
             Construction Materials &amp; Engineering Laboratory — مختبر الإنشاءات والمواد الهندسية
           </span>

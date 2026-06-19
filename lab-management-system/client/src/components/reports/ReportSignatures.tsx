@@ -127,14 +127,16 @@ export function ReportSignatures({
                 <p className="text-[9px] font-bold text-gray-900 uppercase mb-0.5">{s.label}</p>
                 <div className="signature-line border-b border-gray-800 min-h-[22px] mb-0.5 mx-1 flex items-end justify-center pb-0.5">
                   {s.name ? (
-                    <span className="text-gray-900 text-xs font-semibold">{s.name}</span>
+                    <span className="text-gray-900 text-xs font-normal">{s.name}</span>
                   ) : (
                     <span className="text-gray-700 text-[9px] italic font-normal">{s.pending}</span>
                   )}
                 </div>
-                {s.date ? <p className="text-gray-800 text-[8px] mt-0.5">{s.date}</p> : null}
+                {s.date ? (
+                  <p className="signature-date text-black text-[8px] font-normal mt-0.5 print:text-black">{s.date}</p>
+                ) : null}
                 {s.notes ? (
-                  <p className="text-gray-900 text-[8px] mt-1 px-0.5 whitespace-pre-wrap text-start leading-snug italic border-t border-gray-200 pt-1">
+                  <p className="text-gray-900 text-[8px] font-normal mt-1 px-0.5 whitespace-pre-wrap text-start leading-snug italic border-t border-gray-200 pt-1">
                     {s.notes}
                   </p>
                 ) : null}

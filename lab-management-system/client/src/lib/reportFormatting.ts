@@ -6,10 +6,19 @@
 export const REPORT_META_LABEL_CLASS =
   "border border-gray-200 px-2 py-1.5 text-gray-900 w-[18%] text-[11px] font-bold print:text-black";
 export const REPORT_META_VALUE_CLASS =
-  "border border-gray-200 px-2 py-1.5 font-semibold text-gray-900 w-[32%] text-[12px] print:text-black";
+  "border border-gray-200 px-2 py-1.5 font-normal text-gray-900 w-[32%] text-[12px] print:text-black";
 export const REPORT_REF_LABEL_CLASS =
   "text-gray-900 text-[11px] font-bold tracking-wide block mb-1 print:text-black";
-export const REPORT_REF_VALUE_CLASS = "font-semibold text-gray-900 text-[13px] print:text-black";
+export const REPORT_REF_VALUE_CLASS =
+  "font-normal text-gray-900 text-[13px] print:text-black";
+/** Label above a value in detailed-result info cards (Block Type, Size, etc.). */
+export const REPORT_INFO_LABEL_CLASS =
+  "text-gray-900 text-[11px] font-bold leading-tight print:text-black";
+export const REPORT_INFO_VALUE_CLASS =
+  "text-gray-900 text-[12px] font-normal leading-tight mt-0.5 print:text-black";
+
+/** Already shown in the report metadata table — hide from summary / detailed info cards. */
+export const REPORT_DUPLICATE_METADATA_KEYS = new Set(["standard"]);
 
 type RequiredSpec = { labelEn: string; labelAr: string; unit: string };
 

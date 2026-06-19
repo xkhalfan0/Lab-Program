@@ -267,6 +267,11 @@
    * Grey/slate muted text → solid black for legible print & PDF output.
    * Pass/fail accent colors (green, red, emerald, amber, blue badges) are preserved.
    */
+  .lab-print-root .lab-report-header > div:first-child,
+  .lab-print-root .lab-report-header > div:first-child * {
+    color: #000 !important;
+  }
+
   .lab-print-root .text-gray-400,
   .lab-print-root .text-gray-500,
   .lab-print-root .text-gray-600,
@@ -289,6 +294,36 @@
   table.metadata-table th,
   table.signatures-table td,
   table.signatures-table th {
+    color: #000 !important;
+  }
+
+  /* Metadata tables: odd columns = labels (bold), even columns = values (normal) */
+  .lab-print-root table.metadata-table td:nth-child(odd),
+  .report-page table.metadata-table td:nth-child(odd) {
+    font-weight: 700 !important;
+  }
+
+  .lab-print-root table.metadata-table td:nth-child(even),
+  .report-page table.metadata-table td:nth-child(even) {
+    font-weight: 400 !important;
+  }
+
+  /* Info cards in detailed results: label bold, value normal */
+  .lab-print-root .report-info-grid p:first-child,
+  .report-page .report-info-grid p:first-child {
+    font-weight: 700 !important;
+    color: #000 !important;
+  }
+
+  .lab-print-root .report-info-grid p:last-child,
+  .report-page .report-info-grid p:last-child {
+    font-weight: 400 !important;
+    color: #000 !important;
+  }
+
+  .lab-print-root .signature-date,
+  .report-page .signature-date,
+  .lab-print-root table.signatures-table .signature-column .signature-date {
     color: #000 !important;
   }
 
