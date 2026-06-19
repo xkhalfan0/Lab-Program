@@ -48,8 +48,30 @@ import {
 import { buildSampleVisibilityCondition } from "../db";
 import { getOfficialTestByCode } from "../data/official-test-catalog";
 import { computeSampleKpisFromStatusCounts } from "../../shared/dashboardInsights";
+import {
+  buildReportReadAtMap,
+  countActiveFailedAlerts,
+  isFailedResultAlertActive,
+} from "../../shared/sectorFailedAlerts";
 
 const SECTOR_TOKEN_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+
+async function getSectorTestResultReadAtMap(
+  db: NonNullable<Awaited<ReturnType<typeof getDb>>>,
+  sectorKey: string,
+) {
+  const rows = await db
+    .select({
+      reportId: sectorReportReads.reportId,
+      readAt: sectorReportReads.readAt,
+    })
+    .from(sectorReportReads)
+    .where(and(
+      eq(sectorReportReads.sectorKey, sectorKey as any),
+      eq(sectorReportReads.reportType, "test_result"),
+    ));
+  return buildReportReadAtMap(rows);
+}
 
 function resolveTestTypeMeta(testTypeCode: string | null | undefined) {
   const meta = getOfficialTestByCode(testTypeCode);
@@ -221,7 +243,6 @@ export const sectorRouter = router({
 
     const sampleKpis = computeSampleKpisFromStatusCounts(statusRows);
     const totalSamples = sampleKpis.total;
-    const pendingSamples = sampleKpis.active;
     const completedSamples = sampleKpis.completed;
 
     const approvedCountRow = await db
@@ -243,7 +264,22 @@ export const sectorRouter = router({
       .from(specializedTestResults)
       .innerJoin(samples, eq(specializedTestResults.sampleId, samples.id))
       .where(and(baseWhere, eq(specializedTestResults.status, "approved"), eq(specializedTestResults.overallResult, "fail")));
-    const failedResults = Number(failCountRow?.count ?? 0);
+    const failedResultsIssued = Number(failCountRow?.count ?? 0);
+
+    /** Sector view: received samples still in the lab — balances with total = inLab + pass + fail issued. */
+    const samplesInLab = Math.max(0, totalSamples - readyResults - failedResultsIssued);
+
+    const failedRows = await db
+      .select({
+        id: specializedTestResults.id,
+        overallResult: specializedTestResults.overallResult,
+      })
+      .from(specializedTestResults)
+      .innerJoin(samples, eq(specializedTestResults.sampleId, samples.id))
+      .where(and(baseWhere, eq(specializedTestResults.status, "approved"), eq(specializedTestResults.overallResult, "fail")));
+
+    const testResultReadAtMap = await getSectorTestResultReadAtMap(db, ctx.sectorKey);
+    const failedResults = countActiveFailedAlerts(failedRows, testResultReadAtMap);
 
     const recentFailedRows = await db
       .select({
@@ -261,33 +297,28 @@ export const sectorRouter = router({
       .orderBy(desc(specializedTestResults.updatedAt))
       .limit(5);
 
-    const recentFailedResults = recentFailedRows.map((r) => {
-      const meta = resolveTestTypeMeta(r.testTypeCode);
-      const summary = r.summaryValues as Record<string, unknown> | null;
-      const hint =
-        (summary?.overallIndex != null ? String(summary.overallIndex) : null) ??
-        (summary?.result != null ? String(summary.result) : null) ??
-        meta.testTypeNameAr;
-      return {
-        id: r.id,
-        sampleCode: r.sampleCode,
-        contractNumber: r.contractNumber,
-        testTypeCode: meta.testTypeCode,
-        testTypeNameAr: meta.testTypeNameAr,
-        testTypeNameEn: meta.testTypeNameEn,
-        hint,
-        createdAt: r.updatedAt ?? r.testDate,
-      };
-    });
+    const recentFailedResults = recentFailedRows
+      .filter((r) => isFailedResultAlertActive("fail", r.id, testResultReadAtMap))
+      .map((r) => {
+        const meta = resolveTestTypeMeta(r.testTypeCode);
+        const summary = r.summaryValues as Record<string, unknown> | null;
+        const hint =
+          (summary?.overallIndex != null ? String(summary.overallIndex) : null) ??
+          (summary?.result != null ? String(summary.result) : null) ??
+          meta.testTypeNameAr;
+        return {
+          id: r.id,
+          sampleCode: r.sampleCode,
+          contractNumber: r.contractNumber,
+          testTypeCode: meta.testTypeCode,
+          testTypeNameAr: meta.testTypeNameAr,
+          testTypeNameEn: meta.testTypeNameEn,
+          hint,
+          createdAt: r.updatedAt ?? r.testDate,
+        };
+      });
 
-    const readResults = await db
-      .select({ reportId: sectorReportReads.reportId })
-      .from(sectorReportReads)
-      .where(and(
-        eq(sectorReportReads.sectorKey, ctx.sectorKey as any),
-        eq(sectorReportReads.reportType, "test_result")
-      ));
-    const readResultIds = new Set(readResults.map((r: { reportId: number }) => r.reportId));
+    const readResultIds = new Set(testResultReadAtMap.keys());
 
     const approvedIds = await db
       .select({ id: specializedTestResults.id })
@@ -324,10 +355,11 @@ export const sectorRouter = router({
 
     return {
       totalSamples,
-      pendingSamples,
+      samplesInLab,
       completedSamples,
       approvedResults,
       readyResults,
+      failedResultsIssued,
       failedResults,
       recentFailedResults,
       unreadResults,
@@ -460,22 +492,20 @@ export const sectorRouter = router({
         .offset(offset);
 
       const allApproved = await db
-        .select({ id: specializedTestResults.id })
+        .select({
+          id: specializedTestResults.id,
+          overallResult: specializedTestResults.overallResult,
+        })
         .from(specializedTestResults)
         .where(and(
           inArray(specializedTestResults.sampleId, sampleIds),
           eq(specializedTestResults.status, "approved")
         ));
 
-      const readRecords = await db
-        .select({ reportId: sectorReportReads.reportId })
-        .from(sectorReportReads)
-        .where(and(
-          eq(sectorReportReads.sectorKey, ctx.sectorKey as any),
-          eq(sectorReportReads.reportType, "test_result")
-        ));
-      const readIds = new Set(readRecords.map((r: { reportId: number }) => r.reportId));
+      const testResultReadAtMap = await getSectorTestResultReadAtMap(db, ctx.sectorKey);
+      const readIds = new Set(testResultReadAtMap.keys());
       const unreadCount = allApproved.filter((r: { id: number }) => !readIds.has(r.id)).length;
+      const activeFailedCount = countActiveFailedAlerts(allApproved, testResultReadAtMap);
 
       return {
         results: results.map((r: any) => {
@@ -495,10 +525,12 @@ export const sectorRouter = router({
             testDate: r.testDate,
             updatedAt: r.updatedAt,
             isRead: readIds.has(r.id),
+            failedAlertActive: isFailedResultAlertActive(r.overallResult, r.id, testResultReadAtMap),
           };
         }),
         total: allApproved.length,
         unreadCount,
+        activeFailedCount,
       };
     }),
 
@@ -659,16 +691,10 @@ export const sectorRouter = router({
           eq(specializedTestResults.status, "approved")
         ));
 
-      const readResults = await db
-        .select({ reportId: sectorReportReads.reportId })
-        .from(sectorReportReads)
-        .where(and(
-          eq(sectorReportReads.sectorKey, ctx.sectorKey as any),
-          eq(sectorReportReads.reportType, "test_result")
-        ));
-      const readResultIds = new Set(readResults.map((r: { reportId: number }) => r.reportId));
+      const testResultReadAtMap = await getSectorTestResultReadAtMap(db, ctx.sectorKey);
+      const readResultIds = new Set(testResultReadAtMap.keys());
       unreadResults = approvedRows.filter((r: { id: number }) => !readResultIds.has(r.id)).length;
-      failedResults = approvedRows.filter((r: { overallResult: string | null }) => r.overallResult === "fail").length;
+      failedResults = countActiveFailedAlerts(approvedRows, testResultReadAtMap);
 
       const contractIds = Array.from(new Set(
         sectorSamples
@@ -959,14 +985,8 @@ export const sectorRouter = router({
         .orderBy(desc(specializedTestResults.updatedAt))
         .limit(100);
 
-      const readRows = await db
-        .select({ reportId: sectorReportReads.reportId })
-        .from(sectorReportReads)
-        .where(and(
-          eq(sectorReportReads.sectorKey, ctx.sectorKey as any),
-          eq(sectorReportReads.reportType, "test_result")
-        ));
-      const readResultIds = new Set(readRows.map((r: { reportId: number }) => r.reportId));
+      const testResultReadAtMap = await getSectorTestResultReadAtMap(db, ctx.sectorKey);
+      const readResultIds = new Set(testResultReadAtMap.keys());
 
       resultItems = results.map((r: any) => {
         const typeMeta = resolveTestTypeMeta(r.testTypeCode);
@@ -980,6 +1000,7 @@ export const sectorRouter = router({
           subtitle: contractNumber ? `${contractNumber} — ${testLabel}` : testLabel,
           status: r.overallResult,
           isRead: readResultIds.has(r.id),
+          failedAlertActive: isFailedResultAlertActive(r.overallResult, r.id, testResultReadAtMap),
           createdAt: r.updatedAt ?? r.testDate,
           refId: r.id,
           sampleCode: sampleMap[r.sampleId]?.sampleCode,

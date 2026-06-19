@@ -198,6 +198,7 @@ type InboxItem = {
   subtitle?: string;
   status?: string;
   isRead: boolean;
+  failedAlertActive?: boolean;
   createdAt: any;
   refId: number;
   sampleCode?: string;
@@ -780,10 +781,14 @@ function isResultFail(item: InboxItem) {
   return item.type === "result" && (item.status === "fail" || item.status === "failed");
 }
 
+function isFailedResultAlert(item: InboxItem) {
+  return item.type === "result" && Boolean(item.failedAlertActive);
+}
+
 function InboxRow({ item, lang, onClick }: { item: InboxItem; lang: string; onClick: () => void }) {
   const T = lang === "ar" ? T_AR : T_EN;
   const isRtl = lang === "ar";
-  const isFail = isResultFail(item);
+  const isFail = isFailedResultAlert(item);
   const typeConf = getTypeConfig(item.type, lang, isFail);
   const statusBadge = getStatusBadge(item.status, lang);
   const TypeIcon = typeConf.icon;
@@ -863,13 +868,13 @@ export default function SectorInbox() {
   const filtered = useMemo(() => {
     let list = items;
     if (filter === "unread") list = items.filter((i) => !i.isRead);
-    else if (filter === "failed") list = items.filter((i) => isResultFail(i));
+    else if (filter === "failed") list = items.filter((i) => isFailedResultAlert(i));
     else if (filter !== "all") list = items.filter((i) => i.type === filter);
 
     if (filter === "all") {
       return [...list].sort((a, b) => {
-        const aFail = isResultFail(a) ? 0 : 1;
-        const bFail = isResultFail(b) ? 0 : 1;
+        const aFail = isFailedResultAlert(a) ? 0 : 1;
+        const bFail = isFailedResultAlert(b) ? 0 : 1;
         if (aFail !== bFail) return aFail - bFail;
         return new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime();
       });
@@ -883,7 +888,7 @@ export default function SectorInbox() {
     result: items.filter((i) => i.type === "result").length,
     clearance: items.filter((i) => i.type === "clearance").length,
     notification: items.filter((i) => i.type === "notification").length,
-    failed: items.filter((i) => isResultFail(i)).length,
+    failed: items.filter((i) => isFailedResultAlert(i)).length,
   }), [items]);
 
   const filterBtns: { key: typeof filter; label: string; icon: any; count: number; danger?: boolean }[] = [

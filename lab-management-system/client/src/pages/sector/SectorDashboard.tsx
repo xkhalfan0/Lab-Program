@@ -25,8 +25,10 @@ const t = {
     viewReport: "عرض التقرير",
     failedResults: "نتائج راسبة",
     readyResults: "نتائج جاهزة",
-    underInspection: "قيد الفحص",
+    samplesInLab: "في المختبر",
+    samplesInLabHint: "إجمالي − ناجحة − راسبة",
     totalSamples: "إجمالي العينات",
+    totalSamplesHint: "في المختبر + ناجحة + راسبة",
     updates: "التحديثات",
     resultsTab: "النتائج",
     clearancesTab: "براءات الذمة",
@@ -62,8 +64,10 @@ const t = {
     viewReport: "View Report",
     failedResults: "Failed Results",
     readyResults: "Ready Results",
-    underInspection: "Under Inspection",
+    samplesInLab: "In Lab",
+    samplesInLabHint: "Total − pass − fail",
     totalSamples: "Total Samples",
+    totalSamplesHint: "In lab + pass + fail",
     updates: "Updates",
     resultsTab: "Results",
     clearancesTab: "Clearances",
@@ -96,6 +100,7 @@ type InboxItem = {
   subtitle?: string;
   status?: string;
   isRead: boolean;
+  failedAlertActive?: boolean;
   createdAt: string | Date | null;
   refId: number;
   sampleCode?: string;
@@ -122,6 +127,10 @@ function timeAgo(dateVal: unknown, lang: "ar" | "en"): string {
 
 function isResultFail(item: InboxItem) {
   return item.type === "result" && (item.status === "fail" || item.status === "failed");
+}
+
+function isFailedResultAlert(item: InboxItem) {
+  return item.type === "result" && Boolean(item.failedAlertActive);
 }
 
 function activityLabel(item: InboxItem, lang: "ar" | "en"): string {
@@ -253,12 +262,14 @@ function KpiCard({
   tone,
   href,
   critical,
+  subtitle,
 }: {
   label: string;
   value: number;
   tone: "red" | "green" | "amber" | "slate";
   href?: string;
   critical?: boolean;
+  subtitle?: string;
 }) {
   const tones = {
     red: { value: "text-red-600", border: "border-red-200", bg: "bg-red-50" },
@@ -267,17 +278,19 @@ function KpiCard({
     slate: { value: "text-slate-800", border: "border-slate-200", bg: "bg-white" },
   };
   const c = tones[tone];
+  const showCritical = critical && value > 0;
   const inner = (
     <>
-      {critical && value > 0 && (
+      {showCritical && (
         <AlertTriangle className="mb-2 h-8 w-8 text-red-500" strokeWidth={2.5} />
       )}
-      <p className={`font-bold tabular-nums ${critical && value > 0 ? "text-5xl" : "text-4xl"} ${c.value}`}>{value}</p>
-      <p className={`mt-1 font-medium text-slate-600 ${critical && value > 0 ? "text-base" : "text-sm"}`}>{label}</p>
+      <p className={`font-bold tabular-nums ${showCritical ? "text-5xl" : "text-4xl"} ${c.value}`}>{value}</p>
+      <p className={`mt-1 font-medium text-slate-600 ${showCritical ? "text-base" : "text-sm"}`}>{label}</p>
+      {subtitle ? <p className="mt-0.5 text-[11px] text-slate-400 leading-snug">{subtitle}</p> : null}
     </>
   );
   const cls = `rounded-2xl border p-5 shadow-sm transition ${c.border} ${c.bg} ${
-    critical && value > 0 ? "col-span-2 ring-2 ring-red-300 hover:bg-red-100/80 lg:col-span-1" : ""
+    showCritical ? "col-span-2 ring-2 ring-red-300 hover:bg-red-100/80 lg:col-span-1" : ""
   } ${href && value > 0 ? "cursor-pointer hover:shadow-md" : ""}`;
 
   if (href && value > 0) {
@@ -301,7 +314,7 @@ function ActivityRow({
 }) {
   const T = t[lang];
   const isRtl = lang === "ar";
-  const isFail = isResultFail(item);
+  const isFail = isFailedResultAlert(item);
   const label = activityLabel(item, lang);
   const code = item.sampleCode ?? (isRtl ? item.title : item.titleEn ?? item.title);
 
@@ -381,8 +394,8 @@ export default function SectorDashboard() {
     else if (feedTab === "clearance") list = items.filter((i) => i.type === "clearance");
 
     return [...list].sort((a, b) => {
-      const aFail = isResultFail(a) ? 0 : 1;
-      const bFail = isResultFail(b) ? 0 : 1;
+      const aFail = isFailedResultAlert(a) ? 0 : 1;
+      const bFail = isFailedResultAlert(b) ? 0 : 1;
       if (aFail !== bFail) return aFail - bFail;
       return new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime();
     }).slice(0, showAllFeed ? 100 : 12);
@@ -432,15 +445,25 @@ export default function SectorDashboard() {
 
             <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4">
               <KpiCard
-                label={T.failedResults}
-                value={stats?.failedResults ?? 0}
-                tone="red"
-                href="/sector/results?filter=fail"
-                critical
+                label={T.totalSamples}
+                value={stats?.totalSamples ?? 0}
+                tone="slate"
+                subtitle={T.totalSamplesHint}
+              />
+              <KpiCard
+                label={T.samplesInLab}
+                value={stats?.samplesInLab ?? 0}
+                tone="amber"
+                subtitle={T.samplesInLabHint}
               />
               <KpiCard label={T.readyResults} value={stats?.readyResults ?? 0} tone="green" />
-              <KpiCard label={T.underInspection} value={stats?.pendingSamples ?? 0} tone="amber" />
-              <KpiCard label={T.totalSamples} value={stats?.totalSamples ?? 0} tone="slate" />
+              <KpiCard
+                label={T.failedResults}
+                value={stats?.failedResultsIssued ?? 0}
+                tone="red"
+                href="/sector/results?filter=fail"
+                critical={(stats?.failedResults ?? 0) > 0}
+              />
             </div>
 
             <div className={`${sectorTheme.card} overflow-hidden`}>

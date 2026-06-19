@@ -117,6 +117,7 @@ export default function SectorResults() {
   const readCount = allResults.filter((r) => r.isRead).length;
   const passCount = allResults.filter((r) => r.overallResult?.toLowerCase() === "pass").length;
   const failCount = allResults.filter((r) => r.overallResult?.toLowerCase() === "fail").length;
+  const activeFailedCount = data?.activeFailedCount ?? allResults.filter((r) => r.failedAlertActive).length;
 
   const filtered = allResults.filter((r) => {
     const testLabel = isRtl ? (r.testTypeNameAr ?? r.testType) : (r.testTypeNameEn ?? r.testType);
@@ -131,6 +132,7 @@ export default function SectorResults() {
     }
     if (resultFilter === "pass" && r.overallResult?.toLowerCase() !== "pass") return false;
     if (resultFilter === "fail" && r.overallResult?.toLowerCase() !== "fail") return false;
+    if (resultFilter === "fail" && !r.failedAlertActive) return false;
     if (readFilter === "unread" && r.isRead) return false;
     if (readFilter === "read" && !r.isRead) return false;
     if (dateFrom && r.testDate && new Date(r.testDate) < new Date(dateFrom)) return false;
@@ -182,7 +184,7 @@ export default function SectorResults() {
             { key: "unread", label: T.unreadOnly, count: unreadCount, active: readFilter === "unread", onClick: () => { setReadFilter(readFilter === "unread" ? "" : "unread"); setPage(1); } },
             { key: "read", label: T.readOnly, count: readCount, active: readFilter === "read", onClick: () => { setReadFilter(readFilter === "read" ? "" : "read"); setPage(1); } },
             { key: "pass", label: T.passOnly, count: passCount, active: resultFilter === "pass", onClick: () => { setResultFilter(resultFilter === "pass" ? "" : "pass"); setPage(1); } },
-            { key: "fail", label: T.failOnly, count: failCount, active: resultFilter === "fail", onClick: () => { setResultFilter(resultFilter === "fail" ? "" : "fail"); setPage(1); } },
+            { key: "fail", label: T.failOnly, count: activeFailedCount, active: resultFilter === "fail", onClick: () => { setResultFilter(resultFilter === "fail" ? "" : "fail"); setPage(1); } },
           ].map((btn) => (
             <button
               key={btn.key}
@@ -251,18 +253,35 @@ export default function SectorResults() {
                   const isPass = r.overallResult?.toLowerCase() === "pass";
                   const isFail = r.overallResult?.toLowerCase() === "fail";
                   const testLabel = isRtl ? (r.testTypeNameAr ?? r.testType ?? r.testTypeCode) : (r.testTypeNameEn ?? r.testType ?? r.testTypeCode);
+                  const showFailAlert = Boolean(r.failedAlertActive);
                   return (
                     <tr
                       key={r.id}
-                      className={`cursor-pointer transition hover:bg-blue-50/50 ${!r.isRead ? "bg-blue-50/30" : i % 2 === 0 ? "bg-white" : "bg-slate-50/50"}`}
+                      className={`cursor-pointer transition hover:bg-blue-50/50 ${
+                        showFailAlert
+                          ? "bg-red-50/40"
+                          : !r.isRead
+                            ? "bg-blue-50/30"
+                            : i % 2 === 0
+                              ? "bg-white"
+                              : "bg-slate-50/50"
+                      }`}
                       onClick={() => openReport(r.id, testLabel ?? "")}
                     >
-                      <td className="px-3 py-3">{!r.isRead && <div className="mx-auto h-2 w-2 rounded-full bg-blue-500" />}</td>
+                      <td className="px-3 py-3">
+                        {showFailAlert ? (
+                          <div className="mx-auto h-2 w-2 rounded-full bg-red-500" title={isRtl ? "تنبيه نتيجة راسبة" : "Failed result alert"} />
+                        ) : !r.isRead ? (
+                          <div className="mx-auto h-2 w-2 rounded-full bg-blue-500" />
+                        ) : null}
+                      </td>
                       <td className="px-4 py-3 font-mono font-medium text-slate-900">
                         {r.sampleCode}
-                        {!r.isRead && (
+                        {showFailAlert ? (
+                          <span className="ms-2 rounded bg-red-100 px-1.5 py-0.5 text-[10px] font-semibold text-red-700">{T.fail}</span>
+                        ) : !r.isRead ? (
                           <span className="ms-2 rounded bg-blue-100 px-1.5 py-0.5 text-[10px] font-semibold text-blue-700">{T.unread}</span>
-                        )}
+                        ) : null}
                       </td>
                       <td className="px-4 py-3 text-slate-600">{r.contractNumber ?? "—"}</td>
                       <td className="max-w-[220px] px-4 py-3 text-slate-700">{testLabel ?? "—"}</td>
