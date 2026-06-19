@@ -350,12 +350,7 @@ function TechnicianAssignmentCard({
               {PendingDeletionBadge}
             </div>
             {subLabel && <p className="text-xs text-muted-foreground">{subLabel}</p>}
-            {dist.orderCode && dist.isMultiTest && (
-              <Badge variant="secondary" className="text-xs font-normal">
-                {tx("partOf", lang)} {dist.orderCode}
-              </Badge>
-            )}
-            <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+            <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
               <div>
                 <p className="text-xs text-muted-foreground">{tx("sampleCode", lang)}</p>
                 <p className="font-mono text-sm font-medium">{sampleCode}</p>
@@ -368,10 +363,6 @@ function TechnicianAssignmentCard({
               <div>
                 <p className="text-xs text-muted-foreground">{tx("contractNo", lang)}</p>
                 <p className="font-mono text-sm font-medium">{contractNo}</p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">{tx("distCode", lang)}</p>
-                <p className="font-mono text-sm font-medium">{dist.distributionCode ?? "—"}</p>
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">{tx("received", lang)}</p>
@@ -452,7 +443,7 @@ function TechnicianAssignmentCard({
                       <DeletionRequestButton
                         targetTable="distributions"
                         targetId={distId}
-                        targetLabel={`${dist.distributionCode ?? distId} · ${dist.testType ?? ""}`}
+                        targetLabel={`Sample ${sampleCode} · ${dist.testType ?? ""}`}
                         variant="icon"
                         onSuccess={onDeletionSuccess}
                       />
@@ -467,7 +458,7 @@ function TechnicianAssignmentCard({
               <DeletionRequestButton
                 targetTable="distributions"
                 targetId={distId}
-                targetLabel={`${dist.distributionCode ?? distId} · ${dist.testType ?? ""}`}
+                targetLabel={`Sample ${sampleCode} · ${dist.testType ?? ""}`}
                 variant="icon"
                 onSuccess={onDeletionSuccess}
               />
@@ -539,7 +530,6 @@ function TechnicianBatchCard({
             <p className="text-xs text-muted-foreground truncate">
               <Building2 className="inline h-3.5 w-3.5 mr-1 align-text-bottom" />
               {contractor}
-              {group[0]?.orderCode ? ` · ${group[0].orderCode}` : ""}
             </p>
           </div>
         </div>
@@ -739,6 +729,11 @@ export default function Technician() {
     }
   };
 
+  const selectedSampleCode =
+    selectedDist?.sampleCode ??
+    allSamples.find((s: any) => s.id === selectedDist?.sampleId)?.sampleCode ??
+    "—";
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (dialogDeletionPending) return;
@@ -902,8 +897,8 @@ export default function Technician() {
             <form onSubmit={handleSubmit} className="mt-2 space-y-4">
               <div className="space-y-1 rounded-lg bg-muted/40 p-3 text-xs">
                 <div>
-                  <span className="text-muted-foreground">{tx("order", lang)}:</span>{" "}
-                  <span className="font-mono font-bold">{selectedDist.distributionCode}</span>
+                  <span className="text-muted-foreground">{tx("sampleCode", lang)}:</span>{" "}
+                  <span className="font-mono font-bold">{selectedSampleCode}</span>
                 </div>
                 <div>
                   <span className="text-muted-foreground">{tx("testType", lang)}:</span>{" "}

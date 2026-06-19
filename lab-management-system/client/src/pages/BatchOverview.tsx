@@ -213,8 +213,8 @@ export default function BatchOverview() {
                     <span className="font-mono font-semibold">{sample?.sampleCode ?? "\u2014"}</span>
                   </div>
                   <div>
-                    <span className="text-slate-500 block text-xs">{isAr ? "\u0631\u0642\u0645 \u0627\u0644\u0637\u0644\u0628" : "Order ID"}</span>
-                    <span className="font-mono font-semibold">{orderId}</span>
+                    <span className="text-slate-500 block text-xs">{isAr ? "نوع العينة" : "Sample type"}</span>
+                    <span className="font-medium">{sample?.sampleType ?? "—"}</span>
                   </div>
                   <div className="col-span-2 sm:col-span-1">
                     <span className="text-slate-500 block text-xs">{isAr ? "\u0627\u0644\u0645\u0642\u0627\u0648\u0644" : "Contractor"}</span>
@@ -280,11 +280,11 @@ export default function BatchOverview() {
                           <div className="min-w-0 flex-1">
                             <div className="flex flex-wrap items-center gap-2 mb-0.5">
                               <span className="text-xs font-bold text-slate-400">#{index + 1}</span>
+                              {isAgg && (
                               <Badge variant="outline" className="text-[10px] font-mono">
-                                {isAgg
-                                  ? (isAr ? `${row.members.length} مقاسات` : `${row.members.length} sizes`)
-                                  : dist.distributionCode ?? `DIST-${dist.id}`}
+                                {isAr ? `${row.members.length} مقاسات` : `${row.members.length} sizes`}
                               </Badge>
+                              )}
                               <Badge
                                 className={
                                   done

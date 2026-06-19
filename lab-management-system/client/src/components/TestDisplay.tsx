@@ -92,7 +92,6 @@ export function TestPriceBadge({
 
 export function TestNameBlock({
   name,
-  code,
   className,
   nameClassName,
 }: {
@@ -106,7 +105,6 @@ export function TestNameBlock({
       <span className={cn("block text-sm font-medium leading-snug text-foreground", nameClassName)}>
         {name}
       </span>
-      {code && <TestCodeBadge code={code} className="mt-0.5" />}
     </div>
   );
 }

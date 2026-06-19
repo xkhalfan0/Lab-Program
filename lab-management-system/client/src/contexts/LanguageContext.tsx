@@ -177,6 +177,8 @@ const translations: Record<string, Record<Language, string>> = {
   "reception.acceptable": { en: "Acceptable", ar: "مقبولة" },
   "reception.collectionDate": { en: "Collection Date", ar: "تاريخ الجمع" },
   "reception.location": { en: "Location / Site", ar: "الموقع" },
+  "reception.referenceNo": { en: "Reference No.", ar: "رقم المرجع" },
+  "reception.contractorForm": { en: "Contractor form (scan)", ar: "نموذج المقاول (مسح ضوئي)" },
   "reception.priority": { en: "Priority", ar: "الأولوية" },
   "reception.normal": { en: "Normal", ar: "عادية" },
   "reception.urgent": { en: "Urgent", ar: "عاجلة" },

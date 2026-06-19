@@ -33,7 +33,11 @@ const SECTORS = [
 
 const REASON_LABELS: Record<string, { en: string; ar: string }> = {
   "in testing": { en: "In testing", ar: "قيد الفحص" },
-  "review wait": { en: "Review wait", ar: "بانتظار المراجعة" },
+  "in progress": { en: "In progress", ar: "قيد التنفيذ" },
+  "pending distribution": { en: "Pending distribution", ar: "بانتظار التوزيع" },
+  "awaiting review": { en: "Awaiting review", ar: "بانتظار المراجعة" },
+  "review wait": { en: "Awaiting review", ar: "بانتظار المراجعة" },
+  "awaiting qc": { en: "Awaiting QC", ar: "بانتظار ضبط الجودة" },
   "no technician assigned": { en: "No technician assigned", ar: "لم يُعيَّن فني" },
   "past expected date": { en: "Past expected date", ar: "تجاوز التاريخ المتوقع" },
 };
@@ -199,9 +203,9 @@ export default function SupervisorDashboard() {
             ) : (
               <div className="space-y-2 max-h-52 overflow-y-auto">
                 {reviewQueue.slice(0, 10).map((row) => (
-                  <div key={row.orderCode} className="flex items-center gap-2 p-2.5 rounded-lg bg-slate-50 border border-slate-100">
+                  <div key={row.sampleCode} className="flex items-center gap-2 p-2.5 rounded-lg bg-slate-50 border border-slate-100">
                     <div className="flex-1 min-w-0">
-                      <span className="text-xs font-mono font-semibold text-blue-600">{row.orderCode}</span>
+                      <span className="text-xs font-mono font-semibold text-blue-600">{row.sampleCode}</span>
                       <p className="text-xs text-slate-600 truncate">{row.testName}</p>
                     </div>
                     <span className="text-xs text-slate-500">{row.waitHours}h</span>
@@ -227,14 +231,14 @@ export default function SupervisorDashboard() {
             ) : (
               <div className="space-y-2 max-h-52 overflow-y-auto">
                 {stuckOrders.slice(0, 10).map((row, i) => (
-                  <div key={`${row.code}-${i}`} className="flex items-center gap-2 p-2.5 rounded-lg bg-red-50/50 border border-red-100">
+                  <div key={`${row.sampleCode}-${i}`} className="flex items-center gap-2 p-2.5 rounded-lg bg-red-50/50 border border-red-100">
                     <div className="flex-1 min-w-0">
-                      <span className="text-xs font-mono font-semibold">{row.code}</span>
+                      <span className="text-xs font-mono font-semibold text-blue-600">{row.sampleCode}</span>
                       <p className="text-xs text-slate-600">
                         {isAr ? (REASON_LABELS[row.reason]?.ar ?? row.reasonAr) : (REASON_LABELS[row.reason]?.en ?? row.reason)}
                       </p>
                     </div>
-                    <span className="text-xs font-bold text-red-600">{row.ageDays}d</span>
+                    <span className="text-xs font-bold text-red-600 shrink-0">{row.ageDays}d</span>
                   </div>
                 ))}
               </div>

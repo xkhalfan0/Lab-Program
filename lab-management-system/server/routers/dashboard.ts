@@ -100,6 +100,31 @@ function ageDays(from: Date, now: Date): number {
   return Math.floor((now.getTime() - from.getTime()) / (1000 * 60 * 60 * 24));
 }
 
+/** Human-readable workflow stage for stuck/overdue samples (never order/distribution codes). */
+function stuckStageFromSampleStatus(status: string | null | undefined): {
+  reason: string;
+  reasonAr: string;
+} {
+  switch (status) {
+    case "received":
+      return { reason: "pending distribution", reasonAr: "بانتظار التوزيع" };
+    case "distributed":
+    case "testing_in_progress":
+      return { reason: "in testing", reasonAr: "قيد الفحص" };
+    case "awaiting_review":
+    case "under_review":
+      return { reason: "awaiting review", reasonAr: "بانتظار المراجعة" };
+    case "processed":
+    case "tested":
+      return { reason: "review wait", reasonAr: "بانتظار المراجعة" };
+    case "reviewed":
+    case "approved":
+      return { reason: "awaiting qc", reasonAr: "بانتظار ضبط الجودة" };
+    default:
+      return { reason: "in progress", reasonAr: "قيد التنفيذ" };
+  }
+}
+
 export const dashboardRouter = router({
   /**
    * Main KPIs endpoint — responds to time filter
@@ -738,7 +763,7 @@ export const dashboardRouter = router({
           (now.getTime() - new Date(o.updatedAt).getTime()) / (1000 * 60 * 60)
         );
         return {
-          orderCode: o.orderCode,
+          sampleCode: o.sampleCode ?? "—",
           testName,
           waitHours,
           priority: o.priority ?? "normal",
@@ -751,35 +776,58 @@ export const dashboardRouter = router({
 
   stuckOrders: protectedProcedure.query(async () => {
     const now = new Date();
-    const stuck: { code: string; reason: string; reasonAr: string; ageDays: number }[] = [];
+    const stuck: {
+      sampleCode: string;
+      reason: string;
+      reasonAr: string;
+      ageDays: number;
+    }[] = [];
+    const seen = new Set<string>();
+
+    const push = (
+      sampleCode: string | null | undefined,
+      reason: string,
+      reasonAr: string,
+      ageDays: number,
+    ) => {
+      const code = sampleCode?.trim();
+      if (!code || seen.has(code)) return;
+      seen.add(code);
+      stuck.push({ sampleCode: code, reason, reasonAr, ageDays });
+    };
+
+    const allSamples = await getAllSamples();
+    const sampleCodeById = new Map(
+      allSamples.map((s) => [s.id, s.sampleCode?.trim() || ""]),
+    );
+
+    const resolveSampleCode = (sampleId: number | null | undefined, joined?: string | null) =>
+      joined?.trim() || (sampleId ? sampleCodeById.get(sampleId) : "") || null;
 
     const orders = await getAllLabOrders();
     for (const o of orders) {
-      const created = new Date(o.createdAt);
-      const age = ageDays(created, now);
+      const sampleCode = resolveSampleCode(o.sampleId, o.sampleCode);
+      if (!sampleCode) continue;
+      const anchor = new Date(o.updatedAt ?? o.createdAt);
+      const age = ageDays(anchor, now);
+      const stage = stuckStageFromSampleStatus(o.sampleStatus);
+
       if (
         isInGroup(o.status, LAB_ORDER_STATUS_GROUPS.inProgress) &&
         age > 3
       ) {
-        stuck.push({
-          code: o.orderCode,
-          reason: "in testing",
-          reasonAr: "قيد الفحص",
-          ageDays: age,
-        });
+        push(sampleCode, stage.reason, stage.reasonAr, age);
       } else if (o.status === "completed" && age > 2) {
-        stuck.push({
-          code: o.orderCode,
-          reason: "review wait",
-          reasonAr: "بانتظار المراجعة",
-          ageDays: age,
-        });
+        push(sampleCode, "awaiting review", "بانتظار المراجعة", age);
+      } else if (o.status === "reviewed" && age > 2) {
+        push(sampleCode, "awaiting qc", "بانتظار ضبط الجودة", age);
       }
     }
 
-    const allSamples = await getAllSamples();
     for (const s of allSamples) {
       if (s.status === "deleted") continue;
+      const sampleCode = s.sampleCode?.trim();
+      if (!sampleCode) continue;
       const dists = await getDistributionsBySample(s.id);
       const received = new Date(s.receivedAt ?? s.createdAt);
       const age = ageDays(received, now);
@@ -789,12 +837,7 @@ export const dashboardRouter = router({
         dists.length > 0 &&
         dists.every((d) => !d.assignedTechnicianId)
       ) {
-        stuck.push({
-          code: s.sampleCode,
-          reason: "no technician assigned",
-          reasonAr: "لم يُعيَّن فني",
-          ageDays: age,
-        });
+        push(sampleCode, "no technician assigned", "لم يُعيَّن فني", age);
       }
 
       const pastDue = dists.some((d) => {
@@ -803,12 +846,34 @@ export const dashboardRouter = router({
         return now.getTime() > new Date(d.expectedCompletionDate).getTime();
       });
       if (pastDue && !NOT_OVERDUE_SAMPLE_STATUSES.includes(s.status)) {
-        stuck.push({
-          code: s.sampleCode,
-          reason: "past expected date",
-          reasonAr: "تجاوز التاريخ المتوقع",
-          ageDays: age,
-        });
+        const overdueDays = Math.max(
+          ...dists
+            .filter((d) => {
+              if (!d.expectedCompletionDate) return false;
+              if (DIST_DONE_STATUSES.includes(d.status)) return false;
+              return now.getTime() > new Date(d.expectedCompletionDate).getTime();
+            })
+            .map((d) =>
+              ageDays(new Date(d.expectedCompletionDate!), now),
+            ),
+          0,
+        );
+        push(
+          sampleCode,
+          "past expected date",
+          "تجاوز التاريخ المتوقع",
+          overdueDays || age,
+        );
+      }
+
+      if (
+        isInGroup(s.status, SAMPLE_STATUS_GROUPS.inProgress) &&
+        !["distributed"].includes(s.status) &&
+        age > 3 &&
+        dists.some((d) => isInGroup(d.status, DISTRIBUTION_STATUS_GROUPS.open))
+      ) {
+        const stage = stuckStageFromSampleStatus(s.status);
+        push(sampleCode, stage.reason, stage.reasonAr, age);
       }
     }
 

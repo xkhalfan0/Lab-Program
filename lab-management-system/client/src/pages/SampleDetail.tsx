@@ -751,7 +751,6 @@ export default function SampleDetail() {
                   </div>
                 )}
                 {[
-                  { label: lang === "ar" ? "رقم الأمر" : "Order Code", value: dist.distributionCode },
                   { label: lang === "ar" ? "الاختبار" : "Test", value: dist.testName },
                   { label: lang === "ar" ? "عدد العينات" : "Specimens", value: String(dist.quantity ?? 1) },
                   { label: lang === "ar" ? "سعر الوحدة" : "Unit Price", value: dist.unitPrice ? `${Number(dist.unitPrice).toFixed(2)} ${lang === "ar" ? "درهم" : "AED"}` : "—" },

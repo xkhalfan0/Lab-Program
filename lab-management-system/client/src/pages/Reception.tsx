@@ -1,6 +1,7 @@
 import DashboardLayout from "@/components/DashboardLayout";
 import { DeletionRequestButton } from "@/components/DeletionRequestButton";
-import { ReceptionNominalCubeSizePanel, isValidNominalCubeSize } from "@/components/ReceptionNominalCubeSizePanel";
+import { ReceptionContractorFormUpload } from "@/components/ReceptionContractorFormUpload";
+import { readFileAsBase64 } from "@/lib/sampleFileUpload";
 import { ReceptionRetestPanel } from "@/components/ReceptionRetestPanel";
 import { RetestBadge } from "@/components/RetestBadge";
 import {
@@ -211,6 +212,7 @@ const emptyForm = () => ({
   condition: "good" as "good" | "damaged" | "partial",
   notes: "",
   location: "",
+  referenceNo: "",
   castingDate: undefined as Date | undefined,
   priority: "normal" as "low" | "normal" | "high" | "urgent",
 });
@@ -272,7 +274,7 @@ function ReceptionOrderActionsCell({
           className="h-7 px-2"
           title={lang === "ar" ? "طباعة وصل الاستلام" : "Print Receipt"}
           disabled={hasPendingDeletion}
-          onClick={() => window.open(`/print-receipt/${order.sampleId}`, "_blank")}
+          onClick={() => window.open(`/print-receipt/${order.sampleId}?lang=${lang}`, "_blank")}
         >
           <Printer className="w-3.5 h-3.5" />
         </Button>
@@ -299,7 +301,7 @@ function ReceptionOrderActionsCell({
                 <DeletionRequestButton
                   targetTable="lab_orders"
                   targetId={order.id}
-                  targetLabel={`Order ${order.orderCode}`}
+                  targetLabel={`Sample ${order.sampleCode || order.orderCode}`}
                   variant="icon"
                   onSuccess={onDeletionSuccess}
                 />
@@ -314,7 +316,7 @@ function ReceptionOrderActionsCell({
         <DeletionRequestButton
           targetTable="lab_orders"
           targetId={order.id}
-          targetLabel={`Order ${order.orderCode}`}
+          targetLabel={`Sample ${order.sampleCode || order.orderCode}`}
           variant="icon"
           onSuccess={onDeletionSuccess}
         />
@@ -349,6 +351,7 @@ export default function Reception() {
   const [foamConcreteAge, setFoamConcreteAge] = useState("");
   /** Reception: CONC_CUBE nominal face size (stored on sample) — required when cube test selected */
   const [nominalCubeSize, setNominalCubeSize] = useState("");
+  const [contractorFormFile, setContractorFormFile] = useState<File | null>(null);
   const concCubePanelRef = useRef<HTMLDivElement>(null);
 
   const minQtyForTest = (code: string) => (code === "CONC_CUBE" ? MIN_CONC_CUBE_COUNT : 1);
@@ -430,16 +433,39 @@ export default function Reception() {
     setAsphaltMixSelectionMode("batch");
     setNominalCubeSize("");
     setFoamConcreteAge("");
+    setContractorFormFile(null);
   };
 
+  const uploadAttachment = trpc.attachments.upload.useMutation();
+
   const createOrder = trpc.orders.create.useMutation({
-    onSuccess: (result) => {
+    onSuccess: async (result) => {
+      if (contractorFormFile) {
+        try {
+          const { base64, mimeType } = await readFileAsBase64(contractorFormFile);
+          await uploadAttachment.mutateAsync({
+            sampleId: result.sample.id,
+            fileName: contractorFormFile.name,
+            fileData: base64,
+            mimeType,
+            fileSize: contractorFormFile.size,
+            attachmentType: "contractor_form",
+          });
+        } catch (err) {
+          toast.error(
+            lang === "ar"
+              ? "تم تسجيل العينة، لكن فشل حفظ نموذج المقاول."
+              : "Sample registered, but contractor form upload failed.",
+          );
+          console.error(err);
+        }
+      }
       toast.success(lang === "ar"
         ? `تم تسجيل العينة ${result.sample.sampleCode} (${result.items.length} اختبار)`
         : `Sample ${result.sample.sampleCode} registered (${result.items.length} test(s))`);
       resetRegistrationForm();
       refetch();
-      window.open(`/print-receipt/${result.sample.id}`, "_blank");
+      window.open(`/print-receipt/${result.sample.id}?lang=${lang}`, "_blank");
     },
     onError: (err) => toast.error(err.message),
   });
@@ -1126,6 +1152,7 @@ export default function Reception() {
       condition: form.condition,
       notes: form.notes || undefined,
       location: form.location || undefined,
+      referenceNo: form.referenceNo?.trim() || undefined,
       castingDate: castingDateISO || undefined,
       priority: form.priority,
       nominalCubeSize: finalTests.some(t => t.testTypeCode === "CONC_CUBE") ? nominalCubeSize : undefined,
@@ -1290,7 +1317,7 @@ export default function Reception() {
                       />
                     </div>
                     <div className="flex gap-1 shrink-0">
-                      <Button type="button" variant="ghost" size="sm" className="h-7 px-2" onClick={() => window.open(`/print-receipt/${order.sampleId}`, "_blank")}>
+                      <Button type="button" variant="ghost" size="sm" className="h-7 px-2" onClick={() => window.open(`/print-receipt/${order.sampleId}?lang=${lang}`, "_blank")}>
                         <Printer className="w-3.5 h-3.5" />
                       </Button>
                     </div>
@@ -1363,6 +1390,26 @@ export default function Reception() {
                           <Label className="text-[15px]">{lang === "ar" ? "الموقع" : "Location"}</Label>
                           <Input className="h-10 text-base" placeholder={lang === "ar" ? "اختياري" : "Optional"} value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} />
                         </div>
+                        <div className="space-y-2">
+                          <Label className="text-[15px]">
+                            {lang === "ar" ? "رقم المرجع" : "Reference No."}
+                            <span className="text-muted-foreground text-xs font-normal ms-1">
+                              ({lang === "ar" ? "اختياري" : "optional"})
+                            </span>
+                          </Label>
+                          <Input
+                            className="h-10 text-base"
+                            placeholder={lang === "ar" ? "مرجع المقاول / RFQ / MTS..." : "Contractor ref., RFQ, MTS..."}
+                            value={form.referenceNo}
+                            onChange={(e) => setForm({ ...form, referenceNo: e.target.value })}
+                          />
+                        </div>
+                        <ReceptionContractorFormUpload
+                          file={contractorFormFile}
+                          onFileChange={setContractorFormFile}
+                          lang={lang}
+                          disabled={createOrder.isPending || uploadAttachment.isPending}
+                        />
                         <div className="space-y-2 sm:col-span-2">
                           <Label className="text-[15px]">{lang === "ar" ? "نوع المادة" : "Material"} <span className="text-red-500">*</span></Label>
                           <div className="flex flex-wrap gap-2">
@@ -1706,8 +1753,7 @@ export default function Reception() {
                     <table className="w-full text-sm">
                       <thead>
                         <tr className="border-b bg-muted/30">
-                          <th className="text-start px-4 py-2.5 text-xs font-medium text-muted-foreground">{lang === "ar" ? "رقم العينة" : "Sample ID"}</th>
-                          <th className="text-start px-4 py-2.5 text-xs font-medium text-muted-foreground">{lang === "ar" ? "رقم الأوردر" : "Order #"}</th>
+                          <th className="text-start px-4 py-2.5 text-xs font-medium text-muted-foreground">{lang === "ar" ? "رمز العينة" : "Sample Code"}</th>
                           <th className="text-start px-4 py-2.5 text-xs font-medium text-muted-foreground">{t("table.contractNo")}</th>
                           <th className="text-start px-4 py-2.5 text-xs font-medium text-muted-foreground">{t("table.contractor")}</th>
                           <th className="text-start px-4 py-2.5 text-xs font-medium text-muted-foreground">{lang === "ar" ? "نوع العينة" : "Type"}</th>
@@ -1729,7 +1775,6 @@ export default function Reception() {
                                 compact
                               />
                             </td>
-                            <td className="px-4 py-2.5 font-mono text-xs text-muted-foreground">{order.orderCode}</td>
                             <td className="px-4 py-2.5 text-xs font-mono text-muted-foreground">{order.contractNumber ?? "—"}</td>
                             <td className="px-4 py-2.5 text-xs">{order.contractorName ?? "—"}</td>
                             <td className="px-4 py-2.5 text-xs">{typeLabel(order.sampleType ?? "")}</td>
@@ -1771,7 +1816,7 @@ export default function Reception() {
       <Dialog open={editOpen} onOpenChange={(v) => { setEditOpen(v); if (!v) setEditingOrder(null); }}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>{lang === "ar" ? `تعديل الأوردر ${editingOrder?.orderCode ?? ""}` : `Edit Order ${editingOrder?.orderCode ?? ""}`}</DialogTitle>
+            <DialogTitle>{lang === "ar" ? `تعديل العينة ${editingOrder?.sampleCode ?? ""}` : `Edit Sample ${editingOrder?.sampleCode ?? ""}`}</DialogTitle>
           </DialogHeader>
           {editingOrder && (
             <div className="space-y-4 py-2">

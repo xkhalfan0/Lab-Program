@@ -47,6 +47,7 @@ const normalizeOrder = (order: any) => {
   return {
     ...order,
     orderCode: String(order.orderCode || ""),
+    sampleCode: String(order.sampleCode || ""),
     contractorName: String(order.contractorName || ""),
     sampleType: String(order.sampleType || ""),
     items: (order.items || []).map((item: any) => ({
@@ -412,7 +413,7 @@ function DistributionAllOrdersActionsCell({
                 <DeletionRequestButton
                   targetTable="lab_orders"
                   targetId={order.id}
-                  targetLabel={`Order ${order.orderCode}`}
+                  targetLabel={`Sample ${order.sampleCode || order.orderCode}`}
                   variant="icon"
                   onSuccess={onDeletionSuccess}
                 />
@@ -427,7 +428,7 @@ function DistributionAllOrdersActionsCell({
         <DeletionRequestButton
           targetTable="lab_orders"
           targetId={order.id}
-          targetLabel={`Order ${order.orderCode}`}
+          targetLabel={`Sample ${order.sampleCode || order.orderCode}`}
           variant="icon"
           onSuccess={onDeletionSuccess}
         />
@@ -468,7 +469,7 @@ function OrdersTable({
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b bg-muted/30">
-                  <th className="text-start px-4 py-2.5 text-xs font-medium text-muted-foreground">{lang === "ar" ? "رقم الأوردر" : "Order #"}</th>
+                  <th className="text-start px-4 py-2.5 text-xs font-medium text-muted-foreground">{lang === "ar" ? "رمز العينة" : "Sample Code"}</th>
                   <th className="text-start px-4 py-2.5 text-xs font-medium text-muted-foreground">{lang === "ar" ? "المقاول" : "Contractor"}</th>
                   <th className="text-start px-4 py-2.5 text-xs font-medium text-muted-foreground">{lang === "ar" ? "النوع" : "Type"}</th>
                   <th className="text-start px-4 py-2.5 text-xs font-medium text-muted-foreground">{lang === "ar" ? "الاختبارات" : "Tests"}</th>
@@ -481,7 +482,7 @@ function OrdersTable({
                 {orders.map((order: any) => (
                   <tr key={order.id} className="border-b last:border-0 hover:bg-muted/20 transition-colors">
                     <td className="px-4 py-2.5">
-                      <div className="font-mono text-xs font-semibold text-primary">{toText(order.orderCode)}</div>
+                      <div className="font-mono text-xs font-semibold text-primary">{toText(order.sampleCode)}</div>
                       <RetestBadge
                         retestNumber={order.retestNumber}
                         originalSampleId={order.originalSampleId}
@@ -679,8 +680,8 @@ export default function Distribution() {
           onSearchChange={setListSearch}
           searchPlaceholder={
             lang === "ar"
-              ? "بحث برقم الأوردر، العينة، العقد، أو المقاول..."
-              : "Search by order, sample, contract, or contractor..."
+              ? "بحث برمز العينة، العقد، أو المقاول..."
+              : "Search by sample code, contract, or contractor..."
           }
           sampleType={sampleTypeFilter}
           onSampleTypeChange={setSampleTypeFilter}
@@ -748,11 +749,11 @@ export default function Distribution() {
             <DialogTitle>
               {isEditing
                 ? (lang === "ar"
-                  ? `تعديل التوزيع — ${toText(selectedOrder?.orderCode)}`
-                  : `Edit Distribution — ${toText(selectedOrder?.orderCode)}`)
+                  ? `تعديل التوزيع — ${toText(selectedOrder?.sampleCode)}`
+                  : `Edit Distribution — ${toText(selectedOrder?.sampleCode)}`)
                 : (lang === "ar"
-                  ? `توزيع الأوردر — ${toText(selectedOrder?.orderCode)}`
-                  : `Distribute Order — ${toText(selectedOrder?.orderCode)}`)}
+                  ? `توزيع العينة — ${toText(selectedOrder?.sampleCode)}`
+                  : `Distribute Sample — ${toText(selectedOrder?.sampleCode)}`)}
             </DialogTitle>
           </DialogHeader>
           <form onSubmit={handleDistribute} className="space-y-4 mt-2">

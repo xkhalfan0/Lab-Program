@@ -85,6 +85,8 @@ export const samples = mysqlTable("samples", {
   testTypeName: varchar("testTypeName", { length: 256 }), // locked test name at registration time
   batchId: varchar("batchId", { length: 32 }), // groups samples created together (e.g. multi-block batch)
   location: varchar("location", { length: 256 }), // sample location/origin (e.g. "Floor 3, Column C2")
+  /** Contractor / client reference written at reception (optional) */
+  referenceNo: varchar("referenceNo", { length: 128 }),
   /** Nominal cube face size from reception: "150mm" or "100mm" (concrete cube samples only) */
   nominalCubeSize: varchar("nominalCubeSize", { length: 32 }),
   castingDate: timestamp("castingDate"), // date of concrete casting (used to calculate sample age automatically)
@@ -220,6 +222,7 @@ export const attachments = mysqlTable("attachments", {
     "payment_order",
     "payment_receipt",
     "test_report",
+    "contractor_form",
     "other",
   ]).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),

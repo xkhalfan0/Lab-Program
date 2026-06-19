@@ -241,7 +241,7 @@ export default function TestRouter() {
                 <FlaskConical className="text-blue-500" size={28} />
                 <div>
                   <h2 className="font-bold text-slate-800 text-lg">{dist.testName}</h2>
-                  <p className="text-sm text-slate-500">Distribution: {dist.distributionCode}</p>
+                  <p className="text-sm text-slate-500">Sample: {dist.sampleCode ?? "—"}</p>
                 </div>
               </div>
               <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 text-sm text-amber-700">

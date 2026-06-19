@@ -9,6 +9,7 @@ import { sectorRouter } from "./routers/sector";
 import { dashboardRouter } from "./routers/dashboard";
 import { deletionRouter } from "./routers/deletion";
 import { labOrderReceptionCreateInputSchema, runLabOrderReceptionCreate } from "./routers/orders";
+import { sanitizeUploadFileName, validateClearanceLetterFile, decodeBase64Payload } from "./uploadUtils";
 import { ensureConcreteGroupsFromReceptionPlan } from "./concreteCubeGroups";
 import { parseConcCubePlan } from "@shared/concreteCubeReception";
 import { calcActualAgeDays, resolveBs1881AgeFactor } from "@shared/concreteCubeBs1881";
@@ -1623,19 +1624,22 @@ ${testSummaries.length > 0 ? testSummaries.join("\n\n") : "لم تُجرَ اخ�
             "payment_order",
             "payment_receipt",
             "test_report",
+            "contractor_form",
             "other",
           ]),
         })
       )
       .mutation(async ({ ctx, input }) => {
-        const buffer = Buffer.from(input.fileData, "base64");
-        const fileKey = `lab-attachments/${input.sampleId}/${Date.now()}-${input.fileName}`;
+        const safeName = sanitizeUploadFileName(input.fileName);
+        const buffer = decodeBase64Payload(input.fileData);
+        validateClearanceLetterFile(safeName, buffer.length);
+        const fileKey = `lab-attachments/${input.sampleId}/${Date.now()}-${safeName}`;
         const { url } = await storagePut(fileKey, buffer, input.mimeType);
         const attachment = await createAttachment({
           sampleId: input.sampleId,
           distributionId: input.distributionId,
           uploadedById: ctx.user.id,
-          fileName: input.fileName,
+          fileName: safeName,
           fileKey,
           fileUrl: url,
           mimeType: input.mimeType,
@@ -3459,7 +3463,12 @@ ${testSummaries.length > 0 ? testSummaries.join("\n\n") : "لم تُجرَ اخ�
       .query(async ({ ctx, input }) => {
         const allOrders = await getAllLabOrders();
         const sampleOrders = allOrders.filter((o: { sampleId: number | null }) => o.sampleId === input.sampleId);
-        return sampleOrders;
+        return Promise.all(
+          sampleOrders.map(async (o: { id: number }) => {
+            const items = await getLabOrderItems(o.id);
+            return { ...o, items };
+          }),
+        );
       }),
     getForReport: protectedProcedure
       .input(z.object({ orderId: z.number() }))

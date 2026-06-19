@@ -30,6 +30,7 @@ export const labOrderReceptionCreateInputSchema = z.object({
   sectorNameEn: z.string().optional(),
   condition: z.enum(["good", "damaged", "partial"]).default("good"),
   priority: z.enum(["low", "normal", "high", "urgent"]).default("normal"),
+  referenceNo: z.string().max(128).optional(),
   nominalCubeSize: z.string().optional(),
   tests: z
     .array(
@@ -72,6 +73,7 @@ export async function runLabOrderReceptionCreate(ctx: ReceptionCtx, input: LabOr
     condition: input.condition,
     notes: input.notes ?? null,
     location: input.location ?? null,
+    referenceNo: input.referenceNo?.trim() || null,
     nominalCubeSize:
       input.tests.some((t) => t.testTypeCode === "CONC_CUBE") ? (input.nominalCubeSize ?? "150mm") : null,
     castingDate: input.castingDate ? new Date(input.castingDate) : null,
