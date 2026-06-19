@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { PassFailBadge, ResultBanner } from "@/components/PassFailBadge";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { formatCalendarDate } from "@/lib/dateFormat";
+import { formatInspectionReference, inspectionRefLabel } from "@/lib/inspectionReference";
 import { getOfficialTestDisplayName } from "@/lib/officialTestCatalog";
 import {
   formatSummaryLabel,
@@ -464,19 +465,25 @@ export default function BatchReport() {
               <table className="metadata-table w-full border-collapse text-xs bg-gray-50">
                 <tbody>
                   <tr>
-                    <td className="border border-gray-200 px-2 py-2 text-center w-1/3">
+                    <td className="border border-gray-200 px-2 py-2 text-center w-1/4">
                       <span className="text-gray-400 text-[10px] uppercase block mb-1">
                         {isAr ? "\u0631\u0642\u0645 \u0627\u0644\u0639\u064a\u0646\u0629" : "Sample No."}
                       </span>
                       <span className="font-mono font-bold text-sm">{sample?.sampleCode ?? EM_DASH}</span>
                     </td>
-                    <td className="border border-gray-200 px-2 py-2 text-center w-1/3">
+                    <td className="border border-gray-200 px-2 py-2 text-center w-1/4">
+                      <span className="text-gray-400 text-[10px] uppercase block mb-1">
+                        {inspectionRefLabel(isAr ? "ar" : "en")}
+                      </span>
+                      <span className="font-mono font-bold text-sm">{formatInspectionReference(sample?.referenceNo)}</span>
+                    </td>
+                    <td className="border border-gray-200 px-2 py-2 text-center w-1/4">
                       <span className="text-gray-400 text-[10px] uppercase block mb-1">
                         {isAr ? "\u0627\u0644\u0645\u0642\u0627\u0648\u0644" : "Contractor"}
                       </span>
                       <span className="font-semibold text-[11px]">{sample?.contractorName ?? EM_DASH}</span>
                     </td>
-                    <td className="border border-gray-200 px-2 py-2 text-center w-1/3">
+                    <td className="border border-gray-200 px-2 py-2 text-center w-1/4">
                       <span className="text-gray-400 text-[10px] uppercase block mb-1">
                         {isAr ? "\u0627\u0644\u0645\u0634\u0631\u0648\u0639" : "Project"}
                       </span>
@@ -620,7 +627,7 @@ export default function BatchReport() {
               })}
             </div>
 
-            <ReportSignatures sig={batchSignatures} labels={signatureLabels} />
+            <ReportSignatures sig={batchSignatures} labels={signatureLabels} lang={isAr ? "ar" : "en"} />
 
             <div
               className="mt-4 pt-2 border-t border-gray-200 flex justify-between text-gray-400"

@@ -17,6 +17,19 @@ type SignatureSource = {
   qcReviewedAt?: Date | string | null;
 } | null | undefined;
 
+const PENDING = {
+  ar: {
+    tested: "لم يُفحص بعد",
+    reviewed: "لم يُراجع بعد",
+    approved: "لم يُعتمد بعد",
+  },
+  en: {
+    tested: "Not tested yet",
+    reviewed: "Not reviewed yet",
+    approved: "Not approved yet",
+  },
+} as const;
+
 /** Merge signature fields from one or more test result rows (first non-empty wins). */
 export function pickReviewSignatures(sources: SignatureSource[]): ReportSignatureData {
   let testedBy: string | null = null;
@@ -50,25 +63,43 @@ function fmtSigDate(d?: Date | string | null) {
 export function ReportSignatures({
   sig,
   labels,
+  lang = "en",
   className = "mt-4 pt-3 border-t border-gray-300 report-signatures-block print-no-break",
   showTitle = false,
   title,
 }: {
   sig: ReportSignatureData;
   labels: { tested: string; reviewed: string; approved: string };
+  lang?: "ar" | "en";
   className?: string;
   showTitle?: boolean;
   title?: string;
 }) {
+  const pending = PENDING[lang];
+
   const slots = [
-    sig.testedBy ? { label: labels.tested, name: sig.testedBy, date: fmtSigDate(sig.testedAt) } : null,
-    sig.reviewedBy ? { label: labels.reviewed, name: sig.reviewedBy, date: fmtSigDate(sig.reviewedAt) } : null,
-    sig.approvedBy ? { label: labels.approved, name: sig.approvedBy, date: fmtSigDate(sig.approvedAt) } : null,
-  ].filter(Boolean) as Array<{ label: string; name: string; date?: string }>;
-
-  if (!slots.length) return null;
-
-  const colWidth = `${100 / slots.length}%`;
+    {
+      key: "tested",
+      label: labels.tested,
+      name: sig.testedBy?.trim() || null,
+      date: fmtSigDate(sig.testedAt),
+      pending: pending.tested,
+    },
+    {
+      key: "reviewed",
+      label: labels.reviewed,
+      name: sig.reviewedBy?.trim() || null,
+      date: fmtSigDate(sig.reviewedAt),
+      pending: pending.reviewed,
+    },
+    {
+      key: "approved",
+      label: labels.approved,
+      name: sig.approvedBy?.trim() || null,
+      date: fmtSigDate(sig.approvedAt),
+      pending: pending.approved,
+    },
+  ];
 
   return (
     <div className={className}>
@@ -80,13 +111,16 @@ export function ReportSignatures({
           <tr>
             {slots.map((s) => (
               <td
-                key={s.label}
-                className="signature-column align-top text-center border border-gray-300 px-2 py-1.5 text-xs"
-                style={{ width: colWidth }}
+                key={s.key}
+                className="signature-column align-top text-center border border-gray-300 px-2 py-1.5 text-xs w-1/3"
               >
                 <p className="text-[9px] font-bold text-gray-700 uppercase mb-0.5">{s.label}</p>
                 <div className="signature-line border-b border-gray-800 min-h-[22px] mb-0.5 mx-1 flex items-end justify-center pb-0.5">
-                  <span className="text-gray-700 text-xs font-semibold">{s.name}</span>
+                  {s.name ? (
+                    <span className="text-gray-700 text-xs font-semibold">{s.name}</span>
+                  ) : (
+                    <span className="text-gray-400 text-[9px] italic font-normal">{s.pending}</span>
+                  )}
                 </div>
                 {s.date ? <p className="text-gray-400 text-[8px] mt-0.5">{s.date}</p> : null}
               </td>

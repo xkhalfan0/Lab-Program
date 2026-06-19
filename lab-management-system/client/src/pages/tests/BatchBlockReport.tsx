@@ -13,6 +13,7 @@ import { FlexibleResultsTable, type Column } from "@/components/reports/Flexible
 import { ReportSignatures, pickReviewSignatures } from "@/components/reports/ReportSignatures";
 
 import { formatCalendarDate } from "@/lib/dateFormat";
+import { formatInspectionReference, inspectionRefLabel } from "@/lib/inspectionReference";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function fmt(v: any, dec = 2) {
@@ -279,15 +280,19 @@ export default function BatchBlockReport() {
             <table className="metadata-table w-full border-collapse text-xs bg-gray-50">
               <tbody>
                 <tr>
-                  <td className="border border-gray-200 px-2 py-2 text-center align-top w-1/3">
+                  <td className="border border-gray-200 px-2 py-2 text-center align-top w-1/4">
                     <span className="text-gray-400 text-[10px] uppercase tracking-wide block mb-1">{isAr ? "رقم الدفعة" : "Batch No."}</span>
                     <span className="font-mono font-bold text-gray-900 text-sm">{batchId}</span>
                   </td>
-                  <td className="border border-gray-200 px-2 py-2 text-center align-top w-1/3">
+                  <td className="border border-gray-200 px-2 py-2 text-center align-top w-1/4">
+                    <span className="text-gray-400 text-[10px] uppercase tracking-wide block mb-1">{inspectionRefLabel(isAr ? "ar" : "en")}</span>
+                    <span className="font-mono font-bold text-gray-900 text-sm">{formatInspectionReference(firstSample?.referenceNo)}</span>
+                  </td>
+                  <td className="border border-gray-200 px-2 py-2 text-center align-top w-1/4">
                     <span className="text-gray-400 text-[10px] uppercase tracking-wide block mb-1">{isAr ? "عدد الأنواع" : "Block Types"}</span>
                     <span className="font-mono font-bold text-blue-700 text-sm">{batchData.length}</span>
                   </td>
-                  <td className="border border-gray-200 px-2 py-2 text-center align-top w-1/3">
+                  <td className="border border-gray-200 px-2 py-2 text-center align-top w-1/4">
                     <span className="text-gray-400 text-[10px] uppercase tracking-wide block mb-1">{isAr ? "تاريخ الاستلام" : "Received Date"}</span>
                     <span className="font-semibold text-gray-900">{fmtDate(firstSample?.receivedAt)}</span>
                   </td>
@@ -345,7 +350,7 @@ export default function BatchBlockReport() {
             })}
           </div>
 
-          <ReportSignatures sig={batchSignatures} labels={signatureLabels} />
+          <ReportSignatures sig={batchSignatures} labels={signatureLabels} lang={isAr ? "ar" : "en"} />
 
           {/* Footer */}
           <div className="mt-4 pt-2 border-t border-gray-200 flex justify-between text-gray-400" style={{ fontSize: "8px" }}>

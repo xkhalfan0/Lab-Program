@@ -28,6 +28,7 @@ import {
 const REPORT_LABELS = {
   ar: {
     sampleCode: "رمز العينة",
+    inspectionReferenceNo: "رقم مرجع التفتيش",
     contractNumber: "رقم العقد",
     contractorName: "المقاول",
     testType: "نوع الاختبار",
@@ -53,6 +54,7 @@ const REPORT_LABELS = {
   },
   en: {
     sampleCode: "Sample Code",
+    inspectionReferenceNo: "Inspection Reference No.",
     contractNumber: "Contract No.",
     contractorName: "Contractor",
     testType: "Test Type",
@@ -212,7 +214,8 @@ export function SectorTestResultDialog({
               <div className="overflow-hidden rounded-xl border border-slate-200">
                 <div className="px-4">
                   <DetailRow icon={Hash} label={T.sampleCode} value={s?.sampleCode} />
-                  <DetailRow icon={ClipboardList} label={T.contractNumber} value={r.contractNo ?? s?.contractNumber} />
+                  <DetailRow icon={ClipboardList} label={T.inspectionReferenceNo} value={s?.referenceNo} />
+                  <DetailRow icon={ClipboardList} label={T.contractNumber} value={s?.contractNumber ?? r.contractNo} />
                   <DetailRow icon={Building2} label={T.contractorName} value={r.contractorName ?? s?.contractorName} />
                   <DetailRow icon={FileText} label={T.testType} value={resolvedTestType} />
                   <DetailRow

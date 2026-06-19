@@ -1392,7 +1392,7 @@ export default function Reception() {
                         </div>
                         <div className="space-y-2">
                           <Label className="text-[15px]">
-                            {lang === "ar" ? "رقم المرجع" : "Reference No."}
+                            {t("reception.referenceNo")}
                             <span className="text-muted-foreground text-xs font-normal ms-1">
                               ({lang === "ar" ? "اختياري" : "optional"})
                             </span>

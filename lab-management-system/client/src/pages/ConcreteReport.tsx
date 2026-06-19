@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Printer, X, Download, Loader2, CheckCircle, XCircle } from "lucide-react";
 import { generatePdfFromElement } from "@/lib/pdf";
 import { formatCalendarDate } from "@/lib/dateFormat";
+import { formatInspectionReference, inspectionRefLabel } from "@/lib/inspectionReference";
 import { useLanguage } from "@/contexts/LanguageContext";
 import {
   calcActualAgeDays,
@@ -357,7 +358,7 @@ function ReportPage({
         <table className="metadata-table w-full border-collapse text-xs bg-gray-50">
           <tbody>
             <tr>
-              <td className="border border-gray-200 px-2 py-2 text-center align-top w-1/3">
+              <td className="border border-gray-200 px-2 py-2 text-center align-top w-1/4">
                 <span className="text-gray-400 text-[10px] uppercase tracking-wide block mb-1">
                   {ar ? "رقم العينة" : "Sample No."}
                 </span>
@@ -373,13 +374,21 @@ function ReportPage({
                   </span>
                 )}
               </td>
-              <td className="border border-gray-200 px-2 py-2 text-center align-top w-1/3">
+              <td className="border border-gray-200 px-2 py-2 text-center align-top w-1/4">
                 <span className="text-gray-400 text-[10px] uppercase tracking-wide block mb-1">
                   {ar ? "رقم التوزيع" : "Distribution No."}
                 </span>
                 <span className="font-mono font-bold text-blue-700 text-sm">{refNo}</span>
               </td>
-              <td className="border border-gray-200 px-2 py-2 text-center align-top w-1/3">
+              <td className="border border-gray-200 px-2 py-2 text-center align-top w-1/4">
+                <span className="text-gray-400 text-[10px] uppercase tracking-wide block mb-1">
+                  {inspectionRefLabel(lang)}
+                </span>
+                <span className="font-mono font-bold text-gray-900 text-sm">
+                  {formatInspectionReference((distribution as { referenceNo?: string | null })?.referenceNo)}
+                </span>
+              </td>
+              <td className="border border-gray-200 px-2 py-2 text-center align-top w-1/4">
                 <span className="text-gray-400 text-[10px] uppercase tracking-wide block mb-1">
                   {ar ? "تاريخ الاستلام" : "Received Date"}
                 </span>
@@ -605,6 +614,7 @@ function ReportPage({
           reviewed: ar ? "المراجع" : "Reviewed By",
           approved: ar ? "المعتمد" : "Approved By",
         }}
+        lang={lang}
       />
 
       <div className="mt-4 pt-2 border-t border-gray-200 flex justify-between text-gray-400" style={{ fontSize: "8px" }}>

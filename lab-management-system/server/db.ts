@@ -1113,6 +1113,7 @@ export async function getDistributionById(id: number) {
       sector: samples.sector,
       receivedAt: samples.receivedAt,
       sampleLocation: samples.location,
+      referenceNo: samples.referenceNo,
       castingDate: samples.castingDate,
       nominalCubeSize: samples.nominalCubeSize,
       // Test type names

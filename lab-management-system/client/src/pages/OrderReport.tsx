@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Loader2, Printer, Download, Globe, X, CheckCircle, XCircle } from "lucide-react";
 import { generatePdfFromElement } from "@/lib/pdf";
 import { ReportSignatures, pickReviewSignatures } from "@/components/reports/ReportSignatures";
+import { formatInspectionReference } from "@/lib/inspectionReference";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function fmtDate(val: Date | string | null | undefined, lang: string): string {
@@ -51,6 +52,7 @@ const L = {
   orderNo:      { ar: "رقم الطلب", en: "Order No." },
   sampleCode:   { ar: "رمز العينة", en: "Sample Code" },
   contractNo:   { ar: "رقم العقد", en: "Contract No." },
+  inspectionRef: { ar: "رقم مرجع التفتيش", en: "Inspection Reference No." },
   project:      { ar: "اسم المشروع", en: "Project Name" },
   contractor:   { ar: "المقاول", en: "Contractor" },
   sampleType:   { ar: "نوع العينة", en: "Sample Type" },
@@ -455,6 +457,7 @@ function TestSection({ item, distWithResult, lang, index }: {
             reviewed: t("reviewedBy", lang),
             approved: t("approvedBy", lang),
           }}
+          lang={isAr ? "ar" : "en"}
           className="mt-3 pt-2 border-t border-gray-200 report-signatures-block print-no-break"
         />
       </div>
@@ -657,6 +660,7 @@ export default function OrderReport() {
                   const pairs: [string, unknown][] = [
                     [t("orderNo", lang), order.orderCode],
                     [t("sampleCode", lang), order.sampleCode ?? sample?.sampleCode],
+                    [t("inspectionRef", lang), formatInspectionReference(sample?.referenceNo)],
                     [t("contractNo", lang), order.contractNumber],
                     [t("project", lang), order.contractName],
                     [t("contractor", lang), order.contractorName],
@@ -783,6 +787,7 @@ export default function OrderReport() {
               reviewed: t("reviewedBy", lang),
               approved: t("approvedBy", lang),
             }}
+            lang={isAr ? "ar" : "en"}
             showTitle
             title={t("signatures", lang)}
             className="mt-4 pt-3 border-t-2 border-gray-400 report-signatures-block print-no-break"

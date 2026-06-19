@@ -71,6 +71,7 @@ const T_AR = {
   printAr: "طباعة (عربي)",
   printEn: "Print (English)",
   sampleCode: "رمز العينة",
+  inspectionReferenceNo: "رقم مرجع التفتيش",
   contractNumber: "رقم العقد",
   contractName: "اسم العقد",
   contractorName: "اسم المقاول",
@@ -135,6 +136,7 @@ const T_EN = {
   printAr: "طباعة (عربي)",
   printEn: "Print (English)",
   sampleCode: "Sample Code",
+  inspectionReferenceNo: "Inspection Reference No.",
   contractNumber: "Contract No.",
   contractName: "Contract Name",
   contractorName: "Contractor",
@@ -268,6 +270,7 @@ function buildPrintContent(detail: any, lang: string, labName: string): string {
   if (detail?.type === "result") {
     return buildSectorResultReportHtml(detail, lang, labName, {
       sampleCode: T.sampleCode,
+      inspectionReferenceNo: T.inspectionReferenceNo,
       contractNumber: T.contractNumber,
       projectName: T.projectName,
       contractorName: T.contractorName,
@@ -589,7 +592,8 @@ function ResultDetail({ detail, T, lang }: { detail: any; T: typeof T_AR; lang: 
         </div>
         <div className="px-4 divide-y divide-white/5">
           <DetailRow icon={Hash} label={T.sampleCode} value={s?.sampleCode} />
-          <DetailRow icon={ClipboardList} label={T.contractNumber} value={r.contractNo ?? s?.contractNumber} />
+          <DetailRow icon={ClipboardList} label={T.inspectionReferenceNo} value={s?.referenceNo} />
+          <DetailRow icon={ClipboardList} label={T.contractNumber} value={s?.contractNumber ?? r.contractNo} />
           <DetailRow icon={Building2} label={T.projectName} value={r.projectName} />
           <DetailRow icon={User} label={T.contractorName} value={r.contractorName} />
           <DetailRow icon={FileText} label={T.testType} value={r.testTypeCode} />

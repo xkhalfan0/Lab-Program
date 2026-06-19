@@ -31,7 +31,7 @@ const T = {
   docNo: { ar: "رقم الوثيقة", en: "Doc. No." },
   date: { ar: "التاريخ", en: "Date" },
   sampleNo: { ar: "رقم العينة", en: "Sample No." },
-  refNo: { ar: "المرجع", en: "Reference No." },
+  refNo: { ar: "رقم مرجع التفتيش", en: "Inspection Reference No." },
   sampleType: { ar: "نوع العينة", en: "Sample Type" },
   contractor: { ar: "المقاول", en: "Contractor" },
   contractNo: { ar: "رقم العقد", en: "Contract No." },

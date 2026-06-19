@@ -242,7 +242,8 @@ ${reportFontLinks()}
   <div class="section-title">${lang === "ar" ? "معلومات العينة" : "Sample Information"}</div>
   <div class="grid">
     <div class="field"><div class="field-label">${labels.sampleCode}</div><div class="field-value">${s?.sampleCode ?? "—"}</div></div>
-    <div class="field"><div class="field-label">${labels.contractNumber}</div><div class="field-value">${r.contractNo ?? s?.contractNumber ?? "—"}</div></div>
+    <div class="field"><div class="field-label">${labels.inspectionReferenceNo ?? (lang === "ar" ? "رقم مرجع التفتيش" : "Inspection Reference No.")}</div><div class="field-value">${s?.referenceNo?.trim() || "—"}</div></div>
+    <div class="field"><div class="field-label">${labels.contractNumber}</div><div class="field-value">${s?.contractNumber ?? "—"}</div></div>
     <div class="field"><div class="field-label">${labels.projectName}</div><div class="field-value">${r.projectName ?? s?.contractName ?? "—"}</div></div>
     <div class="field"><div class="field-label">${labels.contractorName}</div><div class="field-value">${r.contractorName ?? s?.contractorName ?? "—"}</div></div>
     <div class="field"><div class="field-label">${labels.testType}</div><div class="field-value">${lang === "ar" ? (r.testTypeNameAr ?? r.testTypeName ?? r.testTypeCode) : (r.testTypeNameEn ?? r.testTypeCode ?? "—")}</div></div>
