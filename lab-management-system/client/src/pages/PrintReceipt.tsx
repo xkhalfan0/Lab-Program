@@ -19,12 +19,6 @@ const SECTOR_LABELS: Record<string, { ar: string; en: string }> = {
   sector_5: { ar: "قطاع/5", en: "Sector 5" },
 };
 
-const CONDITION_LABELS: Record<string, { ar: string; en: string }> = {
-  good: { ar: "جيدة", en: "Good" },
-  damaged: { ar: "تالفة", en: "Damaged" },
-  partial: { ar: "جزئية", en: "Partial" },
-};
-
 const T = {
   close: { ar: "إغلاق", en: "Close" },
   print: { ar: "طباعة / حفظ PDF", en: "Print / Save PDF" },
@@ -32,8 +26,8 @@ const T = {
   notFound: { ar: "لم يتم العثور على العينة.", en: "Sample not found." },
   labNameAr: { ar: "مختبر الإنشاءات والمواد الهندسية", en: "Construction Materials & Engineering Laboratory" },
   labNameEn: { ar: "Construction Materials & Engineering Laboratory", en: "مختبر الإنشاءات والمواد الهندسية" },
-  receiptTitleAr: { ar: "وصل استلام عينة", en: "Sample Receipt" },
-  receiptTitleEn: { ar: "Sample Receipt", en: "وصل استلام عينة" },
+  receiptTitleAr: { ar: "وصل استلام عينة", en: "وصل استلام عينة" },
+  receiptTitleEn: { ar: "Sample Receipt", en: "Sample Receipt" },
   docNo: { ar: "رقم الوثيقة", en: "Doc. No." },
   date: { ar: "التاريخ", en: "Date" },
   sampleNo: { ar: "رقم العينة", en: "Sample No." },
@@ -44,15 +38,12 @@ const T = {
   project: { ar: "اسم المشروع", en: "Project Name" },
   sector: { ar: "القطاع", en: "Sector" },
   quantity: { ar: "الكمية", en: "Quantity" },
-  condition: { ar: "حالة العينة", en: "Condition" },
+  tests: { ar: "الاختبارات", en: "Test(s)" },
   receivedAt: { ar: "تاريخ الاستلام", en: "Received At" },
   totalPrice: { ar: "إجمالي الرسوم", en: "Total Fees" },
   contractorForm: { ar: "نموذج المقاول", en: "Contractor Form" },
   viewFile: { ar: "عرض الملف", en: "View file" },
   notes: { ar: "ملاحظات", en: "Notes" },
-  sigReception: { ar: "موظف الاستقبال", en: "Reception Staff" },
-  sigManager: { ar: "مسؤول المختبر", en: "Lab Manager" },
-  sigContractor: { ar: "المقاول / المندوب", en: "Contractor / Agent" },
   printedAt: { ar: "طُبع في", en: "Printed at" },
 } as const;
 
@@ -94,7 +85,7 @@ function BilingualTh({ en, ar }: { en: string; ar: string }) {
         background: "#f3f4f6",
         fontWeight: 600,
         color: "#374151",
-        padding: "8px 10px",
+        padding: "5px 8px",
         width: "22%",
         verticalAlign: "middle",
       }}
@@ -113,7 +104,7 @@ function ValueTd({ children, mono }: { children: ReactNode; mono?: boolean }) {
   return (
     <td
       style={{
-        padding: "8px 10px",
+        padding: "5px 8px",
         fontFamily: mono ? "monospace" : "inherit",
         fontWeight: mono ? 700 : 400,
         color: mono ? "#1d4ed8" : "#111",
@@ -161,6 +152,21 @@ export default function PrintReceipt() {
     }, 0);
   }, [orders]);
 
+  const testNamesDisplay = useMemo(() => {
+    const names: string[] = [];
+    if (orders?.length) {
+      for (const order of orders) {
+        for (const item of (order as any).items ?? []) {
+          const name = item.testTypeName || item.testName || item.testTypeCode;
+          if (!name || name === "__multi__") continue;
+          const qty = Number(item.quantity) || 1;
+          names.push(qty > 1 ? `${name} ×${qty}` : name);
+        }
+      }
+    }
+    return names.length ? names.join(" · ") : "—";
+  }, [orders]);
+
   let totalQuantity = 1;
   if (sample?.quantity != null && sample.quantity > 0) {
     totalQuantity = sample.quantity;
@@ -205,8 +211,6 @@ export default function PrintReceipt() {
 
   const sectorLabel = SECTOR_LABELS[(sample as any).sector ?? ""];
   const sampleTypeRaw = SAMPLE_TYPE_LABELS[(sample as any).sampleType] ?? (sample as any).sampleType;
-  const conditionKey = (sample as any).condition ?? "good";
-  const condition = CONDITION_LABELS[conditionKey] ?? CONDITION_LABELS.good;
   const docNo = receiptDocNo(sample);
   const referenceNo = (sample as any).referenceNo?.trim() || "—";
 
@@ -238,48 +242,48 @@ export default function PrintReceipt() {
           className="mx-auto bg-white shadow-lg print:shadow-none"
           style={{
             width: "210mm",
-            minHeight: "148mm",
-            padding: "8mm 10mm 10mm 10mm",
+            maxHeight: "148mm",
+            padding: "5mm 8mm 4mm 8mm",
             fontFamily: "Arial, sans-serif",
-            fontSize: "10.5px",
+            fontSize: "10px",
             direction: lang === "ar" ? "rtl" : "ltr",
           }}
         >
           {/* Header */}
-          <div className="border-t-4 border-gray-900 pt-2 pb-1 mb-0">
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "16px" }}>
+          <div className="border-t-4 border-gray-900 pt-1 pb-0 mb-0">
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px" }}>
               <div style={{ textAlign: lang === "ar" ? "right" : "left", flex: 1 }}>
-                <h1 style={{ fontSize: "17px", fontWeight: 900, color: "#111", lineHeight: 1.3 }}>
+                <h1 style={{ fontSize: "14px", fontWeight: 900, color: "#111", lineHeight: 1.25 }}>
                   {T.labNameAr.ar}
                 </h1>
-                <p style={{ fontSize: "11px", color: "#666", marginTop: "2px" }}>{T.labNameEn.en}</p>
+                <p style={{ fontSize: "9px", color: "#666", marginTop: "1px" }}>{T.labNameEn.en}</p>
               </div>
               <div
                 style={{
                   display: "flex",
                   flexDirection: "column",
                   alignItems: "center",
-                  padding: "0 20px",
+                  padding: "0 14px",
                   borderLeft: "1px solid #ccc",
                   borderRight: "1px solid #ccc",
                 }}
               >
                 <div
                   style={{
-                    width: "48px",
-                    height: "48px",
+                    width: "40px",
+                    height: "40px",
                     borderRadius: "50%",
                     border: "2px solid #333",
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "center",
-                    fontSize: "20px",
+                    fontSize: "17px",
                     fontWeight: 900,
                   }}
                 >
                   م
                 </div>
-                <span style={{ fontSize: "9px", color: "#999", marginTop: "2px", letterSpacing: "3px" }}>LAB</span>
+                <span style={{ fontSize: "8px", color: "#999", marginTop: "1px", letterSpacing: "2px" }}>LAB</span>
               </div>
               <div
                 style={{
@@ -323,18 +327,18 @@ export default function PrintReceipt() {
               background: "#1a1a2e",
               color: "white",
               textAlign: "center",
-              padding: "6px 0",
-              marginBottom: "10px",
+              padding: "4px 0",
+              marginBottom: "6px",
             }}
           >
-            <p style={{ fontSize: "15px", fontWeight: 700, letterSpacing: "1px" }}>{T.receiptTitleAr.ar}</p>
-            <p style={{ fontSize: "10px", color: "#aaa", marginTop: "2px", letterSpacing: "2px" }}>
+            <p style={{ fontSize: "14px", fontWeight: 700, letterSpacing: "0.5px" }}>{T.receiptTitleAr.ar}</p>
+            <p style={{ fontSize: "9px", color: "#aaa", marginTop: "1px", letterSpacing: "1px" }}>
               {T.receiptTitleEn.en}
             </p>
           </div>
 
           {/* Data table */}
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "10.5px", marginBottom: "10px" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "10px", marginBottom: "4px" }}>
             <tbody>
               <tr style={{ borderBottom: "1px solid #e5e7eb" }}>
                 {th("sampleNo")}
@@ -358,28 +362,32 @@ export default function PrintReceipt() {
               </tr>
               <tr style={{ borderBottom: "1px solid #e5e7eb" }}>
                 {th("project")}
-                <td colSpan={3} style={{ padding: "8px 10px" }}>
+                <td colSpan={3} style={{ padding: "5px 8px" }}>
                   {sample.contractName ?? "—"}
                 </td>
               </tr>
               <tr style={{ borderBottom: "1px solid #e5e7eb" }}>
                 {th("quantity")}
                 <ValueTd>{totalQuantity}</ValueTd>
-                {th("condition")}
-                <ValueTd>
-                  {condition.en} / {condition.ar}
-                </ValueTd>
+                {th("totalPrice")}
+                <ValueTd mono>{totalPrice > 0 ? fmtMoney(totalPrice, lang) : "—"}</ValueTd>
+              </tr>
+              <tr style={{ borderBottom: "1px solid #e5e7eb" }}>
+                {th("tests")}
+                <td colSpan={3} style={{ padding: "5px 8px", lineHeight: 1.4 }}>
+                  {testNamesDisplay}
+                </td>
               </tr>
               <tr style={{ borderBottom: "1px solid #e5e7eb" }}>
                 {th("receivedAt")}
-                <ValueTd>{fmtDateTime(sample.receivedAt, lang)}</ValueTd>
-                {th("totalPrice")}
-                <ValueTd mono>{totalPrice > 0 ? fmtMoney(totalPrice, lang) : "—"}</ValueTd>
+                <td colSpan={3} style={{ padding: "5px 8px" }}>
+                  {fmtDateTime(sample.receivedAt, lang)}
+                </td>
               </tr>
               {contractorForm && (
                 <tr style={{ borderBottom: "1px solid #e5e7eb" }}>
                   {th("contractorForm")}
-                  <td colSpan={3} style={{ padding: "8px 10px" }}>
+                  <td colSpan={3} style={{ padding: "5px 8px" }}>
                     <a
                       href={contractorForm.fileUrl}
                       target="_blank"
@@ -394,7 +402,7 @@ export default function PrintReceipt() {
               {(sample as any).notes && (
                 <tr>
                   {th("notes")}
-                  <td colSpan={3} style={{ padding: "8px 10px", color: "#555" }}>
+                  <td colSpan={3} style={{ padding: "5px 8px", color: "#555" }}>
                     {(sample as any).notes}
                   </td>
                 </tr>
@@ -402,35 +410,17 @@ export default function PrintReceipt() {
             </tbody>
           </table>
 
-          {/* Signatures */}
-          <div style={{ marginTop: "20px", display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "16px" }}>
-            {[
-              { ar: T.sigReception.ar, en: T.sigReception.en },
-              { ar: T.sigManager.ar, en: T.sigManager.en },
-              { ar: T.sigContractor.ar, en: T.sigContractor.en },
-            ].map((sig) => (
-              <div key={sig.en} style={{ textAlign: "center" }}>
-                <div style={{ borderTop: "1px solid #555", paddingTop: "6px", marginTop: "24px" }}>
-                  <p style={{ fontWeight: 700, fontSize: "11px", color: "#333" }}>{sig.ar}</p>
-                  <p style={{ fontSize: "9px", color: "#888", marginTop: "2px" }} dir="ltr">
-                    {sig.en}
-                  </p>
-                </div>
-              </div>
-            ))}
-          </div>
-
           {/* Footer */}
           <div
             style={{
-              marginTop: "24px",
-              paddingTop: "10px",
+              marginTop: "8px",
+              paddingTop: "6px",
               borderTop: "1px solid #e5e7eb",
               display: "flex",
               justifyContent: "space-between",
-              fontSize: "8px",
+              fontSize: "7.5px",
               color: "#aaa",
-              gap: "12px",
+              gap: "8px",
             }}
           >
             <span>
@@ -448,6 +438,7 @@ export default function PrintReceipt() {
           @page { size: A5 landscape; margin: 0; }
           body { margin: 0; }
           .print\\:hidden { display: none !important; }
+          .print\\:py-0 { padding-top: 0 !important; padding-bottom: 0 !important; }
         }
       `}</style>
     </>
