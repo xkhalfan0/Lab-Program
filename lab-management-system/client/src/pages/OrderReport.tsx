@@ -12,6 +12,23 @@ import { Loader2, Printer, Download, Globe, X, CheckCircle, XCircle } from "luci
 import { generatePdfFromElement } from "@/lib/pdf";
 import { ReportSignatures, pickReviewSignatures } from "@/components/reports/ReportSignatures";
 import { formatInspectionReference } from "@/lib/inspectionReference";
+import {
+  formatSummaryLabel,
+  formatSummaryValue,
+  renderFormData,
+} from "@/pages/tests/SpecializedTestReport";
+
+const SUMMARY_SKIP_KEYS = new Set([
+  "overallResult",
+  "overallPass",
+  "passesSpec",
+  "blocks",
+  "rows",
+  "cubes",
+  "specimens",
+  "readings",
+  "fractions",
+]);
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function fmtDate(val: Date | string | null | undefined, lang: string): string {
@@ -215,46 +232,54 @@ function SpecializedSection({ specResult, lang }: { specResult: any; lang: strin
   const isAr = lang === "ar";
   const fd = specResult.formData ?? {};
   const sv = specResult.summaryValues ?? {};
-  const isPass = specResult.overallResult === "pass";
-  const isFail = specResult.overallResult === "fail";
+  const formTemplate = specResult.formTemplate ?? "";
+
+  const summaryEntries = Object.entries(sv).filter(
+    ([k, v]) => !SUMMARY_SKIP_KEYS.has(k) && v != null && v !== "" && typeof v !== "object",
+  );
 
   return (
     <div className="space-y-3">
-      {/* Summary values */}
-      {Object.keys(sv).length > 0 && (
-        <div className="grid grid-cols-4 gap-2">
-          {Object.entries(sv).map(([k, v]) => (
-            <div key={k} className="bg-gray-50 border border-gray-200 rounded p-2 text-center">
-              <p className="text-gray-500 text-[9px] mb-0.5 capitalize">{k.replace(/_/g, " ")}</p>
-              <p className="font-bold text-gray-900 text-xs">{String(v)}</p>
-            </div>
-          ))}
-        </div>
-      )}
-      {/* Form data — render key fields generically */}
-      {Object.keys(fd).length > 0 && (
-        <div className="border border-gray-200 rounded overflow-hidden">
-          <table className="w-full text-[10px] border-collapse">
-            <tbody>
-              {Object.entries(fd)
-                .filter(([, v]) => v !== null && v !== undefined && v !== "" && typeof v !== "object")
-                .slice(0, 20)
-                .map(([k, v], i) => (
-                  <tr key={k} className={i % 2 === 0 ? "bg-white" : "bg-gray-50"}>
-                    <td className="border border-gray-200 px-2 py-1 text-gray-600 capitalize w-1/3">{k.replace(/_/g, " ")}</td>
-                    <td className="border border-gray-200 px-2 py-1 font-semibold text-gray-900">{String(v)}</td>
+      {summaryEntries.length > 0 && (
+        <table className="metadata-table w-full border-collapse text-[10px]">
+          <tbody>
+            {(() => {
+              const rows: typeof summaryEntries[] = [];
+              for (let i = 0; i < summaryEntries.length; i += 2) {
+                rows.push(summaryEntries.slice(i, i + 2) as typeof summaryEntries);
+              }
+              return rows.map((pair, ri) => {
+                const [a, b] = [pair[0], pair[1]];
+                return (
+                  <tr key={ri}>
+                    <td className="border border-gray-200 px-2 py-1 text-gray-500 w-[18%]">
+                      {formatSummaryLabel(a[0], formTemplate, isAr)}
+                    </td>
+                    <td className="border border-gray-200 px-2 py-1 font-semibold text-gray-900 w-[32%]">
+                      {formatSummaryValue(a[0], a[1], isAr)}
+                    </td>
+                    {b ? (
+                      <>
+                        <td className="border border-gray-200 px-2 py-1 text-gray-500 w-[18%]">
+                          {formatSummaryLabel(b[0], formTemplate, isAr)}
+                        </td>
+                        <td className="border border-gray-200 px-2 py-1 font-semibold text-gray-900 w-[32%]">
+                          {formatSummaryValue(b[0], b[1], isAr)}
+                        </td>
+                      </>
+                    ) : (
+                      <td className="border border-gray-200 px-2 py-1" colSpan={2} />
+                    )}
                   </tr>
-                ))}
-            </tbody>
-          </table>
-        </div>
+                );
+              });
+            })()}
+          </tbody>
+        </table>
       )}
-      {/* Overall result */}
-      {specResult.overallResult !== "pending" && (
-        <div className={`rounded p-2 text-center text-xs font-bold border ${isPass ? "bg-green-50 border-green-300 text-green-800" : "bg-red-50 border-red-300 text-red-800"}`}>
-          {isPass ? `✓ ${t("pass", lang)}` : `✗ ${t("fail", lang)}`}
-        </div>
-      )}
+      {formTemplate && fd && Object.keys(fd).length > 0
+        ? renderFormData(formTemplate, fd, isAr)
+        : null}
     </div>
   );
 }
@@ -342,38 +367,42 @@ function TestSection({ item, distWithResult, lang, index }: {
   }
 
   const isPass = overallResult === "pass";
-  const isFail = overallResult === "fail";
-
-  // Reviewer signatures
-  const managerName = specResult?.managerReviewedByName ?? legacyResult?.managerReviewedByName ?? null;
-  const managerDate = specResult?.managerReviewedAt ?? legacyResult?.managerReviewedAt ?? null;
-  const qcName = specResult?.qcReviewedByName ?? legacyResult?.qcReviewedByName ?? null;
-  const qcDate = specResult?.qcReviewedAt ?? legacyResult?.qcReviewedAt ?? null;
-  const testedBy = specResult?.testedBy ?? concreteGroups[0]?.testedBy ?? null;
 
   return (
-    <div className="mb-6 border border-gray-400 rounded overflow-hidden">
-      {/* Section header */}
-      <div className="bg-gray-800 text-white px-4 py-2 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <span className="text-xs font-bold opacity-70">#{index + 1}</span>
-          <span className="text-sm font-bold">{safeText(item.testTypeName)}</span>
-          {item.testSubType && (
-            <span className="text-xs opacity-70 bg-white/10 px-2 py-0.5 rounded">{safeText(item.testSubType)}</span>
-          )}
-        </div>
-        <div className="flex items-center gap-2">
-          {overallResult !== "pending" && (
-            <span className={`flex items-center gap-1 text-xs font-bold px-2 py-0.5 rounded-full ${isPass ? "bg-green-500 text-white" : "bg-red-500 text-white"}`}>
-              {isPass ? <CheckCircle size={10} /> : <XCircle size={10} />}
-              {isPass ? t("pass", lang) : t("fail", lang)}
-            </span>
-          )}
-          {item.quantity > 1 && (
-            <span className="text-xs opacity-70">{isAr ? `الكمية: ${safeText(item.quantity)}` : `Qty: ${safeText(item.quantity)}`}</span>
-          )}
-        </div>
-      </div>
+    <div className="mb-6 border border-gray-400 rounded overflow-hidden print-no-break">
+      {/* Section header — table layout for stable print/PDF */}
+      <table className="w-full border-collapse bg-gray-800 text-white">
+        <tbody>
+          <tr>
+            <td className="px-4 py-2 align-middle">
+              <span className="text-xs font-bold opacity-70 me-2">#{index + 1}</span>
+              <span className="text-sm font-bold">{safeText(item.testTypeName)}</span>
+              {item.testSubType ? (
+                <span className="text-xs opacity-70 bg-white/10 px-2 py-0.5 rounded ms-2">
+                  {safeText(item.testSubType)}
+                </span>
+              ) : null}
+            </td>
+            <td className="px-4 py-2 align-middle text-end whitespace-nowrap">
+              {overallResult !== "pending" ? (
+                <span
+                  className={`inline-flex items-center gap-1 text-xs font-bold px-2 py-0.5 rounded-full me-2 ${
+                    isPass ? "bg-green-500 text-white" : "bg-red-500 text-white"
+                  }`}
+                >
+                  {isPass ? <CheckCircle size={10} /> : <XCircle size={10} />}
+                  {isPass ? t("pass", lang) : t("fail", lang)}
+                </span>
+              ) : null}
+              {item.quantity > 1 ? (
+                <span className="text-xs opacity-70">
+                  {isAr ? `الكمية: ${safeText(item.quantity)}` : `Qty: ${safeText(item.quantity)}`}
+                </span>
+              ) : null}
+            </td>
+          </tr>
+        </tbody>
+      </table>
 
       <div className="p-4">
         {/* Distribution info */}
@@ -444,22 +473,6 @@ function TestSection({ item, distWithResult, lang, index }: {
           </div>
         )}
 
-        <ReportSignatures
-          sig={{
-            testedBy,
-            reviewedBy: managerName,
-            reviewedAt: managerDate,
-            approvedBy: qcName,
-            approvedAt: qcDate,
-          }}
-          labels={{
-            tested: t("testedBy", lang),
-            reviewed: t("reviewedBy", lang),
-            approved: t("approvedBy", lang),
-          }}
-          lang={isAr ? "ar" : "en"}
-          className="mt-3 pt-2 border-t border-gray-200 report-signatures-block print-no-break"
-        />
       </div>
     </div>
   );
@@ -729,6 +742,10 @@ export default function OrderReport() {
                     const af = dwr.concreteGroups.some((g: any) => g.complianceStatus === "fail");
                     res = ap ? "pass" : af ? "fail" : "pending";
                   }
+                  const displayStatus =
+                    res === "pass" || res === "fail"
+                      ? "completed"
+                      : item.status;
                   return (
                     <tr key={item.id} className={i % 2 === 0 ? "bg-white" : "bg-gray-50"}>
                       <td className="border border-gray-200 px-2 py-1.5 text-center">{i + 1}</td>
@@ -739,14 +756,14 @@ export default function OrderReport() {
                       <td className="border border-gray-200 px-2 py-1.5 text-center">{safeText(item.quantity)}</td>
                       <td className="border border-gray-200 px-2 py-1.5 text-center">
                         <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-medium ${
-                          item.status === "completed" ? "bg-green-100 text-green-700" :
-                          item.status === "in_progress" ? "bg-blue-100 text-blue-700" :
-                          item.status === "cancelled" ? "bg-gray-100 text-gray-500" :
+                          displayStatus === "completed" ? "bg-green-100 text-green-700" :
+                          displayStatus === "in_progress" ? "bg-blue-100 text-blue-700" :
+                          displayStatus === "cancelled" ? "bg-gray-100 text-gray-500" :
                           "bg-amber-100 text-amber-700"
                         }`}>
-                          {item.status === "completed" ? (isAr ? "مكتمل" : "Completed") :
-                           item.status === "in_progress" ? (isAr ? "جارٍ" : "In Progress") :
-                           item.status === "cancelled" ? (isAr ? "ملغى" : "Cancelled") :
+                          {displayStatus === "completed" ? (isAr ? "مكتمل" : "Completed") :
+                           displayStatus === "in_progress" ? (isAr ? "جارٍ" : "In Progress") :
+                           displayStatus === "cancelled" ? (isAr ? "ملغى" : "Cancelled") :
                            (isAr ? "معلق" : "Pending")}
                         </span>
                       </td>

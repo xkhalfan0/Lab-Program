@@ -3461,6 +3461,16 @@ function renderConcreteCubes(fd: any, isAr: boolean) {
 
 export function formatSummaryLabel(key: string, formTemplate: string, isAr: boolean): string {
   const L = (en: string, ar: string) => (isAr ? ar : en);
+  const common: Record<string, string> = {
+    count: L("Count", "العدد"),
+    testDate: L("Test Date", "تاريخ الفحص"),
+    avgStrength: L("Avg. Strength (N/mm²)", "متوسط المقاومة (N/mm²)"),
+    required: L("Required (N/mm²)", "المطلوب (N/mm²)"),
+    blockType: L("Block Type", "نوع البلوك"),
+    standard: L("Standard", "المعيار"),
+    overallResult: L("Overall Result", "النتيجة الإجمالية"),
+  };
+  if (common[key]) return common[key];
   const maps: Record<string, Record<string, string>> = {
     agg_specific_gravity: {
       aggType: L("Aggregate Type", "نوع الركام"),
@@ -3492,6 +3502,17 @@ export function formatSummaryLabel(key: string, formTemplate: string, isAr: bool
 
 export function formatSummaryValue(key: string, value: unknown, isAr: boolean): string {
   if (value == null || value === "") return "—";
+  if (key === "testDate" && typeof value === "string") {
+    try {
+      return new Date(value).toLocaleDateString(isAr ? "ar-AE" : "en-GB");
+    } catch {
+      return String(value);
+    }
+  }
+  if (key === "blockType" && typeof value === "object" && value !== null) {
+    const o = value as { label?: string; name?: string; code?: string };
+    return o.label ?? o.name ?? o.code ?? "—";
+  }
   if (key === "overallResult") {
     const v = String(value).toLowerCase();
     if (v === "pass") return isAr ? "مطابق" : "PASS";
