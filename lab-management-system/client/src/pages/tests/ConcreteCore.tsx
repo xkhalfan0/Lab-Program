@@ -81,6 +81,7 @@ interface CoreRow {
   weightInAirSSD: string;  // Weight in air SSD (g)
   weightInWater: string;   // Weight in water (g)
   maxLoad: string;
+  rebarSize: string;       // Rebar size (mm) — free text/number entered by technician
   area?: number;
   ld?: number;
   correctionFactor?: number;
@@ -137,6 +138,7 @@ function newRow(index: number): CoreRow {
     weightInAirSSD: "",
     weightInWater: "",
     maxLoad: "",
+    rebarSize: "",
   };
 }
 
@@ -276,6 +278,7 @@ export default function ConcreteCore() {
         weightInAirSSD: String(c.weightInAirSSD ?? ""),
         weightInWater: String(c.weightInWater ?? ""),
         maxLoad: String(c.maxLoad || ""),
+        rebarSize: String(c.rebarSize ?? ""),
       })));
     }
        if (existing.status === "submitted") setSubmitted(true);
@@ -372,11 +375,6 @@ export default function ConcreteCore() {
 
   const LD_TABLE = [
     { ld: "0.96–1.04", cf: "1.00 (no correction)" },
-    { ld: "1.00", cf: "0.80" },
-    { ld: "1.10", cf: "0.82" },
-    { ld: "1.25", cf: "0.87" },
-    { ld: "1.50", cf: "0.93" },
-    { ld: "1.75", cf: "0.97" },
     { ld: "2.00", cf: "1.00 (cylinder strength)" },
   ];
 
@@ -567,6 +565,7 @@ export default function ConcreteCore() {
                     { en: "Core Str. (N/mm²)", ar: "قوة اللب (نيوتن/مم²)" },
                     { en: "Eq. Cube Str. (N/mm²)", ar: "قوة المكعب المكافئة (نيوتن/مم²)" },
                     { en: "Result", ar: "النتيجة" },
+                    { en: "Rebar Size, MM", ar: "قطر الحديد (مم)" },
                   ].map(h => (
                     <th
                       key={h.en}
@@ -668,6 +667,15 @@ export default function ConcreteCore() {
                       {row.result && row.result !== "pending" ? (
                         <PassFailBadge result={row.result} size="sm" />
                       ) : "—"}
+                    </td>
+                    <td className="border border-slate-200 px-1 py-1">
+                      <Input
+                        value={row.rebarSize}
+                        onChange={e => updateRow(row.id, "rebarSize", e.target.value)}
+                        className="h-7 text-xs w-20 text-center"
+                        placeholder="—"
+                        disabled={submitted}
+                      />
                     </td>
                   </tr>
                 ))}
