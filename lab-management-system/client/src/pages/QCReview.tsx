@@ -29,18 +29,6 @@ import {
 import { useState, useEffect, useMemo, type ReactElement } from "react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { toast } from "sonner";
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  Tooltip as RechartsTooltip,
-  ResponsiveContainer,
-  LineChart,
-  Line,
-  ReferenceLine,
-  Cell,
-} from "recharts";
 
 // ─── Task state helpers ───────────────────────────────────────────────────────
 type QcListTab = "pending" | "done";
@@ -799,18 +787,6 @@ export default function QCReview() {
   const contractNumberDisplay =
     selectedSample?.contractNumber ?? specializedResult?.contractNo ?? "—";
 
-  const chartsData = result?.chartsData as any;
-  const rawValues: number[] = chartsData?.values ?? [];
-  const avg = parseFloat(result?.average ?? "0");
-  const minVal = dist?.minAcceptable ? parseFloat(dist.minAcceptable) : null;
-  const maxVal = dist?.maxAcceptable ? parseFloat(dist.maxAcceptable) : null;
-
-  const trendData = rawValues.map((v, i) => ({ name: `R${i + 1}`, value: v }));
-  const barData = rawValues.map((v, i) => ({
-    name: `R${i + 1}`,
-    value: v,
-    fill: (minVal == null || v >= minVal) && (maxVal == null || v <= maxVal) ? "#22c55e" : "#ef4444",
-  }));
 
   useEffect(() => {
     if (selectedSampleId > 0) {
@@ -1038,26 +1014,6 @@ export default function QCReview() {
             </div>
           ) : hasAnyResult ? (
             <div className="space-y-5 mt-2">
-              {/* Pass / Fail banner */}
-              {(isPass || isFail) && (
-                <div className={`rounded-lg px-3 py-2 flex items-center gap-2 border ${
-                  isPass
-                    ? "bg-green-50 border-green-200 text-green-800"
-                    : "bg-red-50 border-red-200 text-red-800"
-                }`}>
-                  {isPass ? (
-                    <CheckCircle2 className="w-5 h-5 shrink-0 text-green-600" />
-                  ) : (
-                    <XCircle className="w-5 h-5 shrink-0 text-red-600" />
-                  )}
-                  <span className="text-sm font-semibold">
-                    {isPass
-                      ? (lang === "ar" ? "PASS — ناجح" : "PASS")
-                      : (lang === "ar" ? "FAIL — راسب" : "FAIL")}
-                  </span>
-                </div>
-              )}
-
               {/* Sample / test context */}
               <div className="rounded-lg border bg-muted/30 p-3">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2 text-xs">
@@ -1074,83 +1030,6 @@ export default function QCReview() {
                   ))}
                 </div>
               </div>
-
-              {/* Stats */}
-              {result && (
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                {[
-                  { label: lang === "ar" ? "المتوسط" : "Average", value: `${result.average} ${result.unit}` },
-                  { label: lang === "ar" ? "الانحراف المعياري" : "Std Deviation", value: result.stdDeviation ?? "—" },
-                  { label: lang === "ar" ? "نسبة الامتثال" : "Compliance %", value: result.percentage ? `${result.percentage}%` : "—" },
-                  { label: lang === "ar" ? "الحالة" : "Status", value: result.complianceStatus?.toUpperCase() ?? "—", highlight: result.complianceStatus === "pass" ? "text-green-700" : "text-red-700" },
-                ].map((s) => (
-                  <div key={s.label} className="bg-muted/40 rounded-lg p-3 text-center">
-                    <p className="text-xs text-muted-foreground">{s.label}</p>
-                    <p className={`text-lg font-bold mt-1 ${(s as any).highlight ?? "text-foreground"}`}>{s.value}</p>
-                  </div>
-                ))}
-              </div>
-              )}
-
-              {/* Full Report Link */}
-              {(dist?.id || (selectedSample as any)?.batchId) && (
-                <div className="flex gap-2">
-                  {wrapDisabledWithTooltip(
-                    dialogSamplePending,
-                    dialogSampleDisabledWarning,
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="gap-1.5 flex-1"
-                      disabled={dialogSamplePending}
-                      onClick={() => {
-                        const batchId = (selectedSample as any)?.batchId;
-                        if (batchId) {
-                          window.open(`/batch-report/${batchId}`, "_blank");
-                        } else if (dist?.id) {
-                          window.open(`/test-report/${dist.id}`, "_blank");
-                        }
-                      }}
-                    >
-                      <ExternalLink className="w-3.5 h-3.5" />
-                      {lang === "ar" ? "تقرير الاختبار" : "Test Report"}
-                    </Button>
-                  )}
-                </div>
-              )}
-
-              {/* Charts */}
-              {result && rawValues.length > 0 && (
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <p className="text-xs font-medium mb-2">{lang === "ar" ? "خط الاتجاه" : "Trend Line"}</p>
-                    <ResponsiveContainer width="100%" height={140}>
-                      <LineChart data={trendData}>
-                        <XAxis dataKey="name" tick={{ fontSize: 10 }} />
-                        <YAxis tick={{ fontSize: 10 }} />
-                        <RechartsTooltip />
-                        {minVal != null && <ReferenceLine y={minVal} stroke="#ef4444" strokeDasharray="3 3" />}
-                        {maxVal != null && <ReferenceLine y={maxVal} stroke="#f97316" strokeDasharray="3 3" />}
-                        <ReferenceLine y={avg} stroke="#3b82f6" strokeDasharray="3 3" />
-                        <Line type="monotone" dataKey="value" stroke="#3b82f6" dot={{ r: 3 }} strokeWidth={2} />
-                      </LineChart>
-                    </ResponsiveContainer>
-                  </div>
-                  <div>
-                    <p className="text-xs font-medium mb-2">{lang === "ar" ? "الرسم البياني" : "Bar Chart"}</p>
-                    <ResponsiveContainer width="100%" height={140}>
-                      <BarChart data={barData}>
-                        <XAxis dataKey="name" tick={{ fontSize: 10 }} />
-                        <YAxis tick={{ fontSize: 10 }} />
-                        <RechartsTooltip />
-                        <Bar dataKey="value" radius={[3, 3, 0, 0]}>
-                          {barData.map((entry, i) => <Cell key={i} fill={entry.fill} />)}
-                        </Bar>
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
-                </div>
-              )}
 
               {/* Supervisor Review Summary */}
               {managerReview && (

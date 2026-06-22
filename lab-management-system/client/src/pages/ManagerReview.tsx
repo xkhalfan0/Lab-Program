@@ -478,14 +478,6 @@ export default function ManagerReview() {
   const hasResult = !!(result || specResult);
   const isSpecialized = !result && !!specResult;
 
-  const chartsData = result?.chartsData as any;
-  const rawValues: number[] = chartsData?.values ?? [];
-  const avg = parseFloat(result?.average ?? "0");
-  const minVal = dist?.minAcceptable ? parseFloat(dist.minAcceptable) : null;
-  const maxVal = dist?.maxAcceptable ? parseFloat(dist.maxAcceptable) : null;
-  const passing = rawValues.filter(
-    (v) => (minVal == null || v >= minVal) && (maxVal == null || v <= maxVal)
-  ).length;
   // Derive overall compliance from result
   const overallCompliance = isSpecialized
     ? (specResult?.overallResult ?? "pending")
@@ -657,75 +649,6 @@ export default function ManagerReview() {
                   </div>
                 </div>
               )}
-
-              {/* ── Pass/Fail Banner ─────────────────────────────────────── */}
-              {overallCompliance !== "pending" && (
-                <div className={`rounded-xl p-4 flex items-center gap-4 border-2 ${
-                  isPass
-                    ? "bg-green-50 border-green-300 text-green-800"
-                    : "bg-red-50 border-red-300 text-red-800"
-                }`}>
-                  {isPass ? (
-                    <CheckCircle2 className="w-10 h-10 text-green-600 shrink-0" />
-                  ) : (
-                    <AlertCircle className="w-10 h-10 text-red-600 shrink-0" />
-                  )}
-                  <div>
-                    <p className="text-lg font-extrabold tracking-wide">
-                      {isPass
-                        ? (lang === "ar" ? "✓ النتيجة: ناجح" : "✓ Result: PASS")
-                        : (lang === "ar" ? "✗ النتيجة: راسب" : "✗ Result: FAIL")}
-                    </p>
-                    <p className="text-sm mt-0.5 opacity-80">
-                      {isPass
-                        ? (lang === "ar" ? "العينة مطابقة للمواصفات القياسية" : "Sample meets specification requirements")
-                        : (lang === "ar" ? "العينة لا تطابق المواصفات القياسية" : "Sample does not meet specification requirements")}
-                    </p>
-                  </div>
-                  <div className="ms-auto text-right">
-                    <p className="text-2xl font-extrabold">{result?.percentage ? `${result.percentage}%` : "—"}</p>
-                    <p className="text-xs opacity-70">{lang === "ar" ? "نسبة الامتثال" : "Compliance"}</p>
-                  </div>
-                </div>
-              )}
-
-              {/* ── Stats Summary ─────────────────────────────────────────── */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                {[
-                  { label: lang === "ar" ? "المتوسط" : "Average", value: result ? `${result.average} ${result.unit}` : "—", color: "text-blue-700" },
-                  { label: lang === "ar" ? "الانحراف المعياري" : "Std Dev", value: result?.stdDeviation ?? "—", color: "text-purple-700" },
-                  { label: lang === "ar" ? "ناجح / الكل" : "Pass / Total", value: `${passing} / ${rawValues.length}`, color: "text-teal-700" },
-                  {
-                    label: lang === "ar" ? "الحالة" : "Status",
-                    value: isPass ? (lang === "ar" ? "ناجح" : "PASS") : isFail ? (lang === "ar" ? "راسب" : "FAIL") : "—",
-                    color: isPass ? "text-green-700" : isFail ? "text-red-700" : "text-gray-500",
-                  },
-                ].map(s => (
-                  <div key={s.label} className="bg-muted/40 rounded-lg p-3 text-center">
-                    <p className={`text-lg font-bold ${s.color}`}>{s.value}</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">{s.label}</p>
-                  </div>
-                ))}
-              </div>
-
-              {/* ── Report (single entry: concrete / specialized / order / legacy / batch) ── */}
-              <div className="flex gap-2">
-                {reportUrl &&
-                  wrapDisabledWithTooltip(
-                    dialogSamplePending,
-                    dialogSampleDisabledWarning,
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="gap-1.5 flex-1"
-                      disabled={dialogSamplePending}
-                      onClick={handleOpenReport}
-                    >
-                      <FileText className="w-3.5 h-3.5" />
-                      {lang === "ar" ? "فتح التقرير" : "Open report"}
-                    </Button>
-                  )}
-              </div>
 
               {/* ── Decision Buttons ──────────────────────────────────────── */}
               <div className="grid grid-cols-3 gap-3">
