@@ -19,7 +19,6 @@ import {
   AlertCircle,
   CheckCircle2,
   Clock,
-  Eye,
   UserCheck,
   Pencil,
   Printer,
@@ -352,18 +351,6 @@ function DistributionAllOrdersActionsCell({
   return (
     <div className="flex items-center gap-1">
       {PendingDeletionBadge}
-      {wrapDisabledAction(
-        <Button
-          size="sm"
-          variant="ghost"
-          className="h-7 px-2"
-          disabled={hasPendingDeletion}
-          onClick={() => setLocation(`/order/${order.id}`)}
-        >
-          <Eye className="w-3.5 h-3.5" />
-        </Button>,
-        hasPendingDeletion
-      )}
       {canDistribute &&
         wrapDisabledAction(
           <Button
