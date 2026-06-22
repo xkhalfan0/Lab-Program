@@ -365,6 +365,7 @@ export default function Reception() {
   /** Reception: CONC_CUBE nominal face size (stored on sample) — required when cube test selected */
   const [nominalCubeSize, setNominalCubeSize] = useState("");
   const [supplier, setSupplier] = useState("");
+  const [curingDate, setCuringDate] = useState<Date | undefined>(undefined);
   const [contractorFormFile, setContractorFormFile] = useState<File | null>(null);
   const concCubePanelRef = useRef<HTMLDivElement>(null);
 
@@ -447,6 +448,7 @@ export default function Reception() {
     setAsphaltMixSelectionMode("batch");
     setNominalCubeSize("");
     setSupplier("");
+    setCuringDate(undefined);
     setFoamConcreteAge("");
     setContractorFormFile(null);
   };
@@ -1008,6 +1010,7 @@ export default function Reception() {
   };
 
   const isCastingRequired = selectedTests.some(t => CASTING_DATE_TESTS.includes(t.testTypeCode));
+  const isConcCore = selectedTests.some(t => t.testTypeCode === "CONC_CORE");
   const getSelectedGroups = () => {
     const groups = new Set<string>();
     selectedTests.forEach(t => {
@@ -1172,7 +1175,11 @@ export default function Reception() {
       sectorNameAr: form.sectorNameAr || undefined,
       sectorNameEn: form.sectorNameEn || undefined,
       condition: form.condition,
-      notes: [supplier ? `__SUPPLIER__:${supplier.trim()}` : "", form.notes || ""].filter(Boolean).join("\n") || undefined,
+      notes: [
+        supplier ? `__SUPPLIER__:${supplier.trim()}` : "",
+        curingDate ? `__CURING_DATE__:${format(curingDate, "yyyy-MM-dd")}` : "",
+        form.notes || "",
+      ].filter(Boolean).join("\n") || undefined,
       location: form.location || undefined,
       referenceNo: form.referenceNo?.trim() || undefined,
       castingDate: castingDateISO || undefined,
@@ -1550,6 +1557,32 @@ export default function Reception() {
                                 <Calendar mode="single" selected={form.castingDate} onSelect={(d) => setForm(f => ({ ...f, castingDate: d }))} disabled={(date) => date > new Date()} captionLayout="dropdown" />
                               </PopoverContent>
                             </Popover>
+                          </div>
+                        )}
+                        {isConcCore && (
+                          <div className="space-y-2 sm:col-span-2">
+                            <Label className="text-[15px]">
+                              {lang === "ar" ? "تاريخ المعالجة (الكيورينج)" : "Date of Curing"}
+                              <span className="text-muted-foreground text-xs font-normal ms-1">({lang === "ar" ? "اختياري" : "optional"})</span>
+                            </Label>
+                            <div className="flex items-center gap-2">
+                              <Popover>
+                                <PopoverTrigger asChild>
+                                  <Button variant="outline" className={cn("flex-1 h-10 justify-start font-normal text-base", !curingDate && "text-muted-foreground")}>
+                                    <CalendarIcon className="mr-2 h-4 w-4" />
+                                    {curingDate ? format(curingDate, "dd MMM yyyy") : (lang === "ar" ? "اختر..." : "Pick date")}
+                                  </Button>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-auto p-0" align="start">
+                                  <Calendar mode="single" selected={curingDate} onSelect={setCuringDate} captionLayout="dropdown" />
+                                </PopoverContent>
+                              </Popover>
+                              {curingDate && (
+                                <Button variant="ghost" size="sm" className="h-10 px-2 text-muted-foreground" onClick={() => setCuringDate(undefined)}>
+                                  {lang === "ar" ? "مسح" : "Clear"}
+                                </Button>
+                              )}
+                            </div>
                           </div>
                         )}
                       </div>

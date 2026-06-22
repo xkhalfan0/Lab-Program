@@ -210,6 +210,11 @@ export default function ConcreteCore() {
   const distId = parseInt(distributionId ?? "0");
 
   const { data: dist } = trpc.distributions.get.useQuery({ id: distId }, { enabled: !!distId });
+
+  // Parse curing date set at reception (stored in sample notes as __CURING_DATE__:YYYY-MM-DD)
+  const curingDateMatch = ((dist as any)?.sampleNotes ?? "").match(/__CURING_DATE__:(\d{4}-\d{2}-\d{2})/);
+  const curingDateFromReception: string | null = curingDateMatch ? curingDateMatch[1] : null;
+
   const { data: existing, isFetched: existingFetched } = trpc.specializedTests.getByDistribution.useQuery(
     { distributionId: distId },
     { enabled: !!distId }
@@ -496,6 +501,16 @@ export default function ConcreteCore() {
                 <Label className="text-xs text-slate-500 mb-1 block">{ar ? "تاريخ الصب" : "Date Cast"}</Label>
                 <Input type="date" value={castDate} onChange={e => setCastDate(e.target.value)} disabled={submitted} />
               </div>
+              {curingDateFromReception && (
+                <div>
+                  <Label className="text-xs text-slate-500 mb-1 block">
+                    {ar ? "تاريخ المعالجة (الاستلام)" : "Date of Curing (from Reception)"}
+                  </Label>
+                  <div className="h-10 flex items-center px-3 rounded-md border bg-slate-50 text-sm font-mono text-slate-700">
+                    {new Date(curingDateFromReception + "T00:00:00").toLocaleDateString(ar ? "ar-AE" : "en-AE", { year: "numeric", month: "short", day: "numeric" })}
+                  </div>
+                </div>
+              )}
               <div>
                 <Label className="text-xs text-slate-500 mb-1 block">{ar ? "تاريخ الفحص" : "Test Date"}</Label>
                 <Input type="date" value={testDate} onChange={e => setTestDate(e.target.value)} disabled={submitted} />
