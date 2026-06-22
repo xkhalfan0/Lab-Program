@@ -196,20 +196,21 @@ export function SectorLayout({ children }: { children: React.ReactNode }) {
             })}
           </nav>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
             {failedCount > 0 && (
               <Link
                 href="/sector/results?filter=fail"
-                className="hidden items-center gap-1.5 rounded-lg border border-red-400 bg-red-600 px-3 py-1.5 text-xs font-bold text-white shadow-lg shadow-red-900/30 transition hover:bg-red-700 sm:flex animate-pulse"
+                className="hidden items-center gap-2 rounded-xl border-2 border-red-400 bg-red-600 px-4 py-2 text-sm font-bold text-white shadow-lg shadow-red-900/40 transition hover:bg-red-700 sm:flex animate-pulse"
               >
                 <AlertTriangle className="h-4 w-4" />
                 {failedCount} {T.failedShort}
               </Link>
             )}
+
             {sector && (
-              <div className="hidden items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-1.5 sm:flex">
-                <span className="h-2 w-2 rounded-full bg-emerald-400" />
-                <span className="max-w-[200px] truncate text-xs font-medium text-white">
+              <div className="hidden items-center gap-2.5 rounded-xl border border-emerald-400/30 bg-emerald-500/10 px-4 py-2 sm:flex">
+                <span className="h-2.5 w-2.5 rounded-full bg-emerald-400 shadow-sm shadow-emerald-400/50" />
+                <span className="max-w-[220px] truncate text-sm font-semibold text-emerald-100">
                   {isRtl ? sector.nameAr : sector.nameEn}
                 </span>
               </div>
@@ -217,7 +218,7 @@ export function SectorLayout({ children }: { children: React.ReactNode }) {
 
             {(unreadCount?.total ?? 0) > 0 && (
               <div className="relative hidden sm:block">
-                <Bell className="h-5 w-5 text-amber-400" />
+                <Bell className="h-6 w-6 text-amber-400" />
                 <span className="absolute -top-1 -end-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white">
                   {unreadCount!.total > 9 ? "9+" : unreadCount!.total}
                 </span>
@@ -227,18 +228,18 @@ export function SectorLayout({ children }: { children: React.ReactNode }) {
             <button
               type="button"
               onClick={() => setLang(lang === "ar" ? "en" : "ar")}
-              className="flex items-center gap-1 rounded-lg border border-white/10 px-2.5 py-1.5 text-xs text-slate-300 transition hover:bg-white/5 hover:text-white"
+              className="flex items-center gap-1.5 rounded-xl border border-white/15 bg-white/8 px-4 py-2 text-sm font-medium text-slate-200 transition hover:bg-white/15 hover:text-white"
             >
-              <Globe className="h-3.5 w-3.5" />
+              <Globe className="h-4 w-4" />
               {T.lang}
             </button>
 
             <button
               type="button"
               onClick={handleLogout}
-              className="flex items-center gap-1.5 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-1.5 text-xs font-medium text-red-300 transition hover:bg-red-500/20"
+              className="flex items-center gap-2 rounded-xl border border-red-500/40 bg-red-500/15 px-4 py-2 text-sm font-semibold text-red-300 transition hover:bg-red-500/30 hover:text-red-200"
             >
-              <LogOut className="h-3.5 w-3.5" />
+              <LogOut className="h-4 w-4" />
               <span className="hidden sm:inline">{T.logout}</span>
             </button>
           </div>
