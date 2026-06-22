@@ -51,6 +51,8 @@ const T = {
   },
   digitalAttachment: { ar: "مرفق رقمي", en: "digital attachment" },
   notes: { ar: "ملاحظات", en: "Notes" },
+  supplier: { ar: "المورد / المصدر", en: "Supplier / Source" },
+  location: { ar: "موقع العينة", en: "Sample Location" },
   printedAt: { ar: "طُبع في", en: "Printed at" },
 } as const;
 
@@ -238,6 +240,12 @@ export default function PrintReceipt({ sectorSampleId }: { sectorSampleId?: numb
   const sampleTypeRaw = SAMPLE_TYPE_LABELS[(sample as any).sampleType] ?? (sample as any).sampleType;
   const docNo = receiptDocNo(sample);
   const referenceNo = (sample as any).referenceNo?.trim() || "—";
+
+  const rawNotes: string = (sample as any).notes ?? "";
+  const supplierMatch = rawNotes.match(/^__SUPPLIER__:(.+?)(?:\n|$)/);
+  const supplierValue = supplierMatch ? supplierMatch[1].trim() : null;
+  const cleanNotes = rawNotes.replace(/^__SUPPLIER__:[^\n]*\n?/, "").trim();
+  const sampleLocation: string | null = (sample as any).location?.trim() || null;
 
   const th = (key: keyof typeof T) => {
     const l = bilingualLabel(key);
@@ -461,11 +469,27 @@ export default function PrintReceipt({ sectorSampleId }: { sectorSampleId?: numb
                   </td>
                 </tr>
               )}
-              {(sample as any).notes && (
+              {supplierValue && (
+                <tr style={{ borderBottom: "1px solid #e5e7eb" }}>
+                  {th("supplier")}
+                  <td colSpan={3} style={{ padding: "5px 8px", color: "#111", fontWeight: 500 }}>
+                    {supplierValue}
+                  </td>
+                </tr>
+              )}
+              {sampleLocation && (
+                <tr style={{ borderBottom: "1px solid #e5e7eb" }}>
+                  {th("location")}
+                  <td colSpan={3} style={{ padding: "5px 8px", color: "#111" }}>
+                    {sampleLocation}
+                  </td>
+                </tr>
+              )}
+              {cleanNotes && (
                 <tr>
                   {th("notes")}
                   <td colSpan={3} style={{ padding: "5px 8px", color: "#555" }}>
-                    {(sample as any).notes}
+                    {cleanNotes}
                   </td>
                 </tr>
               )}
