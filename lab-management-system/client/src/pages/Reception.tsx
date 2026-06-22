@@ -1495,7 +1495,7 @@ export default function Reception() {
                             className="h-10 text-base"
                             placeholder={lang === "ar" ? "مرجع المقاول / RFQ / MTS..." : "Contractor ref., RFQ, MTS..."}
                             value={form.referenceNo}
-                            onChange={(e) => setForm({ ...form, referenceNo: e.target.value })}
+                            onChange={(e) => setForm({ ...form, referenceNo: e.target.value.replace(/\s/g, "") })}
                           />
                         </div>
                         <ReceptionContractorFormUpload
@@ -1809,7 +1809,7 @@ export default function Reception() {
                   placeholder={lang === "ar" ? "رقم المرجع (Ref No.)..." : "Ref No. filter..."}
                   className="h-11 text-base pe-8"
                   value={refSearch}
-                  onChange={(e) => setRefSearch(e.target.value)}
+                  onChange={(e) => setRefSearch(e.target.value.replace(/\s/g, ""))}
                 />
                 {refSearch && (
                   <button
