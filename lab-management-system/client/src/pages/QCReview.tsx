@@ -751,16 +751,25 @@ export default function QCReview() {
   const specializedResult = specializedResults?.[0];
   const hasAnyResult = !!result || !!specializedResult;
 
-  // Compute report URL
+  // Compute report URL — use dist or fall back to result.distributionId
   const reportUrl = (() => {
     const batchId = (selectedSample as { batchId?: string } | null)?.batchId;
     if (batchId) return `/batch-report/${encodeURIComponent(batchId)}`;
-    if (!dist?.id) return null;
-    const tt = (dist.testType ?? "").toLowerCase();
-    if (tt === "conc_cube" || tt === "concrete_compression" || tt === "concrete" || tt.includes("conc_cube"))
-      return `/concrete-report/${dist.id}`;
-    if (specializedResult?.distributionId === dist.id) return `/test-report/${dist.id}`;
-    if (result) return `/test-report/${dist.id}`;
+
+    // Resolve the best distribution ID available
+    const distId = dist?.id ?? (result as { distributionId?: number } | undefined)?.distributionId ?? null;
+    if (!distId) return null;
+
+    // Detect concrete-cube test by code OR by chartsData.source (legacy results)
+    const tt = (dist?.testType ?? "").toLowerCase();
+    const chartsSource = (result?.chartsData as { source?: string } | undefined)?.source;
+    const isConcreteCube =
+      tt === "conc_cube" || tt.includes("conc_cube") || tt === "concrete_compression" || tt === "concrete" ||
+      chartsSource === "concrete_cubes";
+
+    if (isConcreteCube) return `/concrete-report/${distId}`;
+    if (specializedResult?.distributionId === distId) return `/test-report/${distId}`;
+    if (result) return `/test-report/${distId}`;
     return null;
   })();
   const isModalDataLoading = !!selectedSample && (
