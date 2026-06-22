@@ -1,6 +1,6 @@
 import { useParams } from "wouter";
 import { trpc } from "@/lib/trpc";
-import { useRef, useEffect, useState } from "react";
+import { useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Printer, X, Download, Loader2, CheckCircle, XCircle } from "lucide-react";
 import { generatePdfFromElement } from "@/lib/pdf";
@@ -637,14 +637,6 @@ export default function ConcreteReport() {
     setIsDownloadLoading(false);
   };
 
-  // Auto-print when opened in a new tab
-  useEffect(() => {
-    if (!isLoading && (groups as any[]).length > 0 && window.opener) {
-      const timer = setTimeout(() => handlePrint(), 600);
-      return () => clearTimeout(timer);
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isLoading]);
 
   if (isLoading) {
     return (
