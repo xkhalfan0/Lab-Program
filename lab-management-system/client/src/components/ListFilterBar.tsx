@@ -66,11 +66,21 @@ export function ListFilterBar({
         <div className="relative md:col-span-2 xl:col-span-2">
           <Search className="absolute start-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
           <Input
-            className="ps-9"
+            className="ps-9 pe-9"
             placeholder={searchPlaceholder}
             value={search}
             onChange={(e) => onSearchChange(e.target.value)}
           />
+          {search && (
+            <button
+              type="button"
+              onClick={() => onSearchChange("")}
+              className="absolute end-3 top-1/2 -translate-y-1/2 rounded-full p-0.5 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+              aria-label="Clear search"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
         </div>
 
         {onSectorChange && (
@@ -120,7 +130,7 @@ export function ListFilterBar({
           </Select>
         ))}
 
-        {showClear && onClear && (
+        {showClear && onClear && (sector !== "all" || (sampleType && sampleType !== "all") || selectFilters.some(f => f.value !== (f.options[0]?.value ?? "all"))) && (
           <Button variant="outline" size="sm" onClick={onClear} className="gap-1.5 h-10">
             <X className="w-4 h-4" />
             {isAr ? "مسح الفلاتر" : "Clear filters"}
