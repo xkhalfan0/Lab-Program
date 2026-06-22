@@ -738,6 +738,7 @@ export default function Reception() {
   };
 
   const toggleBlockSubtype = (testTypeId: number, subtypeValue: string, testTypeName: string, testTypeCode: string, formTemplate: string | undefined, unitPrice: number) => {
+    const defaultQty = testTypeCode === "CONC_BLOCK" ? 10 : 0;
     setMultiSubtypes(prev => {
       const current = prev[testTypeId] ?? {};
       if (current[subtypeValue] !== undefined) {
@@ -745,15 +746,16 @@ export default function Reception() {
         delete updated[subtypeValue];
         return { ...prev, [testTypeId]: updated };
       } else {
-        return { ...prev, [testTypeId]: { ...current, [subtypeValue]: 0 } };
+        return { ...prev, [testTypeId]: { ...current, [subtypeValue]: defaultQty } };
       }
     });
   };
 
-  const setBlockSubtypeQty = (testTypeId: number, subtypeValue: string, qty: number) => {
+  const setBlockSubtypeQty = (testTypeId: number, subtypeValue: string, qty: number, testTypeCode?: string) => {
+    const minQty = testTypeCode === "CONC_BLOCK" ? 10 : 0;
     setMultiSubtypes(prev => ({
       ...prev,
-      [testTypeId]: { ...(prev[testTypeId] ?? {}), [subtypeValue]: Math.max(0, qty) },
+      [testTypeId]: { ...(prev[testTypeId] ?? {}), [subtypeValue]: Math.max(minQty, qty) },
     }));
   };
 
@@ -885,14 +887,19 @@ export default function Reception() {
                     <div className="flex items-center gap-1">
                       <span className="text-xs text-muted-foreground">{lang === "ar" ? "عدد:" : "Qty:"}</span>
                       <TestQtyInput
-                        type="number" min={0} max={999}
+                        type="number" min={tt.code === "CONC_BLOCK" ? 10 : 0} max={999}
                         value={qty ? qty : ""}
                         placeholder="—"
-                        warning={qty === 0}
+                        warning={qty === 0 || (tt.code === "CONC_BLOCK" && qty < 10)}
                         onFocus={e => e.currentTarget.select()}
-                        onChange={e => setBlockSubtypeQty(tt.id, st.value, parseInt(e.target.value) || 0)}
+                        onChange={e => setBlockSubtypeQty(tt.id, st.value, parseInt(e.target.value) || 0, tt.code)}
                         className="h-6 w-16"
                       />
+                      {tt.code === "CONC_BLOCK" && qty > 0 && qty < 10 && (
+                        <span className="text-xs text-red-500 font-medium">
+                          {lang === "ar" ? "الحد الأدنى 10" : "Min. 10"}
+                        </span>
+                      )}
                     </div>
                   )}
                 </TestNestedRow>
