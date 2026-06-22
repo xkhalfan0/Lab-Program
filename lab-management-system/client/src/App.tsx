@@ -35,6 +35,7 @@ import ClearanceArchive from "./pages/ClearanceArchive";
 import PrintCertificate from "./pages/PrintCertificate";
 import OrderReport from "./pages/OrderReport";
 import MonthlyReport from "./pages/MonthlyReport";
+import ContractorFormView from "./pages/ContractorFormView";
 import SectorLogin from "./pages/sector/SectorLogin";
 import { SectorLangProvider } from "./pages/sector/SectorLayout";
 import SectorDashboard from "./pages/sector/SectorDashboard";
@@ -309,6 +310,7 @@ function Router() {
 
       {/* Print pages — opened in new tab, session cookie is shared */}
       <Route path="/print-receipt/:id" component={PrintReceipt} />
+      <Route path="/contractor-form/:sampleId" component={ContractorFormView} />
       <Route path="/print/test-catalog" component={PrintTestCatalog} />
       <Route path="/print-certificate/:id" component={PrintCertificate} />
 
