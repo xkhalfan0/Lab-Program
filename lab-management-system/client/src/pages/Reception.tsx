@@ -343,6 +343,7 @@ export default function Reception() {
   const { user } = useAuth();
   const canEditSample = ["admin", "lab_manager", "reception"].includes(user?.role ?? "");
   const [search, setSearch] = useState("");
+  const [refSearch, setRefSearch] = useState("");
   const [sectorFilter, setSectorFilter] = useState<string>("all");
   const [sampleTypeFilter, setSampleTypeFilter] = useState<string>("all");
   const [form, setForm] = useState(emptyForm());
@@ -1195,14 +1196,18 @@ export default function Reception() {
   };
 
   const filteredOrders = orders?.filter((o: any) => {
-    const matchSearch =
-      (o.orderCode ?? "").toLowerCase().includes(search.toLowerCase()) ||
-      (o.sampleCode ?? "").toLowerCase().includes(search.toLowerCase()) ||
-      (o.contractorName ?? "").toLowerCase().includes(search.toLowerCase()) ||
-      (o.contractNumber ?? "").toLowerCase().includes(search.toLowerCase());
+    const q = search.toLowerCase();
+    const matchSearch = !q ||
+      (o.orderCode ?? "").toLowerCase().includes(q) ||
+      (o.sampleCode ?? "").toLowerCase().includes(q) ||
+      (o.contractorName ?? "").toLowerCase().includes(q) ||
+      (o.contractNumber ?? "").toLowerCase().includes(q) ||
+      (o.referenceNo ?? "").toLowerCase().includes(q);
+    const rq = refSearch.trim().toLowerCase();
+    const matchRef = !rq || (o.referenceNo ?? "").toLowerCase().includes(rq);
     const matchSector = sectorFilter === "all" || (o as any).sector === sectorFilter;
     const matchType = sampleTypeFilter === "all" || o.sampleType === sampleTypeFilter;
-    return matchSearch && matchSector && matchType;
+    return matchSearch && matchRef && matchSector && matchType;
   }) ?? [];
 
   const typeLabel = (type: string) => {
@@ -1762,19 +1767,54 @@ export default function Reception() {
           </TabsContent>
 
           <TabsContent value="history" className="mt-4 space-y-4">
-            <div className="relative">
-              <Search className="absolute start-3.5 top-1/2 -translate-y-1/2 w-[18px] h-[18px] text-muted-foreground" />
-              <Input
-                placeholder={
-                  lang === "ar"
-                    ? "بحث برقم العينة، العقد، المقاول، أو الأوردر..."
-                    : "Search by sample ID, contract, contractor, or order..."
-                }
-                className="ps-10 h-11 text-base"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-              />
+            <div className="flex gap-2 items-center">
+              <div className="relative flex-1">
+                <Search className="absolute start-3.5 top-1/2 -translate-y-1/2 w-[18px] h-[18px] text-muted-foreground" />
+                <Input
+                  placeholder={
+                    lang === "ar"
+                      ? "بحث برقم العينة، العقد، المقاول، أو الأوردر..."
+                      : "Search by sample ID, contract, contractor, or order..."
+                  }
+                  className="ps-10 h-11 text-base"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                />
+                {search && (
+                  <button
+                    type="button"
+                    onClick={() => setSearch("")}
+                    className="absolute end-3 top-1/2 -translate-y-1/2 rounded-full p-0.5 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+              <div className="relative w-52 shrink-0">
+                <Input
+                  placeholder={lang === "ar" ? "رقم المرجع (Ref No.)..." : "Ref No. filter..."}
+                  className="h-11 text-base pe-8"
+                  value={refSearch}
+                  onChange={(e) => setRefSearch(e.target.value)}
+                />
+                {refSearch && (
+                  <button
+                    type="button"
+                    onClick={() => setRefSearch("")}
+                    className="absolute end-3 top-1/2 -translate-y-1/2 rounded-full p-0.5 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
             </div>
+            {refSearch.trim() && (
+              <p className="text-xs text-blue-600 -mt-2 ms-1">
+                {lang === "ar"
+                  ? `تصفية بالمرجع "${refSearch.trim()}" — يمكنك تضييق النتائج بإضافة رقم العقد في خانة البحث الرئيسية`
+                  : `Filtering by ref "${refSearch.trim()}" — narrow results further by adding a contract number in the main search`}
+              </p>
+            )}
 
             <div className="flex items-center gap-1.5 flex-wrap">
               <span className="text-xs text-muted-foreground">{lang === "ar" ? "القطاع:" : "Sector:"}</span>
@@ -1831,6 +1871,7 @@ export default function Reception() {
                           <th className="text-start px-4 py-2.5 text-xs font-medium text-muted-foreground">{lang === "ar" ? "رمز العينة" : "Sample Code"}</th>
                           <th className="text-start px-4 py-2.5 text-xs font-medium text-muted-foreground">{t("table.contractNo")}</th>
                           <th className="text-start px-4 py-2.5 text-xs font-medium text-muted-foreground">{t("table.contractor")}</th>
+                          <th className="text-start px-4 py-2.5 text-xs font-medium text-muted-foreground">{lang === "ar" ? "رقم المرجع" : "Ref No."}</th>
                           <th className="text-start px-4 py-2.5 text-xs font-medium text-muted-foreground">{lang === "ar" ? "نوع العينة" : "Type"}</th>
                           <th className="text-start px-4 py-2.5 text-xs font-medium text-muted-foreground">{lang === "ar" ? "الاختبارات" : "Tests"}</th>
                           <th className="text-start px-4 py-2.5 text-xs font-medium text-muted-foreground">{t("table.receivedAt")}</th>
@@ -1852,6 +1893,15 @@ export default function Reception() {
                             </td>
                             <td className="px-4 py-2.5 text-xs font-mono text-muted-foreground">{order.contractNumber ?? "—"}</td>
                             <td className="px-4 py-2.5 text-xs">{order.contractorName ?? "—"}</td>
+                            <td className="px-4 py-2.5 text-xs">
+                              {order.referenceNo ? (
+                                <span className={`font-mono ${refSearch.trim() && (order.referenceNo ?? "").toLowerCase().includes(refSearch.trim().toLowerCase()) ? "bg-yellow-100 text-yellow-800 px-1 rounded" : "text-muted-foreground"}`}>
+                                  {order.referenceNo}
+                                </span>
+                              ) : (
+                                <span className="text-muted-foreground/40">—</span>
+                              )}
+                            </td>
                             <td className="px-4 py-2.5 text-xs">{typeLabel(order.sampleType ?? "")}</td>
                             <td className="px-4 py-2.5 text-xs">
                               <Badge
