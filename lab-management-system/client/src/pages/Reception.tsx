@@ -364,6 +364,7 @@ export default function Reception() {
   const [foamConcreteAge, setFoamConcreteAge] = useState("");
   /** Reception: CONC_CUBE nominal face size (stored on sample) — required when cube test selected */
   const [nominalCubeSize, setNominalCubeSize] = useState("");
+  const [supplier, setSupplier] = useState("");
   const [contractorFormFile, setContractorFormFile] = useState<File | null>(null);
   const concCubePanelRef = useRef<HTMLDivElement>(null);
 
@@ -445,6 +446,7 @@ export default function Reception() {
     setAsphaltMixCourse("");
     setAsphaltMixSelectionMode("batch");
     setNominalCubeSize("");
+    setSupplier("");
     setFoamConcreteAge("");
     setContractorFormFile(null);
   };
@@ -1163,7 +1165,7 @@ export default function Reception() {
       sectorNameAr: form.sectorNameAr || undefined,
       sectorNameEn: form.sectorNameEn || undefined,
       condition: form.condition,
-      notes: form.notes || undefined,
+      notes: [supplier ? `__SUPPLIER__:${supplier.trim()}` : "", form.notes || ""].filter(Boolean).join("\n") || undefined,
       location: form.location || undefined,
       referenceNo: form.referenceNo?.trim() || undefined,
       castingDate: castingDateISO || undefined,
@@ -1469,6 +1471,18 @@ export default function Reception() {
                         <div className="space-y-2">
                           <Label className="text-[15px]">{lang === "ar" ? "الموقع" : "Location"}</Label>
                           <Input className="h-10 text-base" placeholder={lang === "ar" ? "اختياري" : "Optional"} value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} />
+                        </div>
+                        <div className="space-y-2">
+                          <Label className="text-[15px]">
+                            {lang === "ar" ? "المورد / المصدر" : "Source / Supplier"}
+                            <span className="text-muted-foreground text-xs font-normal ms-1">({lang === "ar" ? "اختياري" : "optional"})</span>
+                          </Label>
+                          <Input
+                            className="h-10 text-base"
+                            placeholder={lang === "ar" ? "مثال: خليج ريدي ميكس" : "e.g. Gulf Readymix"}
+                            value={supplier}
+                            onChange={(e) => setSupplier(e.target.value)}
+                          />
                         </div>
                         <div className="space-y-2">
                           <Label className="text-[15px]">

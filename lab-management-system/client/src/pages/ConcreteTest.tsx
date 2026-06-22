@@ -215,6 +215,13 @@ function LockedLabel({ children }: { children: ReactNode }) {
   );
 }
 
+/** Parse the supplier value stored in sample notes as "__SUPPLIER__:value" */
+function parseSupplierFromNotes(notes: string | null | undefined): string {
+  if (!notes) return "";
+  const m = notes.match(/^__SUPPLIER__:(.+?)(\n|$)/m);
+  return m ? m[1].trim() : "";
+}
+
 // ─── Single Age Group Panel ───────────────────────────────────────────────────
 interface GroupPanelProps {
   group: any;
@@ -225,6 +232,8 @@ interface GroupPanelProps {
   distributionNominalCube?: string | null;
   receptionPlan?: ConcCubeReceptionPlan | null;
   isConcCubeOrder?: boolean;
+  /** Supplier entered at reception — shown as locked/read-only if present */
+  receptionSupplier?: string;
 }
 
 function initialSelectedTestAge(g: { comments?: string | null; testAge?: number }): number | null {
@@ -234,7 +243,7 @@ function initialSelectedTestAge(g: { comments?: string | null; testAge?: number 
   return [7, 14, 28].includes(gt) ? gt : null;
 }
 
-function GroupPanel({ group, distributionId, onRefresh, castingDate: distCastingDate, distributionNominalCube, receptionPlan, isConcCubeOrder }: GroupPanelProps) {
+function GroupPanel({ group, distributionId, onRefresh, castingDate: distCastingDate, distributionNominalCube, receptionPlan, isConcCubeOrder, receptionSupplier }: GroupPanelProps) {
   const { lang } = useLanguage();
   const ar = lang === "ar";
   const [open, setOpen] = useState(true);
@@ -245,8 +254,9 @@ function GroupPanel({ group, distributionId, onRefresh, castingDate: distCasting
   const [testAge, setTestAge] = useState<number | null>(() => initialSelectedTestAge(group));
   const [headerExpanded, setHeaderExpanded] = useState(false);
 
-  // Header fields
-  const [sourceSupplier, setSourceSupplier] = useState(group.sourceSupplier ?? "");
+  // Header fields — sourceSupplier is locked if set by reception
+  const supplierFromReception = receptionSupplier ?? "";
+  const [sourceSupplier, setSourceSupplier] = useState(supplierFromReception || group.sourceSupplier || "");
   const [batchDateTime, setBatchDateTime] = useState(group.batchDateTime ?? "");
   const [slump, setSlump] = useState(group.slump ?? "");
   const [classOfConcrete, setClassOfConcrete] = useState(group.classOfConcrete ?? "");
@@ -779,8 +789,18 @@ function GroupPanel({ group, distributionId, onRefresh, castingDate: distCasting
             {headerExpanded && (
               <div className="mt-3 grid grid-cols-2 gap-3 p-3 bg-gray-50 rounded-lg border">
                 <div>
-                  <Label className="text-xs">{ar ? "مصدر/مورد الخرسانة" : "Concrete Source/Supplier"} <span className="text-red-600">*</span></Label>
-                  <Input value={sourceSupplier} onChange={e => setSourceSupplier(e.target.value)} className="h-8 text-sm" placeholder={ar ? "مثال: مورد الخرسانة" : "e.g. Gulf Readymix"} disabled={isSubmitted} />
+                  <Label className="text-xs flex items-center gap-1">
+                    {ar ? "مصدر/مورد الخرسانة" : "Concrete Source/Supplier"}
+                    {supplierFromReception ? <LockedLabel>{ar ? "من الاستقبال" : "from reception"}</LockedLabel> : <span className="text-red-600">*</span>}
+                  </Label>
+                  <Input
+                    value={sourceSupplier}
+                    onChange={e => setSourceSupplier(e.target.value)}
+                    className="h-8 text-sm"
+                    placeholder={ar ? "مثال: مورد الخرسانة" : "e.g. Gulf Readymix"}
+                    disabled={isSubmitted || !!supplierFromReception}
+                    readOnly={!!supplierFromReception}
+                  />
                 </div>
                 <div>
                   <Label className="text-xs">
@@ -1324,6 +1344,7 @@ export default function ConcreteTest() {
                 distributionNominalCube={distribution?.nominalCubeSize}
                 receptionPlan={receptionPlan}
                 isConcCubeOrder={isConcCubeOrder}
+                receptionSupplier={parseSupplierFromNotes((distribution as any)?.sampleNotes)}
               />
             ))}
 
