@@ -526,6 +526,7 @@ export default function Technician() {
   const [testNotes, setTestNotes] = useState("");
   const [taskTab, setTaskTab] = useState<"active" | "completed">("active");
   const [listSearch, setListSearch] = useState("");
+  const [refSearch, setRefSearch] = useState("");
   const [sampleTypeFilter, setSampleTypeFilter] = useState("all");
 
   const utils = trpc.useUtils();
@@ -622,6 +623,7 @@ export default function Technician() {
     return sortedTasks.filter((dist) => {
       const sample = allSamples.find((s: any) => s.id === dist.sampleId);
       if (sampleTypeFilter !== "all" && sample?.sampleType !== sampleTypeFilter) return false;
+      if (refSearch.trim() && !matchesListSearch(refSearch, [sample?.referenceNo])) return false;
       return matchesListSearch(listSearch, [
         dist.sampleCode,
         sample?.sampleCode,
@@ -634,7 +636,7 @@ export default function Technician() {
         dist.testType,
       ]);
     });
-  }, [sortedTasks, allSamples, listSearch, sampleTypeFilter]);
+  }, [sortedTasks, allSamples, listSearch, refSearch, sampleTypeFilter]);
 
   const counts = useMemo(() => {
     const active = filteredTasks.filter((d) => d.status !== "completed").length;
@@ -840,11 +842,14 @@ export default function Technician() {
                   ? "بحث برمز العينة، العقد، المقاول، أو نوع الاختبار..."
                   : "Search by sample code, contract, contractor, or test..."
               }
+              refSearch={refSearch}
+              onRefSearchChange={setRefSearch}
               sampleType={sampleTypeFilter}
               onSampleTypeChange={setSampleTypeFilter}
-              showClear={hasActiveListFilters({ search: listSearch, sampleType: sampleTypeFilter })}
+              showClear={hasActiveListFilters({ search: listSearch, sampleType: sampleTypeFilter, refSearch })}
               onClear={() => {
                 setListSearch("");
+                setRefSearch("");
                 setSampleTypeFilter("all");
               }}
               resultCount={taskTab === "active" ? activeList.length : completedList.length}

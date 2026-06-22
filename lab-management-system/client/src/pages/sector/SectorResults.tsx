@@ -44,6 +44,7 @@ const t = {
     pass: "ناجح",
     fail: "راسب",
     search: "بحث برمز العينة أو رقم العقد أو نوع الاختبار...",
+    refSearch: "رقم المرجع...",
     clearFilters: "مسح الفلاتر",
     allResults: "الكل",
     from: "من تاريخ",
@@ -74,6 +75,7 @@ const t = {
     pass: "Pass",
     fail: "Fail",
     search: "Search by sample code, contract no., or test type...",
+    refSearch: "Ref No. filter...",
     clearFilters: "Clear Filters",
     allResults: "All",
     from: "From Date",
@@ -92,6 +94,7 @@ export default function SectorResults() {
   const [location] = useLocation();
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
+  const [refSearch, setRefSearch] = useState("");
   const [resultFilter, setResultFilter] = useState("");
   const [readFilter, setReadFilter] = useState("");
   const [dateFrom, setDateFrom] = useState("");
@@ -130,6 +133,10 @@ export default function SectorResults() {
         r.testTypeCode?.toLowerCase().includes(q);
       if (!match) return false;
     }
+    if (refSearch.trim()) {
+      const q = refSearch.trim().toLowerCase();
+      if (!(r as any).referenceNo?.toLowerCase().includes(q)) return false;
+    }
     if (resultFilter === "pass" && r.overallResult?.toLowerCase() !== "pass") return false;
     if (resultFilter === "fail" && r.overallResult?.toLowerCase() !== "fail") return false;
     if (resultFilter === "fail" && !r.failedAlertActive) return false;
@@ -146,7 +153,7 @@ export default function SectorResults() {
 
   const totalPages = Math.max(1, Math.ceil((data?.total ?? 0) / limit));
   const hasDateFilters = dateFrom || dateTo;
-  const hasActiveFilters = resultFilter || readFilter || hasDateFilters || search;
+  const hasActiveFilters = resultFilter || readFilter || hasDateFilters || search || refSearch;
 
   const openReport = (id: number, testTypeLabel: string) => {
     setSelectedResultId(id);
@@ -159,6 +166,7 @@ export default function SectorResults() {
     setDateFrom("");
     setDateTo("");
     setSearch("");
+    setRefSearch("");
     setPage(1);
   };
 
@@ -167,15 +175,46 @@ export default function SectorResults() {
       <SectorPageHeader title={T.title} subtitle={T.subtitle} />
 
       <div className="mb-4 space-y-3">
-        <div className="relative">
-          <Search className={`pointer-events-none absolute top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400 ${isRtl ? "right-3" : "left-3"}`} />
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-            placeholder={T.search}
-            className={`${sectorTheme.input} ${isRtl ? "pr-10" : "pl-10"}`}
-          />
+        <div className="flex flex-col sm:flex-row gap-2">
+          <div className="relative flex-1">
+            <Search className={`pointer-events-none absolute top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400 ${isRtl ? "right-3" : "left-3"}`} />
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+              placeholder={T.search}
+              className={`${sectorTheme.input} ${isRtl ? "pr-10 pe-9" : "pl-10 pe-9"}`}
+            />
+            {search && (
+              <button
+                type="button"
+                onClick={() => { setSearch(""); setPage(1); }}
+                className={`absolute top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 transition ${isRtl ? "left-3" : "right-3"}`}
+                aria-label="Clear search"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
+          <div className="relative sm:w-48">
+            <input
+              type="text"
+              value={refSearch}
+              onChange={(e) => { setRefSearch(e.target.value.replace(/\s/g, "")); setPage(1); }}
+              placeholder={T.refSearch}
+              className={`${sectorTheme.input} ${refSearch ? (isRtl ? "pr-3 pl-9" : "pl-3 pr-9") : "px-3"}`}
+            />
+            {refSearch && (
+              <button
+                type="button"
+                onClick={() => { setRefSearch(""); setPage(1); }}
+                className={`absolute top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 transition ${isRtl ? "left-3" : "right-3"}`}
+                aria-label="Clear ref search"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
         </div>
 
         <div className="flex flex-wrap gap-2">

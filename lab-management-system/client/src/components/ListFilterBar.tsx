@@ -26,6 +26,8 @@ type ListFilterBarProps = {
   search: string;
   onSearchChange: (value: string) => void;
   searchPlaceholder: string;
+  refSearch?: string;
+  onRefSearchChange?: (value: string) => void;
   sector?: string;
   onSectorChange?: (value: string) => void;
   sampleType?: string;
@@ -48,6 +50,8 @@ export function ListFilterBar({
   search,
   onSearchChange,
   searchPlaceholder,
+  refSearch,
+  onRefSearchChange,
   sector,
   onSectorChange,
   sampleType,
@@ -82,6 +86,27 @@ export function ListFilterBar({
             </button>
           )}
         </div>
+
+        {onRefSearchChange && (
+          <div className="relative">
+            <Input
+              className="ps-3 pe-9"
+              placeholder={isAr ? "رقم المرجع..." : "Ref No. filter..."}
+              value={refSearch ?? ""}
+              onChange={(e) => onRefSearchChange(e.target.value.replace(/\s/g, ""))}
+            />
+            {refSearch && (
+              <button
+                type="button"
+                onClick={() => onRefSearchChange("")}
+                className="absolute end-3 top-1/2 -translate-y-1/2 rounded-full p-0.5 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                aria-label="Clear ref search"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+        )}
 
         {onSectorChange && (
           <Select value={sector ?? "all"} onValueChange={onSectorChange}>

@@ -66,6 +66,7 @@ export type ListFilters = {
   sector?: string;
   sampleType?: string;
   technicianId?: string;
+  refSearch?: string;
 };
 
 export function applySampleFilters<
@@ -76,11 +77,15 @@ export function applySampleFilters<
     contractName?: string | null;
     sector?: string | null;
     sampleType?: string | null;
+    referenceNo?: string | null;
   },
 >(items: T[], filters: ListFilters): T[] {
   return items.filter((item) => {
     if (!matchesSectorFilter(filters.sector, item.sector)) return false;
     if (!matchesSampleTypeFilter(filters.sampleType, item.sampleType)) return false;
+    if (filters.refSearch?.trim()) {
+      if (!matchesListSearch(filters.refSearch, [item.referenceNo])) return false;
+    }
     return matchesListSearch(filters.search, [
       item.sampleCode,
       item.contractorName,

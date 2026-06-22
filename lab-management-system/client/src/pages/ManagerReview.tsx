@@ -336,6 +336,7 @@ export default function ManagerReview() {
   const [decision, setDecision] = useState<"approved" | "needs_revision" | "rejected" | null>(null);
   const [listTab, setListTab] = useState<ListTab>("pending");
   const [listSearch, setListSearch] = useState("");
+  const [refSearch, setRefSearch] = useState("");
   const [sectorFilter, setSectorFilter] = useState("all");
   const [sampleTypeFilter, setSampleTypeFilter] = useState("all");
 
@@ -395,8 +396,8 @@ export default function ManagerReview() {
   const doneCount = reviewSamples.filter(s => getSampleTaskState(s) === "completed").length;
 
   const listFilters = useMemo(
-    () => ({ search: listSearch, sector: sectorFilter, sampleType: sampleTypeFilter }),
-    [listSearch, sectorFilter, sampleTypeFilter],
+    () => ({ search: listSearch, sector: sectorFilter, sampleType: sampleTypeFilter, refSearch }),
+    [listSearch, sectorFilter, sampleTypeFilter, refSearch],
   );
 
   const pendingSamples = useMemo(() => {
@@ -549,6 +550,8 @@ export default function ManagerReview() {
               ? "بحث برمز العينة، العقد، المقاول، أو المشروع..."
               : "Search by sample code, contract, contractor, or project..."
           }
+          refSearch={refSearch}
+          onRefSearchChange={setRefSearch}
           sector={sectorFilter}
           onSectorChange={setSectorFilter}
           sampleType={sampleTypeFilter}
@@ -556,6 +559,7 @@ export default function ManagerReview() {
           showClear={hasActiveListFilters(listFilters)}
           onClear={() => {
             setListSearch("");
+            setRefSearch("");
             setSectorFilter("all");
             setSampleTypeFilter("all");
           }}

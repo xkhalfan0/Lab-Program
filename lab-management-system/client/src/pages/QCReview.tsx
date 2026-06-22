@@ -664,6 +664,7 @@ export default function QCReview() {
   const [loadTimedOut, setLoadTimedOut] = useState(false);
   const [sampleListTab, setSampleListTab] = useState<QcListTab>("pending");
   const [listSearch, setListSearch] = useState("");
+  const [refSearch, setRefSearch] = useState("");
   const [sectorFilter, setSectorFilter] = useState("all");
   const [sampleTypeFilter, setSampleTypeFilter] = useState("all");
 
@@ -714,8 +715,8 @@ export default function QCReview() {
   const clearanceNewCount = clearanceRequests.filter(r => getClearanceTaskState(r) === "new").length;
 
   const sampleListFilters = useMemo(
-    () => ({ search: listSearch, sector: sectorFilter, sampleType: sampleTypeFilter }),
-    [listSearch, sectorFilter, sampleTypeFilter],
+    () => ({ search: listSearch, sector: sectorFilter, sampleType: sampleTypeFilter, refSearch }),
+    [listSearch, sectorFilter, sampleTypeFilter, refSearch],
   );
 
   const filteredSamples = useMemo(() => {
@@ -918,6 +919,8 @@ export default function QCReview() {
                 ? "بحث برمز العينة، العقد، المقاول، أو المشروع..."
                 : "Search by sample code, contract, contractor, or project..."
             }
+            refSearch={refSearch}
+            onRefSearchChange={setRefSearch}
             sector={sectorFilter}
             onSectorChange={setSectorFilter}
             sampleType={sampleTypeFilter}
@@ -925,6 +928,7 @@ export default function QCReview() {
             showClear={hasActiveListFilters(sampleListFilters)}
             onClear={() => {
               setListSearch("");
+              setRefSearch("");
               setSectorFilter("all");
               setSampleTypeFilter("all");
             }}

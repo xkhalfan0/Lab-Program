@@ -58,6 +58,7 @@ export default function SupervisorDashboard() {
   const [appliedTo, setAppliedTo] = useState(todayStr);
   const [sectorFilter, setSectorFilter] = useState<string>("all");
   const [listSearch, setListSearch] = useState("");
+  const [refSearch, setRefSearch] = useState("");
   const [sampleTypeFilter, setSampleTypeFilter] = useState("all");
 
   const { data: kpis, isLoading: kpisLoading, refetch } = trpc.dashboard.kpis.useQuery({ period });
@@ -86,6 +87,7 @@ export default function SupervisorDashboard() {
 
     return base.filter((sample) => {
       if (sampleTypeFilter !== "all" && sample.sampleType !== sampleTypeFilter) return false;
+      if (refSearch.trim() && !matchesListSearch(refSearch, [(sample as any).referenceNo])) return false;
       return matchesListSearch(listSearch, [
         sample.sampleCode,
         sample.contractNumber,
@@ -93,7 +95,7 @@ export default function SupervisorDashboard() {
         sample.contractName,
       ]);
     });
-  }, [dailyData?.samples, sectorFilter, sampleTypeFilter, listSearch]);
+  }, [dailyData?.samples, sectorFilter, sampleTypeFilter, listSearch, refSearch]);
   const dailySummary = dailyData?.summary;
   const isSingleDay = appliedFrom === appliedTo;
 
@@ -287,11 +289,14 @@ export default function SupervisorDashboard() {
                 ? "بحث برمز العينة، العقد، أو المقاول..."
                 : "Search by sample code, contract, or contractor..."
             }
+            refSearch={refSearch}
+            onRefSearchChange={setRefSearch}
             sampleType={sampleTypeFilter}
             onSampleTypeChange={setSampleTypeFilter}
-            showClear={hasActiveListFilters({ search: listSearch, sampleType: sampleTypeFilter })}
+            showClear={hasActiveListFilters({ search: listSearch, sampleType: sampleTypeFilter, refSearch })}
             onClear={() => {
               setListSearch("");
+              setRefSearch("");
               setSampleTypeFilter("all");
             }}
             resultCount={dailySamples.length}

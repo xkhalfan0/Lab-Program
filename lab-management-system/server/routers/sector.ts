@@ -469,7 +469,7 @@ export const sectorRouter = router({
       const offset = (input.page - 1) * input.limit;
 
       const sectorSamples = await db
-        .select({ id: samples.id, sampleCode: samples.sampleCode, contractNumber: samples.contractNumber, contractName: samples.contractName, contractorName: samples.contractorName })
+        .select({ id: samples.id, sampleCode: samples.sampleCode, contractNumber: samples.contractNumber, contractName: samples.contractName, contractorName: samples.contractorName, referenceNo: samples.referenceNo })
         .from(samples)
         .where(sectorSamplesWhere(db, ctx.sectorKey));
 
@@ -517,6 +517,7 @@ export const sectorRouter = router({
             contractNumber: sampleMap[r.sampleId]?.contractNumber ?? "",
             contractName: sampleMap[r.sampleId]?.contractName ?? "",
             contractorName: sampleMap[r.sampleId]?.contractorName ?? "",
+            referenceNo: sampleMap[r.sampleId]?.referenceNo ?? null,
             ...typeMeta,
             testType: typeMeta.testTypeNameEn,
             overallResult: r.overallResult,
