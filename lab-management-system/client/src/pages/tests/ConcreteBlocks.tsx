@@ -17,24 +17,23 @@ import { Plus, Trash2, Send, FlaskConical, Info , UserCheck , Printer } from "lu
 import { useAuth } from "@/_core/hooks/useAuth";
 import { useLanguage } from "@/contexts/LanguageContext";
 
-// ─── Block Type Specs (BS EN 772-1) ────────────────────────────────────────────
-// Gross area per block size (BS EN 772-1):
+// ─── Block Type Specs (BS EN 6073) ────────────────────────────────────────────
 // Compressive Strength uses Gross Area = Length × Width (load face).
 // For standard blocks: 400 × thickness mm² (the "width" is the thickness).
 const BLOCK_SPECS = {
   // ── Solid Blocks ──
-  SOLID_10: { label: "Solid Block (10cm)", labelAr: "بلوك صلب 10سم", size: "400×100×200 mm", grossArea: 400 * 100, requiredStrength: 10.5, standard: "BS EN 772-1", code: "CONC_BLOCK_SOLID", blockType: "solid_block", blockSize: "10cm" },
-  SOLID_15: { label: "Solid Block (15cm)", labelAr: "بلوك صلب 15سم", size: "400×150×200 mm", grossArea: 400 * 150, requiredStrength: 10.5, standard: "BS EN 772-1", code: "CONC_BLOCK_SOLID", blockType: "solid_block", blockSize: "15cm" },
-  SOLID_20: { label: "Solid Block (20cm)", labelAr: "بلوك صلب 20سم", size: "400×200×200 mm", grossArea: 400 * 200, requiredStrength: 10.5, standard: "BS EN 772-1", code: "CONC_BLOCK_SOLID", blockType: "solid_block", blockSize: "20cm" },
-  SOLID_25: { label: "Solid Block (25cm)", labelAr: "بلوك صلب 25سم", size: "400×250×200 mm", grossArea: 400 * 250, requiredStrength: 10.5, standard: "BS EN 772-1", code: "CONC_BLOCK_SOLID", blockType: "solid_block", blockSize: "25cm" },
+  SOLID_10: { label: "Solid Block (10cm)", labelAr: "بلوك صلب 10سم", size: "400×100×200 mm", grossArea: 400 * 100, requiredStrength: 10.5, standard: "BS EN 6073", code: "CONC_BLOCK_SOLID", blockType: "solid_block", blockSize: "10cm" },
+  SOLID_15: { label: "Solid Block (15cm)", labelAr: "بلوك صلب 15سم", size: "400×150×200 mm", grossArea: 400 * 150, requiredStrength: 10.5, standard: "BS EN 6073", code: "CONC_BLOCK_SOLID", blockType: "solid_block", blockSize: "15cm" },
+  SOLID_20: { label: "Solid Block (20cm)", labelAr: "بلوك صلب 20سم", size: "400×200×200 mm", grossArea: 400 * 200, requiredStrength: 10.5, standard: "BS EN 6073", code: "CONC_BLOCK_SOLID", blockType: "solid_block", blockSize: "20cm" },
+  SOLID_25: { label: "Solid Block (25cm)", labelAr: "بلوك صلب 25سم", size: "400×250×200 mm", grossArea: 400 * 250, requiredStrength: 10.5, standard: "BS EN 6073", code: "CONC_BLOCK_SOLID", blockType: "solid_block", blockSize: "25cm" },
   // ── Hollow Blocks ──
-  HOLLOW_10: { label: "Hollow Block (10cm)", labelAr: "بلوك مجوف 10سم", size: "400×100×200 mm", grossArea: 400 * 100, requiredStrength: 7.0, standard: "BS EN 772-1", code: "CONC_BLOCK_HOLLOW", blockType: "hollow_block", blockSize: "10cm" },
-  HOLLOW_15: { label: "Hollow Block (15cm)", labelAr: "بلوك مجوف 15سم", size: "400×150×200 mm", grossArea: 400 * 150, requiredStrength: 7.0, standard: "BS EN 772-1", code: "CONC_BLOCK_HOLLOW", blockType: "hollow_block", blockSize: "15cm" },
-  HOLLOW_20: { label: "Hollow Block (20cm)", labelAr: "بلوك مجوف 20سم", size: "400×200×200 mm", grossArea: 400 * 200, requiredStrength: 7.0, standard: "BS EN 772-1", code: "CONC_BLOCK_HOLLOW", blockType: "hollow_block", blockSize: "20cm" },
-  HOLLOW_25: { label: "Hollow Block (25cm)", labelAr: "بلوك مجوف 25سم", size: "400×250×200 mm", grossArea: 400 * 250, requiredStrength: 7.0, standard: "BS EN 772-1", code: "CONC_BLOCK_HOLLOW", blockType: "hollow_block", blockSize: "25cm" },
+  HOLLOW_10: { label: "Hollow Block (10cm)", labelAr: "بلوك مجوف 10سم", size: "400×100×200 mm", grossArea: 400 * 100, requiredStrength: 7.0, standard: "BS EN 6073", code: "CONC_BLOCK_HOLLOW", blockType: "hollow_block", blockSize: "10cm" },
+  HOLLOW_15: { label: "Hollow Block (15cm)", labelAr: "بلوك مجوف 15سم", size: "400×150×200 mm", grossArea: 400 * 150, requiredStrength: 7.0, standard: "BS EN 6073", code: "CONC_BLOCK_HOLLOW", blockType: "hollow_block", blockSize: "15cm" },
+  HOLLOW_20: { label: "Hollow Block (20cm)", labelAr: "بلوك مجوف 20سم", size: "400×200×200 mm", grossArea: 400 * 200, requiredStrength: 7.0, standard: "BS EN 6073", code: "CONC_BLOCK_HOLLOW", blockType: "hollow_block", blockSize: "20cm" },
+  HOLLOW_25: { label: "Hollow Block (25cm)", labelAr: "بلوك مجوف 25سم", size: "400×250×200 mm", grossArea: 400 * 250, requiredStrength: 7.0, standard: "BS EN 6073", code: "CONC_BLOCK_HOLLOW", blockType: "hollow_block", blockSize: "25cm" },
   // ── Thermal Blocks ──
-  THERMAL_20: { label: "Thermal Block (20cm)", labelAr: "بلوك حراري 20سم", size: "400×200×200 mm", grossArea: 400 * 200, requiredStrength: 7.0, standard: "BS EN 772-1", code: "CONC_BLOCK_THERMAL", blockType: "thermal_block", blockSize: "20cm" },
-  THERMAL_25: { label: "Thermal Block (25cm)", labelAr: "بلوك حراري 25سم", size: "400×250×200 mm", grossArea: 400 * 250, requiredStrength: 7.0, standard: "BS EN 772-1", code: "CONC_BLOCK_THERMAL", blockType: "thermal_block", blockSize: "25cm" },
+  THERMAL_20: { label: "Thermal Block (20cm)", labelAr: "بلوك حراري 20سم", size: "400×200×200 mm", grossArea: 400 * 200, requiredStrength: 7.0, standard: "BS EN 6073", code: "CONC_BLOCK_THERMAL", blockType: "thermal_block", blockSize: "20cm" },
+  THERMAL_25: { label: "Thermal Block (25cm)", labelAr: "بلوك حراري 25سم", size: "400×250×200 mm", grossArea: 400 * 250, requiredStrength: 7.0, standard: "BS EN 6073", code: "CONC_BLOCK_THERMAL", blockType: "thermal_block", blockSize: "25cm" },
 };
 
 type BlockTypeKey = keyof typeof BLOCK_SPECS;
@@ -226,7 +225,7 @@ export default function ConcreteBlocks() {
             </div>
             <h1 className="text-2xl font-bold text-slate-900">{ar ? "مقاومة الضغط للبلوك الخرساني" : "Compressive Strength of Masonry Blocks"}</h1>
             <p className="text-slate-500 text-sm mt-1">
-              {ar ? "BS EN 772-1 | أمر التوزيع:" : "BS EN 772-1 | Distribution:"} {dist?.distributionCode ?? `DIST-${distId}`}
+              {ar ? "BS EN 6073 | أمر التوزيع:" : "BS EN 6073 | Distribution:"} {dist?.distributionCode ?? `DIST-${distId}`}
             </p>
           </div>
           <div className="flex gap-2">
@@ -434,7 +433,7 @@ export default function ConcreteBlocks() {
               <ResultBanner
                 result={overallResult}
                 testName={ar ? `مقاومة الضغط لـ ${spec.label}` : `Compressive Strength of ${spec.label}`}
-                standard="BS EN 772-1"
+                standard="BS EN 6073"
               />
             </CardContent>
           </Card>

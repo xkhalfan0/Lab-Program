@@ -87,7 +87,7 @@ function renderBlockSection(formData: any, isAr: boolean) {
             {isAr ? (spec.labelAr ?? spec.label ?? "بلوكة") : (spec.label ?? "Block")}
           </h4>
           <p className="text-xs text-gray-500">
-            {isAr ? "المعيار:" : "Standard:"} {spec.standard ?? "BS 6073"} &nbsp;|&nbsp;
+            {isAr ? "المعيار:" : "Standard:"} {spec.standard ?? "BS EN 6073"} &nbsp;|&nbsp;
             {isAr ? "الحجم:" : "Size:"} {spec.size ?? "—"} &nbsp;|&nbsp;
             {isAr ? "المقاومة المطلوبة:" : "Required Strength:"} {required} N/mm²
           </p>
@@ -239,7 +239,7 @@ export default function BatchBlockReport() {
               reportDate={reportDateStr}
               titlePrimary={isAr ? "تقرير نتيجة فحص البلوكات الخرسانية" : "Masonry Blocks Compressive Strength Report"}
               titleSecondary={
-                isAr ? "BS 6073 — مقاومة الضغط للبلوك الخرساني" : "BS 6073 — Compressive Strength of Masonry Blocks"
+                isAr ? "BS EN 6073 — مقاومة الضغط للبلوك الخرساني" : "BS EN 6073 — Compressive Strength of Masonry Blocks"
               }
             />
             {/* Overall Pass/Fail badge */}

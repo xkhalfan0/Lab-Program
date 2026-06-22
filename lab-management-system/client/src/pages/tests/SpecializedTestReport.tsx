@@ -288,27 +288,16 @@ function renderConcreteBlocks(fd: any, isAr: boolean) {
     return (Math.round(n * 10) / 10).toFixed(1);
   };
   const headers = isAr
-    ? ["المرجع", "التاريخ", "الطول", "العرض", "الوزن (غ)", "الحمل (كن)", "المساحة", "القوة", "CF", "القوة المصححة", "النتيجة"]
-    : ["Block Ref", "Date Tested", "L (mm)", "W (mm)", "Weight (g)", "Load (kN)", "Gross Area (mm²)", "Strength (N/mm²)", "CF", "Corrected Strength (N/mm²)", "Result"];
+    ? ["المرجع", "الطول", "العرض", "الحمل (كن)", "المساحة (مم²)", "القوة (N/mm²)"]
+    : ["Block Ref", "L (mm)", "W (mm)", "Load (kN)", "Gross Area (mm²)", "Strength (N/mm²)"];
 
-  const passFailRenderBlocks = (_: unknown, row: Record<string, unknown>) => {
-    const b = row as any;
-    if (b.result === "pass") return <span className="text-emerald-800 font-bold">{isAr ? "مطابق" : "PASS"}</span>;
-    if (b.result === "fail") return <span className="text-red-800 font-bold">{isAr ? "راسب" : "FAIL"}</span>;
-    return "—";
-  };
   const blockColumns: Column[] = [
     { header: headers[0], field: "blockRef", align: "center", render: (_v, row) => String((row as any).blockRef ?? ((row as any)._bi + 1)) },
-    { header: headers[1], field: "dateTested", align: "center", render: (v) => String(v || "—") },
-    { header: headers[2], field: "lengthMm", align: "center", render: (_v, row) => String((row as any).lengthMm ?? "—") },
-    { header: headers[3], field: "widthMm", align: "center", render: (_v, row) => String((row as any).widthMm ?? "—") },
-    { header: headers[4], field: "weightG", align: "center", render: (_v, row) => String((row as any).weightG ?? "—") },
-    { header: headers[5], field: "loadKN", align: "center", render: (_v, row) => ((row as any).loadKN != null ? fmt((row as any).loadKN, 1) : "—") },
-    { header: headers[6], field: "grossAreaMm2", align: "center", render: (_v, row) => String((row as any).grossAreaMm2 ?? "—") },
-    { header: headers[7], field: "strengthMpa", align: "center", render: (v) => <span className="font-semibold">{fmtS(v)}</span> },
-    { header: headers[8], field: "_cf", align: "center", render: (_v, row) => <span className="text-blue-800">{fmtS(getBlockCf(row as any))}</span> },
-    { header: headers[9], field: "_corr", align: "center", render: (_v, row) => <span className="font-bold">{fmtS(getCorrectedStrength(row as any))}</span> },
-    { header: headers[10], field: "result", align: "center", render: passFailRenderBlocks },
+    { header: headers[1], field: "lengthMm", align: "center", render: (_v, row) => String((row as any).lengthMm ?? "—") },
+    { header: headers[2], field: "widthMm", align: "center", render: (_v, row) => String((row as any).widthMm ?? "—") },
+    { header: headers[3], field: "loadKN", align: "center", render: (_v, row) => ((row as any).loadKN != null ? fmt((row as any).loadKN, 1) : "—") },
+    { header: headers[4], field: "grossAreaMm2", align: "center", render: (_v, row) => String((row as any).grossAreaMm2 ?? "—") },
+    { header: headers[5], field: "strengthMpa", align: "center", render: (v) => <span className="font-semibold">{fmtS(v)}</span> },
   ];
 
   return (
@@ -348,7 +337,7 @@ function renderConcreteBlocks(fd: any, isAr: boolean) {
       {blocks.length > 0 && <FlexibleResultsTable columns={blockColumns} rows={blocks.map((b: any, i: number) => ({ ...b, _bi: i }))} />}
       <div className="flex flex-wrap gap-3 justify-end text-xs">
         <span className="font-semibold">
-          {isAr ? "متوسط القوة المصححة:" : "Average Corrected Strength:"} {fmtS(avgCorrectedStrength)} N/mm²
+          {isAr ? "متوسط القوة:" : "Average Strength:"} {fmtS(avgCorrectedStrength)} N/mm²
           {" "}/ {isAr ? "المطلوب:" : "Required:"} {fmtS(spec.requiredStrength)} N/mm²
         </span>
         <span className={`font-bold px-2 py-1 rounded border ${fd.overallResult === "pass" ? "bg-green-50 border-green-200 text-green-800" : "bg-red-50 border-red-200 text-red-800"}`}>
