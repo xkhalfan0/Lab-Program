@@ -147,8 +147,8 @@ export function SectorLayout({ children }: { children: React.ReactNode }) {
     <div dir={isRtl ? "rtl" : "ltr"} className="min-h-screen bg-slate-50">
       <Toaster position="bottom-right" duration={2500} closeButton richColors />
       <header className="sticky top-0 z-50 border-b border-white/10 bg-gradient-to-r from-slate-900 via-slate-800 to-blue-950 shadow-lg shadow-slate-900/20">
-        <div className="flex h-16 w-full items-center justify-between gap-4 px-4 lg:px-8">
-          <div className="flex items-center gap-3">
+        <div className="flex h-20 w-full items-center justify-between gap-4 px-4 lg:px-8">
+          <div className="flex items-center gap-3 shrink-0">
             <button
               type="button"
               className="rounded-lg p-2 text-white/80 hover:bg-white/10 lg:hidden"
@@ -157,34 +157,34 @@ export function SectorLayout({ children }: { children: React.ReactNode }) {
               {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
             </button>
             <Link href="/sector/dashboard" className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500 to-cyan-500 shadow-md">
-                <FlaskConical className="h-5 w-5 text-white" />
+              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500 to-cyan-500 shadow-md">
+                <FlaskConical className="h-6 w-6 text-white" />
               </div>
               <div className="hidden sm:block">
-                <div className="text-sm font-bold leading-tight text-white">{T.title}</div>
+                <div className="text-base font-bold leading-tight text-white">{T.title}</div>
                 <div className="text-xs text-blue-300">{T.subtitle}</div>
               </div>
             </Link>
           </div>
 
-          <nav className="hidden items-center gap-1 lg:flex">
+          <nav className="hidden items-stretch gap-1 self-stretch lg:flex">
             {navItems.map(({ path, label, icon: Icon, badge, badgeDanger }) => {
               const active = location === path;
               return (
                 <Link
                   key={path}
                   href={path}
-                  className={`relative flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-medium transition-all ${
+                  className={`relative flex flex-col items-center justify-center gap-1.5 px-6 py-2 text-sm font-semibold transition-all border-b-[3px] ${
                     active
-                      ? "border border-blue-400/30 bg-blue-500/20 text-white"
-                      : "border border-transparent text-slate-300 hover:bg-white/5 hover:text-white"
+                      ? "border-b-blue-400 bg-blue-500/15 text-white"
+                      : "border-b-transparent text-slate-300 hover:bg-white/5 hover:text-white hover:border-b-white/30"
                   }`}
                 >
-                  <Icon className="h-4 w-4" />
-                  {label}
+                  <Icon className="h-5 w-5" />
+                  <span className="whitespace-nowrap">{label}</span>
                   {badge && badge > 0 ? (
                     <span
-                      className={`absolute -top-1 -end-1 flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-[10px] font-bold text-white ${
+                      className={`absolute top-2 end-2 flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-[10px] font-bold text-white ${
                         badgeDanger ? "animate-pulse bg-red-600 ring-2 ring-red-300" : "bg-red-500"
                       }`}
                     >
