@@ -194,15 +194,6 @@ function QCReviewActiveSampleCard({
           <p className="text-xs">{SAMPLE_TYPE_LABELS[sample.sampleType]}</p>
         </div>
         <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
-          {wrapDisabledWithTooltip(
-            hasPendingDeletion,
-            DisabledWarning,
-            <Button size="sm" variant="outline" className="gap-1.5" disabled={hasPendingDeletion}
-              onClick={() => tryOpen()}>
-              <ClipboardCheck className="w-3.5 h-3.5" />
-              {lang === "ar" ? "مراجعة جودة" : "QC Review"}
-            </Button>
-          )}
           {hasPendingDeletion ? (
             <Tooltip>
               <TooltipTrigger asChild>

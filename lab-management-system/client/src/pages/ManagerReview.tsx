@@ -174,15 +174,6 @@ function ManagerReviewActiveSampleCard({
           </p>
         </div>
         <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
-          {wrapDisabledWithTooltip(
-            hasPendingDeletion,
-            DisabledWarning,
-            <Button size="sm" variant="outline" className="gap-1.5 shrink-0" disabled={hasPendingDeletion}
-              onClick={() => tryOpen()}>
-              <ClipboardCheck className="w-3.5 h-3.5" />
-              {lang === "ar" ? "مراجعة النتائج" : "Review Results"}
-            </Button>
-          )}
           {hasPendingDeletion ? (
             <Tooltip>
               <TooltipTrigger asChild>
