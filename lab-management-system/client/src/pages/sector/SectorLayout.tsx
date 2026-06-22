@@ -146,45 +146,45 @@ export function SectorLayout({ children }: { children: React.ReactNode }) {
   return (
     <div dir={isRtl ? "rtl" : "ltr"} className="min-h-screen bg-slate-50">
       <Toaster position="bottom-right" duration={2500} closeButton richColors />
-      <header className="sticky top-0 z-50 border-b border-white/10 bg-gradient-to-r from-slate-900 via-slate-800 to-blue-950 shadow-lg shadow-slate-900/20">
-        <div className="flex h-20 w-full items-center justify-between gap-4 px-4 lg:px-8">
-          <div className="flex items-center gap-3 shrink-0">
+      <header className="sticky top-0 z-50 border-b border-white/10 bg-gradient-to-r from-slate-900 via-slate-800 to-blue-950 shadow-xl shadow-slate-900/30">
+        <div className="flex h-24 w-full items-center justify-between gap-4 px-4 lg:px-8">
+          <div className="flex items-center gap-4 shrink-0">
             <button
               type="button"
               className="rounded-lg p-2 text-white/80 hover:bg-white/10 lg:hidden"
               onClick={() => setMobileOpen(!mobileOpen)}
             >
-              {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+              {mobileOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
             </button>
             <Link href="/sector/dashboard" className="flex items-center gap-3">
-              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500 to-cyan-500 shadow-md">
-                <FlaskConical className="h-6 w-6 text-white" />
+              <div className="flex h-13 w-13 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-500 to-cyan-500 shadow-lg p-3">
+                <FlaskConical className="h-7 w-7 text-white" />
               </div>
               <div className="hidden sm:block">
-                <div className="text-base font-bold leading-tight text-white">{T.title}</div>
-                <div className="text-xs text-blue-300">{T.subtitle}</div>
+                <div className="text-lg font-bold leading-tight text-white">{T.title}</div>
+                <div className="text-sm text-blue-300 mt-0.5">{T.subtitle}</div>
               </div>
             </Link>
           </div>
 
-          <nav className="hidden items-stretch gap-1 self-stretch lg:flex">
+          <nav className="hidden items-stretch gap-0.5 self-stretch lg:flex">
             {navItems.map(({ path, label, icon: Icon, badge, badgeDanger }) => {
               const active = location === path;
               return (
                 <Link
                   key={path}
                   href={path}
-                  className={`relative flex flex-col items-center justify-center gap-1.5 px-6 py-2 text-sm font-semibold transition-all border-b-[3px] ${
+                  className={`relative flex flex-col items-center justify-center gap-2 px-8 text-base font-bold transition-all border-b-4 ${
                     active
-                      ? "border-b-blue-400 bg-blue-500/15 text-white"
-                      : "border-b-transparent text-slate-300 hover:bg-white/5 hover:text-white hover:border-b-white/30"
+                      ? "border-b-blue-400 bg-blue-500/20 text-white"
+                      : "border-b-transparent text-slate-300 hover:bg-white/8 hover:text-white hover:border-b-white/30"
                   }`}
                 >
-                  <Icon className="h-5 w-5" />
+                  <Icon className="h-6 w-6" />
                   <span className="whitespace-nowrap">{label}</span>
                   {badge && badge > 0 ? (
                     <span
-                      className={`absolute top-2 end-2 flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-[10px] font-bold text-white ${
+                      className={`absolute top-3 end-2 flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-[11px] font-bold text-white ${
                         badgeDanger ? "animate-pulse bg-red-600 ring-2 ring-red-300" : "bg-red-500"
                       }`}
                     >
