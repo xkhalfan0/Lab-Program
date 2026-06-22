@@ -211,9 +211,12 @@ export default function ConcreteCore() {
 
   const { data: dist } = trpc.distributions.get.useQuery({ id: distId }, { enabled: !!distId });
 
-  // Parse curing date set at reception (stored in sample notes as __CURING_DATE__:YYYY-MM-DD)
-  const curingDateMatch = ((dist as any)?.sampleNotes ?? "").match(/__CURING_DATE__:(\d{4}-\d{2}-\d{2})/);
+  // Parse reception-supplied fields from sample notes
+  const rawSampleNotes: string = (dist as any)?.sampleNotes ?? "";
+  const curingDateMatch = rawSampleNotes.match(/__CURING_DATE__:(\d{4}-\d{2}-\d{2})/);
   const curingDateFromReception: string | null = curingDateMatch ? curingDateMatch[1] : null;
+  const aggregateTypeMatch = rawSampleNotes.match(/__AGGREGATE_TYPE__:([^\n]+)/);
+  const aggregateTypeFromReception: string | null = aggregateTypeMatch ? aggregateTypeMatch[1].trim() : null;
 
   const { data: existing, isFetched: existingFetched } = trpc.specializedTests.getByDistribution.useQuery(
     { distributionId: distId },
@@ -508,6 +511,16 @@ export default function ConcreteCore() {
                   </Label>
                   <div className="h-10 flex items-center px-3 rounded-md border bg-slate-50 text-sm font-mono text-slate-700">
                     {new Date(curingDateFromReception + "T00:00:00").toLocaleDateString(ar ? "ar-AE" : "en-AE", { year: "numeric", month: "short", day: "numeric" })}
+                  </div>
+                </div>
+              )}
+              {aggregateTypeFromReception && (
+                <div>
+                  <Label className="text-xs text-slate-500 mb-1 block">
+                    {ar ? "نوع الركام (الاستلام)" : "Type of Aggregate (from Reception)"}
+                  </Label>
+                  <div className="h-10 flex items-center px-3 rounded-md border bg-slate-50 text-sm text-slate-700">
+                    {aggregateTypeFromReception}
                   </div>
                 </div>
               )}

@@ -366,6 +366,7 @@ export default function Reception() {
   const [nominalCubeSize, setNominalCubeSize] = useState("");
   const [supplier, setSupplier] = useState("");
   const [curingDate, setCuringDate] = useState<Date | undefined>(undefined);
+  const [aggregateType, setAggregateType] = useState("");
   const [contractorFormFile, setContractorFormFile] = useState<File | null>(null);
   const concCubePanelRef = useRef<HTMLDivElement>(null);
 
@@ -449,6 +450,7 @@ export default function Reception() {
     setNominalCubeSize("");
     setSupplier("");
     setCuringDate(undefined);
+    setAggregateType("");
     setFoamConcreteAge("");
     setContractorFormFile(null);
   };
@@ -1178,6 +1180,7 @@ export default function Reception() {
       notes: [
         supplier ? `__SUPPLIER__:${supplier.trim()}` : "",
         curingDate ? `__CURING_DATE__:${format(curingDate, "yyyy-MM-dd")}` : "",
+        aggregateType.trim() ? `__AGGREGATE_TYPE__:${aggregateType.trim()}` : "",
         form.notes || "",
       ].filter(Boolean).join("\n") || undefined,
       location: form.location || undefined,
@@ -1583,6 +1586,18 @@ export default function Reception() {
                                 </Button>
                               )}
                             </div>
+                          </div>
+                          <div className="space-y-2">
+                            <Label className="text-[15px]">
+                              {lang === "ar" ? "نوع الركام" : "Type of Aggregate"}
+                              <span className="text-muted-foreground text-xs font-normal ms-1">({lang === "ar" ? "اختياري" : "optional"})</span>
+                            </Label>
+                            <Input
+                              className="h-10 text-base"
+                              placeholder={lang === "ar" ? "مثال: حجر جيري، جرانيت..." : "e.g. Limestone, Granite..."}
+                              value={aggregateType}
+                              onChange={(e) => setAggregateType(e.target.value)}
+                            />
                           </div>
                         )}
                       </div>
