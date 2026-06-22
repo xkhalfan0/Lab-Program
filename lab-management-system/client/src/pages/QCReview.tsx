@@ -197,7 +197,8 @@ function QCReviewActiveSampleCard({
           {wrapDisabledWithTooltip(
             hasPendingDeletion,
             DisabledWarning,
-            <Button size="sm" variant="outline" className="gap-1.5" disabled={hasPendingDeletion}>
+            <Button size="sm" variant="outline" className="gap-1.5" disabled={hasPendingDeletion}
+              onClick={() => tryOpen()}>
               <ClipboardCheck className="w-3.5 h-3.5" />
               {lang === "ar" ? "مراجعة جودة" : "QC Review"}
             </Button>
@@ -749,6 +750,19 @@ export default function QCReview() {
   const result = results?.[0];
   const specializedResult = specializedResults?.[0];
   const hasAnyResult = !!result || !!specializedResult;
+
+  // Compute report URL
+  const reportUrl = (() => {
+    const batchId = (selectedSample as { batchId?: string } | null)?.batchId;
+    if (batchId) return `/batch-report/${encodeURIComponent(batchId)}`;
+    if (!dist?.id) return null;
+    const tt = (dist.testType ?? "").toLowerCase();
+    if (tt === "conc_cube" || tt === "concrete_compression" || tt === "concrete" || tt.includes("conc_cube"))
+      return `/concrete-report/${dist.id}`;
+    if (specializedResult?.distributionId === dist.id) return `/test-report/${dist.id}`;
+    if (result) return `/test-report/${dist.id}`;
+    return null;
+  })();
   const isModalDataLoading = !!selectedSample && (
     isLegacyResultsLoading ||
     isSpecializedResultsLoading ||
@@ -1030,6 +1044,18 @@ export default function QCReview() {
                   ))}
                 </div>
               </div>
+
+              {/* Open Report Button */}
+              {reportUrl && (
+                <Button
+                  variant="outline"
+                  className="w-full gap-2 border-blue-200 text-blue-700 hover:bg-blue-50 hover:border-blue-400"
+                  onClick={() => window.open(reportUrl, "_blank")}
+                >
+                  <ExternalLink className="w-4 h-4" />
+                  {lang === "ar" ? "فتح تقرير الاختبار" : "Open Test Report"}
+                </Button>
+              )}
 
               {/* Supervisor Review Summary */}
               {managerReview && (

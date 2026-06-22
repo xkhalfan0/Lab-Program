@@ -31,7 +31,7 @@ import {
   ClipboardCheck,
   FileText,
   ChevronRight,
-  Loader2,
+  ExternalLink,
 } from "lucide-react";
 import { useState, useMemo, type ReactElement } from "react";
 import { toast } from "sonner";
@@ -53,6 +53,12 @@ function sectorLabel(val: string | null | undefined, lang: string) {
 
 // ─── Task state helpers ───────────────────────────────────────────────────────
 type ListTab = "pending" | "done";
+
+const FINAL_STATUSES = ["reviewed", "approved", "qc_passed", "qc_failed", "clearance_issued", "rejected"];
+
+function isSampleAlreadyDecided(sample: any): boolean {
+  return FINAL_STATUSES.includes(sample?.status ?? "");
+}
 
 function getSampleTaskState(sample: any): "new" | "incomplete" | "completed" {
   if (sample.status === "reviewed" || sample.status === "approved" || sample.status === "qc_passed" || sample.status === "qc_failed" || sample.status === "clearance_issued" || sample.status === "rejected") {
@@ -171,7 +177,8 @@ function ManagerReviewActiveSampleCard({
           {wrapDisabledWithTooltip(
             hasPendingDeletion,
             DisabledWarning,
-            <Button size="sm" variant="outline" className="gap-1.5 shrink-0" disabled={hasPendingDeletion}>
+            <Button size="sm" variant="outline" className="gap-1.5 shrink-0" disabled={hasPendingDeletion}
+              onClick={() => tryOpen()}>
               <ClipboardCheck className="w-3.5 h-3.5" />
               {lang === "ar" ? "مراجعة النتائج" : "Review Results"}
             </Button>
@@ -482,8 +489,8 @@ export default function ManagerReview() {
   const overallCompliance = isSpecialized
     ? (specResult?.overallResult ?? "pending")
     : (result?.complianceStatus ?? "pending");
-  const isPass = overallCompliance === "pass";
-  const isFail = overallCompliance === "fail";
+
+  const alreadyDecided = isSampleAlreadyDecided(selectedSample);
 
   const handleOpenReport = () => {
     if (!reportUrl) {
@@ -650,8 +657,40 @@ export default function ManagerReview() {
                 </div>
               )}
 
-              {/* ── Decision Buttons ──────────────────────────────────────── */}
-              <div className="grid grid-cols-3 gap-3">
+              {/* Open Report Button — always visible when report exists */}
+              {reportUrl && (
+                <Button
+                  variant="outline"
+                  className="w-full gap-2 border-blue-200 text-blue-700 hover:bg-blue-50 hover:border-blue-400"
+                  onClick={handleOpenReport}
+                >
+                  <ExternalLink className="w-4 h-4" />
+                  {lang === "ar" ? "فتح تقرير الاختبار" : "Open Test Report"}
+                </Button>
+              )}
+
+              {/* Already-decided banner */}
+              {alreadyDecided && (
+                <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-3 flex items-center gap-3">
+                  <CheckCircle2 className="w-5 h-5 text-green-600 shrink-0" />
+                  <div>
+                    <p className="text-sm font-semibold text-green-800">
+                      {lang === "ar" ? "تمت المراجعة بالفعل" : "Review already completed"}
+                    </p>
+                    <p className="text-xs text-green-700">
+                      {lang === "ar"
+                        ? "تم اتخاذ قرار على هذه العينة. يمكنك مراجعة التقرير أعلاه."
+                        : "A decision has already been made for this sample. You can view the report above."}
+                    </p>
+                  </div>
+                  <div className="ms-auto shrink-0">
+                    <StatusBadge status={selectedSample?.status} />
+                  </div>
+                </div>
+              )}
+
+              {/* ── Decision Buttons — only shown if not already decided ─── */}
+              {!alreadyDecided && <><div className="grid grid-cols-3 gap-3">
                 {wrapDisabledWithTooltip(
                   dialogSamplePending,
                   dialogSampleDisabledWarning,
@@ -817,6 +856,13 @@ export default function ManagerReview() {
                   {lang === "ar" ? "إلغاء" : "Cancel"}
                 </Button>
               </div>
+              </>}
+              {/* Close button for already-decided samples */}
+              {alreadyDecided && (
+                <Button variant="outline" className="w-full" onClick={() => setSelectedSample(null)}>
+                  {lang === "ar" ? "إغلاق" : "Close"}
+                </Button>
+              )}
             </div>
           ) : (
             <div className="p-8 text-center space-y-3">
