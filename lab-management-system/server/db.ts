@@ -2301,6 +2301,86 @@ export async function getLabOrderItems(orderId: number) {
     .orderBy(labOrderItems.id);
 }
 
+function appendSampleTestLabel(
+  map: Map<number, string[]>,
+  sampleId: number,
+  name: string | null | undefined,
+  code: string | null | undefined,
+  quantity: unknown,
+) {
+  const labelName = name?.trim() || code?.trim();
+  if (!labelName || labelName === "__multi__") return;
+  const qty = Number(quantity) || 1;
+  const label = qty > 1 ? `${labelName} ×${qty}` : labelName;
+  const list = map.get(sampleId) ?? [];
+  if (!list.includes(label)) list.push(label);
+  map.set(sampleId, list);
+}
+
+/** Human-readable test names grouped by sample (order items, then distributions fallback). */
+export async function getSampleTestNamesBySampleIds(sampleIds: number[]) {
+  const map = new Map<number, string[]>();
+  if (!sampleIds.length) return map;
+
+  const db = await getDb();
+  if (!db) return map;
+
+  const orderRows = await db
+    .select({
+      sampleId: labOrders.sampleId,
+      testTypeName: labOrderItems.testTypeName,
+      testTypeCode: labOrderItems.testTypeCode,
+      quantity: labOrderItems.quantity,
+    })
+    .from(labOrderItems)
+    .innerJoin(labOrders, eq(labOrderItems.orderId, labOrders.id))
+    .where(
+      and(
+        inArray(labOrders.sampleId, sampleIds),
+        isNull(labOrders.deletedAt),
+        ne(labOrderItems.status, "cancelled"),
+      ),
+    )
+    .orderBy(labOrderItems.id);
+
+  for (const row of orderRows) {
+    if (row.sampleId == null) continue;
+    appendSampleTestLabel(map, row.sampleId, row.testTypeName, row.testTypeCode, row.quantity);
+  }
+
+  const missingIds = sampleIds.filter((id) => (map.get(id)?.length ?? 0) === 0);
+  if (missingIds.length > 0) {
+    const distRows = await db
+      .select({
+        sampleId: distributions.sampleId,
+        testType: distributions.testType,
+        testName: distributions.testName,
+        quantity: distributions.quantity,
+      })
+      .from(distributions)
+      .where(and(inArray(distributions.sampleId, missingIds), isNull(distributions.deletedAt)))
+      .orderBy(distributions.id);
+
+    for (const row of distRows) {
+      if (row.sampleId == null) continue;
+      const def = getOfficialTestByCode(row.testType ?? "");
+      const name = row.testName?.trim() || def?.nameEn || row.testType;
+      appendSampleTestLabel(map, row.sampleId, name, row.testType, row.quantity);
+    }
+  }
+
+  return map;
+}
+
+export async function attachTestNamesToSamples<T extends { id: number }>(rows: T[]) {
+  if (!rows.length) return rows.map((row) => ({ ...row, testNames: [] as string[] }));
+  const map = await getSampleTestNamesBySampleIds(rows.map((row) => row.id));
+  return rows.map((row) => ({
+    ...row,
+    testNames: map.get(row.id) ?? [],
+  }));
+}
+
 /** Active lab order line items joined to non-deleted orders and visible samples (analytics source of truth). */
 export async function getActiveLabOrderItemsForAnalytics() {
   const db = await getDb();

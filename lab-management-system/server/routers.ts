@@ -33,6 +33,7 @@ import {
   deleteUser,
   getAllCertificates,
   getAllSamples,
+  attachTestNamesToSamples,
   getAllUsers,
   getAttachmentsBySample,
   getCertificateBySample,
@@ -447,9 +448,9 @@ export const appRouter = router({
       .query(async ({ ctx, input }) => {
         const include = input?.includeDeleted === true;
         if (include && !["admin", "lab_manager"].includes(ctx.user.role)) {
-          return getAllSamples();
+          return attachTestNamesToSamples(await getAllSamples());
         }
-        return getAllSamples({ includeDeleted: include });
+        return attachTestNamesToSamples(await getAllSamples({ includeDeleted: include }));
       }),
 
     get: protectedProcedure

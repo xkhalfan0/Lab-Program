@@ -21,6 +21,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { ListFilterBar } from "@/components/ListFilterBar";
 import { applyClearanceFilters, applySampleFilters, hasActiveListFilters } from "@/lib/listFilters";
 import { SAMPLE_TYPE_LABELS } from "@/lib/labTypes";
+import { SampleTestNamesLine } from "@/components/TestDisplay";
 import {
   ShieldCheck, CheckCircle, XCircle, RotateCcw, ClipboardCheck,
   BadgeCheck, FlaskConical, DollarSign, CheckCircle2, Clock,
@@ -191,7 +192,8 @@ function QCReviewActiveSampleCard({
           <p className="text-xs text-muted-foreground">
             {sample.contractorName} — {sample.contractNumber ?? "—"}
           </p>
-          <p className="text-xs">{SAMPLE_TYPE_LABELS[sample.sampleType]}</p>
+          <SampleTestNamesLine testNames={(sample as { testNames?: string[] }).testNames} />
+          <p className="text-[11px] text-muted-foreground/80">{SAMPLE_TYPE_LABELS[sample.sampleType]}</p>
         </div>
         <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
           {hasPendingDeletion ? (
@@ -259,10 +261,13 @@ function QCReviewArchiveSampleCard({
       onClick={tryOpen}
     >
       <CardContent className="p-3 flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2 flex-wrap min-w-0">
-          <p className="font-mono text-xs font-bold text-primary">{sample.sampleCode}</p>
-          <StatusBadge status={sample.status} />
-          {PendingDeletionBadge}
+        <div className="min-w-0 space-y-1">
+          <div className="flex items-center gap-2 flex-wrap">
+            <p className="font-mono text-xs font-bold text-primary">{sample.sampleCode}</p>
+            <StatusBadge status={sample.status} />
+            {PendingDeletionBadge}
+          </div>
+          <SampleTestNamesLine testNames={(sample as { testNames?: string[] }).testNames} className="text-[11px]" />
         </div>
         {wrapDisabledWithTooltip(
           hasPendingDeletion,

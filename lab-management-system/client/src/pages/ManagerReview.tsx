@@ -21,6 +21,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { ListFilterBar } from "@/components/ListFilterBar";
 import { applySampleFilters, hasActiveListFilters } from "@/lib/listFilters";
 import { SAMPLE_TYPE_LABELS } from "@/lib/labTypes";
+import { SampleTestNamesLine } from "@/components/TestDisplay";
 import {
   CheckSquare,
   XCircle,
@@ -169,7 +170,8 @@ function ManagerReviewActiveSampleCard({
           <p className="text-xs text-muted-foreground">
             {sample.contractorName} — {(sample as any).contractNumber ?? "—"}
           </p>
-          <p className="text-xs text-muted-foreground">
+          <SampleTestNamesLine testNames={(sample as { testNames?: string[] }).testNames} />
+          <p className="text-[11px] text-muted-foreground/80">
             {SAMPLE_TYPE_LABELS[(sample as any).sampleType] ?? (sample as any).sampleType}
           </p>
         </div>
@@ -254,7 +256,8 @@ function ManagerReviewArchiveSampleCard({
           <p className="text-xs text-muted-foreground">
             {sample.contractorName} — {(sample as any).contractNumber ?? "—"}
           </p>
-          <p className="text-xs text-muted-foreground">
+          <SampleTestNamesLine testNames={(sample as { testNames?: string[] }).testNames} />
+          <p className="text-[11px] text-muted-foreground/80">
             {SAMPLE_TYPE_LABELS[(sample as any).sampleType] ?? (sample as any).sampleType}
             {(sample as any).receivedAt && (
               <span className="ms-2 text-muted-foreground/70">

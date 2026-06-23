@@ -109,6 +109,28 @@ export function TestNameBlock({
   );
 }
 
+/** One-line summary of tests performed on a sample (review list cards). */
+export function SampleTestNamesLine({
+  testNames,
+  className,
+}: {
+  testNames?: string[] | null;
+  className?: string;
+}) {
+  if (!testNames?.length) return null;
+  return (
+    <p
+      className={cn(
+        "text-xs font-medium text-foreground leading-snug flex items-start gap-1.5 text-start",
+        className,
+      )}
+    >
+      <FlaskConical className="w-3 h-3 shrink-0 mt-0.5 text-primary/70" />
+      <span className="break-words">{testNames.join(" · ")}</span>
+    </p>
+  );
+}
+
 export function TestChip({
   label,
   quantity,
