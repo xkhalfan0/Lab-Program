@@ -71,11 +71,11 @@ export function ReceptionNominalCubeSizePanel({
 
   return (
     <div className={cn("space-y-4", className)}>
-      <div className="flex items-start gap-3">
+      <div className="flex items-start gap-3 rtl:flex-row-reverse">
         <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-white shadow-sm">
           <Ruler className="h-5 w-5" />
         </div>
-        <div className="flex-1 space-y-1 min-w-0">
+        <div className="flex-1 space-y-1 min-w-0 text-start">
           <Label htmlFor={id} className="text-base font-semibold text-blue-950 leading-snug">
             {title}
             <span className="text-red-500 ms-1">*</span>

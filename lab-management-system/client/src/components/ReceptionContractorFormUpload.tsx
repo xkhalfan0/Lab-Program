@@ -42,7 +42,7 @@ export function ReceptionContractorFormUpload({ file, onFileChange, lang, disabl
           ({isAr ? "اختياري — PDF أو صورة" : "optional — PDF or image"})
         </span>
       </Label>
-      <p className="text-xs text-muted-foreground">
+      <p className="text-xs text-muted-foreground text-start">
         {isAr
           ? "ارفع النموذج الموقّع من المقاول — يُحفظ مع العينة ووصل الاستلام."
           : "Upload the signed contractor form — saved with the sample and receipt."}
@@ -59,7 +59,7 @@ export function ReceptionContractorFormUpload({ file, onFileChange, lang, disabl
         <Button
           type="button"
           variant="outline"
-          className="h-10 gap-2 flex-1 min-w-[200px] justify-center border-dashed"
+          className="h-10 gap-2 flex-1 min-w-[200px] justify-start text-start border-dashed"
           disabled={disabled}
           onClick={() => inputRef.current?.click()}
         >

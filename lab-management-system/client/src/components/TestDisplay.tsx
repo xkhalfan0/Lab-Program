@@ -101,8 +101,8 @@ export function TestNameBlock({
   nameClassName?: string;
 }) {
   return (
-    <div className={cn("min-w-0 flex-1", className)}>
-      <span className={cn("block text-sm font-medium leading-snug text-foreground", nameClassName)}>
+    <div className={cn("min-w-0 flex-1 text-start", className)}>
+      <span className={cn("block text-sm font-medium leading-snug text-foreground text-start", nameClassName)}>
         {name}
       </span>
     </div>
@@ -417,7 +417,7 @@ export function TestSelectionRow({
   compact?: boolean;
 }) {
   return (
-    <div className="flex items-start gap-2">
+    <div className="flex items-start gap-2 rtl:flex-row-reverse">
       <Checkbox
         id={id}
         checked={checked}
@@ -428,7 +428,7 @@ export function TestSelectionRow({
       <label
         htmlFor={id}
         className={cn(
-          "flex flex-1 min-w-0 gap-1.5",
+          "flex flex-1 min-w-0 gap-1.5 text-start",
           compact ? "flex-col items-stretch" : "flex-row items-center justify-between gap-2",
           disabled ? "cursor-not-allowed opacity-60" : "cursor-pointer",
         )}

@@ -240,10 +240,10 @@ function FormSection({
   className?: string;
 }) {
   return (
-    <section className={cn("space-y-4", className)}>
+    <section className={cn("space-y-4 text-start", className)}>
       {title ? (
-        <div className="space-y-1">
-          <h3 className="text-base font-semibold tracking-tight text-foreground flex items-center gap-2.5">
+        <div className="space-y-1 text-start">
+          <h3 className="text-base font-semibold tracking-tight text-foreground flex items-center gap-2.5 rtl:flex-row-reverse">
             {step != null && (
               <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs font-bold">
                 {step}
@@ -251,7 +251,7 @@ function FormSection({
             )}
             {title}
           </h3>
-          {subtitle ? <p className="text-xs text-muted-foreground ms-9">{subtitle}</p> : null}
+          {subtitle ? <p className="text-xs text-muted-foreground ms-9 text-start">{subtitle}</p> : null}
         </div>
       ) : null}
       {children}
@@ -358,7 +358,7 @@ function ReceptionOrderActionsCell({
 }
 
 export default function Reception() {
-  const { t, lang } = useLanguage();
+  const { t, lang, dir } = useLanguage();
   const [receptionMode, setReceptionMode] = useState<"new" | "retest">("new");
   const { user } = useAuth();
   const canEditSample = ["admin", "lab_manager", "reception"].includes(user?.role ?? "");
@@ -1312,7 +1312,7 @@ export default function Reception() {
 
   return (
     <DashboardLayout>
-      <div className="space-y-5">
+      <div className="space-y-5" dir={dir}>
         {/* Header */}
         <div className="flex items-center justify-between gap-4 flex-wrap">
           <div>
@@ -1760,8 +1760,8 @@ export default function Reception() {
                             <Label className="text-[15px]">{lang === "ar" ? "تاريخ الصب" : "Casting date"} <span className="text-red-500">*</span></Label>
                             <Popover>
                               <PopoverTrigger asChild>
-                                <Button variant="outline" className={cn("w-full h-10 justify-start font-normal text-base", !form.castingDate && "text-muted-foreground")}>
-                                  <CalendarIcon className="mr-2 h-4 w-4" />
+                                <Button variant="outline" className={cn("w-full h-10 justify-start font-normal text-base text-start", !form.castingDate && "text-muted-foreground")}>
+                                  <CalendarIcon className="me-2 h-4 w-4" />
                                   {form.castingDate ? format(form.castingDate, "dd MMM yyyy") : (lang === "ar" ? "اختر..." : "Pick date")}
                                 </Button>
                               </PopoverTrigger>
@@ -1781,8 +1781,8 @@ export default function Reception() {
                               <div className="flex items-center gap-2">
                                 <Popover>
                                   <PopoverTrigger asChild>
-                                    <Button variant="outline" className={cn("flex-1 h-10 justify-start font-normal text-base", !curingDate && "text-muted-foreground")}>
-                                      <CalendarIcon className="mr-2 h-4 w-4" />
+                                    <Button variant="outline" className={cn("flex-1 h-10 justify-start font-normal text-base text-start", !curingDate && "text-muted-foreground")}>
+                                      <CalendarIcon className="me-2 h-4 w-4" />
                                       {curingDate ? format(curingDate, "dd MMM yyyy") : (lang === "ar" ? "اختر..." : "Pick date")}
                                     </Button>
                                   </PopoverTrigger>
@@ -2129,8 +2129,8 @@ export default function Reception() {
                 <Label>{lang === "ar" ? "تاريخ الصب" : "Casting Date"}</Label>
                 <Popover>
                   <PopoverTrigger asChild>
-                    <Button variant="outline" className={`w-full justify-start text-left font-normal ${!editingOrder.castingDate && "text-muted-foreground"}`}>
-                      <CalendarIcon className="mr-2 h-4 w-4" />
+                    <Button variant="outline" className={`w-full justify-start text-start font-normal ${!editingOrder.castingDate && "text-muted-foreground"}`}>
+                      <CalendarIcon className="me-2 h-4 w-4" />
                       {editingOrder.castingDate ? format(editingOrder.castingDate, "dd/MM/yyyy") : (lang === "ar" ? "اختر تاريخ" : "Select date")}
                     </Button>
                   </PopoverTrigger>

@@ -196,12 +196,30 @@
     text-align: right;
   }
 
-  /* 9. Input fields: text direction */
+  /* 9. Input fields and form controls: text direction */
   [dir="rtl"] input,
   [dir="rtl"] textarea,
-  [dir="rtl"] select {
+  [dir="rtl"] select,
+  [dir="rtl"] [data-slot="input"],
+  [dir="rtl"] [data-slot="select-trigger"],
+  [dir="rtl"] [data-slot="select-item"] {
     text-align: right;
     direction: rtl;
+  }
+
+  [dir="rtl"] [data-slot="select-trigger"] [data-slot="select-value"] {
+    text-align: right;
+    justify-content: flex-start;
+  }
+
+  [dir="rtl"] [data-slot="label"] {
+    text-align: right;
+    justify-content: flex-start;
+  }
+
+  [dir="rtl"] [data-slot="select-item"] > span:first-child {
+    right: 0.5rem;
+    left: auto;
   }
 
   /* 10. Cards and flex rows: reverse for RTL */
