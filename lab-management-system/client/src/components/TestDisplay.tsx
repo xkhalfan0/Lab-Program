@@ -168,13 +168,43 @@ export function TestOrderItemRow({
   quantity,
   status = "default",
   showIcon = true,
+  variant = "stacked",
 }: {
   label: string;
   quantity?: number;
   status?: TestChipStatus;
   showIcon?: boolean;
+  variant?: "stacked" | "table";
 }) {
   const Icon = status === "completed" ? CheckCircle2 : FlaskConical;
+
+  if (variant === "table") {
+    return (
+      <div className="flex items-center gap-2.5 px-3 py-2.5 border-b border-border/40 last:border-b-0 rtl:flex-row-reverse">
+        {showIcon && (
+          <div
+            className={cn(
+              "flex h-7 w-7 shrink-0 items-center justify-center rounded-md ring-1 ring-inset",
+              status === "completed"
+                ? "bg-emerald-50 text-emerald-700 ring-emerald-200"
+                : "bg-primary/8 text-primary ring-primary/15",
+            )}
+          >
+            <Icon className="h-3.5 w-3.5" />
+          </div>
+        )}
+        <p className="min-w-0 flex-1 text-xs font-medium leading-snug text-foreground break-words text-start">
+          {label}
+        </p>
+        {quantity != null && quantity > 1 && (
+          <span className="shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold tabular-nums text-slate-600">
+            ×{quantity}
+          </span>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div
       className={cn(
@@ -203,6 +233,7 @@ export function TestOrderItemList({
   items,
   emptyLabel = "None",
   className,
+  variant = "stacked",
 }: {
   items: Array<{
     key?: string;
@@ -212,18 +243,28 @@ export function TestOrderItemList({
   }>;
   emptyLabel?: string;
   className?: string;
+  variant?: "stacked" | "table";
 }) {
   if (items.length === 0) {
     return <span className="text-xs text-muted-foreground italic">{emptyLabel}</span>;
   }
+  const isTable = variant === "table";
   return (
-    <div className={cn("flex flex-col gap-1.5", className)}>
+    <div
+      className={cn(
+        isTable
+          ? "rounded-lg border border-border/70 bg-gradient-to-b from-background to-muted/15 shadow-sm overflow-hidden min-w-[13rem]"
+          : "flex flex-col gap-1.5",
+        className,
+      )}
+    >
       {items.map((item, idx) => (
         <TestOrderItemRow
           key={item.key ?? `${item.label}-${idx}`}
           label={item.label}
           quantity={item.quantity}
           status={item.status}
+          variant={variant}
         />
       ))}
     </div>

@@ -90,15 +90,19 @@ function isOrderDistributed(order: any) {
 
 function TypeCell({ order, lang }: { order: any; lang: string }) {
   const base = typeLabel(order.sampleType ?? "", lang);
-  const sub = order.sampleSubType;
+  const rawSub = order.sampleSubType;
+  const sub =
+    rawSub == null || rawSub === "" || rawSub === "—"
+      ? null
+      : String(rawSub).trim();
   return (
     <div className="flex flex-col gap-0.5 text-start">
-      <span>{base}</span>
-      {sub && (
+      <span className="font-medium text-foreground">{base}</span>
+      {sub ? (
         <span className="text-[10px] text-muted-foreground font-medium bg-slate-100 px-1.5 py-0.5 rounded w-fit">
           {sub}
         </span>
-      )}
+      ) : null}
     </div>
   );
 }
@@ -480,12 +484,17 @@ function OrdersTable({
                     <td className="px-4 py-2.5 text-xs text-start">{toText(order.contractorName)}</td>
                     <td className="px-4 py-2.5 text-xs text-start">
                       <TypeCell
-                        order={{ ...order, sampleType: String(order.sampleType ?? ""), sampleSubType: toText(order.sampleSubType) }}
+                        order={{
+                          ...order,
+                          sampleType: String(order.sampleType ?? ""),
+                          sampleSubType: order.sampleSubType ? String(order.sampleSubType) : null,
+                        }}
                         lang={lang}
                       />
                     </td>
-                    <td className="px-4 py-2.5 min-w-[12rem] text-start">
+                    <td className="px-4 py-2.5 min-w-[14rem] text-start">
                       <TestOrderItemList
+                        variant="table"
                         items={mapOrderItemsToTestList(order.items ?? [], (item) =>
                           item.status === "completed" ? "completed" : "pending",
                         )}
