@@ -20,15 +20,13 @@ import { useDeletionStatus } from "@/hooks/useDeletionStatus";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { ListFilterBar } from "@/components/ListFilterBar";
 import { applySampleFilters, hasActiveListFilters } from "@/lib/listFilters";
-import { SAMPLE_TYPE_LABELS } from "@/lib/labTypes";
-import { SampleTestNamesLine } from "@/components/TestDisplay";
+import { ReviewSampleCard } from "@/components/ReviewSampleCard";
 import {
   CheckSquare,
   XCircle,
   RotateCcw,
   CheckCircle2,
   AlertCircle,
-  Building2,
   ClipboardCheck,
   FileText,
   ChevronRight,
@@ -129,84 +127,70 @@ function ManagerReviewActiveSampleCard({
     onOpen(sample);
   };
 
+  const accent: "new" | "incomplete" | "completed" | "disabled" = hasPendingDeletion
+    ? "disabled"
+    : state === "new"
+      ? "new"
+      : state === "incomplete"
+        ? "incomplete"
+        : "completed";
+
   return (
-    <Card
-      className={`hover:shadow-md transition-shadow border-l-4 ${
-        hasPendingDeletion
-          ? "cursor-not-allowed opacity-90 border-l-muted bg-muted/20"
-          : "cursor-pointer " +
-            (state === "new"
-              ? "border-l-red-400 bg-red-50/30"
-              : state === "incomplete"
-                ? "border-l-amber-400 bg-amber-50/20"
-                : "border-l-green-400")
-      }`}
+    <ReviewSampleCard
+      sample={sample}
+      lang={lang}
+      accent={accent}
+      disabled={hasPendingDeletion}
       onClick={tryOpen}
-    >
-      <CardContent className="p-4 flex items-center justify-between gap-3">
-        <div className="space-y-1.5 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            <p className="font-mono text-sm font-bold text-primary">{sample.sampleCode}</p>
-            <StatusBadge status={sample.status} />
-            {state === "new" && (
-              <Badge className="bg-red-100 text-red-700 border-red-200 gap-1 text-xs">
-                <span className="w-1.5 h-1.5 rounded-full bg-red-500 inline-block animate-pulse" />
-                {lang === "ar" ? "جديدة" : "New"}
-              </Badge>
-            )}
-            <RetestBadge
-              retestNumber={(sample as { retestNumber?: number }).retestNumber}
-              originalSampleId={(sample as { originalSampleId?: number }).originalSampleId}
-              compact
-            />
-            {PendingDeletionBadge}
-            {(sample as any).sector && (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200">
-                <Building2 className="w-3 h-3" />
-                {sectorLabel((sample as any).sector, lang)}
-              </span>
-            )}
-          </div>
-          <p className="text-xs text-muted-foreground">
-            {sample.contractorName} — {(sample as any).contractNumber ?? "—"}
-          </p>
-          <SampleTestNamesLine testNames={(sample as { testNames?: string[] }).testNames} />
-          <p className="text-[11px] text-muted-foreground/80">
-            {SAMPLE_TYPE_LABELS[(sample as any).sampleType] ?? (sample as any).sampleType}
-          </p>
-        </div>
-        <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
-          {hasPendingDeletion ? (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <span className="inline-flex cursor-not-allowed opacity-60">
-                  <span className="pointer-events-none inline-flex">
-                    <DeletionRequestButton
-                      targetTable="samples"
-                      targetId={sample.id}
-                      targetLabel={`Sample ${sample.sampleCode}`}
-                      variant="icon"
-                      onSuccess={onRefetch}
-                    />
-                  </span>
-                </span>
-              </TooltipTrigger>
-              <TooltipContent side="top" className="max-w-xs">
-                {DisabledWarning}
-              </TooltipContent>
-            </Tooltip>
-          ) : (
-            <DeletionRequestButton
-              targetTable="samples"
-              targetId={sample.id}
-              targetLabel={`Sample ${sample.sampleCode}`}
-              variant="icon"
-              onSuccess={onRefetch}
-            />
+      sectorLabel={(sample as any).sector ? sectorLabel((sample as any).sector, lang) : null}
+      headerBadges={
+        <>
+          <StatusBadge status={sample.status} />
+          {state === "new" && (
+            <Badge className="bg-red-100 text-red-700 border-red-200 gap-1 text-xs">
+              <span className="w-1.5 h-1.5 rounded-full bg-red-500 inline-block animate-pulse" />
+              {lang === "ar" ? "جديدة" : "New"}
+            </Badge>
           )}
-        </div>
-      </CardContent>
-    </Card>
+          <RetestBadge
+            retestNumber={(sample as { retestNumber?: number }).retestNumber}
+            originalSampleId={(sample as { originalSampleId?: number }).originalSampleId}
+            compact
+          />
+          {PendingDeletionBadge}
+        </>
+      }
+      actions={
+        hasPendingDeletion ? (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className="inline-flex cursor-not-allowed opacity-60">
+                <span className="pointer-events-none inline-flex">
+                  <DeletionRequestButton
+                    targetTable="samples"
+                    targetId={sample.id}
+                    targetLabel={`Sample ${sample.sampleCode}`}
+                    variant="icon"
+                    onSuccess={onRefetch}
+                  />
+                </span>
+              </span>
+            </TooltipTrigger>
+            <TooltipContent side="top" className="max-w-xs">
+              {DisabledWarning}
+            </TooltipContent>
+          </Tooltip>
+        ) : (
+          <DeletionRequestButton
+            targetTable="samples"
+            targetId={sample.id}
+            targetLabel={`Sample ${sample.sampleCode}`}
+            variant="icon"
+            onSuccess={onRefetch}
+          />
+        )
+      }
+    />
   );
 }
 
@@ -234,47 +218,32 @@ function ManagerReviewArchiveSampleCard({
   };
 
   return (
-    <Card
-      className={`border-l-4 border-l-green-400 hover:shadow-sm transition-shadow opacity-80 hover:opacity-100 ${
-        hasPendingDeletion ? "cursor-not-allowed" : "cursor-pointer"
-      }`}
+    <ReviewSampleCard
+      sample={sample}
+      lang={lang}
+      accent="completed"
+      compact
+      disabled={hasPendingDeletion}
       onClick={tryOpen}
-    >
-      <CardContent className="p-4 flex items-center justify-between">
-        <div className="space-y-1">
-          <div className="flex items-center gap-2 flex-wrap">
-            <p className="font-mono text-sm font-bold text-primary">{sample.sampleCode}</p>
-            <StatusBadge status={sample.status} />
-            {PendingDeletionBadge}
-            {(sample as any).sector && (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200">
-                <Building2 className="w-3 h-3" />
-                {sectorLabel((sample as any).sector, lang)}
-              </span>
-            )}
-          </div>
-          <p className="text-xs text-muted-foreground">
-            {sample.contractorName} — {(sample as any).contractNumber ?? "—"}
-          </p>
-          <SampleTestNamesLine testNames={(sample as { testNames?: string[] }).testNames} />
-          <p className="text-[11px] text-muted-foreground/80">
-            {SAMPLE_TYPE_LABELS[(sample as any).sampleType] ?? (sample as any).sampleType}
-            {(sample as any).receivedAt && (
-              <span className="ms-2 text-muted-foreground/70">
-                • {new Date((sample as any).receivedAt).toLocaleDateString(lang === "ar" ? "ar-AE" : "en-AE")}
-              </span>
-            )}
-          </p>
-        </div>
-        {wrapDisabledWithTooltip(
+      receivedAt={(sample as any).receivedAt}
+      sectorLabel={(sample as any).sector ? sectorLabel((sample as any).sector, lang) : null}
+      showReviewHint={false}
+      headerBadges={
+        <>
+          <StatusBadge status={sample.status} />
+          {PendingDeletionBadge}
+        </>
+      }
+      actions={
+        wrapDisabledWithTooltip(
           hasPendingDeletion,
           DisabledWarning,
-          <span className="inline-flex">
-            <ChevronRight className={`w-4 h-4 text-muted-foreground ${lang === "ar" ? "rotate-180" : ""}`} />
-          </span>
-        )}
-      </CardContent>
-    </Card>
+          <span className="inline-flex text-muted-foreground">
+            <ChevronRight className={`h-5 w-5 ${lang === "ar" ? "rotate-180" : ""}`} />
+          </span>,
+        )
+      }
+    />
   );
 }
 
@@ -571,7 +540,7 @@ export default function ManagerReview() {
               </CardContent>
             </Card>
           ) : (
-            <div className="grid gap-3">
+            <div className="grid gap-4">
               {pendingSamples.map((sample) => (
                 <ManagerReviewActiveSampleCard
                   key={sample.id}
@@ -596,7 +565,7 @@ export default function ManagerReview() {
               </CardContent>
             </Card>
           ) : (
-            <div className="grid gap-3">
+            <div className="grid gap-4">
               {doneSamples.map((sample) => (
                 <ManagerReviewArchiveSampleCard
                   key={sample.id}
