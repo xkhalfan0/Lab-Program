@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useParams, useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { redirectAfterTestSave } from "@/lib/batchHelpers";
@@ -147,6 +147,22 @@ function rowsFromQuantity(quantity: number | null | undefined): CoreRow[] {
   return Array.from({ length: n }, (_, i) => newRow(i));
 }
 
+function resolveRegisteredCoreQuantity(dist: { orderItemQuantity?: number | null; quantity?: number | null } | null | undefined): number {
+  const q = Number(dist?.orderItemQuantity ?? dist?.quantity) || 1;
+  return Math.max(1, Math.min(999, q));
+}
+
+function syncRowsToQuantity(rows: CoreRow[], quantity: number): CoreRow[] {
+  const n = Math.max(1, Math.min(999, quantity));
+  if (rows.length === n) return rows;
+  if (rows.length > n) return rows.slice(0, n);
+  return [...rows, ...Array.from({ length: n - rows.length }, (_, i) => newRow(rows.length + i))];
+}
+
+function todayIsoDate(): string {
+  return new Date().toISOString().split("T")[0];
+}
+
 function computeRow(row: CoreRow, specifiedCubeStrength: number): CoreRow {
   const d = parseFloat(row.diameter);
   const l = parseFloat(row.length);
@@ -223,20 +239,16 @@ export default function ConcreteCore() {
     { enabled: !!distId }
   );
 
-  const initFromDistRef = useRef(false);
-
-  useEffect(() => {
-    initFromDistRef.current = false;
-  }, [distId]);
-
-  const coreCount = Math.max(1, Math.min(999, Number(dist?.quantity) || 1));
+  const coreCount = resolveRegisteredCoreQuantity(dist);
 
   const [specifiedStrength, setSpecifiedStrength] = useState("30");
   const [coreType, setCoreType] = useState("Drilled Core");
   const [endCondition, setEndCondition] = useState("as-drilled"); // as-drilled | grinded | capped
-  const [structureType, setStructureType] = useState("");
   const [castDate, setCastDate] = useState("");
-  const [testDate, setTestDate] = useState(() => new Date().toISOString().split("T")[0]);
+  const [coringDate, setCoringDate] = useState("");
+  const [cementType, setCementType] = useState("");
+  const [aggTypeMaxSize, setAggTypeMaxSize] = useState("");
+  const [submittedTestDate, setSubmittedTestDate] = useState<string | null>(null);
   const [notes, setNotes] = useState("");
   const [rows, setRows] = useState<CoreRow[]>([]);
   const [saving, setSaving] = useState(false);
@@ -245,6 +257,7 @@ export default function ConcreteCore() {
   const ar = lang === "ar";
   const { user } = useAuth();
   const [submitted, setSubmitted] = useState(false);
+  const testDate = submitted ? (submittedTestDate ?? todayIsoDate()) : todayIsoDate();
 
   const saveResult = trpc.specializedTests.save.useMutation({
     onSuccess: (_, vars) => {
@@ -265,19 +278,28 @@ export default function ConcreteCore() {
     setCastDate(prev => prev || iso);
   }, [dist?.castingDate]);
 
+  useEffect(() => {
+    if (aggregateTypeFromReception) {
+      setAggTypeMaxSize(prev => prev || aggregateTypeFromReception);
+    }
+  }, [aggregateTypeFromReception]);
+
   // Load existing data
   useEffect(() => {
     if (!existing?.formData) return;
     const fd = existing.formData as any;
+    const registeredQty = resolveRegisteredCoreQuantity(dist);
     if (fd.specifiedCubeStrength) setSpecifiedStrength(String(fd.specifiedCubeStrength));
     if (fd.coreType) setCoreType(fd.coreType);
     if (fd.endCondition) setEndCondition(fd.endCondition);
-    if (fd.structureType) setStructureType(fd.structureType);
     if (fd.castDate) setCastDate(String(fd.castDate).split("T")[0]);
-    if (fd.testDate) setTestDate(String(fd.testDate).split("T")[0]);
+    if (fd.coringDate) setCoringDate(String(fd.coringDate).split("T")[0]);
+    if (fd.cementType) setCementType(String(fd.cementType));
+    if (fd.aggTypeMaxSize) setAggTypeMaxSize(String(fd.aggTypeMaxSize));
+    if (fd.testDate) setSubmittedTestDate(String(fd.testDate).split("T")[0]);
     if (fd.notes) setNotes(fd.notes);
     if (fd.cores && Array.isArray(fd.cores)) {
-      setRows(fd.cores.map((c: any) => ({
+      const mapped = fd.cores.map((c: any) => ({
         id: c.id || `row_${Date.now()}_${Math.random()}`,
         coreNo: c.coreNo || "",
         diameter: String(c.diameter || "100"),
@@ -287,20 +309,18 @@ export default function ConcreteCore() {
         weightInWater: String(c.weightInWater ?? ""),
         maxLoad: String(c.maxLoad || ""),
         rebarSize: String(c.rebarSize ?? ""),
-      })));
+      }));
+      setRows(existing.status === "submitted" ? mapped : syncRowsToQuantity(mapped, registeredQty));
     }
-       if (existing.status === "submitted") setSubmitted(true);
-  }, [existing]);
+    if (existing.status === "submitted") setSubmitted(true);
+  }, [existing, dist]);
 
-  // Row count fixed to reception/distribution quantity when no saved cores yet
+  // Keep row count aligned with reception order item quantity (not total sample quantity)
   useEffect(() => {
-    if (!dist || !existingFetched) return;
-    const fd = existing?.formData as { cores?: unknown[] } | undefined;
-    if (Array.isArray(fd?.cores) && fd.cores.length > 0) return;
-    if (initFromDistRef.current) return;
-    setRows(rowsFromQuantity(dist.quantity));
-    initFromDistRef.current = true;
-  }, [dist, existingFetched, existing?.formData]);
+    if (!dist || !existingFetched || submitted) return;
+    const qty = resolveRegisteredCoreQuantity(dist);
+    setRows(prev => (prev.length === qty ? prev : syncRowsToQuantity(prev, qty)));
+  }, [dist, dist?.orderItemQuantity, dist?.quantity, existingFetched, submitted]);
 
   const ageDays =
     castDate && testDate
@@ -356,8 +376,10 @@ export default function ConcreteCore() {
           specifiedCubeStrength: specStr,
           coreType,
           endCondition,
-          structureType,
           castDate: castDate || undefined,
+          coringDate: coringDate || undefined,
+          cementType: cementType.trim() || undefined,
+          aggTypeMaxSize: aggTypeMaxSize.trim() || undefined,
           testDate: testDate || undefined,
           ageDays: ageDays ?? undefined,
           cores: computedRows.map(r => ({
@@ -492,17 +514,12 @@ export default function ConcreteCore() {
                 </Select>
               </div>
               <div>
-                <Label className="text-xs text-slate-500 mb-1 block">{ar ? "نوع الهيكل" : "Structure Type"}</Label>
-                <Input
-                  value={structureType}
-                  onChange={e => setStructureType(e.target.value)}
-                  placeholder={ar ? "مثال: عمود، بلاطة، جدار" : "e.g. Column, Slab, Wall"}
-                  disabled={submitted}
-                />
-              </div>
-              <div>
                 <Label className="text-xs text-slate-500 mb-1 block">{ar ? "تاريخ الصب" : "Date Cast"}</Label>
                 <Input type="date" value={castDate} onChange={e => setCastDate(e.target.value)} disabled={submitted} />
+              </div>
+              <div>
+                <Label className="text-xs text-slate-500 mb-1 block">{ar ? "تاريخ الحفر" : "Date of Coring"}</Label>
+                <Input type="date" value={coringDate} onChange={e => setCoringDate(e.target.value)} disabled={submitted} />
               </div>
               {curingDateFromReception && (
                 <div>
@@ -514,19 +531,31 @@ export default function ConcreteCore() {
                   </div>
                 </div>
               )}
-              {aggregateTypeFromReception && (
-                <div>
-                  <Label className="text-xs text-slate-500 mb-1 block">
-                    {ar ? "نوع الركام (الاستلام)" : "Type of Aggregate (from Reception)"}
-                  </Label>
-                  <div className="h-10 flex items-center px-3 rounded-md border bg-slate-50 text-sm text-slate-700">
-                    {aggregateTypeFromReception}
-                  </div>
-                </div>
-              )}
+              <div>
+                <Label className="text-xs text-slate-500 mb-1 block">{ar ? "نوع الأسمنت" : "Cement Type"}</Label>
+                <Input
+                  value={cementType}
+                  onChange={e => setCementType(e.target.value)}
+                  placeholder={ar ? "مثال: OPC، SRC" : "e.g. OPC, SRC"}
+                  disabled={submitted}
+                />
+              </div>
+              <div>
+                <Label className="text-xs text-slate-500 mb-1 block">
+                  {ar ? "نوع الركام والحجم الأقصى" : "Type of Agg. & Max size"}
+                </Label>
+                <Input
+                  value={aggTypeMaxSize}
+                  onChange={e => setAggTypeMaxSize(e.target.value)}
+                  placeholder={ar ? "مثال: ركام خشن 20 مم" : "e.g. Coarse aggregate 20 mm"}
+                  disabled={submitted}
+                />
+              </div>
               <div>
                 <Label className="text-xs text-slate-500 mb-1 block">{ar ? "تاريخ الفحص" : "Test Date"}</Label>
-                <Input type="date" value={testDate} onChange={e => setTestDate(e.target.value)} disabled={submitted} />
+                <div className="h-10 flex items-center px-3 rounded-md border bg-slate-50 text-sm font-mono text-slate-700">
+                  {new Date(testDate + "T00:00:00").toLocaleDateString(ar ? "ar-AE" : "en-AE", { year: "numeric", month: "short", day: "numeric" })}
+                </div>
               </div>
               <div>
                 <Label className="text-xs text-slate-500 mb-1 block">{ar ? "العمر (يوم)" : "Age (days)"}</Label>

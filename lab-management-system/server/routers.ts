@@ -1072,15 +1072,15 @@ ${testSummaries.length > 0 ? testSummaries.join("\n\n") : "لم تُجرَ اخ�
         const orderId = await getOrderIdForDistribution(input.id);
         let testSubType = dist.testSubType;
         let orderItemCount: number | undefined;
+        let orderItemQuantity: number | undefined;
         if (orderId) {
           const items = await getLabOrderItems(orderId);
           orderItemCount = items.length;
-          if (!testSubType) {
-            const item = items.find(
-              (i) => Number(i.distributionId) === input.id || i.testTypeCode === dist.testType,
-            );
-            if (item?.testSubType) testSubType = item.testSubType;
-          }
+          const item = items.find(
+            (i) => Number(i.distributionId) === input.id || i.testTypeCode === dist.testType,
+          );
+          if (item?.quantity != null) orderItemQuantity = item.quantity;
+          if (!testSubType && item?.testSubType) testSubType = item.testSubType;
         }
         const sample = await getSampleById(dist.sampleId);
         let originalSampleCode: string | null = null;
@@ -1093,6 +1093,7 @@ ${testSummaries.length > 0 ? testSummaries.join("\n\n") : "لم تُجرَ اخ�
           testSubType: testSubType ?? null,
           orderId: orderId ?? undefined,
           orderItemCount,
+          orderItemQuantity,
           isMultiTest: (orderItemCount ?? 0) >= 2,
           retestNumber: sample?.retestNumber ?? null,
           originalSampleId: sample?.originalSampleId ?? null,

@@ -226,6 +226,24 @@ function renderConcreteCore(fd: any, isAr: boolean, castingDateMs?: number | nul
             <p className="font-bold text-blue-800">{fd.ageDays}</p>
           </div>
         )}
+        {fd.coringDate && (
+          <div className="bg-slate-50 border border-slate-200 rounded p-2 text-center">
+            <p className="text-slate-600 font-semibold">{isAr ? "تاريخ الحفر" : "Date of Coring"}</p>
+            <p className="font-bold text-slate-800">{fmtDate(fd.coringDate)}</p>
+          </div>
+        )}
+        {fd.cementType && (
+          <div className="bg-slate-50 border border-slate-200 rounded p-2 text-center">
+            <p className="text-slate-600 font-semibold">{isAr ? "نوع الأسمنت" : "Cement Type"}</p>
+            <p className="font-bold text-slate-800">{fd.cementType}</p>
+          </div>
+        )}
+        {(fd.aggTypeMaxSize || fd.aggregateType) && (
+          <div className="bg-slate-50 border border-slate-200 rounded p-2 text-center">
+            <p className="text-slate-600 font-semibold">{isAr ? "نوع الركام والحجم الأقصى" : "Type of Agg. & Max size"}</p>
+            <p className="font-bold text-slate-800">{fd.aggTypeMaxSize ?? fd.aggregateType}</p>
+          </div>
+        )}
       </div>
       <FlexibleResultsTable
         columns={coreColumns}
