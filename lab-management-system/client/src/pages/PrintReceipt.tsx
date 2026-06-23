@@ -304,8 +304,7 @@ export default function PrintReceipt({ sectorSampleId }: { sectorSampleId?: numb
           className="mx-auto bg-white shadow-lg print:shadow-none"
           style={{
             width: "210mm",
-            maxHeight: "148mm",
-            padding: "5mm 8mm 4mm 8mm",
+            padding: "10mm 12mm 8mm 12mm",
             fontFamily: "Arial, sans-serif",
             fontSize: "10px",
             direction: lang === "ar" ? "rtl" : "ltr",
@@ -521,7 +520,7 @@ export default function PrintReceipt({ sectorSampleId }: { sectorSampleId?: numb
 
       <style>{`
         @media print {
-          @page { size: A5 landscape; margin: 0; }
+          @page { size: A4 portrait; margin: 0; }
           body { margin: 0; }
           .print\\:hidden { display: none !important; }
           .print\\:py-0 { padding-top: 0 !important; padding-bottom: 0 !important; }
