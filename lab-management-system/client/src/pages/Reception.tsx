@@ -149,6 +149,8 @@ const SUBTYPES_BY_CODE: Record<string, { value: string; labelAr: string; labelEn
   ],
 };
 
+const MIN_CONC_BLOCK_COUNT = 10;
+
 const CATEGORIES = [
   { value: "concrete", labelAr: "خرسانة", labelEn: "Concrete" },
   { value: "soil", labelAr: "تربة", labelEn: "Soil" },
@@ -224,16 +226,32 @@ const emptyForm = () => ({
 
 function FormSection({
   title,
+  step,
+  subtitle,
   children,
   className,
 }: {
   title?: string;
+  step?: number;
+  subtitle?: string;
   children: ReactNode;
   className?: string;
 }) {
   return (
     <section className={cn("space-y-4", className)}>
-      {title ? <h3 className="text-base font-semibold tracking-tight text-foreground">{title}</h3> : null}
+      {title ? (
+        <div className="space-y-1">
+          <h3 className="text-base font-semibold tracking-tight text-foreground flex items-center gap-2.5">
+            {step != null && (
+              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs font-bold">
+                {step}
+              </span>
+            )}
+            {title}
+          </h3>
+          {subtitle ? <p className="text-xs text-muted-foreground ms-9">{subtitle}</p> : null}
+        </div>
+      ) : null}
       {children}
     </section>
   );
@@ -742,7 +760,7 @@ export default function Reception() {
   };
 
   const toggleBlockSubtype = (testTypeId: number, subtypeValue: string, testTypeName: string, testTypeCode: string, formTemplate: string | undefined, unitPrice: number) => {
-    const defaultQty = testTypeCode === "CONC_BLOCK" ? 10 : 0;
+    const defaultQty = testTypeCode === "CONC_BLOCK" ? MIN_CONC_BLOCK_COUNT : 0;
     setMultiSubtypes(prev => {
       const current = prev[testTypeId] ?? {};
       if (current[subtypeValue] !== undefined) {
@@ -755,11 +773,10 @@ export default function Reception() {
     });
   };
 
-  const setBlockSubtypeQty = (testTypeId: number, subtypeValue: string, qty: number, testTypeCode?: string) => {
-    const minQty = testTypeCode === "CONC_BLOCK" ? 10 : 0;
+  const setBlockSubtypeQty = (testTypeId: number, subtypeValue: string, qty: number) => {
     setMultiSubtypes(prev => ({
       ...prev,
-      [testTypeId]: { ...(prev[testTypeId] ?? {}), [subtypeValue]: Math.max(minQty, qty) },
+      [testTypeId]: { ...(prev[testTypeId] ?? {}), [subtypeValue]: Math.max(0, qty) },
     }));
   };
 
@@ -891,17 +908,21 @@ export default function Reception() {
                     <div className="flex items-center gap-1">
                       <span className="text-xs text-muted-foreground">{lang === "ar" ? "عدد:" : "Qty:"}</span>
                       <TestQtyInput
-                        type="number" min={tt.code === "CONC_BLOCK" ? 10 : 0} max={999}
+                        type="number" min={0} max={999}
                         value={qty ? qty : ""}
                         placeholder="—"
-                        warning={qty === 0 || (tt.code === "CONC_BLOCK" && qty < 10)}
+                        warning={
+                          tt.code === "CONC_BLOCK"
+                            ? !qty || qty < MIN_CONC_BLOCK_COUNT
+                            : qty === 0
+                        }
                         onFocus={e => e.currentTarget.select()}
-                        onChange={e => setBlockSubtypeQty(tt.id, st.value, parseInt(e.target.value) || 0, tt.code)}
+                        onChange={e => setBlockSubtypeQty(tt.id, st.value, parseInt(e.target.value) || 0)}
                         className="h-6 w-16"
                       />
-                      {tt.code === "CONC_BLOCK" && qty > 0 && qty < 10 && (
+                      {tt.code === "CONC_BLOCK" && isSubSelected && (!qty || qty < MIN_CONC_BLOCK_COUNT) && (
                         <span className="text-xs text-red-500 font-medium">
-                          {lang === "ar" ? "الحد الأدنى 10" : "Min. 10"}
+                          {lang === "ar" ? `الحد الأدنى ${MIN_CONC_BLOCK_COUNT}` : `Min. ${MIN_CONC_BLOCK_COUNT}`}
                         </span>
                       )}
                     </div>
@@ -1013,6 +1034,8 @@ export default function Reception() {
 
   const isCastingRequired = selectedTests.some(t => CASTING_DATE_TESTS.includes(t.testTypeCode));
   const isConcCore = selectedTests.some(t => t.testTypeCode === "CONC_CORE");
+  const contractSelected = !!form.contractId;
+  const hasSelectedTests = selectedTests.length > 0;
   const getSelectedGroups = () => {
     const groups = new Set<string>();
     selectedTests.forEach(t => {
@@ -1026,12 +1049,16 @@ export default function Reception() {
   const hasMultipleGroups = selectedGroups.size > 1;
   const hasMixTests = selectedTests.some(t => ASPHALT_MIX_TEST_CODES.includes(t.testTypeCode));
 
-  /** Multi-subtype: at least one subtype qty > 0; others: qty >= min (3 for cubes, 1 otherwise). */
+  /** Multi-subtype: at least one subtype qty > 0 (blocks: min 10 each); others: qty >= min (3 for cubes, 1 otherwise). */
   const hasInvalidQtyTests = selectedTests.some(t => {
     if (MULTI_SUBTYPE_TESTS.includes(t.testTypeCode) && t.testSubType === "__multi__") {
       const map = multiSubtypes[t.testTypeId] ?? {};
       const vals = Object.values(map);
-      return vals.length === 0 || vals.some(q => !q);
+      if (vals.length === 0) return true;
+      if (t.testTypeCode === "CONC_BLOCK") {
+        return vals.some(q => !q || q < MIN_CONC_BLOCK_COUNT);
+      }
+      return vals.some(q => !q);
     }
     return (t.quantity ?? 0) < minQtyForTest(t.testTypeCode);
   });
@@ -1071,8 +1098,8 @@ export default function Reception() {
     if (hasInvalidQtyTests) {
       toast.error(
         lang === "ar"
-          ? `يجب أن تكون كمية كل اختبار صالحة (مكعبات: ${MIN_CONC_CUBE_COUNT} على الأقل، غير ذلك: 1 على الأقل)`
-          : `Each selected test needs a valid quantity (cubes: min ${MIN_CONC_CUBE_COUNT}, others: min 1)`,
+          ? `يجب أن تكون كمية كل اختبار صالحة (بلوكات: ${MIN_CONC_BLOCK_COUNT} على الأقل، مكعبات: ${MIN_CONC_CUBE_COUNT} على الأقل، غير ذلك: 1 على الأقل)`
+          : `Each selected test needs a valid quantity (blocks: min ${MIN_CONC_BLOCK_COUNT}, cubes: min ${MIN_CONC_CUBE_COUNT}, others: min 1)`,
       );
       return;
     }
@@ -1154,6 +1181,14 @@ export default function Reception() {
           return;
         }
         for (const [subtypeValue, qty] of entries) {
+          if (t.testTypeCode === "CONC_BLOCK" && qty < MIN_CONC_BLOCK_COUNT) {
+            toast.error(
+              lang === "ar"
+                ? `الحد الأدنى ${MIN_CONC_BLOCK_COUNT} بلوكات لكل نوع`
+                : `Minimum ${MIN_CONC_BLOCK_COUNT} blocks required per block type`,
+            );
+            return;
+          }
           const subLabel = SUBTYPES_BY_CODE[t.testTypeCode]?.find(s => s.value === subtypeValue);
           finalTests.push({
             ...t,
@@ -1440,7 +1475,16 @@ export default function Reception() {
               <CardContent className="p-0">
                 <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] divide-y lg:divide-y-0 lg:divide-x min-h-0">
                   <div className="p-6 lg:p-7 space-y-7 min-w-0">
-                    <FormSection title={lang === "ar" ? "بيانات العينة" : "Sample details"}>
+                    {/* Step 1 — Contract */}
+                    <FormSection
+                      step={1}
+                      title={lang === "ar" ? "العقد" : "Contract"}
+                      subtitle={
+                        lang === "ar"
+                          ? "اختر رقم العقد — يُعبّأ المقاول تلقائياً"
+                          : "Select the contract — contractor fills in automatically"
+                      }
+                    >
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div className="space-y-2 sm:col-span-2">
                           <Label className="text-[15px]">{t("tests.contractNumber")} <span className="text-red-500">*</span></Label>
@@ -1474,54 +1518,52 @@ export default function Reception() {
                             </div>
                           </>
                         )}
-                        <div className="space-y-2">
-                          <Label className="text-[15px]">{lang === "ar" ? "القطاع" : "Sector"} <span className="text-red-500">*</span></Label>
-                          <Select value={form.sectorKey} onValueChange={handleSectorChange}>
-                            <SelectTrigger className="h-10 text-base"><SelectValue placeholder={lang === "ar" ? "اختر..." : "Select..."} /></SelectTrigger>
-                            <SelectContent>
-                              {sectors.filter((s: any) => s.isActive).map((s: any) => (
-                                <SelectItem key={s.sectorKey} value={s.sectorKey}>{lang === "ar" ? s.nameAr : s.nameEn}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <div className="space-y-2">
-                          <Label className="text-[15px]">{lang === "ar" ? "الموقع" : "Location"}</Label>
-                          <Input className="h-10 text-base" placeholder={lang === "ar" ? "اختياري" : "Optional"} value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} />
-                        </div>
-                        <div className="space-y-2">
-                          <Label className="text-[15px]">
-                            {lang === "ar" ? "المورد / المصدر" : "Source / Supplier"}
-                            <span className="text-muted-foreground text-xs font-normal ms-1">({lang === "ar" ? "اختياري" : "optional"})</span>
-                          </Label>
-                          <Input
-                            className="h-10 text-base"
-                            placeholder={lang === "ar" ? "مثال: خليج ريدي ميكس" : "e.g. Gulf Readymix"}
-                            value={supplier}
-                            onChange={(e) => setSupplier(e.target.value)}
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label className="text-[15px]">
-                            {t("reception.referenceNo")}
-                            <span className="text-muted-foreground text-xs font-normal ms-1">
-                              ({lang === "ar" ? "اختياري" : "optional"})
-                            </span>
-                          </Label>
-                          <Input
-                            className="h-10 text-base"
-                            placeholder={lang === "ar" ? "مرجع المقاول / RFQ / MTS..." : "Contractor ref., RFQ, MTS..."}
-                            value={form.referenceNo}
-                            onChange={(e) => setForm({ ...form, referenceNo: e.target.value.replace(/\s/g, "") })}
-                          />
-                        </div>
+                      </div>
+                    </FormSection>
+
+                    {/* Step 2 — Contractor form scan */}
+                    <FormSection
+                      step={2}
+                      title={lang === "ar" ? "نموذج المقاول" : "Contractor form"}
+                      subtitle={
+                        lang === "ar"
+                          ? "ارفع مسح نموذج المقاول (اختياري)"
+                          : "Upload the contractor form scan (optional)"
+                      }
+                      className="border-t pt-6"
+                    >
+                      {!contractSelected ? (
+                        <p className="text-sm text-muted-foreground rounded-lg border border-dashed px-4 py-3">
+                          {lang === "ar" ? "اختر العقد أولاً" : "Select a contract first"}
+                        </p>
+                      ) : (
                         <ReceptionContractorFormUpload
                           file={contractorFormFile}
                           onFileChange={setContractorFormFile}
                           lang={lang}
                           disabled={createOrder.isPending || uploadAttachment.isPending}
                         />
-                        <div className="space-y-2 sm:col-span-2">
+                      )}
+                    </FormSection>
+
+                    {/* Step 3 — Choose tests */}
+                    <FormSection
+                      step={3}
+                      title={lang === "ar" ? "اختيار الاختبار" : "Choose test"}
+                      subtitle={
+                        lang === "ar"
+                          ? "اختر نوع المادة ثم الاختبار/الاختبارات المطلوبة"
+                          : "Pick material type, then select the required test(s)"
+                      }
+                      className="border-t pt-6"
+                    >
+                      {!contractSelected ? (
+                        <p className="text-sm text-muted-foreground rounded-lg border border-dashed px-4 py-6 text-center">
+                          {lang === "ar" ? "اختر العقد أولاً لعرض الاختبارات" : "Select a contract first to choose tests"}
+                        </p>
+                      ) : (
+                      <div className="space-y-4">
+                        <div className="space-y-2">
                           <Label className="text-[15px]">{lang === "ar" ? "نوع المادة" : "Material"} <span className="text-red-500">*</span></Label>
                           <div className="flex flex-wrap gap-2">
                             {CATEGORIES.map(cat => (
@@ -1546,65 +1588,7 @@ export default function Reception() {
                             ))}
                           </div>
                         </div>
-                        {isCastingRequired && (
-                          <div className="space-y-2 sm:col-span-2">
-                            <Label className="text-[15px]">{lang === "ar" ? "تاريخ الصب" : "Casting date"} <span className="text-red-500">*</span></Label>
-                            <Popover>
-                              <PopoverTrigger asChild>
-                                <Button variant="outline" className={cn("w-full h-10 justify-start font-normal text-base", !form.castingDate && "text-muted-foreground")}>
-                                  <CalendarIcon className="mr-2 h-4 w-4" />
-                                  {form.castingDate ? format(form.castingDate, "dd MMM yyyy") : (lang === "ar" ? "اختر..." : "Pick date")}
-                                </Button>
-                              </PopoverTrigger>
-                              <PopoverContent className="w-auto p-0" align="start">
-                                <Calendar mode="single" selected={form.castingDate} onSelect={(d) => setForm(f => ({ ...f, castingDate: d }))} disabled={(date) => date > new Date()} captionLayout="dropdown" />
-                              </PopoverContent>
-                            </Popover>
-                          </div>
-                        )}
-                        {isConcCore && (
-                          <div className="space-y-2 sm:col-span-2">
-                            <Label className="text-[15px]">
-                              {lang === "ar" ? "تاريخ المعالجة (الكيورينج)" : "Date of Curing"}
-                              <span className="text-muted-foreground text-xs font-normal ms-1">({lang === "ar" ? "اختياري" : "optional"})</span>
-                            </Label>
-                            <div className="flex items-center gap-2">
-                              <Popover>
-                                <PopoverTrigger asChild>
-                                  <Button variant="outline" className={cn("flex-1 h-10 justify-start font-normal text-base", !curingDate && "text-muted-foreground")}>
-                                    <CalendarIcon className="mr-2 h-4 w-4" />
-                                    {curingDate ? format(curingDate, "dd MMM yyyy") : (lang === "ar" ? "اختر..." : "Pick date")}
-                                  </Button>
-                                </PopoverTrigger>
-                                <PopoverContent className="w-auto p-0" align="start">
-                                  <Calendar mode="single" selected={curingDate} onSelect={setCuringDate} captionLayout="dropdown" />
-                                </PopoverContent>
-                              </Popover>
-                              {curingDate && (
-                                <Button variant="ghost" size="sm" className="h-10 px-2 text-muted-foreground" onClick={() => setCuringDate(undefined)}>
-                                  {lang === "ar" ? "مسح" : "Clear"}
-                                </Button>
-                              )}
-                            </div>
-                          </div>
-                          <div className="space-y-2">
-                            <Label className="text-[15px]">
-                              {lang === "ar" ? "نوع الركام" : "Type of Aggregate"}
-                              <span className="text-muted-foreground text-xs font-normal ms-1">({lang === "ar" ? "اختياري" : "optional"})</span>
-                            </Label>
-                            <Input
-                              className="h-10 text-base"
-                              placeholder={lang === "ar" ? "مثال: حجر جيري، جرانيت..." : "e.g. Limestone, Granite..."}
-                              value={aggregateType}
-                              onChange={(e) => setAggregateType(e.target.value)}
-                            />
-                          </div>
-                        )}
-                      </div>
-                    </FormSection>
 
-                    <FormSection title={lang === "ar" ? "الاختبارات" : "Tests"} className="border-t pt-6">
-                      <div className="space-y-4">
                 {form.sampleType && (
                   <TestSelectionPanel
                     hint={lang === "ar" ? "مرّر القائمة لاختيار الاختبارات" : "Scroll the list to choose tests"}
@@ -1666,44 +1650,9 @@ export default function Reception() {
                         </div>
                       </div>
                     )}
-
-                    {hasMixTests && (
-                      <div className="space-y-2">
-                        <Label className="text-sm font-semibold">
-                          {lang === "ar" ? "نوع طبقة الأسفلت *" : "Asphalt Mix Course *"}
-                        </Label>
-                        <div className="flex gap-2">
-                          {[
-                            { value: "wearing_course", labelEn: "Wearing Course", labelAr: "طبقة رابطة" },
-                            { value: "base_course", labelEn: "Base Course", labelAr: "طبقة قاعدة" },
-                          ].map(course => (
-                            <button
-                              key={course.value}
-                              type="button"
-                              onClick={() => {
-                                setAsphaltMixCourse(course.value);
-                                setSelectedTests(prev => prev.map(t =>
-                                  ASPHALT_MIX_TEST_CODES.includes(t.testTypeCode)
-                                    ? { ...t, testSubType: course.value }
-                                    : t,
-                                ));
-                              }}
-                              className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium border transition-all ${
-                                asphaltMixCourse === course.value
-                                  ? "bg-blue-600 text-white border-blue-600"
-                                  : "bg-white text-slate-700 border-slate-300 hover:border-blue-400"
-                              }`}
-                            >
-                              {lang === "ar" ? course.labelAr : course.labelEn}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    )}
                   </div>
                 )}
 
-                {/* Tests Selection (checkboxes) */}
                 {form.sampleType &&
                   form.sampleType !== "asphalt" &&
                   (
@@ -1735,36 +1684,205 @@ export default function Reception() {
                   </TestSelectionPanel>
                 )}
 
-                {selectedTests.some(t => t.testTypeCode === "CONC_FOAM") && (
-                  <div className="space-y-1.5">
-                    <Label className="flex items-center gap-1">
-                      {lang === "ar" ? "عمر الخرسانة (أيام)" : "Age of Concrete (days)"}
-                      <span className="text-red-500">*</span>
-                    </Label>
-                    <Input
-                      type="number"
-                      min={1}
-                      max={999}
-                      inputMode="numeric"
-                      value={foamConcreteAge}
-                      onChange={(e) => setFoamConcreteAge(e.target.value)}
-                      placeholder={lang === "ar" ? "مثال: 28" : "e.g., 28"}
-                      required
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      {lang === "ar" ? "المدة من الصب حتى الاختبار" : "Time from casting to testing"}
-                    </p>
-                  </div>
-                )}
-
                     {!form.sampleType && (
-                      <p className="text-base text-muted-foreground text-center py-10">
-                        {lang === "ar" ? "اختر نوع المادة أعلاه لعرض الاختبارات" : "Select a material type above to see available tests"}
+                      <p className="text-base text-muted-foreground text-center py-6">
+                        {lang === "ar" ? "اختر نوع المادة لعرض الاختبارات" : "Select a material type to see available tests"}
                       </p>
                     )}
+                      </div>
+                      )}
+                    </FormSection>
 
-                  </div>
-                </FormSection>
+                    {/* Step 4 — Reception entry data (test-specific fields) */}
+                    <FormSection
+                      step={4}
+                      title={lang === "ar" ? "بيانات الإدخال" : "Entry data"}
+                      subtitle={
+                        lang === "ar"
+                          ? "أدخل تفاصيل العينة حسب الاختبار/الاختبارات المختارة"
+                          : "Enter sample details required for the selected test(s)"
+                      }
+                      className="border-t pt-6"
+                    >
+                      {!hasSelectedTests ? (
+                        <p className="text-sm text-muted-foreground rounded-lg border border-dashed px-4 py-6 text-center">
+                          {lang === "ar" ? "اختر اختباراً واحداً على الأقل لإدخال البيانات" : "Select at least one test to enter sample details"}
+                        </p>
+                      ) : (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label className="text-[15px]">{lang === "ar" ? "القطاع" : "Sector"} <span className="text-red-500">*</span></Label>
+                          <Select value={form.sectorKey} onValueChange={handleSectorChange}>
+                            <SelectTrigger className="h-10 text-base"><SelectValue placeholder={lang === "ar" ? "اختر..." : "Select..."} /></SelectTrigger>
+                            <SelectContent>
+                              {sectors.filter((s: any) => s.isActive).map((s: any) => (
+                                <SelectItem key={s.sectorKey} value={s.sectorKey}>{lang === "ar" ? s.nameAr : s.nameEn}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-2">
+                          <Label className="text-[15px]">{lang === "ar" ? "الموقع" : "Location"}</Label>
+                          <Input className="h-10 text-base" placeholder={lang === "ar" ? "اختياري" : "Optional"} value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} />
+                        </div>
+                        <div className="space-y-2">
+                          <Label className="text-[15px]">
+                            {lang === "ar" ? "المورد / المصدر" : "Source / Supplier"}
+                            <span className="text-muted-foreground text-xs font-normal ms-1">({lang === "ar" ? "اختياري" : "optional"})</span>
+                          </Label>
+                          <Input
+                            className="h-10 text-base"
+                            placeholder={lang === "ar" ? "مثال: خليج ريدي ميكس" : "e.g. Gulf Readymix"}
+                            value={supplier}
+                            onChange={(e) => setSupplier(e.target.value)}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label className="text-[15px]">
+                            {t("reception.referenceNo")}
+                            <span className="text-muted-foreground text-xs font-normal ms-1">
+                              ({lang === "ar" ? "اختياري" : "optional"})
+                            </span>
+                          </Label>
+                          <Input
+                            className="h-10 text-base"
+                            placeholder={lang === "ar" ? "مرجع المقاول / RFQ / MTS..." : "Contractor ref., RFQ, MTS..."}
+                            value={form.referenceNo}
+                            onChange={(e) => setForm({ ...form, referenceNo: e.target.value.replace(/\s/g, "") })}
+                          />
+                        </div>
+                        {isCastingRequired && (
+                          <div className="space-y-2 sm:col-span-2">
+                            <Label className="text-[15px]">{lang === "ar" ? "تاريخ الصب" : "Casting date"} <span className="text-red-500">*</span></Label>
+                            <Popover>
+                              <PopoverTrigger asChild>
+                                <Button variant="outline" className={cn("w-full h-10 justify-start font-normal text-base", !form.castingDate && "text-muted-foreground")}>
+                                  <CalendarIcon className="mr-2 h-4 w-4" />
+                                  {form.castingDate ? format(form.castingDate, "dd MMM yyyy") : (lang === "ar" ? "اختر..." : "Pick date")}
+                                </Button>
+                              </PopoverTrigger>
+                              <PopoverContent className="w-auto p-0" align="start">
+                                <Calendar mode="single" selected={form.castingDate} onSelect={(d) => setForm(f => ({ ...f, castingDate: d }))} disabled={(date) => date > new Date()} captionLayout="dropdown" />
+                              </PopoverContent>
+                            </Popover>
+                          </div>
+                        )}
+                        {isConcCore && (
+                          <>
+                            <div className="space-y-2 sm:col-span-2">
+                              <Label className="text-[15px]">
+                                {lang === "ar" ? "تاريخ المعالجة (الكيورينج)" : "Date of Curing"}
+                                <span className="text-muted-foreground text-xs font-normal ms-1">({lang === "ar" ? "اختياري" : "optional"})</span>
+                              </Label>
+                              <div className="flex items-center gap-2">
+                                <Popover>
+                                  <PopoverTrigger asChild>
+                                    <Button variant="outline" className={cn("flex-1 h-10 justify-start font-normal text-base", !curingDate && "text-muted-foreground")}>
+                                      <CalendarIcon className="mr-2 h-4 w-4" />
+                                      {curingDate ? format(curingDate, "dd MMM yyyy") : (lang === "ar" ? "اختر..." : "Pick date")}
+                                    </Button>
+                                  </PopoverTrigger>
+                                  <PopoverContent className="w-auto p-0" align="start">
+                                    <Calendar mode="single" selected={curingDate} onSelect={setCuringDate} captionLayout="dropdown" />
+                                  </PopoverContent>
+                                </Popover>
+                                {curingDate && (
+                                  <Button variant="ghost" size="sm" className="h-10 px-2 text-muted-foreground" onClick={() => setCuringDate(undefined)}>
+                                    {lang === "ar" ? "مسح" : "Clear"}
+                                  </Button>
+                                )}
+                              </div>
+                            </div>
+                            <div className="space-y-2 sm:col-span-2">
+                              <Label className="text-[15px]">
+                                {lang === "ar" ? "نوع الركام" : "Type of Aggregate"}
+                                <span className="text-muted-foreground text-xs font-normal ms-1">({lang === "ar" ? "اختياري" : "optional"})</span>
+                              </Label>
+                              <Input
+                                className="h-10 text-base"
+                                placeholder={lang === "ar" ? "مثال: حجر جيري، جرانيت..." : "e.g. Limestone, Granite..."}
+                                value={aggregateType}
+                                onChange={(e) => setAggregateType(e.target.value)}
+                              />
+                            </div>
+                          </>
+                        )}
+                        {selectedTests.some(t => t.testTypeCode === "CONC_FOAM") && (
+                          <div className="space-y-2 sm:col-span-2">
+                            <Label className="flex items-center gap-1 text-[15px]">
+                              {lang === "ar" ? "عمر الخرسانة (أيام)" : "Age of Concrete (days)"}
+                              <span className="text-red-500">*</span>
+                            </Label>
+                            <Input
+                              type="number"
+                              min={1}
+                              max={999}
+                              inputMode="numeric"
+                              className="h-10 text-base"
+                              value={foamConcreteAge}
+                              onChange={(e) => setFoamConcreteAge(e.target.value)}
+                              placeholder={lang === "ar" ? "مثال: 28" : "e.g., 28"}
+                              required
+                            />
+                            <p className="text-xs text-muted-foreground">
+                              {lang === "ar" ? "المدة من الصب حتى الاختبار" : "Time from casting to testing"}
+                            </p>
+                          </div>
+                        )}
+                        {hasMixTests && (
+                          <div className="space-y-2 sm:col-span-2">
+                            <Label className="text-[15px]">
+                              {lang === "ar" ? "نوع طبقة الأسفلت" : "Asphalt Mix Course"} <span className="text-red-500">*</span>
+                            </Label>
+                            <div className="flex gap-2">
+                              {[
+                                { value: "wearing_course", labelEn: "Wearing Course", labelAr: "طبقة رابطة" },
+                                { value: "base_course", labelEn: "Base Course", labelAr: "طبقة قاعدة" },
+                              ].map(course => (
+                                <button
+                                  key={course.value}
+                                  type="button"
+                                  onClick={() => {
+                                    setAsphaltMixCourse(course.value);
+                                    setSelectedTests(prev => prev.map(t =>
+                                      ASPHALT_MIX_TEST_CODES.includes(t.testTypeCode)
+                                        ? { ...t, testSubType: course.value }
+                                        : t,
+                                    ));
+                                  }}
+                                  className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium border transition-all ${
+                                    asphaltMixCourse === course.value
+                                      ? "bg-blue-600 text-white border-blue-600"
+                                      : "bg-white text-slate-700 border-slate-300 hover:border-blue-400"
+                                  }`}
+                                >
+                                  {lang === "ar" ? course.labelAr : course.labelEn}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        {hasConcCubeTest && (
+                          <div
+                            ref={concCubePanelRef}
+                            className={cn(
+                              "sm:col-span-2 rounded-lg border p-4",
+                              missingConcCubeSize
+                                ? "border-amber-400 bg-amber-50/80"
+                                : "border-border bg-muted/30",
+                            )}
+                          >
+                            <ReceptionNominalCubeSizePanel
+                              lang={lang}
+                              variant="default"
+                              value={nominalCubeSize}
+                              onChange={setNominalCubeSize}
+                            />
+                          </div>
+                        )}
+                      </div>
+                      )}
+                    </FormSection>
                   </div>
 
                   <aside className="p-6 lg:p-7 bg-muted/20 space-y-5 lg:sticky lg:top-6 lg:z-10 lg:self-start lg:max-h-[calc(100vh-3rem)] lg:overflow-y-auto">
@@ -1781,24 +1899,6 @@ export default function Reception() {
                         <span className="text-muted-foreground">{lang === "ar" ? "الاختبارات" : "Tests"}</span>
                         <span className="font-medium">{selectedTests.length || "—"}</span>
                       </div>
-                      {hasConcCubeTest && (
-                        <div
-                          ref={concCubePanelRef}
-                          className={cn(
-                            "rounded-lg border p-3",
-                            missingConcCubeSize
-                              ? "border-amber-400 bg-amber-50/80"
-                              : "border-border bg-muted/30",
-                          )}
-                        >
-                          <ReceptionNominalCubeSizePanel
-                            lang={lang}
-                            variant="compact"
-                            value={nominalCubeSize}
-                            onChange={setNominalCubeSize}
-                          />
-                        </div>
-                      )}
                       <div className="flex justify-between gap-2 pt-3 border-t text-lg font-semibold">
                         <span>{lang === "ar" ? "الإجمالي" : "Total"}</span>
                         <span className="text-primary">{totalPrice > 0 ? `${totalPrice.toFixed(0)} AED` : "—"}</span>
@@ -1810,8 +1910,8 @@ export default function Reception() {
                     {missingConcCubeSize && (
                       <p className="text-sm text-amber-800 font-medium">
                         {lang === "ar"
-                          ? "اختر الحجم الاسمي للمكعب من القائمة على اليمين"
-                          : "Select nominal cube size in the panel on the right"}
+                          ? "اختر الحجم الاسمي للمكعب في خطوة بيانات الإدخال"
+                          : "Select nominal cube size in the entry data step"}
                       </p>
                     )}
                     <Button
