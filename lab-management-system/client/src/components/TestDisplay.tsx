@@ -158,7 +158,7 @@ export function TestOrderItemRow({
   return (
     <div
       className={cn(
-        "flex items-start gap-2 rounded-md border px-2 py-1.5 min-w-[11rem]",
+        "flex items-start gap-2 rounded-md border px-2 py-1.5 min-w-[11rem] rtl:flex-row-reverse",
         CHIP_STATUS_CLASS[status],
       )}
     >
@@ -167,8 +167,8 @@ export function TestOrderItemRow({
           <Icon className="h-3 w-3" />
         </div>
       )}
-      <div className="min-w-0 flex-1 space-y-0.5">
-        <p className="text-xs font-medium leading-snug text-foreground break-words">{label}</p>
+      <div className="min-w-0 flex-1 space-y-0.5 text-start">
+        <p className="text-xs font-medium leading-snug text-foreground break-words text-start">{label}</p>
         {code ? <TestCodeBadge code={code} variant="inline" /> : null}
       </div>
       {quantity != null && quantity > 1 && (
@@ -251,12 +251,12 @@ export function TestAssignmentRow({
   lang?: TestDisplayLang;
 }) {
   return (
-    <div className="flex items-start gap-3 rounded-lg border border-border/80 bg-background px-3.5 py-3 shadow-sm">
+    <div className="flex items-start gap-3 rounded-lg border border-border/80 bg-background px-3.5 py-3 shadow-sm rtl:flex-row-reverse">
       <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary ring-1 ring-primary/15">
         <FlaskConical className="h-4 w-4" />
       </div>
-      <div className="min-w-0 flex-1 space-y-1">
-        <p className="text-sm font-semibold leading-snug text-foreground break-words">{label}</p>
+      <div className="min-w-0 flex-1 space-y-1 text-start">
+        <p className="text-sm font-semibold leading-snug text-foreground break-words text-start">{label}</p>
         {code ? <TestCodeBadge code={code} variant="inline" /> : null}
       </div>
       {quantity != null && quantity > 0 && (

@@ -201,6 +201,7 @@
   [dir="rtl"] textarea,
   [dir="rtl"] select,
   [dir="rtl"] [data-slot="input"],
+  [dir="rtl"] [data-slot="textarea"],
   [dir="rtl"] [data-slot="select-trigger"],
   [dir="rtl"] [data-slot="select-item"] {
     text-align: right;

@@ -92,7 +92,7 @@ function TypeCell({ order, lang }: { order: any; lang: string }) {
   const base = typeLabel(order.sampleType ?? "", lang);
   const sub = order.sampleSubType;
   return (
-    <div className="flex flex-col gap-0.5">
+    <div className="flex flex-col gap-0.5 text-start">
       <span>{base}</span>
       {sub && (
         <span className="text-[10px] text-muted-foreground font-medium bg-slate-100 px-1.5 py-0.5 rounded w-fit">
@@ -287,8 +287,8 @@ function DistributionAllOrdersStatusCell({ order, lang }: { order: any; lang: st
   const totalTests = (order.items ?? []).length;
   const sampleStatus = order.sampleStatus ?? order.sample?.status ?? order.status;
   return (
-    <div className="flex flex-col gap-1">
-      <div className="flex items-center gap-2 flex-wrap">
+    <div className="flex flex-col gap-1 text-start">
+      <div className="flex items-center gap-2 flex-wrap rtl:flex-row-reverse">
         <StatusBadge status={sampleStatus} />
         {deletionStatus.PendingDeletionBadge}
       </div>
@@ -349,7 +349,7 @@ function DistributionAllOrdersActionsCell({
   };
 
   return (
-    <div className="flex items-center gap-1">
+    <div className="flex items-center gap-1 rtl:flex-row-reverse">
       {PendingDeletionBadge}
       {canDistribute &&
         wrapDisabledAction(
@@ -446,14 +446,14 @@ function OrdersTable({
   return (
     <Card>
       <CardHeader className="pb-2">
-        <CardTitle className="text-sm font-semibold">{title}</CardTitle>
+        <CardTitle className="text-sm font-semibold text-start">{title}</CardTitle>
       </CardHeader>
       <CardContent className="p-0">
         {orders.length === 0 ? (
           <div className="p-10 text-center text-sm text-muted-foreground">{emptyMessage}</div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full text-sm" dir={lang === "ar" ? "rtl" : "ltr"}>
               <thead>
                 <tr className="border-b bg-muted/30">
                   <th className="text-start px-4 py-2.5 text-xs font-medium text-muted-foreground">{lang === "ar" ? "رمز العينة" : "Sample Code"}</th>
@@ -468,7 +468,7 @@ function OrdersTable({
               <tbody>
                 {orders.map((order: any) => (
                   <tr key={order.id} className="border-b last:border-0 hover:bg-muted/20 transition-colors">
-                    <td className="px-4 py-2.5">
+                    <td className="px-4 py-2.5 text-start">
                       <div className="font-mono text-xs font-semibold text-primary">{toText(order.sampleCode)}</div>
                       <RetestBadge
                         retestNumber={order.retestNumber}
@@ -477,14 +477,14 @@ function OrdersTable({
                         compact
                       />
                     </td>
-                    <td className="px-4 py-2.5 text-xs">{toText(order.contractorName)}</td>
-                    <td className="px-4 py-2.5 text-xs">
+                    <td className="px-4 py-2.5 text-xs text-start">{toText(order.contractorName)}</td>
+                    <td className="px-4 py-2.5 text-xs text-start">
                       <TypeCell
                         order={{ ...order, sampleType: String(order.sampleType ?? ""), sampleSubType: toText(order.sampleSubType) }}
                         lang={lang}
                       />
                     </td>
-                    <td className="px-4 py-2.5 min-w-[12rem]">
+                    <td className="px-4 py-2.5 min-w-[12rem] text-start">
                       <TestOrderItemList
                         items={mapOrderItemsToTestList(order.items ?? [], (item) =>
                           item.status === "completed" ? "completed" : "pending",
@@ -492,13 +492,13 @@ function OrdersTable({
                         emptyLabel={lang === "ar" ? "لا توجد" : "None"}
                       />
                     </td>
-                    <td className="px-4 py-2.5 text-xs text-muted-foreground">
+                    <td className="px-4 py-2.5 text-xs text-muted-foreground text-start">
                       {toText(order.assignedTechnicianName)}
                     </td>
-                    <td className="px-4 py-2.5">
+                    <td className="px-4 py-2.5 text-start">
                       <DistributionAllOrdersStatusCell order={order} lang={lang} />
                     </td>
-                    <td className="px-4 py-2.5">
+                    <td className="px-4 py-2.5 text-start">
                       <DistributionAllOrdersActionsCell
                         order={order}
                         lang={lang}
@@ -521,7 +521,7 @@ function OrdersTable({
 }
 
 export default function Distribution() {
-  const { lang } = useLanguage();
+  const { lang, dir } = useLanguage();
   const [selectedOrder, setSelectedOrder] = useState<any>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [form, setForm] = useState({
@@ -632,7 +632,7 @@ export default function Distribution() {
 
   return (
     <DashboardLayout>
-      <div className="space-y-5">
+      <div className="space-y-5 text-start" dir={dir}>
         <div>
           <h1 className="text-xl font-bold">{lang === "ar" ? "توزيع الأوردرات" : "Order Distribution"}</h1>
           <p className="text-sm text-muted-foreground">
@@ -725,9 +725,9 @@ export default function Distribution() {
 
       {/* Distribute Dialog */}
       <Dialog open={!!selectedOrder} onOpenChange={(o) => { if (!o) { setSelectedOrder(null); setIsEditing(false); } }}>
-      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto" aria-describedby={undefined}>
+      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto text-start" dir={dir} aria-describedby={undefined}>
           <DialogHeader>
-            <DialogTitle>
+            <DialogTitle className="text-start">
               {isEditing
                 ? (lang === "ar"
                   ? `تعديل التوزيع — ${toText(selectedOrder?.sampleCode)}`
@@ -741,7 +741,7 @@ export default function Distribution() {
             {/* Order Summary */}
             <div className="rounded-xl border border-border/80 bg-muted/30 overflow-hidden">
               <div className="grid grid-cols-2 gap-px bg-border/60">
-                <div className="bg-background px-3.5 py-2.5">
+                <div className="bg-background px-3.5 py-2.5 text-start">
                   <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
                     {lang === "ar" ? "المقاول" : "Contractor"}
                   </p>
@@ -749,7 +749,7 @@ export default function Distribution() {
                     {toText(selectedOrder?.contractorName)}
                   </p>
                 </div>
-                <div className="bg-background px-3.5 py-2.5">
+                <div className="bg-background px-3.5 py-2.5 text-start">
                   <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
                     {lang === "ar" ? "نوع العينة" : "Sample type"}
                   </p>
@@ -758,7 +758,7 @@ export default function Distribution() {
                   </p>
                 </div>
               </div>
-              <div className="border-t border-border/80 bg-background px-3.5 py-3 space-y-2">
+              <div className="border-t border-border/80 bg-background px-3.5 py-3 space-y-2 text-start">
                 <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
                   {lang === "ar" ? "الاختبارات المطلوبة" : "Tests to assign"}
                 </p>
@@ -820,12 +820,12 @@ export default function Distribution() {
               />
             </div>
 
-            <div className="flex gap-2 justify-end pt-2">
+            <div className="flex gap-2 justify-end pt-2 rtl:flex-row-reverse">
               <Button type="button" variant="outline" onClick={() => { setSelectedOrder(null); setIsEditing(false); }}>
                 {lang === "ar" ? "إلغاء" : "Cancel"}
               </Button>
               <Button type="submit" disabled={distributeOrder.isPending || editDistribution.isPending}>
-                {isEditing ? <Pencil className="w-4 h-4 mr-1" /> : <UserCheck className="w-4 h-4 mr-1" />}
+                {isEditing ? <Pencil className="w-4 h-4 me-1" /> : <UserCheck className="w-4 h-4 me-1" />}
                 {isEditing
                   ? (editDistribution.isPending
                     ? (lang === "ar" ? "جاري الحفظ..." : "Saving...")

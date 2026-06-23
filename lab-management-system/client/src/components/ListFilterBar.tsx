@@ -65,7 +65,7 @@ export function ListFilterBar({
   const isAr = lang === "ar";
 
   return (
-    <div className="rounded-xl border bg-card p-3 space-y-3">
+    <div className="rounded-xl border bg-card p-3 space-y-3 text-start" dir={isAr ? "rtl" : "ltr"}>
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
         <div className="relative md:col-span-2 xl:col-span-2">
           <Search className="absolute start-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
