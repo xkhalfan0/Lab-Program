@@ -24,6 +24,11 @@ import {
   REPORT_META_LABEL_CLASS,
   REPORT_META_VALUE_CLASS,
 } from "@/lib/reportFormatting";
+import {
+  getReceptionEntryDisplayPairs,
+  parseSupplierFromNotes,
+  stripStructuredNotes,
+} from "@shared/receptionEntryFields";
 
 const SUMMARY_SKIP_KEYS = new Set([
   "overallResult",
@@ -649,6 +654,13 @@ export default function OrderReport() {
             <table className="metadata-table w-full border-collapse text-[10px]">
               <tbody>
                 {(() => {
+                  const supplier = parseSupplierFromNotes(order.notes ?? sample?.notes);
+                  const entryDataRows = getReceptionEntryDisplayPairs({
+                    notes: order.notes ?? sample?.notes,
+                    nominalCubeSize: sample?.nominalCubeSize,
+                    lang: isAr ? "ar" : "en",
+                  });
+                  const cleanNotes = stripStructuredNotes(order.notes ?? sample?.notes);
                   const pairs: [string, unknown][] = [
                     [t("orderNo", lang), order.orderCode],
                     [t("sampleCode", lang), order.sampleCode ?? sample?.sampleCode],
@@ -659,38 +671,50 @@ export default function OrderReport() {
                     [t("sampleType", lang), sampleTypeLabel(order.sampleType, lang)],
                     [t("location", lang), order.location ?? sample?.location],
                     [t("sector", lang), sectorLabel(sample?.sector, lang)],
-                    ...(order.castingDate ? [[t("castingDate", lang), fmtDate(order.castingDate, lang)]] as [string, unknown][] : []),
                     [t("receivedAt", lang), fmtDate(sample?.receivedAt ?? order.createdAt, lang)],
                     [t("reportDate", lang), reportDateStr],
                   ];
+                  if (supplier) {
+                    pairs.push([isAr ? "المورد / المصدر" : "Supplier / Source", supplier]);
+                  }
+                  if (order.castingDate) {
+                    pairs.push([t("castingDate", lang), fmtDate(order.castingDate, lang)]);
+                  }
+                  for (const row of entryDataRows) {
+                    pairs.push([row.label, row.value]);
+                  }
                   const rows: typeof pairs[] = [];
                   for (let i = 0; i < pairs.length; i += 2) rows.push(pairs.slice(i, i + 2));
-                  return rows.map((pair, ri) => {
-                    const [a, b] = [pair[0], pair[1]];
-                    return (
-                      <tr key={ri}>
-                        <td className={REPORT_META_LABEL_CLASS}>{a[0]}</td>
-                        <td className={REPORT_META_VALUE_CLASS}>{safeText(a[1])}</td>
-                        {b ? (
-                          <>
-                            <td className={REPORT_META_LABEL_CLASS}>{b[0]}</td>
-                            <td className={REPORT_META_VALUE_CLASS}>{safeText(b[1])}</td>
-                          </>
-                        ) : (
-                          <td className="border border-gray-200 px-2 py-1.5" colSpan={2} />
-                        )}
-                      </tr>
-                    );
-                  });
+                  return (
+                    <>
+                      {rows.map((pair, ri) => {
+                        const [a, b] = [pair[0], pair[1]];
+                        return (
+                          <tr key={ri}>
+                            <td className={REPORT_META_LABEL_CLASS}>{a[0]}</td>
+                            <td className={REPORT_META_VALUE_CLASS}>{safeText(a[1])}</td>
+                            {b ? (
+                              <>
+                                <td className={REPORT_META_LABEL_CLASS}>{b[0]}</td>
+                                <td className={REPORT_META_VALUE_CLASS}>{safeText(b[1])}</td>
+                              </>
+                            ) : (
+                              <td className="border border-gray-200 px-2 py-1.5" colSpan={2} />
+                            )}
+                          </tr>
+                        );
+                      })}
+                      {cleanNotes ? (
+                        <tr>
+                          <td className={`${REPORT_META_LABEL_CLASS} align-top`}>{t("notes", lang)}</td>
+                          <td className={REPORT_META_VALUE_CLASS} colSpan={3}>
+                            {safeText(cleanNotes)}
+                          </td>
+                        </tr>
+                      ) : null}
+                    </>
+                  );
                 })()}
-                {order.notes ? (
-                  <tr>
-                    <td className={`${REPORT_META_LABEL_CLASS} align-top`}>{t("notes", lang)}</td>
-                    <td className={REPORT_META_VALUE_CLASS} colSpan={3}>
-                      {safeText(order.notes)}
-                    </td>
-                  </tr>
-                ) : null}
               </tbody>
             </table>
           </div>

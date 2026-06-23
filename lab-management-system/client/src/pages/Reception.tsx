@@ -3,6 +3,7 @@ import { DeletionRequestButton } from "@/components/DeletionRequestButton";
 import { ReceptionContractorFormUpload } from "@/components/ReceptionContractorFormUpload";
 import { ContractorFormViewButton } from "@/components/ContractorFormViewButton";
 import { readFileAsBase64 } from "@/lib/sampleFileUpload";
+import { ReceptionDynamicEntryFields } from "@/components/ReceptionDynamicEntryFields";
 import { ReceptionRetestPanel } from "@/components/ReceptionRetestPanel";
 import {
   ReceptionNominalCubeSizePanel,
@@ -65,6 +66,7 @@ import {
   MIN_CONC_CUBE_COUNT,
   MAX_CONC_CUBE_COUNT,
 } from "@shared/concreteCubeReception";
+import { serializeEntryData } from "@shared/receptionEntryFields";
 import { openTestCatalogPrint } from "@/lib/testCatalogCategories";
 import {
   getCbrDependencyHint,
@@ -387,6 +389,7 @@ export default function Reception() {
   const [supplier, setSupplier] = useState("");
   const [curingDate, setCuringDate] = useState<Date | undefined>(undefined);
   const [aggregateType, setAggregateType] = useState("");
+  const [entryData, setEntryData] = useState<Record<string, string>>({});
   const [contractorFormFile, setContractorFormFile] = useState<File | null>(null);
   const concCubePanelRef = useRef<HTMLDivElement>(null);
 
@@ -471,6 +474,7 @@ export default function Reception() {
     setSupplier("");
     setCuringDate(undefined);
     setAggregateType("");
+    setEntryData({});
     setFoamConcreteAge("");
     setContractorFormFile(null);
   };
@@ -1218,6 +1222,7 @@ export default function Reception() {
         supplier ? `__SUPPLIER__:${supplier.trim()}` : "",
         curingDate ? `__CURING_DATE__:${format(curingDate, "yyyy-MM-dd")}` : "",
         aggregateType.trim() ? `__AGGREGATE_TYPE__:${aggregateType.trim()}` : "",
+        serializeEntryData(entryData) ?? "",
         form.notes || "",
       ].filter(Boolean).join("\n") || undefined,
       location: form.location || undefined,
@@ -1892,6 +1897,14 @@ export default function Reception() {
                             />
                           </div>
                         )}
+                        <ReceptionDynamicEntryFields
+                          lang={lang}
+                          tests={selectedTests}
+                          values={entryData}
+                          onChange={(key, value) =>
+                            setEntryData((prev) => ({ ...prev, [key]: value }))
+                          }
+                        />
                       </div>
                       )}
                     </FormSection>

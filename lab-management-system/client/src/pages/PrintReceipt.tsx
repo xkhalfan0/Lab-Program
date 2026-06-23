@@ -8,6 +8,11 @@ import { trpc } from "@/lib/trpc";
 import { Loader2, Printer, X, XCircle, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SAMPLE_TYPE_LABELS } from "@/lib/labTypes";
+import {
+  getReceptionEntryDisplayPairs,
+  parseSupplierFromNotes,
+  stripStructuredNotes,
+} from "@shared/receptionEntryFields";
 
 type Lang = "ar" | "en";
 
@@ -53,6 +58,7 @@ const T = {
   notes: { ar: "ملاحظات", en: "Notes" },
   supplier: { ar: "المورد / المصدر", en: "Supplier / Source" },
   location: { ar: "موقع العينة", en: "Sample Location" },
+  entryData: { ar: "بيانات الإدخال", en: "Entry Data" },
   printedAt: { ar: "طُبع في", en: "Printed at" },
 } as const;
 
@@ -135,6 +141,28 @@ function FullRow({ labelKey, children }: { labelKey: keyof typeof T; children: R
   return (
     <tr>
       <BilingualTh en={l.en} ar={l.ar} />
+      <ValueTd colSpan={3}>{children}</ValueTd>
+    </tr>
+  );
+}
+
+function SingleLabelRow({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <tr>
+      <td
+        style={{
+          background: "#eef2f7",
+          fontWeight: 700,
+          color: "#334155",
+          padding: "10px 12px",
+          width: "24%",
+          verticalAlign: "middle",
+          borderBottom: "1px solid #dbe3ee",
+          fontSize: "12px",
+        }}
+      >
+        {label}
+      </td>
       <ValueTd colSpan={3}>{children}</ValueTd>
     </tr>
   );
@@ -257,14 +285,15 @@ export default function PrintReceipt({ sectorSampleId }: { sectorSampleId?: numb
   const referenceNo = (sample as any).referenceNo?.trim() || "—";
 
   const rawNotes: string = (sample as any).notes ?? "";
-  const supplierMatch = rawNotes.match(/^__SUPPLIER__:(.+?)(?:\n|$)/);
-  const supplierValue = supplierMatch ? supplierMatch[1].trim() : null;
-  const cleanNotes = rawNotes
-    .replace(/^__SUPPLIER__:[^\n]*\n?/, "")
-    .replace(/^__CURING_DATE__:[^\n]*\n?/, "")
-    .replace(/^__AGGREGATE_TYPE__:[^\n]*\n?/, "")
-    .trim();
+  const supplierValue = parseSupplierFromNotes(rawNotes);
+  const cleanNotes = stripStructuredNotes(rawNotes);
   const sampleLocation = (sample as any).location?.trim() || "—";
+  const entryDataRows = getReceptionEntryDisplayPairs({
+    notes: rawNotes,
+    castingDate: (sample as any).castingDate,
+    nominalCubeSize: (sample as any).nominalCubeSize,
+    lang,
+  });
 
   const th = (key: keyof typeof T) => {
     const l = bilingualLabel(key);
@@ -480,6 +509,30 @@ export default function PrintReceipt({ sectorSampleId }: { sectorSampleId?: numb
               )}
               {supplierValue && (
                 <FullRow labelKey="supplier">{supplierValue}</FullRow>
+              )}
+              {entryDataRows.length > 0 && (
+                <>
+                  <tr>
+                    <td
+                      colSpan={4}
+                      style={{
+                        background: "#f1f5f9",
+                        padding: "8px 12px",
+                        fontWeight: 700,
+                        fontSize: "11px",
+                        color: "#334155",
+                        borderTop: "1px solid #dbe3ee",
+                      }}
+                    >
+                      {tx("entryData", lang)}
+                    </td>
+                  </tr>
+                  {entryDataRows.map((row) => (
+                    <SingleLabelRow key={row.label} label={row.label}>
+                      {row.value}
+                    </SingleLabelRow>
+                  ))}
+                </>
               )}
               {cleanNotes && (
                 <FullRow labelKey="notes">
