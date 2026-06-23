@@ -40,7 +40,7 @@ import { trpc } from "@/lib/trpc";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Search, Printer, FileText, Pencil, X, Trash2, CheckSquare, Package, CalendarIcon, AlertTriangle, ClipboardList, PackagePlus, RotateCcw } from "lucide-react";
+import { Search, Printer, Pencil, X, Trash2, CheckSquare, Package, CalendarIcon, AlertTriangle, ClipboardList, PackagePlus, RotateCcw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState, useMemo, useEffect, useRef, type ReactElement, type ReactNode } from "react";
 import { format } from "date-fns";
@@ -1319,9 +1319,17 @@ export default function Reception() {
             <h1 className="text-2xl font-bold tracking-tight">{t("reception.title")}</h1>
             <p className="text-base text-muted-foreground mt-0.5">{t("reception.subtitle")}</p>
           </div>
-          <Button type="button" variant="outline" className="gap-2 h-10 px-4" onClick={() => openTestCatalogPrint()}>
-            <FileText className="w-4 h-4" />
-            {lang === "ar" ? "الأسعار" : "Prices"}
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => openTestCatalogPrint()}
+            className="h-11 gap-2.5 rounded-xl border-2 border-blue-200 bg-blue-50 px-5 text-blue-900 shadow-sm hover:border-blue-300 hover:bg-blue-100"
+          >
+            <ClipboardList className="h-5 w-5 shrink-0 text-blue-700" />
+            <span className="text-sm font-semibold sm:text-base">
+              {lang === "ar" ? "قائمة أسعار الاختبارات" : "Tests price list"}
+            </span>
+            <Printer className="h-4 w-4 shrink-0 text-blue-600/80" />
           </Button>
         </div>
 
