@@ -143,13 +143,11 @@ export function TestChip({
 /** Compact stacked test rows for order / distribution tables. */
 export function TestOrderItemRow({
   label,
-  code,
   quantity,
   status = "default",
   showIcon = true,
 }: {
   label: string;
-  code?: string | null;
   quantity?: number;
   status?: TestChipStatus;
   showIcon?: boolean;
@@ -169,7 +167,6 @@ export function TestOrderItemRow({
       )}
       <div className="min-w-0 flex-1 space-y-0.5 text-start">
         <p className="text-xs font-medium leading-snug text-foreground break-words text-start">{label}</p>
-        {code ? <TestCodeBadge code={code} variant="inline" /> : null}
       </div>
       {quantity != null && quantity > 1 && (
         <span className="shrink-0 self-start rounded bg-background/80 px-1.5 py-0.5 text-[10px] font-bold tabular-nums text-muted-foreground">
@@ -188,7 +185,6 @@ export function TestOrderItemList({
   items: Array<{
     key?: string;
     label: string;
-    code?: string | null;
     quantity?: number;
     status?: TestChipStatus;
   }>;
@@ -204,7 +200,6 @@ export function TestOrderItemList({
         <TestOrderItemRow
           key={item.key ?? `${item.label}-${idx}`}
           label={item.label}
-          code={item.code}
           quantity={item.quantity}
           status={item.status}
         />
@@ -230,9 +225,6 @@ export function mapOrderItemsToTestList(
               ? item.testCode
               : null,
       }),
-      code:
-        (typeof item.testTypeCode === "string" ? item.testTypeCode : null) ??
-        (typeof item.testCode === "string" ? item.testCode : null),
       quantity: Number(item.quantity) || undefined,
       status: statusFromItem?.(item),
     }));
@@ -241,12 +233,10 @@ export function mapOrderItemsToTestList(
 /** Full-width test row for assignment / distribution dialogs — no truncated pill chips. */
 export function TestAssignmentRow({
   label,
-  code,
   quantity,
   lang = "en",
 }: {
   label: string;
-  code?: string | null;
   quantity?: number;
   lang?: TestDisplayLang;
 }) {
@@ -257,7 +247,6 @@ export function TestAssignmentRow({
       </div>
       <div className="min-w-0 flex-1 space-y-1 text-start">
         <p className="text-sm font-semibold leading-snug text-foreground break-words text-start">{label}</p>
-        {code ? <TestCodeBadge code={code} variant="inline" /> : null}
       </div>
       {quantity != null && quantity > 0 && (
         <div className="shrink-0 rounded-md bg-muted/60 px-2.5 py-1 text-center min-w-[3rem]">

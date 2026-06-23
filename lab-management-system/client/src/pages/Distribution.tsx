@@ -767,7 +767,6 @@ export default function Distribution() {
                     <TestAssignmentRow
                       key={`dialog-${selectedOrder?.id}-${item.id || item._id || idx}`}
                       label={resolveOrderItemTestLabel(item)}
-                      code={item.testTypeCode ?? item.testCode}
                       quantity={Number(item.quantity) || undefined}
                       lang={lang === "ar" ? "ar" : "en"}
                     />
