@@ -301,3 +301,56 @@ export function SectorClearFiltersButton({
     </button>
   );
 }
+
+/** Compact segmented toggle — groups related filters in one control. */
+export function SectorSegmentedFilter<T extends string>({
+  label,
+  value,
+  onChange,
+  options,
+}: {
+  label: string;
+  value: T | "";
+  onChange: (value: T | "") => void;
+  options: Array<{ value: T | ""; label: string; count?: number }>;
+}) {
+  return (
+    <div className="inline-flex flex-col gap-1.5">
+      <span className="px-1 text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</span>
+      <div
+        className="inline-flex rounded-xl border border-slate-200 bg-slate-100/90 p-1"
+        role="group"
+        aria-label={label}
+      >
+        {options.map((opt) => {
+          const isAll = opt.value === "";
+          const isActive = isAll ? value === "" : value === opt.value;
+          return (
+            <button
+              key={opt.value || "all"}
+              type="button"
+              aria-pressed={isActive}
+              onClick={() => onChange(isActive && !isAll ? "" : opt.value)}
+              className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-semibold transition ${
+                isActive
+                  ? "bg-white text-blue-700 shadow-sm ring-1 ring-slate-200/80"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
+            >
+              {opt.label}
+              {opt.count != null && opt.count > 0 && (
+                <span
+                  className={`min-w-[1.125rem] rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums leading-none ${
+                    isActive ? "bg-blue-100 text-blue-700" : "bg-slate-200/90 text-slate-600"
+                  }`}
+                >
+                  {opt.count}
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}

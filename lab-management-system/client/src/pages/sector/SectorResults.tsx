@@ -13,6 +13,7 @@ import {
   SectorTable,
   SectorPagination,
   SectorClearFiltersButton,
+  SectorSegmentedFilter,
   sectorTheme,
 } from "./sectorUi";
 import {
@@ -51,10 +52,12 @@ const t = {
     allResults: "الكل",
     from: "من تاريخ",
     to: "إلى تاريخ",
-    unreadOnly: "غير مقروءة",
-    readOnly: "مقروءة",
-    passOnly: "ناجحة",
-    failOnly: "راسبة",
+    filterStatus: "الحالة",
+    filterResult: "النتيجة",
+    unreadOnly: "جديد",
+    readOnly: "مقروء",
+    passOnly: "ناجح",
+    failOnly: "راسب",
     viewReport: "عرض التقرير",
     actions: "إجراءات",
   },
@@ -82,7 +85,9 @@ const t = {
     allResults: "All",
     from: "From Date",
     to: "To Date",
-    unreadOnly: "Unread",
+    filterStatus: "Status",
+    filterResult: "Result",
+    unreadOnly: "New",
     readOnly: "Read",
     passOnly: "Pass",
     failOnly: "Fail",
@@ -207,37 +212,51 @@ export default function SectorResults() {
           </div>
         </div>
 
-        <div className="flex flex-wrap gap-3">
-          {[
-            { key: "all", label: T.allResults, count: allResults.length, active: !resultFilter && !readFilter, onClick: () => { setResultFilter(""); setReadFilter(""); setPage(1); } },
-            { key: "unread", label: T.unreadOnly, count: unreadCount, active: readFilter === "unread", onClick: () => { setReadFilter(readFilter === "unread" ? "" : "unread"); setPage(1); } },
-            { key: "read", label: T.readOnly, count: readCount, active: readFilter === "read", onClick: () => { setReadFilter(readFilter === "read" ? "" : "read"); setPage(1); } },
-            { key: "pass", label: T.passOnly, count: passCount, active: resultFilter === "pass", onClick: () => { setResultFilter(resultFilter === "pass" ? "" : "pass"); setPage(1); } },
-            { key: "fail", label: T.failOnly, count: activeFailedCount, active: resultFilter === "fail", onClick: () => { setResultFilter(resultFilter === "fail" ? "" : "fail"); setPage(1); } },
-          ].map((btn) => (
+        <div className="flex flex-wrap items-end gap-4">
+          <SectorSegmentedFilter
+            label={T.filterStatus}
+            value={readFilter}
+            onChange={(value) => { setReadFilter(value); setPage(1); }}
+            options={[
+              { value: "", label: T.allResults },
+              { value: "unread", label: T.unreadOnly, count: unreadCount },
+              { value: "read", label: T.readOnly, count: readCount },
+            ]}
+          />
+
+          <SectorSegmentedFilter
+            label={T.filterResult}
+            value={resultFilter}
+            onChange={(value) => { setResultFilter(value); setPage(1); }}
+            options={[
+              { value: "", label: T.allResults },
+              { value: "pass", label: T.passOnly, count: passCount },
+              { value: "fail", label: T.failOnly, count: activeFailedCount },
+            ]}
+          />
+
+          <div className="inline-flex flex-col gap-1.5">
+            <span className="h-[18px]" aria-hidden />
             <button
-              key={btn.key}
               type="button"
-              onClick={btn.onClick}
-              className={`${sectorTheme.filterPill} ${btn.active ? sectorTheme.filterPillActive : sectorTheme.filterPillIdle}`}
+              onClick={() => setShowDateFilters((v) => !v)}
+              className={`inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-semibold transition ${
+                showDateFilters || hasDateFilters
+                  ? "border-blue-600 bg-blue-600 text-white shadow-sm"
+                  : "border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50"
+              }`}
             >
-              {btn.label}
-              <span className="rounded-full bg-black/10 px-2 py-0.5 text-xs font-bold">{btn.count}</span>
+              <Calendar className="h-4 w-4" />
+              {T.from} / {T.to}
             </button>
-          ))}
+          </div>
 
-          <button
-            type="button"
-            onClick={() => setShowDateFilters((v) => !v)}
-            className={`${sectorTheme.filterPill} ${
-              showDateFilters || hasDateFilters ? sectorTheme.filterPillActive : sectorTheme.filterPillIdle
-            }`}
-          >
-            <Calendar className="h-4 w-4" />
-            {T.from} / {T.to}
-          </button>
-
-          {hasActiveFilters && <SectorClearFiltersButton label={T.clearFilters} onClick={clearFilters} />}
+          {hasActiveFilters && (
+            <div className="inline-flex flex-col gap-1.5">
+              <span className="h-[18px]" aria-hidden />
+              <SectorClearFiltersButton label={T.clearFilters} onClick={clearFilters} />
+            </div>
+          )}
         </div>
 
         {showDateFilters && (
