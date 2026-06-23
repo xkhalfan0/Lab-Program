@@ -1516,6 +1516,17 @@ export default function Reception() {
                               <Label className="text-[15px]">{t("reception.contractName")}</Label>
                               <Input readOnly value={form.contractName || "—"} className="bg-muted/30 h-10 text-base" />
                             </div>
+                            <div className="space-y-2 sm:col-span-2">
+                              <Label className="text-[15px]">{lang === "ar" ? "القطاع" : "Sector"} <span className="text-red-500">*</span></Label>
+                              <Select value={form.sectorKey} onValueChange={handleSectorChange}>
+                                <SelectTrigger className="h-10 text-base"><SelectValue placeholder={lang === "ar" ? "اختر..." : "Select..."} /></SelectTrigger>
+                                <SelectContent>
+                                  {sectors.filter((s: any) => s.isActive).map((s: any) => (
+                                    <SelectItem key={s.sectorKey} value={s.sectorKey}>{lang === "ar" ? s.nameAr : s.nameEn}</SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
                           </>
                         )}
                       </div>
@@ -1537,12 +1548,28 @@ export default function Reception() {
                           {lang === "ar" ? "اختر العقد أولاً" : "Select a contract first"}
                         </p>
                       ) : (
-                        <ReceptionContractorFormUpload
-                          file={contractorFormFile}
-                          onFileChange={setContractorFormFile}
-                          lang={lang}
-                          disabled={createOrder.isPending || uploadAttachment.isPending}
-                        />
+                        <div className="space-y-4">
+                          <div className="space-y-2">
+                            <Label className="text-[15px]">
+                              {t("reception.referenceNo")}
+                              <span className="text-muted-foreground text-xs font-normal ms-1">
+                                ({lang === "ar" ? "اختياري" : "optional"})
+                              </span>
+                            </Label>
+                            <Input
+                              className="h-10 text-base"
+                              placeholder={lang === "ar" ? "مرجع المقاول / RFQ / MTS..." : "Contractor ref., RFQ, MTS..."}
+                              value={form.referenceNo}
+                              onChange={(e) => setForm({ ...form, referenceNo: e.target.value.replace(/\s/g, "") })}
+                            />
+                          </div>
+                          <ReceptionContractorFormUpload
+                            file={contractorFormFile}
+                            onFileChange={setContractorFormFile}
+                            lang={lang}
+                            disabled={createOrder.isPending || uploadAttachment.isPending}
+                          />
+                        </div>
                       )}
                     </FormSection>
 
@@ -1710,22 +1737,11 @@ export default function Reception() {
                         </p>
                       ) : (
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                          <Label className="text-[15px]">{lang === "ar" ? "القطاع" : "Sector"} <span className="text-red-500">*</span></Label>
-                          <Select value={form.sectorKey} onValueChange={handleSectorChange}>
-                            <SelectTrigger className="h-10 text-base"><SelectValue placeholder={lang === "ar" ? "اختر..." : "Select..."} /></SelectTrigger>
-                            <SelectContent>
-                              {sectors.filter((s: any) => s.isActive).map((s: any) => (
-                                <SelectItem key={s.sectorKey} value={s.sectorKey}>{lang === "ar" ? s.nameAr : s.nameEn}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <div className="space-y-2">
+                        <div className="space-y-2 sm:col-span-2">
                           <Label className="text-[15px]">{lang === "ar" ? "الموقع" : "Location"}</Label>
                           <Input className="h-10 text-base" placeholder={lang === "ar" ? "اختياري" : "Optional"} value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} />
                         </div>
-                        <div className="space-y-2">
+                        <div className="space-y-2 sm:col-span-2">
                           <Label className="text-[15px]">
                             {lang === "ar" ? "المورد / المصدر" : "Source / Supplier"}
                             <span className="text-muted-foreground text-xs font-normal ms-1">({lang === "ar" ? "اختياري" : "optional"})</span>
@@ -1735,20 +1751,6 @@ export default function Reception() {
                             placeholder={lang === "ar" ? "مثال: خليج ريدي ميكس" : "e.g. Gulf Readymix"}
                             value={supplier}
                             onChange={(e) => setSupplier(e.target.value)}
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label className="text-[15px]">
-                            {t("reception.referenceNo")}
-                            <span className="text-muted-foreground text-xs font-normal ms-1">
-                              ({lang === "ar" ? "اختياري" : "optional"})
-                            </span>
-                          </Label>
-                          <Input
-                            className="h-10 text-base"
-                            placeholder={lang === "ar" ? "مرجع المقاول / RFQ / MTS..." : "Contractor ref., RFQ, MTS..."}
-                            value={form.referenceNo}
-                            onChange={(e) => setForm({ ...form, referenceNo: e.target.value.replace(/\s/g, "") })}
                           />
                         </div>
                         {isCastingRequired && (
