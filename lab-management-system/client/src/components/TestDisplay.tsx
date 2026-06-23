@@ -3,6 +3,7 @@ import { CheckCircle2, FlaskConical } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
+import { SAMPLE_TYPE_LABELS } from "@/lib/labTypes";
 
 export type TestDisplayLang = "ar" | "en";
 
@@ -128,6 +129,50 @@ export function SampleTestNamesLine({
       <FlaskConical className="w-3 h-3 shrink-0 mt-0.5 text-primary/70" />
       <span className="break-words">{testNames.join(" · ")}</span>
     </p>
+  );
+}
+
+/** Contractor, material type, then tests — used on manager/QC review lists. */
+export function ReviewSampleListBody({
+  sample,
+  lang = "en",
+  showReceivedAt,
+}: {
+  sample: {
+    contractorName?: string | null;
+    contractNumber?: string | null;
+    contractName?: string | null;
+    sampleType?: string | null;
+    testNames?: string[] | null;
+    receivedAt?: string | Date | null;
+  };
+  lang?: string;
+  showReceivedAt?: boolean;
+}) {
+  const material =
+    SAMPLE_TYPE_LABELS[sample.sampleType ?? ""] ?? sample.sampleType ?? null;
+
+  return (
+    <div className="space-y-2 text-start">
+      <p className="text-base font-semibold text-foreground leading-snug">
+        {sample.contractorName ?? "—"} — {sample.contractNumber ?? "—"}
+      </p>
+      {sample.contractName?.trim() ? (
+        <p className="text-sm text-muted-foreground">{sample.contractName.trim()}</p>
+      ) : null}
+      {material ? (
+        <span className="inline-flex items-center rounded-md bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-700">
+          {material}
+        </span>
+      ) : null}
+      <SampleTestNamesLine testNames={sample.testNames} />
+      {showReceivedAt && sample.receivedAt ? (
+        <p className="text-xs text-muted-foreground/80">
+          {lang === "ar" ? "استلمت" : "Received"}{" "}
+          {new Date(sample.receivedAt).toLocaleDateString(lang === "ar" ? "ar-AE" : "en-GB")}
+        </p>
+      ) : null}
+    </div>
   );
 }
 
