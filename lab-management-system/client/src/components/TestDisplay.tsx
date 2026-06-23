@@ -126,18 +126,116 @@ export function TestChip({
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-medium border",
+        "inline-flex max-w-full items-start gap-1 px-2 py-0.5 rounded-md text-xs font-medium border",
         CHIP_STATUS_CLASS[status],
         className,
       )}
     >
-      {showIcon && <Icon className="w-3 h-3 shrink-0" />}
-      <span className="truncate max-w-[12rem]">{label}</span>
+      {showIcon && <Icon className="w-3 h-3 shrink-0 mt-0.5" />}
+      <span className="min-w-0 break-words leading-snug">{label}</span>
       {quantity != null && quantity > 1 && (
-        <span className="opacity-80 tabular-nums">×{quantity}</span>
+        <span className="shrink-0 tabular-nums opacity-80">×{quantity}</span>
       )}
     </span>
   );
+}
+
+/** Compact stacked test rows for order / distribution tables. */
+export function TestOrderItemRow({
+  label,
+  code,
+  quantity,
+  status = "default",
+  showIcon = true,
+}: {
+  label: string;
+  code?: string | null;
+  quantity?: number;
+  status?: TestChipStatus;
+  showIcon?: boolean;
+}) {
+  const Icon = status === "completed" ? CheckCircle2 : FlaskConical;
+  return (
+    <div
+      className={cn(
+        "flex items-start gap-2 rounded-md border px-2 py-1.5 min-w-[11rem]",
+        CHIP_STATUS_CLASS[status],
+      )}
+    >
+      {showIcon && (
+        <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded bg-background/70">
+          <Icon className="h-3 w-3" />
+        </div>
+      )}
+      <div className="min-w-0 flex-1 space-y-0.5">
+        <p className="text-xs font-medium leading-snug text-foreground break-words">{label}</p>
+        {code ? <TestCodeBadge code={code} variant="inline" /> : null}
+      </div>
+      {quantity != null && quantity > 1 && (
+        <span className="shrink-0 self-start rounded bg-background/80 px-1.5 py-0.5 text-[10px] font-bold tabular-nums text-muted-foreground">
+          ×{quantity}
+        </span>
+      )}
+    </div>
+  );
+}
+
+export function TestOrderItemList({
+  items,
+  emptyLabel = "None",
+  className,
+}: {
+  items: Array<{
+    key?: string;
+    label: string;
+    code?: string | null;
+    quantity?: number;
+    status?: TestChipStatus;
+  }>;
+  emptyLabel?: string;
+  className?: string;
+}) {
+  if (items.length === 0) {
+    return <span className="text-xs text-muted-foreground italic">{emptyLabel}</span>;
+  }
+  return (
+    <div className={cn("flex flex-col gap-1.5", className)}>
+      {items.map((item, idx) => (
+        <TestOrderItemRow
+          key={item.key ?? `${item.label}-${idx}`}
+          label={item.label}
+          code={item.code}
+          quantity={item.quantity}
+          status={item.status}
+        />
+      ))}
+    </div>
+  );
+}
+
+export function mapOrderItemsToTestList(
+  items: unknown[],
+  statusFromItem?: (item: Record<string, unknown>) => TestChipStatus | undefined,
+) {
+  return (items ?? [])
+    .filter((item): item is Record<string, unknown> => item != null && typeof item === "object")
+    .map((item, idx) => ({
+      key: String(item.id ?? item._id ?? idx),
+      label: resolveOrderItemTestLabel({
+        testName: typeof item.testName === "string" ? item.testName : null,
+        testTypeCode:
+          typeof item.testTypeCode === "string"
+            ? item.testTypeCode
+            : typeof item.testCode === "string"
+              ? item.testCode
+              : null,
+      }),
+      code:
+        (typeof item.testTypeCode === "string" ? item.testTypeCode : null) ??
+        (typeof item.testCode === "string" ? item.testCode : null),
+      quantity: Number(item.quantity) || undefined,
+      status: statusFromItem?.(item),
+    }));
 }
 
 /** Full-width test row for assignment / distribution dialogs — no truncated pill chips. */

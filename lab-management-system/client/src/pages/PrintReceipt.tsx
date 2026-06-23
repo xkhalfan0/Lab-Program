@@ -91,37 +91,52 @@ function BilingualTh({ en, ar }: { en: string; ar: string }) {
   return (
     <td
       style={{
-        background: "#f3f4f6",
-        fontWeight: 600,
-        color: "#374151",
-        padding: "5px 8px",
-        width: "22%",
+        background: "#eef2f7",
+        fontWeight: 700,
+        color: "#334155",
+        padding: "10px 12px",
+        width: "24%",
         verticalAlign: "middle",
+        borderBottom: "1px solid #dbe3ee",
       }}
     >
-      <div style={{ lineHeight: 1.35 }}>
-        <div dir="ltr" style={{ fontSize: "9px", color: "#64748b", fontWeight: 500 }}>
+      <div style={{ lineHeight: 1.4 }}>
+        <div dir="ltr" style={{ fontSize: "10.5px", color: "#64748b", fontWeight: 600, letterSpacing: "0.02em" }}>
           {en}
         </div>
-        <div style={{ fontSize: "10.5px" }}>{ar}</div>
+        <div style={{ fontSize: "12px", marginTop: "2px" }}>{ar}</div>
       </div>
     </td>
   );
 }
 
-function ValueTd({ children, mono }: { children: ReactNode; mono?: boolean }) {
+function ValueTd({ children, mono, colSpan }: { children: ReactNode; mono?: boolean; colSpan?: number }) {
   return (
     <td
+      colSpan={colSpan}
       style={{
-        padding: "5px 8px",
-        fontFamily: mono ? "monospace" : "inherit",
-        fontWeight: mono ? 700 : 400,
-        color: mono ? "#1d4ed8" : "#111",
+        padding: "10px 12px",
+        fontSize: "12.5px",
+        lineHeight: 1.45,
+        fontFamily: mono ? "ui-monospace, monospace" : "inherit",
+        fontWeight: mono ? 700 : 500,
+        color: mono ? "#1d4ed8" : "#0f172a",
         verticalAlign: "middle",
+        borderBottom: "1px solid #e8edf3",
       }}
     >
       {children}
     </td>
+  );
+}
+
+function FullRow({ labelKey, children }: { labelKey: keyof typeof T; children: ReactNode }) {
+  const l = bilingualLabel(labelKey);
+  return (
+    <tr>
+      <BilingualTh en={l.en} ar={l.ar} />
+      <ValueTd colSpan={3}>{children}</ValueTd>
+    </tr>
   );
 }
 
@@ -308,79 +323,82 @@ export default function PrintReceipt({ sectorSampleId }: { sectorSampleId?: numb
           className="mx-auto bg-white shadow-lg print:shadow-none"
           style={{
             width: "210mm",
-            padding: "10mm 12mm 8mm 12mm",
-            fontFamily: "Arial, sans-serif",
-            fontSize: "10px",
+            padding: "12mm 14mm 10mm 14mm",
+            fontFamily: "'Segoe UI', Arial, sans-serif",
+            fontSize: "12px",
+            color: "#0f172a",
             direction: lang === "ar" ? "rtl" : "ltr",
           }}
         >
           {/* Header */}
-          <div className="border-t-4 border-gray-900 pt-1 pb-0 mb-0">
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px" }}>
+          <div style={{ borderTop: "5px solid #0f172a", paddingTop: "10px", marginBottom: "10px" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "16px" }}>
               <div style={{ textAlign: lang === "ar" ? "right" : "left", flex: 1 }}>
-                <h1 style={{ fontSize: "14px", fontWeight: 900, color: "#111", lineHeight: 1.25 }}>
+                <h1 style={{ fontSize: "17px", fontWeight: 800, color: "#0f172a", lineHeight: 1.3 }}>
                   {T.labNameAr.ar}
                 </h1>
-                <p style={{ fontSize: "9px", color: "#666", marginTop: "1px" }}>{T.labNameEn.en}</p>
+                <p style={{ fontSize: "11px", color: "#64748b", marginTop: "4px", fontWeight: 500 }}>{T.labNameEn.en}</p>
               </div>
               <div
                 style={{
                   display: "flex",
                   flexDirection: "column",
                   alignItems: "center",
-                  padding: "0 14px",
-                  borderLeft: "1px solid #ccc",
-                  borderRight: "1px solid #ccc",
+                  padding: "0 16px",
+                  borderLeft: "1px solid #cbd5e1",
+                  borderRight: "1px solid #cbd5e1",
                 }}
               >
                 <div
                   style={{
-                    width: "40px",
-                    height: "40px",
+                    width: "46px",
+                    height: "46px",
                     borderRadius: "50%",
-                    border: "2px solid #333",
+                    border: "2px solid #334155",
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "center",
-                    fontSize: "17px",
+                    fontSize: "20px",
                     fontWeight: 900,
+                    color: "#0f172a",
                   }}
                 >
                   م
                 </div>
-                <span style={{ fontSize: "8px", color: "#999", marginTop: "1px", letterSpacing: "2px" }}>LAB</span>
+                <span style={{ fontSize: "9px", color: "#94a3b8", marginTop: "3px", letterSpacing: "2px", fontWeight: 700 }}>LAB</span>
               </div>
               <div
                 style={{
                   textAlign: lang === "ar" ? "left" : "right",
                   flex: 1,
-                  fontSize: "11px",
-                  color: "#555",
+                  fontSize: "12px",
+                  color: "#475569",
                 }}
               >
-                <div style={{ display: "flex", gap: "6px", justifyContent: lang === "ar" ? "flex-start" : "flex-end", alignItems: "baseline" }}>
-                  <span style={{ fontFamily: "monospace", fontWeight: 700, color: "#111" }} dir="ltr">
+                <div style={{ display: "flex", gap: "8px", justifyContent: lang === "ar" ? "flex-start" : "flex-end", alignItems: "baseline", flexWrap: "wrap" }}>
+                  <span style={{ fontFamily: "ui-monospace, monospace", fontWeight: 800, color: "#0f172a", fontSize: "13px" }} dir="ltr">
                     {docNo}
                   </span>
-                  <span style={{ color: "#64748b", fontSize: "9px" }} dir="ltr">
+                  <span style={{ color: "#64748b", fontSize: "10.5px", fontWeight: 600 }} dir="ltr">
                     {T.docNo.en}
                   </span>
-                  <span style={{ color: "#64748b", fontSize: "9px" }}>{T.docNo.ar}</span>
+                  <span style={{ color: "#64748b", fontSize: "11px", fontWeight: 600 }}>{T.docNo.ar}</span>
                 </div>
                 <div
                   style={{
                     display: "flex",
-                    gap: "6px",
+                    gap: "8px",
                     justifyContent: lang === "ar" ? "flex-start" : "flex-end",
-                    marginTop: "4px",
+                    marginTop: "6px",
                     alignItems: "baseline",
+                    flexWrap: "wrap",
                   }}
                 >
-                  <span dir="ltr">{fmtDateTime(sample.receivedAt, lang)}</span>
-                  <span style={{ color: "#64748b", fontSize: "9px" }} dir="ltr">
+                  <span dir="ltr" style={{ fontWeight: 600, color: "#0f172a" }}>{fmtDateTime(sample.receivedAt, lang)}</span>
+                  <span style={{ color: "#64748b", fontSize: "10.5px", fontWeight: 600 }} dir="ltr">
                     {T.date.en}
                   </span>
-                  <span style={{ color: "#64748b", fontSize: "9px" }}>{T.date.ar}</span>
+                  <span style={{ color: "#64748b", fontSize: "11px", fontWeight: 600 }}>{T.date.ar}</span>
                 </div>
               </div>
             </div>
@@ -389,110 +407,84 @@ export default function PrintReceipt({ sectorSampleId }: { sectorSampleId?: numb
           {/* Title bar */}
           <div
             style={{
-              background: "#1a1a2e",
+              background: "linear-gradient(180deg, #1e293b 0%, #0f172a 100%)",
               color: "white",
               textAlign: "center",
-              padding: "4px 0",
-              marginBottom: "6px",
+              padding: "10px 12px",
+              marginBottom: "12px",
+              borderRadius: "4px",
             }}
           >
-            <p style={{ fontSize: "14px", fontWeight: 700, letterSpacing: "0.5px" }}>{T.receiptTitleAr.ar}</p>
-            <p style={{ fontSize: "9px", color: "#aaa", marginTop: "1px", letterSpacing: "1px" }}>
+            <p style={{ fontSize: "17px", fontWeight: 800, letterSpacing: "0.3px" }}>{T.receiptTitleAr.ar}</p>
+            <p style={{ fontSize: "11px", color: "#cbd5e1", marginTop: "3px", letterSpacing: "0.8px", fontWeight: 600 }}>
               {T.receiptTitleEn.en}
             </p>
           </div>
 
           {/* Data table */}
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "10px", marginBottom: "4px" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "12px", marginBottom: "8px", border: "1px solid #dbe3ee" }}>
             <tbody>
-              <tr style={{ borderBottom: "1px solid #e5e7eb" }}>
+              <tr>
                 {th("sampleNo")}
                 <ValueTd mono>{sample.sampleCode}</ValueTd>
                 {th("refNo")}
                 <ValueTd>{referenceNo}</ValueTd>
               </tr>
-              <tr style={{ borderBottom: "1px solid #e5e7eb" }}>
-                {th("sampleType")}
-                <ValueTd>{sampleTypeRaw}</ValueTd>
+              <tr>
                 {th("contractNo")}
                 <ValueTd mono>{sample.contractNumber ?? "—"}</ValueTd>
-              </tr>
-              <tr style={{ borderBottom: "1px solid #e5e7eb" }}>
-                {th("contractor")}
-                <ValueTd>{sample.contractorName ?? "—"}</ValueTd>
                 {th("sector")}
                 <ValueTd>
                   {sectorLabel ? `${sectorLabel.en} / ${sectorLabel.ar}` : "—"}
                 </ValueTd>
               </tr>
-              <tr style={{ borderBottom: "1px solid #e5e7eb" }}>
+              <tr>
+                {th("contractor")}
+                <ValueTd>{sample.contractorName ?? "—"}</ValueTd>
                 {th("project")}
-                <td colSpan={3} style={{ padding: "5px 8px" }}>
-                  {sample.contractName ?? "—"}
-                </td>
+                <ValueTd>{sample.contractName ?? "—"}</ValueTd>
               </tr>
-              <tr style={{ borderBottom: "1px solid #e5e7eb" }}>
-                {th("location")}
-                <td colSpan={3} style={{ padding: "5px 8px", color: "#111" }}>
-                  {sampleLocation}
-                </td>
-              </tr>
-              <tr style={{ borderBottom: "1px solid #e5e7eb" }}>
+              <tr>
+                {th("sampleType")}
+                <ValueTd>{sampleTypeRaw}</ValueTd>
                 {th("quantity")}
                 <ValueTd>{totalQuantity}</ValueTd>
+              </tr>
+              <FullRow labelKey="location">{sampleLocation}</FullRow>
+              <FullRow labelKey="tests">{testNamesDisplay}</FullRow>
+              <tr>
                 {th("totalPrice")}
                 <ValueTd mono>{totalPrice > 0 ? fmtMoney(totalPrice, lang) : "—"}</ValueTd>
-              </tr>
-              <tr style={{ borderBottom: "1px solid #e5e7eb" }}>
-                {th("tests")}
-                <td colSpan={3} style={{ padding: "5px 8px", lineHeight: 1.4 }}>
-                  {testNamesDisplay}
-                </td>
-              </tr>
-              <tr style={{ borderBottom: "1px solid #e5e7eb" }}>
                 {th("receivedAt")}
-                <td colSpan={3} style={{ padding: "5px 8px" }}>
-                  {fmtDateTime(sample.receivedAt, lang)}
-                </td>
+                <ValueTd>{fmtDateTime(sample.receivedAt, lang)}</ValueTd>
               </tr>
               {contractorForm && (
-                <tr style={{ borderBottom: "1px solid #e5e7eb" }}>
-                  {th("contractorForm")}
-                  <td colSpan={3} style={{ padding: "5px 8px" }}>
-                    <span className="print:hidden">
-                      <a
-                        href={contractorForm.fileUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        style={{ color: "#1d4ed8", fontWeight: 600, textDecoration: "underline" }}
-                      >
-                        {contractorForm.fileName} — {tx("viewFile", lang)}
-                      </a>
+                <FullRow labelKey="contractorForm">
+                  <span className="print:hidden">
+                    <a
+                      href={contractorForm.fileUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{ color: "#1d4ed8", fontWeight: 700, textDecoration: "underline", fontSize: "12.5px" }}
+                    >
+                      {contractorForm.fileName} — {tx("viewFile", lang)}
+                    </a>
+                  </span>
+                  <span className="hidden print:inline" style={{ color: "#334155", fontWeight: 600 }}>
+                    {contractorForm.fileName}{" "}
+                    <span style={{ color: "#94a3b8", fontSize: "10.5px", fontWeight: 500 }}>
+                      ({tx("digitalAttachment", lang)})
                     </span>
-                    <span className="hidden print:inline" style={{ color: "#374151" }}>
-                      {contractorForm.fileName}{" "}
-                      <span style={{ color: "#9ca3af", fontSize: "8px" }}>
-                        ({tx("digitalAttachment", lang)})
-                      </span>
-                    </span>
-                  </td>
-                </tr>
+                  </span>
+                </FullRow>
               )}
               {supplierValue && (
-                <tr style={{ borderBottom: "1px solid #e5e7eb" }}>
-                  {th("supplier")}
-                  <td colSpan={3} style={{ padding: "5px 8px", color: "#111", fontWeight: 500 }}>
-                    {supplierValue}
-                  </td>
-                </tr>
+                <FullRow labelKey="supplier">{supplierValue}</FullRow>
               )}
               {cleanNotes && (
-                <tr>
-                  {th("notes")}
-                  <td colSpan={3} style={{ padding: "5px 8px", color: "#555" }}>
-                    {cleanNotes}
-                  </td>
-                </tr>
+                <FullRow labelKey="notes">
+                  <span style={{ color: "#475569" }}>{cleanNotes}</span>
+                </FullRow>
               )}
             </tbody>
           </table>
@@ -500,20 +492,22 @@ export default function PrintReceipt({ sectorSampleId }: { sectorSampleId?: numb
           {/* Footer */}
           <div
             style={{
-              marginTop: "8px",
-              paddingTop: "6px",
-              borderTop: "1px solid #e5e7eb",
+              marginTop: "12px",
+              paddingTop: "10px",
+              borderTop: "2px solid #e2e8f0",
               display: "flex",
               justifyContent: "space-between",
-              fontSize: "7.5px",
-              color: "#aaa",
-              gap: "8px",
+              alignItems: "center",
+              fontSize: "10px",
+              color: "#64748b",
+              gap: "12px",
+              fontWeight: 500,
             }}
           >
-            <span>
+            <span style={{ fontWeight: 600 }}>
               {T.labNameAr.ar} — {T.labNameEn.en}
             </span>
-            <span dir="ltr">
+            <span dir="ltr" style={{ fontWeight: 600 }}>
               {tx("printedAt", lang)}: {new Date().toLocaleString(lang === "ar" ? "ar-AE" : "en-AE")}
             </span>
           </div>

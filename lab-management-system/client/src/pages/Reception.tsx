@@ -15,6 +15,7 @@ import {
   TestListEmpty,
   TestNameBlock,
   TestNestedRow,
+  TestOrderItemList,
   TestOrderQtyRow,
   TestPriceBadge,
   TestQtyInput,
@@ -23,6 +24,7 @@ import {
   TestSelectionGrid,
   TestSelectionPanel,
   TestSelectionRow,
+  mapOrderItemsToTestList,
 } from "@/components/TestDisplay";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -2044,7 +2046,7 @@ export default function Reception() {
                           <th className="text-start px-4 py-2.5 text-xs font-medium text-muted-foreground">{t("table.contractor")}</th>
                           <th className="text-start px-4 py-2.5 text-xs font-medium text-muted-foreground">{lang === "ar" ? "رقم المرجع" : "Ref No."}</th>
                           <th className="text-start px-4 py-2.5 text-xs font-medium text-muted-foreground">{lang === "ar" ? "نوع العينة" : "Type"}</th>
-                          <th className="text-start px-4 py-2.5 text-xs font-medium text-muted-foreground">{lang === "ar" ? "الاختبارات" : "Tests"}</th>
+                          <th className="text-start px-4 py-2.5 text-xs font-medium text-muted-foreground min-w-[12rem]">{lang === "ar" ? "الاختبارات" : "Tests"}</th>
                           <th className="text-start px-4 py-2.5 text-xs font-medium text-muted-foreground">{t("table.receivedAt")}</th>
                           <th className="text-start px-4 py-2.5 text-xs font-medium text-muted-foreground">{t("table.actions")}</th>
                         </tr>
@@ -2074,16 +2076,11 @@ export default function Reception() {
                               )}
                             </td>
                             <td className="px-4 py-2.5 text-xs">{typeLabel(order.sampleType ?? "")}</td>
-                            <td className="px-4 py-2.5 text-xs">
-                              <Badge
-                                variant="outline"
-                                className="text-xs"
-                                title={((order as any).testNames ?? [])
-                                  .filter((n: string) => !!n)
-                                  .join("\n")}
-                              >
-                                {((order as any).testCount ?? 0)} {lang === "ar" ? "اختبار" : "tests"}
-                              </Badge>
+                            <td className="px-4 py-2.5 text-xs min-w-[12rem]">
+                              <TestOrderItemList
+                                items={mapOrderItemsToTestList(order.items ?? [])}
+                                emptyLabel={lang === "ar" ? "لا توجد" : "None"}
+                              />
                             </td>
                             <td className="px-4 py-2.5 text-xs text-muted-foreground">
                               {new Date(order.createdAt).toLocaleDateString(lang === "ar" ? "ar-AE" : "en-AE")}

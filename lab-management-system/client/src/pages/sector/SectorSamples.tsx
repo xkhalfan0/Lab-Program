@@ -4,17 +4,25 @@ import { SectorLayout, useSectorLang } from "./SectorLayout";
 import {
   SectorPageHeader,
   SectorCard,
+  SectorCardHeader,
   SectorLoading,
   SectorError,
   SectorEmpty,
+  SectorSearchBar,
+  SectorDateRangePanel,
+  SectorTable,
+  SectorTableHead,
+  SectorPagination,
+  SectorSampleTypeBadge,
+  SectorClearFiltersButton,
   sectorTheme,
 } from "./sectorUi";
-import { TestTube2, Search, ChevronLeft, ChevronRight, Calendar, Hash, Building2, X, FileText } from "lucide-react";
+import { TestTube2, Calendar, Building2, FileText } from "lucide-react";
 
 const t = {
   ar: {
     title: "العينات المستلمة",
-    subtitle: "جميع العينات المقدمة من قطاعكم",
+    subtitle: "جميع العينات المقدمة من قطاعكم — يمكنكم عرض وصل الاستلام لكل عينة",
     search: "بحث برمز العينة أو رقم العقد أو المقاول...",
     sampleCode: "رمز العينة",
     contractNumber: "رقم العقد",
@@ -35,10 +43,12 @@ const t = {
     clearFilters: "مسح الفلاتر",
     loadError: "تعذّر تحميل العينات. تحقق من الاتصال أو سجّل الدخول مرة أخرى.",
     retry: "إعادة المحاولة",
+    listTitle: "قائمة العينات",
+    dateFilter: "تصفية بالتاريخ",
   },
   en: {
     title: "Received Samples",
-    subtitle: "All samples submitted by your sector",
+    subtitle: "All samples submitted by your sector — open the reception receipt for any sample",
     search: "Search by sample code, contract no., or contractor...",
     sampleCode: "Sample Code",
     contractNumber: "Contract No.",
@@ -59,8 +69,19 @@ const t = {
     clearFilters: "Clear Filters",
     loadError: "Could not load samples. Check your connection or sign in again.",
     retry: "Retry",
+    listTitle: "Sample list",
+    dateFilter: "Date range",
   },
 };
+
+function formatReceivedDate(value: string | Date | null | undefined, lang: "ar" | "en") {
+  if (!value) return "—";
+  return new Date(value).toLocaleDateString(lang === "ar" ? "ar-AE" : "en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+}
 
 export default function SectorSamples() {
   const { lang } = useSectorLang();
@@ -82,8 +103,10 @@ export default function SectorSamples() {
   });
 
   const samples = data?.samples ?? [];
-  const totalPages = Math.max(1, Math.ceil((data?.total ?? 0) / limit));
-  const hasDateFilters = dateFrom || dateTo;
+  const total = data?.total ?? 0;
+  const totalPages = Math.max(1, Math.ceil(total / limit));
+  const hasDateFilters = Boolean(dateFrom || dateTo);
+  const hasActiveFilters = hasDateFilters || Boolean(search.trim());
 
   const clearFilters = () => {
     setDateFrom("");
@@ -102,81 +125,65 @@ export default function SectorSamples() {
     <SectorLayout>
       <SectorPageHeader title={T.title} subtitle={T.subtitle} />
 
-      <div className="mb-4 space-y-3">
-        <div className="relative">
-          <Search
-            className={`pointer-events-none absolute top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400 ${isRtl ? "right-3" : "left-3"}`}
-          />
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => {
-              setSearch(e.target.value);
-              setPage(1);
-            }}
-            placeholder={T.search}
-            className={`${sectorTheme.input} ${isRtl ? "pr-10" : "pl-10"}`}
-          />
-        </div>
+      <div className="mb-5 space-y-4">
+        <SectorSearchBar
+          value={search}
+          onChange={(value) => {
+            setSearch(value);
+            setPage(1);
+          }}
+          placeholder={T.search}
+          isRtl={isRtl}
+        />
 
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap items-center gap-3">
           <button
             type="button"
             onClick={() => setShowDateFilters((v) => !v)}
-            className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition ${
-              showDateFilters || hasDateFilters
-                ? "border-indigo-600 bg-indigo-600 text-white"
-                : "border-slate-200 bg-white text-slate-600 hover:border-slate-300"
+            className={`${sectorTheme.filterPill} ${
+              showDateFilters || hasDateFilters ? sectorTheme.filterPillActive : sectorTheme.filterPillIdle
             }`}
           >
-            <Calendar className="h-3.5 w-3.5" />
-            {T.from} / {T.to}
-            {hasDateFilters && <span className="h-2 w-2 rounded-full bg-orange-400" />}
+            <Calendar className="h-4 w-4" />
+            {T.dateFilter}
+            {hasDateFilters && <span className="h-2.5 w-2.5 rounded-full bg-orange-400" />}
           </button>
 
-          {(hasDateFilters || search) && (
-            <button
-              type="button"
-              onClick={clearFilters}
-              className="flex items-center gap-1 rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-medium text-amber-700"
-            >
-              <X className="h-3.5 w-3.5" />
-              {T.clearFilters}
-            </button>
-          )}
+          {hasActiveFilters && <SectorClearFiltersButton label={T.clearFilters} onClick={clearFilters} />}
         </div>
 
         {showDateFilters && (
-          <div className="flex flex-wrap gap-4 rounded-xl border border-slate-200 bg-slate-50/80 p-4">
-            <div className="flex min-w-[160px] flex-col gap-1">
-              <label className="text-xs font-medium text-slate-500">{T.from}</label>
-              <input
-                type="date"
-                value={dateFrom}
-                onChange={(e) => {
-                  setDateFrom(e.target.value);
-                  setPage(1);
-                }}
-                className={sectorTheme.input}
-              />
-            </div>
-            <div className="flex min-w-[160px] flex-col gap-1">
-              <label className="text-xs font-medium text-slate-500">{T.to}</label>
-              <input
-                type="date"
-                value={dateTo}
-                onChange={(e) => {
-                  setDateTo(e.target.value);
-                  setPage(1);
-                }}
-                className={sectorTheme.input}
-              />
-            </div>
-          </div>
+          <SectorDateRangePanel
+            fromLabel={T.from}
+            toLabel={T.to}
+            dateFrom={dateFrom}
+            dateTo={dateTo}
+            onFromChange={(value) => {
+              setDateFrom(value);
+              setPage(1);
+            }}
+            onToChange={(value) => {
+              setDateTo(value);
+              setPage(1);
+            }}
+          />
         )}
       </div>
 
-      <SectorCard>
+      <SectorCard
+        header={
+          <SectorCardHeader
+            title={T.listTitle}
+            meta={
+              !isLoading && !isError ? (
+                <span className="rounded-full bg-blue-100 px-3 py-1 text-sm font-bold text-blue-800">
+                  {T.total}: {total}
+                </span>
+              ) : null
+            }
+          />
+        }
+      >
         {isLoading ? (
           <SectorLoading />
         ) : isError ? (
@@ -184,91 +191,66 @@ export default function SectorSamples() {
         ) : samples.length === 0 ? (
           <SectorEmpty icon={TestTube2} message={T.noData} />
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm" dir={isRtl ? "rtl" : "ltr"}>
-              <thead>
-                <tr className="border-b border-slate-100 bg-slate-50/80">
-                  {headers.map((h) => (
-                    <th
-                      key={h}
-                      className="whitespace-nowrap px-4 py-3 text-start text-xs font-semibold uppercase tracking-wide text-slate-500"
-                    >
-                      {h}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
+          <>
+            <SectorTable isRtl={isRtl}>
+              <SectorTableHead headers={headers} />
               <tbody>
                 {samples.map((s, i) => (
-                  <tr key={s.id} className={i % 2 === 0 ? "bg-white" : "bg-slate-50/50"}>
-                    <td className="px-4 py-3 font-mono font-medium text-slate-900">
-                      <div className="flex items-center gap-2">
-                        <Hash className="h-3.5 w-3.5 text-slate-400" />
-                        {s.sampleCode}
+                  <tr
+                    key={s.id}
+                    className={`${sectorTheme.tableBodyRow} ${i % 2 === 1 ? "bg-slate-50/40" : "bg-white"}`}
+                  >
+                    <td className={sectorTheme.tableCellMono}>{s.sampleCode}</td>
+                    <td className={`${sectorTheme.tableCell} font-mono text-slate-600`}>{s.contractNumber ?? "—"}</td>
+                    <td className={`${sectorTheme.tableCell} max-w-[220px] break-words font-medium text-slate-800`}>
+                      {s.contractName ?? "—"}
+                    </td>
+                    <td className={sectorTheme.tableCell}>
+                      <div className="flex items-start gap-2">
+                        <Building2 className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />
+                        <span className="break-words">{s.contractorName ?? "—"}</span>
                       </div>
                     </td>
-                    <td className="px-4 py-3 text-slate-600">{s.contractNumber ?? "—"}</td>
-                    <td className="max-w-[180px] truncate px-4 py-3 text-slate-600">{s.contractName ?? "—"}</td>
-                    <td className="px-4 py-3 text-slate-600">
-                      <div className="flex items-center gap-1.5">
-                        <Building2 className="h-3.5 w-3.5 text-slate-400" />
-                        {s.contractorName ?? "—"}
-                      </div>
+                    <td className={sectorTheme.tableCell}>
+                      <SectorSampleTypeBadge sampleType={s.sampleType} lang={lang} />
                     </td>
-                    <td className="px-4 py-3 text-slate-600">{s.sampleType ?? "—"}</td>
-                    <td className="px-4 py-3">
+                    <td className={sectorTheme.tableCell}>
                       <button
                         type="button"
                         onClick={() => openReceipt(s.id)}
-                        className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-1.5 text-xs font-medium text-blue-700 transition hover:bg-blue-100"
+                        className={sectorTheme.actionButton}
                         title={T.viewReceipt}
                       >
-                        <FileText className="h-3.5 w-3.5" />
+                        <FileText className="h-4 w-4" />
                         {T.viewReceipt}
                       </button>
                     </td>
-                    <td className="whitespace-nowrap px-4 py-3 text-slate-500">
-                      <div className="flex items-center gap-1.5">
-                        <Calendar className="h-3.5 w-3.5 text-slate-400" />
-                        {s.receivedAt ? new Date(s.receivedAt).toLocaleDateString(lang === "ar" ? "ar-AE" : "en-GB") : "—"}
+                    <td className={sectorTheme.tableCellMuted}>
+                      <div className="flex items-center gap-2 whitespace-nowrap">
+                        <Calendar className="h-4 w-4 shrink-0 text-slate-400" />
+                        {formatReceivedDate(s.receivedAt, lang)}
                       </div>
                     </td>
                   </tr>
                 ))}
               </tbody>
-            </table>
-          </div>
-        )}
+            </SectorTable>
 
-        {(data?.total ?? 0) > limit && !isLoading && !isError && (
-          <div className="flex items-center justify-between border-t border-slate-100 px-4 py-3">
-            <span className="text-xs text-slate-500">
-              {T.total}: {data?.total}
-            </span>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-                disabled={page === 1}
-                className="flex items-center gap-1 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                {isRtl ? <ChevronRight className="h-3.5 w-3.5" /> : <ChevronLeft className="h-3.5 w-3.5" />}
-                {T.prev}
-              </button>
-              <span className="text-xs text-slate-500">
-                {T.page} {page} {T.of} {totalPages}
-              </span>
-              <button
-                type="button"
-                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                disabled={page >= totalPages}
-                className="flex items-center gap-1 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                {T.next}
-                {isRtl ? <ChevronLeft className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
-              </button>
-            </div>
-          </div>
+            {total > limit && (
+              <SectorPagination
+                total={total}
+                page={page}
+                totalPages={totalPages}
+                onPrev={() => setPage((p) => Math.max(1, p - 1))}
+                onNext={() => setPage((p) => Math.min(totalPages, p + 1))}
+                prevLabel={T.prev}
+                nextLabel={T.next}
+                pageLabel={T.page}
+                totalLabel={T.total}
+                isRtl={isRtl}
+              />
+            )}
+          </>
         )}
       </SectorCard>
     </SectorLayout>

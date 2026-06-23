@@ -2,7 +2,7 @@ import DashboardLayout from "@/components/DashboardLayout";
 import { DeletionRequestButton } from "@/components/DeletionRequestButton";
 import { RetestBadge } from "@/components/RetestBadge";
 import { StatusBadge } from "@/components/StatusBadge";
-import { TestAssignmentRow, TestChip, resolveOrderItemTestLabel } from "@/components/TestDisplay";
+import { TestAssignmentRow, TestOrderItemList, mapOrderItemsToTestList, resolveOrderItemTestLabel } from "@/components/TestDisplay";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -459,7 +459,7 @@ function OrdersTable({
                   <th className="text-start px-4 py-2.5 text-xs font-medium text-muted-foreground">{lang === "ar" ? "رمز العينة" : "Sample Code"}</th>
                   <th className="text-start px-4 py-2.5 text-xs font-medium text-muted-foreground">{lang === "ar" ? "المقاول" : "Contractor"}</th>
                   <th className="text-start px-4 py-2.5 text-xs font-medium text-muted-foreground">{lang === "ar" ? "النوع" : "Type"}</th>
-                  <th className="text-start px-4 py-2.5 text-xs font-medium text-muted-foreground">{lang === "ar" ? "الاختبارات" : "Tests"}</th>
+                  <th className="text-start px-4 py-2.5 text-xs font-medium text-muted-foreground min-w-[12rem]">{lang === "ar" ? "الاختبارات" : "Tests"}</th>
                   <th className="text-start px-4 py-2.5 text-xs font-medium text-muted-foreground">{lang === "ar" ? "الفني" : "Technician"}</th>
                   <th className="text-start px-4 py-2.5 text-xs font-medium text-muted-foreground">{lang === "ar" ? "الحالة" : "Status"}</th>
                   <th className="text-start px-4 py-2.5 text-xs font-medium text-muted-foreground">{lang === "ar" ? "الإجراء" : "Action"}</th>
@@ -484,19 +484,13 @@ function OrdersTable({
                         lang={lang}
                       />
                     </td>
-                    <td className="px-4 py-2.5">
-                      <div className="flex flex-wrap gap-1">
-                        {(order.items ?? []).length === 0 ? (
-                          <span className="text-xs text-muted-foreground italic">{lang === "ar" ? "لا توجد" : "None"}</span>
-                        ) : (order.items ?? []).filter((item: any) => item && typeof item === "object").map((item: any, idx: number) => (
-                          <TestChip
-                            key={`${order.id}-${item.id || item._id || idx}`}
-                            label={resolveOrderItemTestLabel(item)}
-                            quantity={Number(item.quantity) || undefined}
-                            status={item.status === "completed" ? "completed" : "pending"}
-                          />
-                        ))}
-                      </div>
+                    <td className="px-4 py-2.5 min-w-[12rem]">
+                      <TestOrderItemList
+                        items={mapOrderItemsToTestList(order.items ?? [], (item) =>
+                          item.status === "completed" ? "completed" : "pending",
+                        )}
+                        emptyLabel={lang === "ar" ? "لا توجد" : "None"}
+                      />
                     </td>
                     <td className="px-4 py-2.5 text-xs text-muted-foreground">
                       {toText(order.assignedTechnicianName)}

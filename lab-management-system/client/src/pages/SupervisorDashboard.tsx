@@ -208,7 +208,7 @@ export default function SupervisorDashboard() {
                   <div key={row.sampleCode} className="flex items-center gap-2 p-2.5 rounded-lg bg-slate-50 border border-slate-100">
                     <div className="flex-1 min-w-0">
                       <span className="text-xs font-mono font-semibold text-blue-600">{row.sampleCode}</span>
-                      <p className="text-xs text-slate-600 truncate">{row.testName}</p>
+                      <p className="text-xs text-slate-600 break-words leading-snug">{row.testName}</p>
                     </div>
                     <span className="text-xs text-slate-500">{row.waitHours}h</span>
                     <Badge className={`text-[10px] ${priorityColor(row.priority)}`}>{row.priority}</Badge>

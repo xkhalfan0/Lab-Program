@@ -8,6 +8,11 @@ import {
   SectorCard,
   SectorLoading,
   SectorEmpty,
+  SectorSearchBar,
+  SectorDateRangePanel,
+  SectorTable,
+  SectorPagination,
+  SectorClearFiltersButton,
   sectorTheme,
 } from "./sectorUi";
 import {
@@ -15,10 +20,7 @@ import {
   CheckCircle2,
   XCircle,
   Circle,
-  ChevronLeft,
-  ChevronRight,
   Eye,
-  Search,
   X,
   Calendar,
   FileText,
@@ -174,50 +176,38 @@ export default function SectorResults() {
     <SectorLayout>
       <SectorPageHeader title={T.title} subtitle={T.subtitle} />
 
-      <div className="mb-4 space-y-3">
-        <div className="flex flex-col sm:flex-row gap-2">
-          <div className="relative flex-1">
-            <Search className={`pointer-events-none absolute top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400 ${isRtl ? "right-3" : "left-3"}`} />
-            <input
-              type="text"
+      <div className="mb-5 space-y-4">
+        <div className="flex flex-col gap-3 sm:flex-row">
+          <div className="flex-1">
+            <SectorSearchBar
               value={search}
-              onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+              onChange={(value) => { setSearch(value); setPage(1); }}
               placeholder={T.search}
-              className={`${sectorTheme.input} ${isRtl ? "pr-10 pe-9" : "pl-10 pe-9"}`}
+              isRtl={isRtl}
             />
-            {search && (
-              <button
-                type="button"
-                onClick={() => { setSearch(""); setPage(1); }}
-                className={`absolute top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 transition ${isRtl ? "left-3" : "right-3"}`}
-                aria-label="Clear search"
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
-            )}
           </div>
-          <div className="relative sm:w-48">
+          <div className="relative sm:w-56">
             <input
               type="text"
               value={refSearch}
               onChange={(e) => { setRefSearch(e.target.value.replace(/\s/g, "")); setPage(1); }}
               placeholder={T.refSearch}
-              className={`${sectorTheme.input} ${refSearch ? (isRtl ? "pr-3 pl-9" : "pl-3 pr-9") : "px-3"}`}
+              className={`${sectorTheme.searchInput} ${refSearch ? (isRtl ? "pl-10 pr-4" : "pr-10 pl-4") : ""}`}
             />
             {refSearch && (
               <button
                 type="button"
                 onClick={() => { setRefSearch(""); setPage(1); }}
-                className={`absolute top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 transition ${isRtl ? "left-3" : "right-3"}`}
+                className={`absolute top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 transition ${isRtl ? "left-4" : "right-4"}`}
                 aria-label="Clear ref search"
               >
-                <X className="h-3.5 w-3.5" />
+                <X className="h-4 w-4" />
               </button>
             )}
           </div>
         </div>
 
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-3">
           {[
             { key: "all", label: T.allResults, count: allResults.length, active: !resultFilter && !readFilter, onClick: () => { setResultFilter(""); setReadFilter(""); setPage(1); } },
             { key: "unread", label: T.unreadOnly, count: unreadCount, active: readFilter === "unread", onClick: () => { setReadFilter(readFilter === "unread" ? "" : "unread"); setPage(1); } },
@@ -229,45 +219,36 @@ export default function SectorResults() {
               key={btn.key}
               type="button"
               onClick={btn.onClick}
-              className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition ${
-                btn.active ? sectorTheme.pillActive : sectorTheme.pillIdle
-              }`}
+              className={`${sectorTheme.filterPill} ${btn.active ? sectorTheme.filterPillActive : sectorTheme.filterPillIdle}`}
             >
               {btn.label}
-              <span className="rounded-full bg-black/10 px-1.5 py-0.5 text-[10px] font-bold">{btn.count}</span>
+              <span className="rounded-full bg-black/10 px-2 py-0.5 text-xs font-bold">{btn.count}</span>
             </button>
           ))}
 
           <button
             type="button"
             onClick={() => setShowDateFilters((v) => !v)}
-            className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium ${
-              showDateFilters || hasDateFilters ? "border-indigo-600 bg-indigo-600 text-white" : sectorTheme.pillIdle
+            className={`${sectorTheme.filterPill} ${
+              showDateFilters || hasDateFilters ? sectorTheme.filterPillActive : sectorTheme.filterPillIdle
             }`}
           >
-            <Calendar className="h-3.5 w-3.5" />
+            <Calendar className="h-4 w-4" />
             {T.from} / {T.to}
           </button>
 
-          {hasActiveFilters && (
-            <button type="button" onClick={clearFilters} className="flex items-center gap-1 rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-medium text-amber-700">
-              <X className="h-3.5 w-3.5" />
-              {T.clearFilters}
-            </button>
-          )}
+          {hasActiveFilters && <SectorClearFiltersButton label={T.clearFilters} onClick={clearFilters} />}
         </div>
 
         {showDateFilters && (
-          <div className="flex flex-wrap gap-4 rounded-xl border border-slate-200 bg-slate-50/80 p-4">
-            <div className="flex min-w-[160px] flex-col gap-1">
-              <label className="text-xs font-medium text-slate-500">{T.from}</label>
-              <input type="date" value={dateFrom} onChange={(e) => { setDateFrom(e.target.value); setPage(1); }} className={sectorTheme.input} />
-            </div>
-            <div className="flex min-w-[160px] flex-col gap-1">
-              <label className="text-xs font-medium text-slate-500">{T.to}</label>
-              <input type="date" value={dateTo} onChange={(e) => { setDateTo(e.target.value); setPage(1); }} className={sectorTheme.input} />
-            </div>
-          </div>
+          <SectorDateRangePanel
+            fromLabel={T.from}
+            toLabel={T.to}
+            dateFrom={dateFrom}
+            dateTo={dateTo}
+            onFromChange={(value) => { setDateFrom(value); setPage(1); }}
+            onToChange={(value) => { setDateTo(value); setPage(1); }}
+          />
         )}
       </div>
 
@@ -277,13 +258,12 @@ export default function SectorResults() {
         ) : filtered.length === 0 ? (
           <SectorEmpty icon={FlaskConical} message={T.noData} />
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm" dir={isRtl ? "rtl" : "ltr"}>
+          <SectorTable isRtl={isRtl}>
               <thead>
-                <tr className="border-b border-slate-100 bg-slate-50/80">
-                  <th className="w-4 px-3 py-3" />
+                <tr className={sectorTheme.tableHeadRow}>
+                  <th className="w-5 px-4 py-4" />
                   {[T.sampleCode, T.contractNumber, T.testType, T.result, T.testedBy, T.testDate, T.actions].map((h) => (
-                    <th key={h} className="whitespace-nowrap px-4 py-3 text-start text-xs font-semibold uppercase tracking-wide text-slate-500">{h}</th>
+                    <th key={h} className={sectorTheme.tableHeadCell}>{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -296,52 +276,52 @@ export default function SectorResults() {
                   return (
                     <tr
                       key={r.id}
-                      className={`cursor-pointer transition hover:bg-blue-50/50 ${
+                      className={`cursor-pointer ${sectorTheme.tableBodyRow} ${
                         showFailAlert
                           ? "bg-red-50/40"
                           : !r.isRead
                             ? "bg-blue-50/30"
-                            : i % 2 === 0
-                              ? "bg-white"
-                              : "bg-slate-50/50"
+                            : i % 2 === 1
+                              ? "bg-slate-50/40"
+                              : "bg-white"
                       }`}
                       onClick={() => openReport(r.id, testLabel ?? "")}
                     >
-                      <td className="px-3 py-3">
+                      <td className="px-4 py-4">
                         {showFailAlert ? (
-                          <div className="mx-auto h-2 w-2 rounded-full bg-red-500" title={isRtl ? "تنبيه نتيجة راسبة" : "Failed result alert"} />
+                          <div className="mx-auto h-2.5 w-2.5 rounded-full bg-red-500" title={isRtl ? "تنبيه نتيجة راسبة" : "Failed result alert"} />
                         ) : !r.isRead ? (
-                          <div className="mx-auto h-2 w-2 rounded-full bg-blue-500" />
+                          <div className="mx-auto h-2.5 w-2.5 rounded-full bg-blue-500" />
                         ) : null}
                       </td>
-                      <td className="px-4 py-3 font-mono font-medium text-slate-900">
+                      <td className={sectorTheme.tableCellMono}>
                         {r.sampleCode}
                         {showFailAlert ? (
-                          <span className="ms-2 rounded bg-red-100 px-1.5 py-0.5 text-[10px] font-semibold text-red-700">{T.fail}</span>
+                          <span className="ms-2 rounded-md bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-700">{T.fail}</span>
                         ) : !r.isRead ? (
-                          <span className="ms-2 rounded bg-blue-100 px-1.5 py-0.5 text-[10px] font-semibold text-blue-700">{T.unread}</span>
+                          <span className="ms-2 rounded-md bg-blue-100 px-2 py-0.5 text-xs font-semibold text-blue-700">{T.unread}</span>
                         ) : null}
                       </td>
-                      <td className="px-4 py-3 text-slate-600">{r.contractNumber ?? "—"}</td>
-                      <td className="max-w-[220px] px-4 py-3 text-slate-700">{testLabel ?? "—"}</td>
-                      <td className="px-4 py-3">
-                        <span className={`inline-flex items-center gap-1 font-medium ${isPass ? "text-emerald-700" : isFail ? "text-red-700" : "text-slate-600"}`}>
+                      <td className={`${sectorTheme.tableCell} font-mono text-slate-600`}>{r.contractNumber ?? "—"}</td>
+                      <td className={`${sectorTheme.tableCell} max-w-[260px] break-words font-medium text-slate-800`}>{testLabel ?? "—"}</td>
+                      <td className={sectorTheme.tableCell}>
+                        <span className={`inline-flex items-center gap-1.5 text-[15px] font-semibold ${isPass ? "text-emerald-700" : isFail ? "text-red-700" : "text-slate-600"}`}>
                           {isPass && <CheckCircle2 className="h-4 w-4" />}
                           {isFail && <XCircle className="h-4 w-4" />}
                           {isPass ? T.pass : isFail ? T.fail : r.overallResult ?? "—"}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-slate-600">{r.testedBy ?? "—"}</td>
-                      <td className="whitespace-nowrap px-4 py-3 text-slate-500">
+                      <td className={sectorTheme.tableCell}>{r.testedBy ?? "—"}</td>
+                      <td className={`${sectorTheme.tableCellMuted} whitespace-nowrap`}>
                         {r.testDate ? new Date(r.testDate).toLocaleDateString(isRtl ? "ar-AE" : "en-GB", { day: "2-digit", month: "short", year: "numeric" }) : "—"}
                       </td>
-                      <td className="px-4 py-3">
+                      <td className={sectorTheme.tableCell}>
                         <button
                           type="button"
                           onClick={(e) => { e.stopPropagation(); openReport(r.id, testLabel ?? ""); }}
-                          className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-1.5 text-xs font-medium text-blue-700 hover:bg-blue-100"
+                          className={sectorTheme.actionButton}
                         >
-                          <FileText className="h-3.5 w-3.5" />
+                          <FileText className="h-4 w-4" />
                           {T.viewReport}
                         </button>
                       </td>
@@ -349,25 +329,22 @@ export default function SectorResults() {
                   );
                 })}
               </tbody>
-            </table>
-          </div>
+            </SectorTable>
         )}
 
         {(data?.total ?? 0) > limit && !isLoading && (
-          <div className="flex items-center justify-between border-t border-slate-100 px-4 py-3">
-            <span className="text-xs text-slate-500">{T.total}: {data?.total}</span>
-            <div className="flex items-center gap-2">
-              <button type="button" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1} className="flex items-center gap-1 rounded-lg border border-slate-200 px-3 py-1.5 text-xs disabled:opacity-40">
-                {isRtl ? <ChevronRight className="h-3.5 w-3.5" /> : <ChevronLeft className="h-3.5 w-3.5" />}
-                {T.prev}
-              </button>
-              <span className="text-xs text-slate-500">{T.page} {page} {T.of} {totalPages}</span>
-              <button type="button" onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page >= totalPages} className="flex items-center gap-1 rounded-lg border border-slate-200 px-3 py-1.5 text-xs disabled:opacity-40">
-                {T.next}
-                {isRtl ? <ChevronLeft className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
-              </button>
-            </div>
-          </div>
+          <SectorPagination
+            total={data?.total ?? 0}
+            page={page}
+            totalPages={totalPages}
+            onPrev={() => setPage((p) => Math.max(1, p - 1))}
+            onNext={() => setPage((p) => Math.min(totalPages, p + 1))}
+            prevLabel={T.prev}
+            nextLabel={T.next}
+            pageLabel={T.page}
+            totalLabel={T.total}
+            isRtl={isRtl}
+          />
         )}
       </SectorCard>
 
