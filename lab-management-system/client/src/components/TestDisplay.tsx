@@ -140,6 +140,39 @@ export function TestChip({
   );
 }
 
+/** Full-width test row for assignment / distribution dialogs — no truncated pill chips. */
+export function TestAssignmentRow({
+  label,
+  code,
+  quantity,
+  lang = "en",
+}: {
+  label: string;
+  code?: string | null;
+  quantity?: number;
+  lang?: TestDisplayLang;
+}) {
+  return (
+    <div className="flex items-start gap-3 rounded-lg border border-border/80 bg-background px-3.5 py-3 shadow-sm">
+      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary ring-1 ring-primary/15">
+        <FlaskConical className="h-4 w-4" />
+      </div>
+      <div className="min-w-0 flex-1 space-y-1">
+        <p className="text-sm font-semibold leading-snug text-foreground break-words">{label}</p>
+        {code ? <TestCodeBadge code={code} variant="inline" /> : null}
+      </div>
+      {quantity != null && quantity > 0 && (
+        <div className="shrink-0 rounded-md bg-muted/60 px-2.5 py-1 text-center min-w-[3rem]">
+          <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+            {lang === "ar" ? "الكمية" : "Qty"}
+          </p>
+          <p className="text-sm font-bold tabular-nums text-foreground">{quantity}</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function TestSelectionPanel({
   hint,
   selectedCount,

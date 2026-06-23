@@ -2,7 +2,7 @@ import DashboardLayout from "@/components/DashboardLayout";
 import { DeletionRequestButton } from "@/components/DeletionRequestButton";
 import { RetestBadge } from "@/components/RetestBadge";
 import { StatusBadge } from "@/components/StatusBadge";
-import { TestChip, resolveOrderItemTestLabel } from "@/components/TestDisplay";
+import { TestAssignmentRow, TestChip, resolveOrderItemTestLabel } from "@/components/TestDisplay";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -745,23 +745,37 @@ export default function Distribution() {
           </DialogHeader>
           <form onSubmit={handleDistribute} className="space-y-4 mt-2">
             {/* Order Summary */}
-            <div className="bg-muted/40 rounded-lg p-3 text-xs space-y-2">
-              <div className="flex items-center gap-2">
-                <span className="text-muted-foreground">{lang === "ar" ? "المقاول:" : "Contractor:"}</span>
-                <span className="font-medium">{toText(selectedOrder?.contractorName)}</span>
+            <div className="rounded-xl border border-border/80 bg-muted/30 overflow-hidden">
+              <div className="grid grid-cols-2 gap-px bg-border/60">
+                <div className="bg-background px-3.5 py-2.5">
+                  <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                    {lang === "ar" ? "المقاول" : "Contractor"}
+                  </p>
+                  <p className="mt-0.5 text-sm font-semibold text-foreground leading-snug">
+                    {toText(selectedOrder?.contractorName)}
+                  </p>
+                </div>
+                <div className="bg-background px-3.5 py-2.5">
+                  <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                    {lang === "ar" ? "نوع العينة" : "Sample type"}
+                  </p>
+                  <p className="mt-0.5 text-sm font-semibold text-foreground">
+                    {toText(typeLabel(String(selectedOrder?.sampleType ?? ""), lang))}
+                  </p>
+                </div>
               </div>
-              <div className="flex items-center gap-2">
-                <span className="text-muted-foreground">{lang === "ar" ? "النوع:" : "Type:"}</span>
-                <span className="font-medium">{toText(typeLabel(String(selectedOrder?.sampleType ?? ""), lang))}</span>
-              </div>
-              <div>
-                <span className="text-muted-foreground">{lang === "ar" ? "الاختبارات:" : "Tests:"}</span>
-                <div className="flex flex-wrap gap-1 mt-1">
+              <div className="border-t border-border/80 bg-background px-3.5 py-3 space-y-2">
+                <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                  {lang === "ar" ? "الاختبارات المطلوبة" : "Tests to assign"}
+                </p>
+                <div className="space-y-2">
                   {(selectedOrder?.items ?? []).filter((item: any) => item && typeof item === "object").map((item: any, idx: number) => (
-                    <TestChip
+                    <TestAssignmentRow
                       key={`dialog-${selectedOrder?.id}-${item.id || item._id || idx}`}
                       label={resolveOrderItemTestLabel(item)}
+                      code={item.testTypeCode ?? item.testCode}
                       quantity={Number(item.quantity) || undefined}
+                      lang={lang === "ar" ? "ar" : "en"}
                     />
                   ))}
                 </div>
