@@ -430,6 +430,7 @@ function GroupPanel({ group, distributionId, onRefresh, castingDate: distCasting
       classOfConcrete: classOfConcrete.trim() || undefined,
       maxAggSize: maxAggSize.trim() || undefined,
       slump: slump.trim() || undefined,
+      placeOfSampling: placeOfSampling.trim() || undefined,
     });
   };
 
@@ -540,8 +541,6 @@ function GroupPanel({ group, distributionId, onRefresh, castingDate: distCasting
         return;
       }
       const mixRequired = [
-        { label: ar ? "درجة الخرسانة" : "Class of Concrete", value: classOfConcrete },
-        { label: ar ? "أقصى حجم للركام (مم)" : "Maximum Aggregate Size (mm)", value: maxAggSize },
         { label: ar ? "الهبوط (مم)" : "Slump (mm)", value: slump },
       ];
       const mixMissing = mixRequired.filter((f) => !String(f.value ?? "").trim()).map((f) => f.label);
@@ -559,10 +558,7 @@ function GroupPanel({ group, distributionId, onRefresh, castingDate: distCasting
     if (!cubeOrderFlow) {
       const requiredFields = [
         { label: ar ? "مصدر/مورد الخرسانة" : "Concrete Source/Supplier", value: sourceSupplier },
-        { label: ar ? "درجة الخرسانة" : "Class of Concrete", value: classOfConcrete },
-        { label: ar ? "أقصى حجم للركام (مم)" : "Maximum Aggregate Size (mm)", value: maxAggSize },
         { label: ar ? "الهبوط (مم)" : "Slump (mm)", value: slump },
-        { label: ar ? "مكان أخذ العينة" : "Place of Sampling", value: placeOfSampling },
       ];
       const missing = requiredFields.filter((f) => !String(f.value ?? "").trim()).map((f) => f.label);
       if (missing.length > 0) {
@@ -694,13 +690,13 @@ function GroupPanel({ group, distributionId, onRefresh, castingDate: distCasting
                 <div>
                   <Label className="text-xs">
                     {ar ? "درجة الخرسانة" : "Class of Concrete"}
-                    <span className="text-red-600 ml-1">*</span>
+                    <span className="text-gray-400 font-normal ml-1">({ar ? "اختياري" : "optional"})</span>
                   </Label>
                   <Input
                     value={classOfConcrete}
                     onChange={e => setClassOfConcrete(e.target.value)}
                     onBlur={() => { if (!isSubmitted) void saveMixProperties(); }}
-                    className="h-8 text-sm mt-0.5 bg-yellow-50 border-yellow-300"
+                    className="h-8 text-sm mt-0.5"
                     placeholder={ar ? "مثال: C30 / C40" : "e.g. C30 / C40"}
                     disabled={inputsDisabled}
                   />
@@ -708,14 +704,28 @@ function GroupPanel({ group, distributionId, onRefresh, castingDate: distCasting
                 <div>
                   <Label className="text-xs">
                     {ar ? "أقصى حجم للركام (مم)" : "Maximum Aggregate Size (mm)"}
-                    <span className="text-red-600 ml-1">*</span>
+                    <span className="text-gray-400 font-normal ml-1">({ar ? "اختياري" : "optional"})</span>
                   </Label>
                   <Input
                     value={maxAggSize}
                     onChange={e => setMaxAggSize(e.target.value)}
                     onBlur={() => { if (!isSubmitted) void saveMixProperties(); }}
-                    className="h-8 text-sm mt-0.5 bg-yellow-50 border-yellow-300"
+                    className="h-8 text-sm mt-0.5"
                     placeholder={ar ? "مثال: 20" : "e.g. 20"}
+                    disabled={inputsDisabled}
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs">
+                    {ar ? "مكان أخذ العينة" : "Place of Sampling"}
+                    <span className="text-gray-400 font-normal ml-1">({ar ? "اختياري" : "optional"})</span>
+                  </Label>
+                  <Input
+                    value={placeOfSampling}
+                    onChange={e => setPlaceOfSampling(e.target.value)}
+                    onBlur={() => { if (!isSubmitted) void saveMixProperties(); }}
+                    className="h-8 text-sm mt-0.5"
+                    placeholder={ar ? "مثال: موقع الصب" : "e.g. Pour location"}
                     disabled={inputsDisabled}
                   />
                 </div>
@@ -819,16 +829,22 @@ function GroupPanel({ group, distributionId, onRefresh, castingDate: distCasting
                   )}
                 </div>
                 <div>
-                  <Label className="text-xs">{ar ? "درجة الخرسانة" : "Class of Concrete"} <span className="text-red-600">*</span></Label>
-                  <Input value={classOfConcrete} onChange={e => setClassOfConcrete(e.target.value)} className="h-8 text-sm bg-yellow-50 border-yellow-300" placeholder={ar ? "مثال: C30 / C40" : "e.g. C30 / C40"} disabled={isSubmitted} />
+                  <Label className="text-xs">
+                    {ar ? "درجة الخرسانة" : "Class of Concrete"}
+                    <span className="text-gray-400 font-normal ml-1">({ar ? "اختياري" : "optional"})</span>
+                  </Label>
+                  <Input value={classOfConcrete} onChange={e => setClassOfConcrete(e.target.value)} className="h-8 text-sm" placeholder={ar ? "مثال: C30 / C40" : "e.g. C30 / C40"} disabled={isSubmitted} />
                 </div>
                 <div>
                   <Label className="text-xs">{ar ? "الهبوط (مم)" : "Slump (mm)"} <span className="text-red-600">*</span></Label>
                   <Input value={slump} onChange={e => setSlump(e.target.value)} className="h-8 text-sm bg-yellow-50 border-yellow-300" placeholder={ar ? "مثال: 120" : "e.g. 120"} disabled={isSubmitted} />
                 </div>
                 <div>
-                  <Label className="text-xs">{ar ? "أقصى حجم للركام (مم)" : "Maximum Aggregate Size (mm)"} <span className="text-red-600">*</span></Label>
-                  <Input value={maxAggSize} onChange={e => setMaxAggSize(e.target.value)} className="h-8 text-sm bg-yellow-50 border-yellow-300" placeholder={ar ? "مثال: 20" : "e.g. 20"} disabled={isSubmitted} />
+                  <Label className="text-xs">
+                    {ar ? "أقصى حجم للركام (مم)" : "Maximum Aggregate Size (mm)"}
+                    <span className="text-gray-400 font-normal ml-1">({ar ? "اختياري" : "optional"})</span>
+                  </Label>
+                  <Input value={maxAggSize} onChange={e => setMaxAggSize(e.target.value)} className="h-8 text-sm" placeholder={ar ? "مثال: 20" : "e.g. 20"} disabled={isSubmitted} />
                 </div>
                 <div>
                   <Label className="text-xs">Region</Label>
@@ -843,8 +859,11 @@ function GroupPanel({ group, distributionId, onRefresh, castingDate: distCasting
                   <Input value={cscRef} onChange={e => setCscRef(e.target.value)} className="h-8 text-sm" disabled={isSubmitted} />
                 </div>
                 <div>
-                  <Label className="text-xs">{ar ? "مكان أخذ العينة" : "Place of Sampling"} <span className="text-red-600">*</span></Label>
-                  <Input value={placeOfSampling} onChange={e => setPlaceOfSampling(e.target.value)} className="h-8 text-sm" disabled={isSubmitted} />
+                  <Label className="text-xs">
+                    {ar ? "مكان أخذ العينة" : "Place of Sampling"}
+                    <span className="text-gray-400 font-normal ml-1">({ar ? "اختياري" : "optional"})</span>
+                  </Label>
+                  <Input value={placeOfSampling} onChange={e => setPlaceOfSampling(e.target.value)} className="h-8 text-sm" placeholder={ar ? "مثال: موقع الصب" : "e.g. Pour location"} disabled={isSubmitted} />
                 </div>
                 <div>
                   <Label className="text-xs">Location</Label>

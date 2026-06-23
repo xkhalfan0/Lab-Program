@@ -1972,10 +1972,7 @@ ${testSummaries.length > 0 ? testSummaries.join("\n\n") : "لم تُجرَ اخ�
         if (!group) throw new TRPCError({ code: "NOT_FOUND" });
         const requiredHeaderFields: Array<{ key: keyof typeof group; label: string }> = [
           { key: "sourceSupplier", label: "Concrete Source/Supplier" },
-          { key: "classOfConcrete", label: "Class of Concrete" },
-          { key: "maxAggSize", label: "Maximum Aggregate Size (mm)" },
           { key: "slump", label: "Slump (mm)" },
-          { key: "placeOfSampling", label: "Place of Sampling" },
         ];
         const distForPlan = await getDistributionById(group.distributionId);
         const isConcCubeOrder = distForPlan?.testType === "CONC_CUBE";

@@ -3366,6 +3366,9 @@ function renderConcreteCubes(fd: any, isAr: boolean) {
   const requiredAtAge = fd.requiredAtAge;
   const avgStrength = fd.avgStrength;
   const structureType = fd.structureType;
+  const classOfConcrete = fd.classOfConcrete;
+  const maxAggSize = fd.maxAggSize;
+  const placeOfSampling = fd.placeOfSampling;
   const batchReference = fd.batchReference;
   const curingKey = fd.curingCondition as string | undefined;
   const curingLabels: Record<string, { ar: string; en: string }> = {
@@ -3410,6 +3413,24 @@ function renderConcreteCubes(fd: any, isAr: boolean) {
           <div className="bg-gray-50 border border-gray-200 rounded p-2 text-center">
             <p className="text-gray-600 font-semibold">{isAr ? "نوع الهيكل" : "Structure Type"}</p>
             <p className="font-bold text-gray-800">{structureType}</p>
+          </div>
+        ) : null}
+        {classOfConcrete ? (
+          <div className="bg-gray-50 border border-gray-200 rounded p-2 text-center">
+            <p className="text-gray-600 font-semibold">{isAr ? "درجة الخرسانة" : "Class of Concrete"}</p>
+            <p className="font-bold text-gray-800">{classOfConcrete}</p>
+          </div>
+        ) : null}
+        {maxAggSize ? (
+          <div className="bg-gray-50 border border-gray-200 rounded p-2 text-center">
+            <p className="text-gray-600 font-semibold">{isAr ? "أقصى حجم للركام" : "Max. Aggregate Size"}</p>
+            <p className="font-bold text-gray-800">{maxAggSize} mm</p>
+          </div>
+        ) : null}
+        {placeOfSampling ? (
+          <div className="bg-gray-50 border border-gray-200 rounded p-2 text-center">
+            <p className="text-gray-600 font-semibold">{isAr ? "مكان أخذ العينة" : "Place of Sampling"}</p>
+            <p className="font-bold text-gray-800">{placeOfSampling}</p>
           </div>
         ) : null}
         <div className="bg-gray-50 border border-gray-200 rounded p-2 text-center">

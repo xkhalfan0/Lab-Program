@@ -111,6 +111,9 @@ export default function ConcreteCubes() {
   );
 
   const [specifiedStrength, setSpecifiedStrength] = useState("30");
+  const [classOfConcrete, setClassOfConcrete] = useState("");
+  const [maxAggSize, setMaxAggSize] = useState("");
+  const [placeOfSampling, setPlaceOfSampling] = useState("");
   const [structureType, setStructureType] = useState("");
   const [curingCondition, setCuringCondition] = useState("water_20c");
   const [batchReference, setBatchReference] = useState("");
@@ -161,6 +164,9 @@ export default function ConcreteCubes() {
     if (!existing?.formData) return;
     const fd = existing.formData as any;
     if (fd.specifiedStrength) setSpecifiedStrength(String(fd.specifiedStrength));
+    if (fd.classOfConcrete) setClassOfConcrete(String(fd.classOfConcrete));
+    if (fd.maxAggSize) setMaxAggSize(String(fd.maxAggSize));
+    if (fd.placeOfSampling) setPlaceOfSampling(String(fd.placeOfSampling));
     if (fd.structureType) setStructureType(fd.structureType);
     if (fd.curingCondition) setCuringCondition(String(fd.curingCondition));
     if (fd.batchReference) setBatchReference(String(fd.batchReference));
@@ -237,6 +243,9 @@ export default function ConcreteCubes() {
           isLate: testAge ? (actualAge != null && actualAge > testAge + 5) : false,
           cubeSize: rows[0]?.cubeSize ?? "150",
           specifiedStrength: specStr,
+          classOfConcrete: classOfConcrete.trim() || undefined,
+          maxAggSize: maxAggSize.trim() || undefined,
+          placeOfSampling: placeOfSampling.trim() || undefined,
           structureType,
           curingCondition,
           batchReference: batchReference.trim() || undefined,
@@ -488,6 +497,42 @@ export default function ConcreteCubes() {
                   onChange={e => setSpecifiedStrength(e.target.value)}
                   className="font-mono"
                   placeholder="30"
+                  disabled={submitted}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">
+                  {ar ? "درجة الخرسانة" : "Class of Concrete"}
+                  <span className="text-gray-400 font-normal ml-1">({ar ? "اختياري" : "optional"})</span>
+                </Label>
+                <Input
+                  value={classOfConcrete}
+                  onChange={e => setClassOfConcrete(e.target.value)}
+                  placeholder={ar ? "مثال: C30 / C40" : "e.g. C30 / C40"}
+                  disabled={submitted}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">
+                  {ar ? "أقصى حجم للركام (مم)" : "Maximum Aggregate Size (mm)"}
+                  <span className="text-gray-400 font-normal ml-1">({ar ? "اختياري" : "optional"})</span>
+                </Label>
+                <Input
+                  value={maxAggSize}
+                  onChange={e => setMaxAggSize(e.target.value)}
+                  placeholder={ar ? "مثال: 20" : "e.g. 20"}
+                  disabled={submitted}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">
+                  {ar ? "مكان أخذ العينة" : "Place of Sampling"}
+                  <span className="text-gray-400 font-normal ml-1">({ar ? "اختياري" : "optional"})</span>
+                </Label>
+                <Input
+                  value={placeOfSampling}
+                  onChange={e => setPlaceOfSampling(e.target.value)}
+                  placeholder={ar ? "مثال: موقع الصب" : "e.g. Pour location"}
                   disabled={submitted}
                 />
               </div>
