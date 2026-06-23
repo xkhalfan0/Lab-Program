@@ -244,8 +244,12 @@ export default function PrintReceipt({ sectorSampleId }: { sectorSampleId?: numb
   const rawNotes: string = (sample as any).notes ?? "";
   const supplierMatch = rawNotes.match(/^__SUPPLIER__:(.+?)(?:\n|$)/);
   const supplierValue = supplierMatch ? supplierMatch[1].trim() : null;
-  const cleanNotes = rawNotes.replace(/^__SUPPLIER__:[^\n]*\n?/, "").trim();
-  const sampleLocation: string | null = (sample as any).location?.trim() || null;
+  const cleanNotes = rawNotes
+    .replace(/^__SUPPLIER__:[^\n]*\n?/, "")
+    .replace(/^__CURING_DATE__:[^\n]*\n?/, "")
+    .replace(/^__AGGREGATE_TYPE__:[^\n]*\n?/, "")
+    .trim();
+  const sampleLocation = (sample as any).location?.trim() || "—";
 
   const th = (key: keyof typeof T) => {
     const l = bilingualLabel(key);
@@ -428,6 +432,12 @@ export default function PrintReceipt({ sectorSampleId }: { sectorSampleId?: numb
                 </td>
               </tr>
               <tr style={{ borderBottom: "1px solid #e5e7eb" }}>
+                {th("location")}
+                <td colSpan={3} style={{ padding: "5px 8px", color: "#111" }}>
+                  {sampleLocation}
+                </td>
+              </tr>
+              <tr style={{ borderBottom: "1px solid #e5e7eb" }}>
                 {th("quantity")}
                 <ValueTd>{totalQuantity}</ValueTd>
                 {th("totalPrice")}
@@ -473,14 +483,6 @@ export default function PrintReceipt({ sectorSampleId }: { sectorSampleId?: numb
                   {th("supplier")}
                   <td colSpan={3} style={{ padding: "5px 8px", color: "#111", fontWeight: 500 }}>
                     {supplierValue}
-                  </td>
-                </tr>
-              )}
-              {sampleLocation && (
-                <tr style={{ borderBottom: "1px solid #e5e7eb" }}>
-                  {th("location")}
-                  <td colSpan={3} style={{ padding: "5px 8px", color: "#111" }}>
-                    {sampleLocation}
                   </td>
                 </tr>
               )}
