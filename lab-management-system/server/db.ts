@@ -1203,24 +1203,37 @@ export async function repairOrderDistributionLinks(orderId: number): Promise<num
           item.testSubType == null ||
           d.testSubType == null),
     );
-    if (candidates.length !== 1) continue;
-    await updateLabOrderItemDistribution(item.id, candidates[0].id);
-    linkedDistIds.add(candidates[0].id);
+    if (candidates.length === 0) continue;
+
+    const exactSubType = candidates.filter(
+      (d) => (item.testSubType ?? null) === (d.testSubType ?? null),
+    );
+    const pool = exactSubType.length > 0 ? exactSubType : candidates;
+    if (pool.length === 0) continue;
+
+    const match = pool[0];
+    await updateLabOrderItemDistribution(item.id, match.id);
+    linkedDistIds.add(match.id);
     repaired++;
   }
   return repaired;
 }
 
+type BatchSiblingOptions = { includeResults?: boolean };
+
 /** Distributions for the same lab order (e.g. asphalt mix batch: extract → sieve → Gmb → Marshall).
  *  Uses a direct JOIN on lab_order_items so the result is always consistent with the technician
  *  task list (which uses the same join). */
-export async function getBatchSiblingDistributions(_sampleId: number, orderId: number) {
+export async function getBatchSiblingDistributions(
+  _sampleId: number,
+  orderId: number,
+  options: BatchSiblingOptions = {},
+) {
   const db = await getDb();
   if (!db) return [];
 
   await repairOrderDistributionLinks(orderId);
 
-  // Direct join: find all distributions whose lab_order_item belongs to this order.
   const siblingRows = await db
     .select({ dist: distributions })
     .from(distributions)
@@ -1234,6 +1247,14 @@ export async function getBatchSiblingDistributions(_sampleId: number, orderId: n
     .where(isNull(distributions.deletedAt))
     .orderBy(asc(distributions.createdAt));
 
+  if (!options.includeResults) {
+    return siblingRows.map(({ dist }) => ({
+      ...dist,
+      testResults: [],
+      specializedTestResults: [],
+    }));
+  }
+
   return Promise.all(
     siblingRows.map(async ({ dist }) => {
       const legacy = await getTestResultByDistribution(dist.id);
@@ -1245,6 +1266,19 @@ export async function getBatchSiblingDistributions(_sampleId: number, orderId: n
       };
     }),
   );
+}
+
+/** Order + sample + batch distributions — never throws; used by batch overview UI. */
+export async function getBatchOverviewData(orderId: number, options: BatchSiblingOptions = {}) {
+  const order = await getLabOrderById(orderId);
+  if (!order) {
+    return { order: null, sample: null, siblings: [] as Awaited<ReturnType<typeof getBatchSiblingDistributions>> };
+  }
+  const [sample, siblings] = await Promise.all([
+    getSampleById(order.sampleId),
+    getBatchSiblingDistributions(order.sampleId, orderId, options),
+  ]);
+  return { order, sample: sample ?? null, siblings };
 }
 
 export async function updateDistributionStatus(

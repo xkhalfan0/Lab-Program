@@ -281,8 +281,8 @@ export default function BatchReport() {
   const sampleId = parseInt(params.sampleId ?? "0", 10);
   const orderId = parseInt(params.orderId ?? "0", 10);
 
-  const { data: batchOverview, isLoading: batchLoading } = trpc.orders.getBatchOverview.useQuery(
-    { orderId },
+  const { data: batchOverview, isLoading: batchLoading } = trpc.distributions.getBatchByOrder.useQuery(
+    { orderId, includeResults: true },
     { enabled: orderId > 0 },
   );
 
@@ -347,7 +347,7 @@ export default function BatchReport() {
 
   const handleClose = () => {
     if (window.opener) window.close();
-    else navigate(`/batch/${sampleId}/${orderId}`);
+    else navigate(`/batch/order/${orderId}`);
   };
 
   const handlePrint = () => printLabReport();

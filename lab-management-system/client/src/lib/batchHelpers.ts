@@ -41,8 +41,8 @@ export function isBatchDistribution(dist: {
   return false;
 }
 
-export function getBatchRoute(sampleId: number, orderId: number): string {
-  return `/batch/${sampleId || 0}/${orderId}`;
+export function getBatchRoute(_sampleId: number, orderId: number): string {
+  return `/batch/order/${orderId}`;
 }
 
 export function redirectAfterTestSave(

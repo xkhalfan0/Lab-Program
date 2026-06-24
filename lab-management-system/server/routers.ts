@@ -44,6 +44,7 @@ import {
   getDistributionsBySample,
   getDistributionsByBatch,
   getBatchSiblingDistributions,
+  getBatchOverviewData,
   getDistributionsByTechnician,
   checkTestDependencies,
   getNotificationsByUser,
@@ -1115,7 +1116,24 @@ ${testSummaries.length > 0 ? testSummaries.join("\n\n") : "لم تُجرَ اخ�
         if (!orderId) return [];
         const order = await getLabOrderById(orderId);
         if (!order?.sampleId) return [];
-        return getBatchSiblingDistributions(order.sampleId, orderId);
+        return getBatchSiblingDistributions(order.sampleId, orderId, { includeResults: true });
+      }),
+
+    /** Batch overview payload — order + sample + distributions; never throws. */
+    getBatchByOrder: protectedProcedure
+      .input(
+        z.object({
+          orderId: z.number(),
+          includeResults: z.boolean().optional(),
+        }),
+      )
+      .query(async ({ input }) => {
+        if (!input.orderId) {
+          return { order: null, sample: null, siblings: [] };
+        }
+        return getBatchOverviewData(input.orderId, {
+          includeResults: input.includeResults ?? false,
+        });
       }),
 
     markRead: protectedProcedure
@@ -3141,18 +3159,10 @@ ${testSummaries.length > 0 ? testSummaries.join("\n\n") : "لم تُجرَ اخ�
         return { ...order, items };
       }),
 
-    /** Single call for batch overview: order + sample + all linked test distributions. */
+    /** @deprecated Prefer distributions.getBatchByOrder */
     getBatchOverview: protectedProcedure
       .input(z.object({ orderId: z.number() }))
-      .query(async ({ input }) => {
-        const order = await getLabOrderById(input.orderId);
-        if (!order) throw new TRPCError({ code: "NOT_FOUND", message: "Order not found" });
-        const [sample, siblings] = await Promise.all([
-          getSampleById(order.sampleId),
-          getBatchSiblingDistributions(order.sampleId, input.orderId),
-        ]);
-        return { order, sample: sample ?? null, siblings };
-      }),
+      .query(async ({ input }) => getBatchOverviewData(input.orderId)),
 
     byStatus: protectedProcedure
       .input(z.object({ status: z.enum(["pending", "distributed", "in_progress", "completed", "reviewed", "qc_passed", "rejected"]) }))

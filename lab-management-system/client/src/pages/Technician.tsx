@@ -799,7 +799,7 @@ export default function Technician() {
         allSamples={allSamples}
         onOpenBatch={() => {
           if (!orderId) return;
-          navigate(`/batch/${sampleId || 0}/${orderId}`);
+          navigate(`/batch/order/${orderId}`);
         }}
       />
     );

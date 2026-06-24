@@ -95,6 +95,7 @@ const ROUTE_ROLES: Record<string, string[]> = {
   "/reception": ["admin", "reception", "lab_manager"],
   "/distribution": ["admin", "lab_manager"],
   "/technician": ["admin", "technician", "lab_manager"],
+  "/batch/order/:orderId": ["admin", "technician", "lab_manager"],
   "/batch/:sampleId/:orderId": ["admin", "technician", "lab_manager"],
   "/batch-report/:sampleId/:orderId": ["admin", "technician", "lab_manager"],
   "/manager-review": ["admin", "lab_manager"],
@@ -235,6 +236,7 @@ function Router() {
       <Route path="/technician">
         {() => <ProtectedRoute component={Technician} path="/technician" />}
       </Route>
+      <Route path="/batch/order/:orderId" component={BatchOverview} />
       <Route path="/batch/:sampleId/:orderId" component={BatchOverview} />
       <Route path="/manager-review">
         {() => <ProtectedRoute component={ManagerReview} path="/manager-review" />}

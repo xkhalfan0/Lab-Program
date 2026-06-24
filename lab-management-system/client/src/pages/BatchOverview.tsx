@@ -85,10 +85,11 @@ export default function BatchOverview() {
     data: batchOverview,
     isLoading: batchLoading,
     isError: batchError,
+    error: batchQueryError,
     refetch,
-  } = trpc.orders.getBatchOverview.useQuery(
+  } = trpc.distributions.getBatchByOrder.useQuery(
     { orderId },
-    { enabled: orderId > 0 },
+    { enabled: orderId > 0, retry: 1 },
   );
 
   const sample = batchOverview?.sample ?? null;
@@ -209,15 +210,25 @@ export default function BatchOverview() {
           </div>
         ) : batchError ? (
           <Card>
-            <CardContent className="py-10 text-center text-slate-600">
-              {isAr ? "تعذّر تحميل الحزمة." : "Could not load this batch."}
+            <CardContent className="py-10 text-center text-slate-600 space-y-2">
+              <p>{isAr ? "تعذّر تحميل الحزمة." : "Could not load this batch."}</p>
+              {batchQueryError?.message && (
+                <p className="text-xs text-slate-400">{batchQueryError.message}</p>
+              )}
+              <Button variant="outline" size="sm" onClick={() => refetch()}>
+                {isAr ? "إعادة المحاولة" : "Retry"}
+              </Button>
             </CardContent>
           </Card>
         ) : total === 0 ? (
           <Card>
             <CardContent className="py-10 text-center text-slate-600 space-y-2">
               <p>
-                {batchOverview?.order?.status === "pending"
+                {!batchOverview?.order
+                  ? (isAr
+                    ? "الطلب غير موجود أو تم حذفه."
+                    : "This order was not found or may have been removed.")
+                  : batchOverview.order.status === "pending"
                   ? (isAr
                     ? "لم يتم توزيع هذا الطلب بعد. يجب على مدير المختبر توزيعه أولاً."
                     : "This order has not been distributed yet. The lab manager must distribute it first.")
