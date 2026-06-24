@@ -1,5 +1,5 @@
 import { computeOrderKpisFromStatusCounts } from "@shared/dashboardInsights";
-import { and, desc, eq, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import { alias } from "drizzle-orm/mysql-core";
 import { createPool } from "mysql2";
