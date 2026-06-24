@@ -442,30 +442,44 @@ input[type="number"] {
   }
 }
 
-/* Lab report screen preview — A4 sheet; content height is natural (no forced blank space) */
-.lab-print-root.report-page,
-.report-page {
-  box-sizing: border-box;
-  width: 210mm;
-  max-width: 100%;
-  padding: 12mm 15mm;
-  font-family: Arial, sans-serif;
-  font-size: 10px;
-  line-height: 1.35;
-  min-height: auto;
-  display: block;
-}
+/* Lab report screen preview — A4 sheet; print/PDF use full width via print.css */
+@media screen {
+  .lab-print-root.report-page,
+  .report-page {
+    box-sizing: border-box;
+    width: 210mm;
+    max-width: calc(100vw - 2rem);
+    padding: 8mm;
+    font-family: Arial, sans-serif;
+    font-size: 10px;
+    line-height: 1.35;
+    min-height: auto;
+    display: block;
+  }
 
-.lab-print-root.report-page .report-page-tail,
-.report-page .report-page-tail {
-  margin-top: 10mm;
-}
+  .lab-print-root.report-page .report-page-tail,
+  .report-page .report-page-tail {
+    margin-top: 8mm;
+  }
 
-.lab-print-root.report-page .report-info-grid,
-.report-page .report-info-grid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 0.5rem;
+  .lab-print-root.report-page .report-info-grid,
+  .report-page .report-info-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0.5rem;
+  }
+
+  .lab-print-root.report-page table.lab-results-table,
+  .report-page table.lab-results-table {
+    font-size: 9px;
+  }
+
+  .lab-print-root.report-page table.lab-results-table th,
+  .lab-print-root.report-page table.lab-results-table td,
+  .report-page table.lab-results-table th,
+  .report-page table.lab-results-table td {
+    padding: 4px 5px;
+  }
 }
 
 @media (max-width: 768px) {
@@ -473,16 +487,4 @@ input[type="number"] {
   .report-page .report-info-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
-}
-
-.lab-print-root.report-page table.lab-results-table,
-.report-page table.lab-results-table {
-  font-size: 9px;
-}
-
-.lab-print-root.report-page table.lab-results-table th,
-.lab-print-root.report-page table.lab-results-table td,
-.report-page table.lab-results-table th,
-.report-page table.lab-results-table td {
-  padding: 4px 5px;
 }

@@ -108,8 +108,8 @@ export async function generatePdfFromElement(
   ${styleLinks}
   ${inlineStyles}
   <style>
-    /* The PDF supplies a 6mm gutter; the sheet fills the rest fluidly. */
-    @page { size: A4; margin: 0; }
+    /* Single margin source for PDF: puppeteer page margin (8mm); @page has none. */
+    @page { size: A4 portrait; margin: 0; }
     /* Ensure Arabic glyphs have a font; keep a Latin-first stack with Arabic fallbacks */
     html, body, .lab-print-root, .lab-print-root *, .report-page, .report-page * {
       font-family: 'Noto Sans', 'Cairo', 'Noto Naskh Arabic', system-ui, -apple-system, 'Segoe UI', Arial, sans-serif;

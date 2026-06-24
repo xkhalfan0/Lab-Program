@@ -48,12 +48,12 @@ export function registerPdfRoutes(app: Router) {
       const pdfBuffer = await page.pdf({
         format: "A4",
         printBackground: true,
-        margin: {
-          top: "6mm",
-          bottom: "6mm",
-          left: "6mm",
-          right: "6mm",
-        },
+      margin: {
+        top: "8mm",
+        bottom: "8mm",
+        left: "8mm",
+        right: "8mm",
+      },
       });
 
       await browser.close();

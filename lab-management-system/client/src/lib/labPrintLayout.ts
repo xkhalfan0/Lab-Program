@@ -1,6 +1,6 @@
 import type { CSSProperties } from "react";
 
-/** A4 printable page shell — screen preview matches print.css rules. */
+/** A4 printable page shell — width/margins live in index.css + print.css only. */
 export const LAB_PRINT_PAGE_CLASS =
   "lab-print-root mx-auto bg-white shadow-lg print:shadow-none report-page";
 
@@ -18,8 +18,5 @@ export const LAB_PRINT_CANVAS_CLASS =
 export const LAB_PRINT_LEGACY_CLASS =
   "lab-print-root mx-auto bg-white shadow-lg print:shadow-none report-page report-page--compact";
 
-/** Inline styles kept minimal — dimensions & typography live in print.css / index.css. */
-export const LAB_PRINT_PAGE_STYLE: CSSProperties = {
-  width: "210mm",
-  maxWidth: "100%",
-};
+/** Keep inline styles empty so print/PDF CSS fully controls sizing (no 210mm inline override). */
+export const LAB_PRINT_PAGE_STYLE: CSSProperties = {};
