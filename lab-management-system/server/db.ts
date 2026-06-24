@@ -1019,6 +1019,8 @@ export async function getDistributionsByTechnician(technicianId: number) {
       createdAt: distributions.createdAt,
       updatedAt: distributions.updatedAt,
       batchDistributionId: distributions.batchDistributionId,
+      orderId: labOrders.id,
+      orderCode: labOrders.orderCode,
       sampleCode: samples.sampleCode,
       sampleQuantity: samples.quantity,
       sampleSubType: samples.sampleSubType,
@@ -1165,9 +1167,6 @@ export async function getBatchSiblingDistributions(sampleId: number, orderId: nu
   const db = await getDb();
   if (!db) return [];
 
-  const order = await getLabOrderById(orderId);
-  if (!order || order.sampleId !== sampleId) return [];
-
   const items = await getLabOrderItems(orderId);
   const distIds = items.map(i => i.distributionId).filter((id): id is number => id != null);
   if (distIds.length === 0) return [];
@@ -1177,7 +1176,6 @@ export async function getBatchSiblingDistributions(sampleId: number, orderId: nu
     .from(distributions)
     .where(
       and(
-        eq(distributions.sampleId, sampleId),
         inArray(distributions.id, distIds),
         isNull(distributions.deletedAt),
       ),

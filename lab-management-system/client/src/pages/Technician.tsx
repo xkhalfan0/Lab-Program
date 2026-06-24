@@ -589,14 +589,19 @@ export default function Technician() {
   }, [tasksForDependencyCheck, dependencyQueries]);
 
   const enrichedTasks = useMemo(() => {
-    return assignments.map((dist) => {
-      const parentOrder = myOrders.find((ord: any) =>
-        ord.items?.some((item: any) => Number(item.distributionId) === dist.id),
-      );
+    return assignments.map((dist: any) => {
+      // orderId is now supplied directly by the server query; fall back to myOrders lookup
+      // for older records or edge-cases where the server field might be absent.
+      const dbOrderId: number | undefined = dist.orderId ?? undefined;
+      const parentOrder = dbOrderId
+        ? myOrders.find((ord: any) => ord.id === dbOrderId)
+        : myOrders.find((ord: any) =>
+            ord.items?.some((item: any) => Number(item.distributionId) === dist.id),
+          );
       return {
         ...dist,
-        orderId: parentOrder?.id as number | undefined,
-        orderCode: parentOrder?.orderCode,
+        orderId: (dbOrderId ?? parentOrder?.id) as number | undefined,
+        orderCode: dist.orderCode ?? parentOrder?.orderCode,
         isMultiTest: (parentOrder?.items?.length || 1) > 1,
         pendingDeletion: pendingByDistId.get(dist.id) ?? false,
       };
