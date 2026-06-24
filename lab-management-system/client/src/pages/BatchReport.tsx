@@ -281,15 +281,14 @@ export default function BatchReport() {
   const sampleId = parseInt(params.sampleId ?? "0", 10);
   const orderId = parseInt(params.orderId ?? "0", 10);
 
-  const { data: sample, isLoading: sampleLoading } = trpc.samples.get.useQuery(
-    { id: sampleId },
-    { enabled: sampleId > 0 },
+  const { data: batchOverview, isLoading: batchLoading } = trpc.orders.getBatchOverview.useQuery(
+    { orderId },
+    { enabled: orderId > 0 },
   );
 
-  const { data: siblings = [], isLoading: siblingsLoading } = trpc.distributions.getBatchSiblings.useQuery(
-    { sampleId, orderId },
-    { enabled: sampleId > 0 && orderId > 0 },
-  );
+  const sample = batchOverview?.sample ?? null;
+  const siblings = batchOverview?.siblings ?? [];
+  const resolvedSampleId = sample?.id ?? sampleId;
 
   const { data: testTypes = [] } = trpc.testTypes.list.useQuery();
 
@@ -344,7 +343,7 @@ export default function BatchReport() {
   };
   const reportDateStr = formatReportDate(batchSignatures.approvedAt);
 
-  const isLoading = sampleLoading || siblingsLoading;
+  const isLoading = batchLoading;
 
   const handleClose = () => {
     if (window.opener) window.close();

@@ -1106,15 +1106,16 @@ ${testSummaries.length > 0 ? testSummaries.join("\n\n") : "لم تُجرَ اخ�
     getBatchSiblings: protectedProcedure
       .input(
         z.object({
-          sampleId: z.number(),
+          sampleId: z.number().optional(),
           orderId: z.number(),
         }),
       )
       .query(async ({ input }) => {
-        const { sampleId, orderId } = input;
+        const { orderId } = input;
         if (!orderId) return [];
-        // Same sample + lab order (distributions linked via lab_order_items.distributionId)
-        return getBatchSiblingDistributions(sampleId, orderId);
+        const order = await getLabOrderById(orderId);
+        if (!order?.sampleId) return [];
+        return getBatchSiblingDistributions(order.sampleId, orderId);
       }),
 
     markRead: protectedProcedure
@@ -3140,6 +3141,19 @@ ${testSummaries.length > 0 ? testSummaries.join("\n\n") : "لم تُجرَ اخ�
         return { ...order, items };
       }),
 
+    /** Single call for batch overview: order + sample + all linked test distributions. */
+    getBatchOverview: protectedProcedure
+      .input(z.object({ orderId: z.number() }))
+      .query(async ({ input }) => {
+        const order = await getLabOrderById(input.orderId);
+        if (!order) throw new TRPCError({ code: "NOT_FOUND", message: "Order not found" });
+        const [sample, siblings] = await Promise.all([
+          getSampleById(order.sampleId),
+          getBatchSiblingDistributions(order.sampleId, input.orderId),
+        ]);
+        return { order, sample: sample ?? null, siblings };
+      }),
+
     byStatus: protectedProcedure
       .input(z.object({ status: z.enum(["pending", "distributed", "in_progress", "completed", "reviewed", "qc_passed", "rejected"]) }))
       .query(async ({ ctx, input }) => {
@@ -3241,6 +3255,12 @@ ${testSummaries.length > 0 ? testSummaries.join("\n\n") : "لم تُجرَ اخ�
             notes: input.notes ?? null,
             status: "pending",
           });
+          if (!dist?.id) {
+            throw new TRPCError({
+              code: "INTERNAL_SERVER_ERROR",
+              message: `Failed to create distribution for ${item.testTypeCode}`,
+            });
+          }
           await updateLabOrderItemDistribution(item.id, dist.id);
           if (item.testTypeCode === "CONC_CUBE" && dist?.id) {
             await ensureConcreteGroupsFromReceptionPlan(

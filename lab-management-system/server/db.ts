@@ -1166,16 +1166,61 @@ export async function getDistributionsByBatch(batchDistributionId: string) {
     .orderBy(distributions.id);
 }
 
+/** Link order items to existing distributions when distributionId was never set (legacy/partial distribute). */
+export async function repairOrderDistributionLinks(orderId: number): Promise<number> {
+  const db = await getDb();
+  if (!db) return 0;
+
+  const order = await getLabOrderById(orderId);
+  if (!order?.sampleId) return 0;
+
+  const items = await getLabOrderItems(orderId);
+  const unlinked = items.filter((i) => i.distributionId == null);
+  if (unlinked.length === 0) return 0;
+
+  const distRows = await db
+    .select({
+      id: distributions.id,
+      testType: distributions.testType,
+      testSubType: distributions.testSubType,
+      createdAt: distributions.createdAt,
+    })
+    .from(distributions)
+    .where(and(eq(distributions.sampleId, order.sampleId), isNull(distributions.deletedAt)))
+    .orderBy(asc(distributions.createdAt));
+
+  const linkedDistIds = new Set(
+    items.map((i) => i.distributionId).filter((id): id is number => id != null),
+  );
+
+  let repaired = 0;
+  for (const item of unlinked) {
+    const candidates = distRows.filter(
+      (d) =>
+        !linkedDistIds.has(d.id) &&
+        d.testType === item.testTypeCode &&
+        ((item.testSubType ?? null) === (d.testSubType ?? null) ||
+          item.testSubType == null ||
+          d.testSubType == null),
+    );
+    if (candidates.length !== 1) continue;
+    await updateLabOrderItemDistribution(item.id, candidates[0].id);
+    linkedDistIds.add(candidates[0].id);
+    repaired++;
+  }
+  return repaired;
+}
+
 /** Distributions for the same lab order (e.g. asphalt mix batch: extract → sieve → Gmb → Marshall).
  *  Uses a direct JOIN on lab_order_items so the result is always consistent with the technician
  *  task list (which uses the same join). */
-export async function getBatchSiblingDistributions(sampleId: number, orderId: number) {
+export async function getBatchSiblingDistributions(_sampleId: number, orderId: number) {
   const db = await getDb();
   if (!db) return [];
 
+  await repairOrderDistributionLinks(orderId);
+
   // Direct join: find all distributions whose lab_order_item belongs to this order.
-  // This mirrors the INNER JOIN used in getDistributionsByTechnician, so any distribution
-  // that is visible in the technician task list will also be found here.
   const siblingRows = await db
     .select({ dist: distributions })
     .from(distributions)
@@ -1188,8 +1233,6 @@ export async function getBatchSiblingDistributions(sampleId: number, orderId: nu
     )
     .where(isNull(distributions.deletedAt))
     .orderBy(asc(distributions.createdAt));
-
-  if (siblingRows.length === 0) return [];
 
   return Promise.all(
     siblingRows.map(async ({ dist }) => {

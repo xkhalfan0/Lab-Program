@@ -174,16 +174,26 @@ function getReceivedSortKey(dist: any): number {
   return Number.isNaN(t) ? Number.MAX_SAFE_INTEGER : t;
 }
 
+function toPositiveInt(value: unknown): number {
+  const n = Number(value);
+  return Number.isFinite(n) && n > 0 ? n : 0;
+}
+
+function resolveOrderId(dist: { orderId?: unknown } | null | undefined): number {
+  return toPositiveInt(dist?.orderId);
+}
+
 function groupDistributionsByBatch(distributions: any[]) {
   const batches = new Map<string, any[]>();
   const individuals: any[] = [];
 
   for (const dist of distributions) {
-    if (!dist.orderId) {
+    const orderId = resolveOrderId(dist);
+    if (!orderId) {
       individuals.push(dist);
       continue;
     }
-    const key = `${dist.sampleId}-${dist.orderId}`;
+    const key = `${dist.sampleId}-${orderId}`;
     if (!batches.has(key)) {
       batches.set(key, []);
     }
@@ -590,17 +600,16 @@ export default function Technician() {
 
   const enrichedTasks = useMemo(() => {
     return assignments.map((dist: any) => {
-      // orderId is now supplied directly by the server query; fall back to myOrders lookup
-      // for older records or edge-cases where the server field might be absent.
-      const dbOrderId: number | undefined = dist.orderId ?? undefined;
+      const dbOrderId = resolveOrderId(dist);
       const parentOrder = dbOrderId
-        ? myOrders.find((ord: any) => ord.id === dbOrderId)
+        ? myOrders.find((ord: any) => Number(ord.id) === dbOrderId)
         : myOrders.find((ord: any) =>
             ord.items?.some((item: any) => Number(item.distributionId) === dist.id),
           );
+      const orderId = dbOrderId || resolveOrderId(parentOrder);
       return {
         ...dist,
-        orderId: (dbOrderId ?? parentOrder?.id) as number | undefined,
+        orderId: orderId || undefined,
         orderCode: dist.orderCode ?? parentOrder?.orderCode,
         isMultiTest: (parentOrder?.items?.length || 1) > 1,
         pendingDeletion: pendingByDistId.get(dist.id) ?? false,
@@ -780,15 +789,18 @@ export default function Technician() {
   };
 
   const renderBatchCard = (group: any[]) => {
-    const sampleId = group[0]?.sampleId;
-    const orderId = group[0]?.orderId;
+    const sampleId = toPositiveInt(group[0]?.sampleId);
+    const orderId = resolveOrderId(group[0]);
     return (
       <TechnicianBatchCard
         key={`batch-${sampleId}-${orderId}`}
         group={group}
         lang={lang}
         allSamples={allSamples}
-        onOpenBatch={() => navigate(`/batch/${sampleId}/${orderId}`)}
+        onOpenBatch={() => {
+          if (!orderId) return;
+          navigate(`/batch/${sampleId || 0}/${orderId}`);
+        }}
       />
     );
   };

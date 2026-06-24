@@ -67,24 +67,33 @@ function isCompleted(status: string): boolean {
   return status === "completed";
 }
 
+function toPositiveInt(value: unknown): number {
+  const n = Number(value);
+  return Number.isFinite(n) && n > 0 ? n : 0;
+}
+
 export default function BatchOverview() {
   const params = useParams<{ sampleId: string; orderId: string }>();
   const [, navigate] = useLocation();
   const { lang } = useLanguage();
   const isAr = lang === "ar";
 
-  const sampleId = parseInt(params.sampleId ?? "0", 10);
-  const orderId = parseInt(params.orderId ?? "0", 10);
+  const orderId = toPositiveInt(params.orderId);
+  const sampleIdFromUrl = toPositiveInt(params.sampleId);
 
-  const { data: sample, isLoading: sampleLoading } = trpc.samples.get.useQuery(
-    { id: sampleId },
-    { enabled: sampleId > 0 },
+  const {
+    data: batchOverview,
+    isLoading: batchLoading,
+    isError: batchError,
+    refetch,
+  } = trpc.orders.getBatchOverview.useQuery(
+    { orderId },
+    { enabled: orderId > 0 },
   );
 
-  const { data: siblings = [], isLoading: siblingsLoading, refetch } = trpc.distributions.getBatchSiblings.useQuery(
-    { sampleId, orderId },
-    { enabled: sampleId > 0 && orderId > 0 },
-  );
+  const sample = batchOverview?.sample ?? null;
+  const siblings = batchOverview?.siblings ?? [];
+  const sampleId = sample?.id ?? sampleIdFromUrl;
 
   const sorted = useMemo(() => sortBatchSiblings(siblings as BatchSibling[]), [siblings]);
 
@@ -109,8 +118,8 @@ export default function BatchOverview() {
   // Single-test orders are not a "batch": skip this overview and go straight to
   // the one report (when complete) or its test form (when still pending).
   useEffect(() => {
-    if (siblingsLoading) return;
-    if (sampleId <= 0 || orderId <= 0) return;
+    if (batchLoading) return;
+    if (orderId <= 0) return;
     if (sorted.length !== 1) return;
     const only = sorted[0];
     if (isCompleted(only.status)) {
@@ -118,7 +127,7 @@ export default function BatchOverview() {
     } else {
       navigate(testFormPath(only), { replace: true });
     }
-  }, [siblingsLoading, sorted, sampleId, orderId, navigate]);
+  }, [batchLoading, sorted, orderId, navigate]);
 
   // Concrete-aggregate sieve sizes (20mm, 10mm, 0-5mm, Dune Sand, …) are one shared
   // blend worksheet, so collapse them into a single row here (each size still bills
@@ -157,8 +166,7 @@ export default function BatchOverview() {
     return isAr ? "\u0642\u064a\u062f \u0627\u0644\u0627\u0646\u062a\u0638\u0627\u0631" : "Pending";
   };
 
-  const isSingleTestBatch = !siblingsLoading && sorted.length === 1;
-  const isLoading = siblingsLoading || (sampleLoading && !isSingleTestBatch);
+  const isLoading = batchLoading;
 
   return (
     <DashboardLayout>
@@ -178,7 +186,7 @@ export default function BatchOverview() {
               </p>
             </div>
           </div>
-          {allComplete && sampleId > 0 && orderId > 0 && (
+          {allComplete && orderId > 0 && (
             <Button
               className="gap-2 bg-blue-600 hover:bg-blue-700 shrink-0"
               onClick={() => window.open(`/batch-report/${sampleId}/${orderId}`, "_blank")}
@@ -189,14 +197,37 @@ export default function BatchOverview() {
           )}
         </div>
 
-        {isLoading ? (
+        {orderId <= 0 ? (
+          <Card>
+            <CardContent className="py-10 text-center text-slate-600">
+              {isAr ? "رابط الحزمة غير صالح." : "Invalid batch link — missing order ID."}
+            </CardContent>
+          </Card>
+        ) : isLoading ? (
           <div className="flex justify-center py-16">
             <Loader2 className="w-8 h-8 animate-spin text-slate-400" />
           </div>
-        ) : total === 0 ? (
+        ) : batchError ? (
           <Card>
             <CardContent className="py-10 text-center text-slate-600">
-              {isAr ? "\u0644\u0627 \u062a\u0648\u062c\u062f \u0627\u062e\u062a\u0628\u0627\u0631\u0627\u062a \u0641\u064a \u0647\u0630\u0647 \u0627\u0644\u062d\u0632\u0645\u0629." : "No tests found in this batch."}
+              {isAr ? "تعذّر تحميل الحزمة." : "Could not load this batch."}
+            </CardContent>
+          </Card>
+        ) : total === 0 ? (
+          <Card>
+            <CardContent className="py-10 text-center text-slate-600 space-y-2">
+              <p>
+                {batchOverview?.order?.status === "pending"
+                  ? (isAr
+                    ? "لم يتم توزيع هذا الطلب بعد. يجب على مدير المختبر توزيعه أولاً."
+                    : "This order has not been distributed yet. The lab manager must distribute it first.")
+                  : (isAr
+                    ? "\u0644\u0627 \u062a\u0648\u062c\u062f \u0627\u062e\u062a\u0628\u0627\u0631\u0627\u062a \u0641\u064a \u0647\u0630\u0647 \u0627\u0644\u062d\u0632\u0645\u0629."
+                    : "No tests found in this batch.")}
+              </p>
+              {batchOverview?.order?.orderCode && (
+                <p className="text-xs text-slate-400 font-mono">{batchOverview.order.orderCode}</p>
+              )}
             </CardContent>
           </Card>
         ) : (
