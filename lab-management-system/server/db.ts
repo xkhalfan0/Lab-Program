@@ -1019,6 +1019,7 @@ export async function getDistributionsByTechnician(technicianId: number) {
       createdAt: distributions.createdAt,
       updatedAt: distributions.updatedAt,
       batchDistributionId: distributions.batchDistributionId,
+      testSubType: distributions.testSubType,
       orderId: labOrders.id,
       orderCode: labOrders.orderCode,
       sampleCode: samples.sampleCode,

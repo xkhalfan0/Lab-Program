@@ -1107,16 +1107,12 @@ ${testSummaries.length > 0 ? testSummaries.join("\n\n") : "لم تُجرَ اخ�
       .input(
         z.object({
           sampleId: z.number(),
-          orderId: z.number().optional(),
+          orderId: z.number(),
         }),
       )
       .query(async ({ input }) => {
         const { sampleId, orderId } = input;
-
-        if (!orderId) {
-          return [];
-        }
-
+        if (!orderId) return [];
         // Same sample + lab order (distributions linked via lab_order_items.distributionId)
         return getBatchSiblingDistributions(sampleId, orderId);
       }),
