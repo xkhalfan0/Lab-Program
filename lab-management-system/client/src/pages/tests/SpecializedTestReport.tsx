@@ -14,6 +14,14 @@ import { ReportSignatures, pickReviewSignatures } from "@/components/reports/Rep
 import { LabReportHeader } from "@/components/reports/LabReportHeader";
 import { ReportPrintNote } from "@/components/reports/ReportPrintNote";
 import { formatCalendarDate, formatReportDate } from "@/lib/dateFormat";
+import {
+  LAB_PRINT_BODY_CLASS,
+  LAB_PRINT_CANVAS_CLASS,
+  LAB_PRINT_PAGE_CLASS,
+  LAB_PRINT_PAGE_STYLE,
+  LAB_PRINT_TAIL_CLASS,
+  LAB_PRINT_LEGACY_CLASS,
+} from "@/lib/labPrintLayout";
 import { formatInspectionReference, inspectionRefLabel, reportDocNo } from "@/lib/inspectionReference";
 import {
   formatReportSummaryLabel,
@@ -320,7 +328,7 @@ function renderConcreteBlocks(fd: any, isAr: boolean) {
 
   return (
     <div className="text-xs space-y-3">
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-2 report-info-grid">
+      <div className="grid grid-cols-4 gap-2 report-info-grid">
         <div className="bg-blue-50 border border-blue-200 rounded p-2">
           <p className={REPORT_INFO_LABEL_CLASS}>{isAr ? "نوع البلوك" : "Block Type"}</p>
           <p className={REPORT_INFO_VALUE_CLASS}>{spec.label ?? fd.blockType ?? "—"}</p>
@@ -4081,11 +4089,11 @@ export default function SpecializedTestReport({ sectorResultId }: SpecializedTes
             </Button>
           </div>
         </div>
-        <div className="bg-gray-200 print:bg-white min-h-screen py-6 print:py-0" dir={isAr ? "rtl" : "ltr"}>
+        <div className={LAB_PRINT_CANVAS_CLASS} dir={isAr ? "rtl" : "ltr"}>
           <div
             ref={printRef}
-            className="lab-print-root mx-auto bg-white shadow-lg print:shadow-none"
-            style={{ width: "210mm", padding: "10mm", fontFamily: "Arial, sans-serif", fontSize: "10px" }}
+            className={LAB_PRINT_LEGACY_CLASS}
+            style={LAB_PRINT_PAGE_STYLE}
           >
             <div className="border-b-2 border-gray-900 pb-2 mb-4">
               <h1 className="text-[15px] font-extrabold">{isAr ? "تقرير نتائج الاختبار" : "Test results report"}</h1>
@@ -4217,12 +4225,13 @@ export default function SpecializedTestReport({ sectorResultId }: SpecializedTes
       </div>
 
       {/* Report Page */}
-      <div className="bg-gray-200 print:bg-white min-h-screen py-6 print:py-0" dir={isAr ? "rtl" : "ltr"}>
+      <div className={LAB_PRINT_CANVAS_CLASS} dir={isAr ? "rtl" : "ltr"}>
         <div
           ref={printRef}
-          className="lab-print-root mx-auto bg-white shadow-lg print:shadow-none report-page px-12 py-10"
-          style={{ width: "210mm", fontFamily: "Arial, sans-serif", fontSize: "10px" }}
+          className={LAB_PRINT_PAGE_CLASS}
+          style={LAB_PRINT_PAGE_STYLE}
         >
+          <div className={LAB_PRINT_BODY_CLASS}>
           {/* Header */}
           <LabReportHeader
             lang={isAr ? "ar" : "en"}
@@ -4360,8 +4369,10 @@ export default function SpecializedTestReport({ sectorResultId }: SpecializedTes
             </div>
           )}
 
+          </div>{/* report-page-body */}
+
           {/* Notes + signatures + footer — kept together at page bottom */}
-          <div className="report-page-tail">
+          <div className={LAB_PRINT_TAIL_CLASS}>
           {result.notes && (
             <div className="mb-5 print:mb-2">
               <h3 className="text-xs font-bold text-gray-900 uppercase border-b border-gray-300 pb-1 mb-2">
@@ -4382,17 +4393,6 @@ export default function SpecializedTestReport({ sectorResultId }: SpecializedTes
           </div>
         </div>
       </div>
-
-      <style>{`
-        @media print {
-          @page { size: A4; margin: 0; }
-          body { margin: 0; }
-          .print\\:hidden { display: none !important; }
-          .print\\:bg-white { background: white !important; }
-          .print\\:shadow-none { box-shadow: none !important; }
-          .print\\:py-0 { padding-top: 0 !important; padding-bottom: 0 !important; }
-        }
-      `}</style>
     </>
   );
 }

@@ -22,6 +22,12 @@ import {
 } from "@shared/concreteCubeBs1881";
 import { ReportSignatures } from "@/components/reports/ReportSignatures";
 import { LabReportHeader } from "@/components/reports/LabReportHeader";
+import {
+  LAB_PRINT_BODY_CLASS,
+  LAB_PRINT_CANVAS_CLASS,
+  LAB_PRINT_PAGE_STYLE,
+  LAB_PRINT_TAIL_CLASS,
+} from "@/lib/labPrintLayout";
 
 /** Same marker as ConcreteTest — hidden JSON suffix must never appear on printed reports. */
 const AGE_META_MARKER = "\n__AGE_META__:";
@@ -273,15 +279,11 @@ function ReportPage({
 
   return (
     <div
-      className="report-page bg-white flex flex-col px-12 py-10"
+      className="report-page bg-white flex flex-col mx-auto shadow-lg print:shadow-none"
       dir={ar ? "rtl" : "ltr"}
-      style={{
-        fontFamily: "Arial, sans-serif",
-        fontSize: "10px",
-        width: "210mm",
-      }}
+      style={LAB_PRINT_PAGE_STYLE}
     >
-      <div className="report-page-body">
+      <div className={LAB_PRINT_BODY_CLASS}>
       <div className="mb-5">
         <LabReportHeader
           lang={lang}
@@ -533,7 +535,7 @@ function ReportPage({
       </div>
       </div>
 
-      <div className="report-page-tail">
+      <div className={LAB_PRINT_TAIL_CLASS}>
       {/* Notes */}
       <div className="mb-5 print:mb-2">
         <h3 className="text-xs font-bold text-gray-900 uppercase border-b border-gray-300 pb-1 mb-2">
@@ -677,16 +679,15 @@ export default function ConcreteReport() {
       </div>
 
       {/* Report Content */}
-      <div className="bg-gray-200 print:bg-white min-h-screen py-6 print:py-0" dir={lang === "ar" ? "rtl" : "ltr"}>
-        <div ref={printRef} className="lab-print-root">
+      <div className={LAB_PRINT_CANVAS_CLASS} dir={lang === "ar" ? "rtl" : "ltr"}>
+        <div ref={printRef}>
         {(groups as any[]).length === 0 ? (
           <div className="text-center py-20 text-gray-500">
             No test results found. Please enter results first.
           </div>
         ) : (
           (groups as any[]).map((group: any, idx: number, arr: any[]) => (
-            <div key={group.id} className={`mx-auto mb-6 bg-white shadow-lg print:shadow-none print:mb-0 ${idx > 0 ? "print:page-break-before" : ""}`}
-              style={{ width: "210mm" }}>
+            <div key={group.id} className={`mb-6 print:mb-0 ${idx > 0 ? "print-break-before" : ""}`}>
               <ReportPage
                 group={group}
                 refNo={refNo}
@@ -709,20 +710,6 @@ export default function ConcreteReport() {
         )}
         </div>
       </div>
-
-      {/* Print Styles */}
-      <style>{`
-        @media print {
-          @page { size: A4; margin: 0; }
-          body { margin: 0; background: white !important; }
-          .print\\:hidden { display: none !important; }
-          .print\\:bg-white { background: white !important; }
-          .print\\:shadow-none { box-shadow: none !important; }
-          .print\\:py-0 { padding-top: 0 !important; padding-bottom: 0 !important; }
-          .print\\:page-break-before { page-break-before: always; }
-          .report-page { page-break-inside: auto; }
-        }
-      `}</style>
     </>
   );
 }

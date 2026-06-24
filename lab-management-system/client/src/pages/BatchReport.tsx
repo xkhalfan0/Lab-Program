@@ -14,6 +14,13 @@ import { formatCalendarDate, formatReportDate } from "@/lib/dateFormat";
 import { formatInspectionReference, inspectionRefLabel } from "@/lib/inspectionReference";
 import { ReportPrintNote } from "@/components/reports/ReportPrintNote";
 import { LabReportHeader } from "@/components/reports/LabReportHeader";
+import {
+  LAB_PRINT_BODY_CLASS,
+  LAB_PRINT_CANVAS_CLASS,
+  LAB_PRINT_PAGE_CLASS,
+  LAB_PRINT_PAGE_STYLE,
+  LAB_PRINT_TAIL_CLASS,
+} from "@/lib/labPrintLayout";
 import { getOfficialTestDisplayName } from "@/lib/officialTestCatalog";
 import {
   formatSummaryLabel,
@@ -405,7 +412,7 @@ export default function BatchReport() {
         </div>
       </div>
 
-      <div className="bg-gray-200 print:bg-white min-h-screen py-6 print:py-0" dir={isAr ? "rtl" : "ltr"}>
+      <div className={LAB_PRINT_CANVAS_CLASS} dir={isAr ? "rtl" : "ltr"}>
         {isLoading ? (
           <div className="flex justify-center py-24">
             <Loader2 className="w-8 h-8 animate-spin text-slate-400" />
@@ -419,14 +426,10 @@ export default function BatchReport() {
         ) : (
           <div
             ref={printRef}
-            className="lab-print-root mx-auto bg-white shadow-lg print:shadow-none"
-            style={{
-              width: "210mm",
-              padding: "10mm 12mm 12mm 12mm",
-              fontFamily: "Arial, sans-serif",
-              fontSize: "10px",
-            }}
+            className={LAB_PRINT_PAGE_CLASS}
+            style={LAB_PRINT_PAGE_STYLE}
           >
+            <div className={LAB_PRINT_BODY_CLASS}>
             <LabReportHeader
               lang={isAr ? "ar" : "en"}
               docNo={String(orderId)}
@@ -603,6 +606,9 @@ export default function BatchReport() {
               })}
             </div>
 
+            </div>{/* report-page-body */}
+
+            <div className={LAB_PRINT_TAIL_CLASS}>
             <ReportSignatures sig={batchSignatures} labels={signatureLabels} lang={isAr ? "ar" : "en"} />
 
             <div
@@ -617,21 +623,10 @@ export default function BatchReport() {
               </div>
               <ReportPrintNote lang={isAr ? "ar" : "en"} />
             </div>
+            </div>
           </div>
         )}
       </div>
-
-      <style>{`
-        @media print {
-          @page { size: A4; margin: 0; }
-          body { margin: 0; }
-          .print\\:hidden { display: none !important; }
-          .print\\:bg-white { background: white !important; }
-          .print\\:shadow-none { box-shadow: none !important; }
-          .print\\:py-0 { padding-top: 0 !important; padding-bottom: 0 !important; }
-          .print\\:break-before-page { break-before: page; page-break-before: always; }
-        }
-      `}</style>
     </DashboardLayout>
   );
 }

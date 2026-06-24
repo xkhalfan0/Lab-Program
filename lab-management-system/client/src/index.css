@@ -398,7 +398,13 @@ input[type="number"] {
   }
 
   /* Page breaks */
-  .print-break-before { page-break-before: always; }
+  .print-break-before { page-break-before: always; break-before: page; }
+
+  .report-page + .report-page,
+  .print-break-before {
+    page-break-before: always;
+    break-before: page;
+  }
   .print-break-after  { page-break-after: always; }
   .print-no-break     { page-break-inside: avoid; }
 
@@ -434,4 +440,61 @@ input[type="number"] {
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
   }
+}
+
+/* Lab report screen preview — matches A4 print layout (see styles/print.css) */
+.lab-print-root.report-page,
+.report-page {
+  box-sizing: border-box;
+  width: 210mm;
+  max-width: 100%;
+  padding: 12mm 15mm;
+  font-family: Arial, sans-serif;
+  font-size: 10px;
+  line-height: 1.35;
+  min-height: 297mm;
+  display: flex;
+  flex-direction: column;
+}
+
+.lab-print-root.report-page.report-page--compact,
+.report-page.report-page--compact {
+  min-height: auto;
+}
+
+.lab-print-root.report-page .report-page-body,
+.report-page .report-page-body {
+  flex: 1 1 auto;
+}
+
+.lab-print-root.report-page .report-page-tail,
+.report-page .report-page-tail {
+  flex-shrink: 0;
+  margin-top: auto;
+}
+
+.lab-print-root.report-page .report-info-grid,
+.report-page .report-info-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+@media (max-width: 768px) {
+  .lab-print-root.report-page .report-info-grid,
+  .report-page .report-info-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.lab-print-root.report-page table.lab-results-table,
+.report-page table.lab-results-table {
+  font-size: 9px;
+}
+
+.lab-print-root.report-page table.lab-results-table th,
+.lab-print-root.report-page table.lab-results-table td,
+.report-page table.lab-results-table th,
+.report-page table.lab-results-table td {
+  padding: 4px 5px;
 }

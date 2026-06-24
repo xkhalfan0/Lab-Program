@@ -111,14 +111,12 @@ export async function generatePdfFromElement(
     /* The PDF supplies a 6mm gutter; the sheet fills the rest fluidly. */
     @page { size: A4; margin: 0; }
     /* Ensure Arabic glyphs have a font; keep a Latin-first stack with Arabic fallbacks */
-    html, body, .lab-print-root, .lab-print-root * {
+    html, body, .lab-print-root, .lab-print-root *, .report-page, .report-page * {
       font-family: 'Noto Sans', 'Cairo', 'Noto Naskh Arabic', system-ui, -apple-system, 'Segoe UI', Arial, sans-serif;
     }
     body { margin: 0; padding: 0; background: white; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
-    /* Make the report sheet fluid so it always fits the PDF's printable area
-       (no fixed 210mm that can overflow/clip). It supplies its own 10mm padding
-       as the content margin; the on-screen React preview is unaffected. */
-    .lab-print-root {
+    .lab-print-root,
+    .report-page {
       box-sizing: border-box !important;
       width: 100% !important;
       max-width: 100% !important;
@@ -127,9 +125,10 @@ export async function generatePdfFromElement(
       padding: 0 !important;
       box-shadow: none !important;
     }
-    /* Keep wide content (tables, charts, images) inside the sheet */
-    .lab-print-root table { width: 100% !important; max-width: 100% !important; }
-    .lab-print-root img, .lab-print-root svg, .lab-print-root canvas { max-width: 100% !important; }
+    .lab-print-root table,
+    .report-page table { width: 100% !important; max-width: 100% !important; }
+    .lab-print-root img, .lab-print-root svg, .lab-print-root canvas,
+    .report-page img, .report-page svg, .report-page canvas { max-width: 100% !important; }
     .print\\:hidden { display: none !important; }
     /* Fallback when linked stylesheets fail to load in isolated PDF HTML */
     table { border-collapse: collapse !important; }

@@ -1,0 +1,1551 @@
+{
+  "generatedAt": "2026-06-23T08:13:10.272Z",
+  "reportTypes": {
+    "orderReport": "/order-report/:orderId",
+    "testReport": "/test-report/:distributionId",
+    "concreteReport": "/concrete-report/:distributionId",
+    "batchReport": "/batch-report/:batchId",
+    "printReceipt": "/print-receipt/:sampleId"
+  },
+  "commonMetadata": [
+    "orderCode",
+    "sampleCode",
+    "inspectionReference",
+    "contractNumber",
+    "contractName (project name)",
+    "contractorName",
+    "sampleType (material category)",
+    "location",
+    "sector",
+    "receivedAt",
+    "reportDate",
+    "castingDate",
+    "supplier/source (from notes)",
+    "optional reception entry data fields",
+    "notes (free text)",
+    "technician name",
+    "manager reviewer",
+    "QC reviewer",
+    "overall pass/fail"
+  ],
+  "receptionEntryFieldsByTest": {
+    "CONC_CUBE": [
+      {
+        "key": "sampleFor",
+        "labelEn": "Sample for",
+        "labelAr": "العينة لـ"
+      },
+      {
+        "key": "mixRatio",
+        "labelEn": "Mix ratio",
+        "labelAr": "نسبة الخلطة"
+      },
+      {
+        "key": "cementType",
+        "labelEn": "Cement type",
+        "labelAr": "نوع الأسمنت"
+      },
+      {
+        "key": "maxAggregateSize",
+        "labelEn": "Max aggregate size",
+        "labelAr": "أقصى حجم للركام"
+      },
+      {
+        "key": "time",
+        "labelEn": "Time",
+        "labelAr": "الوقت"
+      },
+      {
+        "key": "slumpInches",
+        "labelEn": "Slump (inches)",
+        "labelAr": "الهبوط (بوصة)"
+      },
+      {
+        "key": "cubesReference",
+        "labelEn": "Cubes/cylinders reference",
+        "labelAr": "مرجع المكعبات/الأسطوانات"
+      },
+      {
+        "key": "campName",
+        "labelEn": "Camp name",
+        "labelAr": "اسم المعسكر"
+      }
+    ],
+    "CONC_CORE": [
+      {
+        "key": "sampleFor",
+        "labelEn": "Sample for",
+        "labelAr": "العينة لـ"
+      },
+      {
+        "key": "mixRatio",
+        "labelEn": "Mix ratio",
+        "labelAr": "نسبة الخلطة"
+      },
+      {
+        "key": "cementType",
+        "labelEn": "Cement type",
+        "labelAr": "نوع الأسمنت"
+      },
+      {
+        "key": "maxAggregateSize",
+        "labelEn": "Max aggregate size",
+        "labelAr": "أقصى حجم للركام"
+      },
+      {
+        "key": "time",
+        "labelEn": "Time",
+        "labelAr": "الوقت"
+      },
+      {
+        "key": "slumpInches",
+        "labelEn": "Slump (inches)",
+        "labelAr": "الهبوط (بوصة)"
+      },
+      {
+        "key": "cubesReference",
+        "labelEn": "Cubes/cylinders reference",
+        "labelAr": "مرجع المكعبات/الأسطوانات"
+      },
+      {
+        "key": "campName",
+        "labelEn": "Camp name",
+        "labelAr": "اسم المعسكر"
+      }
+    ],
+    "CONC_BEAM": [
+      {
+        "key": "sampleFor",
+        "labelEn": "Sample for",
+        "labelAr": "العينة لـ"
+      },
+      {
+        "key": "mixRatio",
+        "labelEn": "Mix ratio",
+        "labelAr": "نسبة الخلطة"
+      },
+      {
+        "key": "cementType",
+        "labelEn": "Cement type",
+        "labelAr": "نوع الأسمنت"
+      },
+      {
+        "key": "maxAggregateSize",
+        "labelEn": "Max aggregate size",
+        "labelAr": "أقصى حجم للركام"
+      },
+      {
+        "key": "time",
+        "labelEn": "Time",
+        "labelAr": "الوقت"
+      },
+      {
+        "key": "slumpInches",
+        "labelEn": "Slump (inches)",
+        "labelAr": "الهبوط (بوصة)"
+      },
+      {
+        "key": "cubesReference",
+        "labelEn": "Cubes/cylinders reference",
+        "labelAr": "مرجع المكعبات/الأسطوانات"
+      },
+      {
+        "key": "campName",
+        "labelEn": "Camp name",
+        "labelAr": "اسم المعسكر"
+      }
+    ],
+    "CONC_FOAM": [
+      {
+        "key": "sampleFor",
+        "labelEn": "Sample for",
+        "labelAr": "العينة لـ"
+      },
+      {
+        "key": "mixRatio",
+        "labelEn": "Mix ratio",
+        "labelAr": "نسبة الخلطة"
+      },
+      {
+        "key": "cementType",
+        "labelEn": "Cement type",
+        "labelAr": "نوع الأسمنت"
+      },
+      {
+        "key": "maxAggregateSize",
+        "labelEn": "Max aggregate size",
+        "labelAr": "أقصى حجم للركام"
+      },
+      {
+        "key": "time",
+        "labelEn": "Time",
+        "labelAr": "الوقت"
+      },
+      {
+        "key": "slumpInches",
+        "labelEn": "Slump (inches)",
+        "labelAr": "الهبوط (بوصة)"
+      },
+      {
+        "key": "cubesReference",
+        "labelEn": "Cubes/cylinders reference",
+        "labelAr": "مرجع المكعبات/الأسطوانات"
+      },
+      {
+        "key": "campName",
+        "labelEn": "Camp name",
+        "labelAr": "اسم المعسكر"
+      }
+    ],
+    "CONC_INTERLOCK": [
+      {
+        "key": "fLevel",
+        "labelEn": "F. level",
+        "labelAr": "مستوى F."
+      },
+      {
+        "key": "facility",
+        "labelEn": "Facility",
+        "labelAr": "المنشأة"
+      },
+      {
+        "key": "sampleDescription",
+        "labelEn": "Sample description",
+        "labelAr": "وصف العينة"
+      }
+    ],
+    "CONC_BLOCK": [
+      {
+        "key": "facility",
+        "labelEn": "Facility",
+        "labelAr": "المنشأة"
+      },
+      {
+        "key": "fLevel",
+        "labelEn": "F. level",
+        "labelAr": "مستوى F."
+      },
+      {
+        "key": "descriptionOfWork",
+        "labelEn": "Description of work",
+        "labelAr": "وصف العمل"
+      }
+    ],
+    "SOIL_SIEVE": [
+      {
+        "key": "facility",
+        "labelEn": "Facility",
+        "labelAr": "المنشأة"
+      },
+      {
+        "key": "fLevel",
+        "labelEn": "F. level",
+        "labelAr": "مستوى F."
+      },
+      {
+        "key": "fullDescription",
+        "labelEn": "Full description",
+        "labelAr": "الوصف الكامل"
+      },
+      {
+        "key": "materialFor",
+        "labelEn": "Material for",
+        "labelAr": "المادة لـ"
+      }
+    ],
+    "SOIL_ATTERBERG": [
+      {
+        "key": "materialDescription",
+        "labelEn": "Material description",
+        "labelAr": "وصف المادة"
+      },
+      {
+        "key": "sourceOfMaterial",
+        "labelEn": "Source of material",
+        "labelAr": "مصدر المادة"
+      },
+      {
+        "key": "materialFor",
+        "labelEn": "Material for",
+        "labelAr": "المادة لـ"
+      }
+    ],
+    "SOIL_PROCTOR": [
+      {
+        "key": "materialDescription",
+        "labelEn": "Material description",
+        "labelAr": "وصف المادة"
+      },
+      {
+        "key": "sourceOfMaterial",
+        "labelEn": "Source of material",
+        "labelAr": "مصدر المادة"
+      },
+      {
+        "key": "materialFor",
+        "labelEn": "Material for",
+        "labelAr": "المادة لـ"
+      }
+    ],
+    "SOIL_CBR": [
+      {
+        "key": "materialDescription",
+        "labelEn": "Material description",
+        "labelAr": "وصف المادة"
+      },
+      {
+        "key": "sourceOfMaterial",
+        "labelEn": "Source of material",
+        "labelAr": "مصدر المادة"
+      },
+      {
+        "key": "materialFor",
+        "labelEn": "Material for",
+        "labelAr": "المادة لـ"
+      }
+    ],
+    "SOIL_FIELD_DENSITY": [
+      {
+        "key": "sampleDescription",
+        "labelEn": "Sample description",
+        "labelAr": "وصف العينة"
+      },
+      {
+        "key": "source",
+        "labelEn": "Source",
+        "labelAr": "المصدر"
+      },
+      {
+        "key": "layer",
+        "labelEn": "Layer",
+        "labelAr": "الطبقة"
+      }
+    ],
+    "STEEL_REBAR": [
+      {
+        "key": "sampleDescription",
+        "labelEn": "Sample description",
+        "labelAr": "وصف العينة"
+      },
+      {
+        "key": "site",
+        "labelEn": "Site",
+        "labelAr": "الموقع"
+      },
+      {
+        "key": "source",
+        "labelEn": "Source",
+        "labelAr": "المصدر"
+      }
+    ],
+    "STEEL_STRUCTURAL": [
+      {
+        "key": "sampleDescription",
+        "labelEn": "Sample description",
+        "labelAr": "وصف العينة"
+      },
+      {
+        "key": "site",
+        "labelEn": "Site",
+        "labelAr": "الموقع"
+      },
+      {
+        "key": "source",
+        "labelEn": "Source",
+        "labelAr": "المصدر"
+      }
+    ],
+    "STEEL_ANCHOR": [
+      {
+        "key": "sampleDescription",
+        "labelEn": "Sample description",
+        "labelAr": "وصف العينة"
+      },
+      {
+        "key": "site",
+        "labelEn": "Site",
+        "labelAr": "الموقع"
+      },
+      {
+        "key": "source",
+        "labelEn": "Source",
+        "labelAr": "المصدر"
+      }
+    ],
+    "STEEL_BEND": [
+      {
+        "key": "sampleDescription",
+        "labelEn": "Sample description",
+        "labelAr": "وصف العينة"
+      },
+      {
+        "key": "site",
+        "labelEn": "Site",
+        "labelAr": "الموقع"
+      },
+      {
+        "key": "source",
+        "labelEn": "Source",
+        "labelAr": "المصدر"
+      }
+    ],
+    "ASPH_HOTBIN": [
+      {
+        "key": "sourceOfAgg",
+        "labelEn": "Source of aggregate",
+        "labelAr": "مصدر الركام"
+      },
+      {
+        "key": "site",
+        "labelEn": "Site",
+        "labelAr": "الموقع"
+      },
+      {
+        "key": "sizeOfAgg",
+        "labelEn": "Size of aggregate",
+        "labelAr": "حجم الركام"
+      }
+    ],
+    "ASPH_BITUMEN_EXTRACT": [
+      {
+        "key": "sourceOfAgg",
+        "labelEn": "Source of aggregate",
+        "labelAr": "مصدر الركام"
+      },
+      {
+        "key": "site",
+        "labelEn": "Site",
+        "labelAr": "الموقع"
+      },
+      {
+        "key": "sizeOfAgg",
+        "labelEn": "Size of aggregate",
+        "labelAr": "حجم الركام"
+      }
+    ],
+    "ASPH_EXTRACTED_SIEVE": [
+      {
+        "key": "sourceOfAgg",
+        "labelEn": "Source of aggregate",
+        "labelAr": "مصدر الركام"
+      },
+      {
+        "key": "site",
+        "labelEn": "Site",
+        "labelAr": "الموقع"
+      },
+      {
+        "key": "sizeOfAgg",
+        "labelEn": "Size of aggregate",
+        "labelAr": "حجم الركام"
+      }
+    ],
+    "ASPH_MARSHALL": [
+      {
+        "key": "sampleLocation",
+        "labelEn": "Sample location",
+        "labelAr": "موقع أخذ العينة"
+      },
+      {
+        "key": "material",
+        "labelEn": "Material",
+        "labelAr": "المادة"
+      },
+      {
+        "key": "source",
+        "labelEn": "Source",
+        "labelAr": "المصدر"
+      },
+      {
+        "key": "plantName",
+        "labelEn": "Plant name",
+        "labelAr": "اسم المصنع"
+      },
+      {
+        "key": "station",
+        "labelEn": "Station",
+        "labelAr": "المحطة"
+      },
+      {
+        "key": "sampleNo",
+        "labelEn": "Sample no.",
+        "labelAr": "رقم العينة"
+      },
+      {
+        "key": "aggSource",
+        "labelEn": "Agg. source",
+        "labelAr": "مصدر الركام"
+      }
+    ],
+    "ASPH_MARSHALL_DENSITY": [
+      {
+        "key": "sampleLocation",
+        "labelEn": "Sample location",
+        "labelAr": "موقع أخذ العينة"
+      },
+      {
+        "key": "material",
+        "labelEn": "Material",
+        "labelAr": "المادة"
+      },
+      {
+        "key": "source",
+        "labelEn": "Source",
+        "labelAr": "المصدر"
+      },
+      {
+        "key": "plantName",
+        "labelEn": "Plant name",
+        "labelAr": "اسم المصنع"
+      },
+      {
+        "key": "station",
+        "labelEn": "Station",
+        "labelAr": "المحطة"
+      },
+      {
+        "key": "sampleNo",
+        "labelEn": "Sample no.",
+        "labelAr": "رقم العينة"
+      },
+      {
+        "key": "aggSource",
+        "labelEn": "Agg. source",
+        "labelAr": "مصدر الركام"
+      }
+    ],
+    "ASPH_CORE": [
+      {
+        "key": "dateSampled",
+        "labelEn": "Date sampled",
+        "labelAr": "تاريخ أخذ العينة"
+      },
+      {
+        "key": "sampleLocation",
+        "labelEn": "Sample location",
+        "labelAr": "موقع أخذ العينة"
+      },
+      {
+        "key": "material",
+        "labelEn": "Material",
+        "labelAr": "المادة"
+      },
+      {
+        "key": "layer",
+        "labelEn": "Layer",
+        "labelAr": "الطبقة"
+      },
+      {
+        "key": "dateLaid",
+        "labelEn": "Date laid",
+        "labelAr": "تاريخ الرصف"
+      },
+      {
+        "key": "sampleNo",
+        "labelEn": "Sample no.",
+        "labelAr": "رقم العينة"
+      }
+    ],
+    "AGG_SG": [
+      {
+        "key": "description",
+        "labelEn": "Description",
+        "labelAr": "الوصف"
+      },
+      {
+        "key": "materialFor",
+        "labelEn": "Material for",
+        "labelAr": "المادة لـ"
+      },
+      {
+        "key": "source",
+        "labelEn": "Source",
+        "labelAr": "المصدر"
+      },
+      {
+        "key": "aggSize",
+        "labelEn": "Aggregate size",
+        "labelAr": "حجم الركام"
+      },
+      {
+        "key": "site",
+        "labelEn": "Site",
+        "labelAr": "الموقع"
+      }
+    ],
+    "AGG_FLAKINESS_ELONGATION": [
+      {
+        "key": "description",
+        "labelEn": "Description",
+        "labelAr": "الوصف"
+      },
+      {
+        "key": "materialFor",
+        "labelEn": "Material for",
+        "labelAr": "المادة لـ"
+      },
+      {
+        "key": "source",
+        "labelEn": "Source",
+        "labelAr": "المصدر"
+      },
+      {
+        "key": "aggSize",
+        "labelEn": "Aggregate size",
+        "labelAr": "حجم الركام"
+      },
+      {
+        "key": "site",
+        "labelEn": "Site",
+        "labelAr": "الموقع"
+      }
+    ],
+    "AGG_CRUSHING": [
+      {
+        "key": "description",
+        "labelEn": "Description",
+        "labelAr": "الوصف"
+      },
+      {
+        "key": "materialFor",
+        "labelEn": "Material for",
+        "labelAr": "المادة لـ"
+      },
+      {
+        "key": "source",
+        "labelEn": "Source",
+        "labelAr": "المصدر"
+      },
+      {
+        "key": "aggSize",
+        "labelEn": "Aggregate size",
+        "labelAr": "حجم الركام"
+      },
+      {
+        "key": "site",
+        "labelEn": "Site",
+        "labelAr": "الموقع"
+      }
+    ],
+    "AGG_IMPACT": [
+      {
+        "key": "description",
+        "labelEn": "Description",
+        "labelAr": "الوصف"
+      },
+      {
+        "key": "materialFor",
+        "labelEn": "Material for",
+        "labelAr": "المادة لـ"
+      },
+      {
+        "key": "source",
+        "labelEn": "Source",
+        "labelAr": "المصدر"
+      },
+      {
+        "key": "aggSize",
+        "labelEn": "Aggregate size",
+        "labelAr": "حجم الركام"
+      },
+      {
+        "key": "site",
+        "labelEn": "Site",
+        "labelAr": "الموقع"
+      }
+    ],
+    "AGG_LA": [
+      {
+        "key": "description",
+        "labelEn": "Description",
+        "labelAr": "الوصف"
+      },
+      {
+        "key": "materialFor",
+        "labelEn": "Material for",
+        "labelAr": "المادة لـ"
+      },
+      {
+        "key": "source",
+        "labelEn": "Source",
+        "labelAr": "المصدر"
+      },
+      {
+        "key": "aggSize",
+        "labelEn": "Aggregate size",
+        "labelAr": "حجم الركام"
+      },
+      {
+        "key": "site",
+        "labelEn": "Site",
+        "labelAr": "الموقع"
+      }
+    ]
+  },
+  "tests": [
+    {
+      "category": "concrete",
+      "nameEn": "Compressive Strength of Concrete Cubes",
+      "nameAr": "قوة ضغط مكعبات الخرسانة",
+      "code": "CONC_CUBE",
+      "unitPrice": "15",
+      "unit": "N/mm²",
+      "standardRef": "BS EN 12390-3",
+      "formTemplate": "concrete_cubes",
+      "sortOrder": 10,
+      "reportSection": {
+        "summaryInfo": [
+          "castingDate",
+          "sampleAgeDays",
+          "nominalCubeSize",
+          "specifiedStrength",
+          "requiredAtAge",
+          "structureType",
+          "classOfConcrete",
+          "maxAggSize",
+          "placeOfSampling",
+          "curingCondition",
+          "batchReference",
+          "avgStrength"
+        ],
+        "tableColumns": [
+          "cubeNo",
+          "location",
+          "cubeSize",
+          "maxLoad",
+          "area",
+          "cubeStrength",
+          "correctedStrength",
+          "result"
+        ],
+        "unit": "N/mm²"
+      }
+    },
+    {
+      "category": "concrete",
+      "nameEn": "Compressive Strength of Concrete Cores",
+      "nameAr": "قوة ضغط نواة خرسانية",
+      "code": "CONC_CORE",
+      "unitPrice": "20",
+      "unit": "N/mm²",
+      "standardRef": "BS EN 12504-1",
+      "formTemplate": "concrete_cores",
+      "sortOrder": 20,
+      "reportSection": {
+        "summaryInfo": [
+          "specifiedCubeStrength",
+          "required",
+          "avgEquivalentCubeStrength",
+          "endCondition",
+          "coreType",
+          "castDate",
+          "ageDays",
+          "coringDate",
+          "cementType",
+          "aggregateType"
+        ],
+        "tableColumns": [
+          "coreNo",
+          "ageDays",
+          "diameter",
+          "length",
+          "weightInAir",
+          "weightInAirSSD",
+          "weightInWater",
+          "density",
+          "ld",
+          "correctionFactor",
+          "maxLoad",
+          "coreStrength",
+          "equivalentCubeStrength",
+          "result"
+        ],
+        "unit": "N/mm²"
+      }
+    },
+    {
+      "category": "concrete",
+      "nameEn": "Compressive Strength of Masonry Blocks",
+      "nameAr": "قوة ضغط بلوك خرساني",
+      "code": "CONC_BLOCK",
+      "unitPrice": "30",
+      "unit": "N/mm²",
+      "standardRef": "BS EN 771-3",
+      "formTemplate": "concrete_blocks",
+      "sortOrder": 30,
+      "reportSection": {
+        "summaryInfo": [
+          "blockType",
+          "blockSpec.size",
+          "blockSpec.standard",
+          "requiredStrength",
+          "avgStrength",
+          "count"
+        ],
+        "tableColumns": [
+          "blockNo",
+          "widthMm",
+          "heightMm",
+          "lengthMm",
+          "weightKg",
+          "maxLoad",
+          "strengthMpa",
+          "correctedStrength",
+          "result"
+        ],
+        "unit": "N/mm²"
+      }
+    },
+    {
+      "category": "concrete",
+      "nameEn": "Compressive Strength of Interlocking Tiles",
+      "nameAr": "قوة ضغط بلاط انترلوك",
+      "code": "CONC_INTERLOCK",
+      "unitPrice": "20",
+      "unit": "N/mm²",
+      "standardRef": "BS EN 1338",
+      "formTemplate": "interlock",
+      "sortOrder": 40,
+      "reportSection": {
+        "summaryInfo": [
+          "tileType",
+          "size",
+          "requiredStrength",
+          "avgStrength"
+        ],
+        "tableColumns": [
+          "specimenNo",
+          "maxLoad",
+          "strength",
+          "result"
+        ],
+        "unit": "N/mm²"
+      }
+    },
+    {
+      "category": "concrete",
+      "nameEn": "Compressive Strength / Density of Lightweight Foam Concrete Cubes",
+      "nameAr": "مقاومة الضغط / كثافة مكعبات الخرسانة الرغوية خفيفة الوزن",
+      "code": "CONC_FOAM",
+      "unitPrice": "15",
+      "unit": "kg/cm²",
+      "standardRef": "BS 1881-116 / BS 1881-114",
+      "formTemplate": "concrete_foam",
+      "sortOrder": 50,
+      "reportSection": {
+        "summaryInfo": [
+          "concreteAge",
+          "requiredStrength",
+          "avgStrength",
+          "avgDensity"
+        ],
+        "tableColumns": [
+          "cubeNo",
+          "maxLoad",
+          "strength",
+          "density",
+          "result"
+        ],
+        "unit": "kg/cm²"
+      }
+    },
+    {
+      "category": "concrete",
+      "nameEn": "Initial Setting Time of Cement",
+      "nameAr": "زمن التصلب الابتدائي للأسمنت",
+      "code": "CEM_SETTING_TIME",
+      "unitPrice": "100",
+      "unit": "min",
+      "standardRef": "ASTM C191 / BS EN 196-3",
+      "formTemplate": "cement_setting_time",
+      "sortOrder": 60,
+      "reportSection": {
+        "summaryInfo": [
+          "initialSettingTime",
+          "finalSettingTime",
+          "requiredInitial",
+          "result"
+        ],
+        "tableColumns": [
+          "reading",
+          "timeMin",
+          "notes"
+        ],
+        "unit": "min"
+      }
+    },
+    {
+      "category": "concrete",
+      "nameEn": "Flexural Strength of Concrete Beams",
+      "nameAr": "مقاومة الانحناء لعوارض الخرسانة",
+      "code": "CONC_BEAM",
+      "unitPrice": "80",
+      "unit": "MPa",
+      "standardRef": "ASTM C78",
+      "formTemplate": "concrete_beam",
+      "sortOrder": 80,
+      "reportSection": {
+        "summaryInfo": [
+          "castDate",
+          "ageDays",
+          "span",
+          "requiredFlexural",
+          "avgStrength"
+        ],
+        "tableColumns": [
+          "beamNo",
+          "width",
+          "depth",
+          "span",
+          "maxLoad",
+          "modulusOfRupture",
+          "result"
+        ],
+        "unit": "MPa"
+      }
+    },
+    {
+      "category": "concrete",
+      "nameEn": "Mix Aggregate Gradation",
+      "nameAr": "تدرج ركام الخلطة",
+      "code": "CONC_MIX_GRAD",
+      "unitPrice": "65",
+      "unit": "%",
+      "standardRef": "ASTM C33 / BS EN 12620",
+      "formTemplate": "concrete_mix_grad",
+      "sortOrder": 90,
+      "reportSection": {
+        "summaryInfo": [
+          "blendStandard",
+          "overallResult"
+        ],
+        "tableColumns": [
+          "sieveSize",
+          "percentPassing",
+          "specMin",
+          "specMax",
+          "result"
+        ],
+        "unit": "%"
+      }
+    },
+    {
+      "category": "steel",
+      "nameEn": "Tensile Strength of Reinforcement Steel",
+      "nameAr": "قوة شد حديد التسليح",
+      "code": "STEEL_REBAR",
+      "unitPrice": "300",
+      "unit": "N/mm²",
+      "standardRef": "BS 4449",
+      "formTemplate": "steel_rebar",
+      "sortOrder": 200,
+      "reportSection": {
+        "summaryInfo": [
+          "barSize",
+          "grade",
+          "standard"
+        ],
+        "tableColumns": [
+          "diameter",
+          "weightPerMeter",
+          "yieldLoadKN",
+          "yieldStrength",
+          "utsLoadKN",
+          "uts",
+          "elongation",
+          "bendResult",
+          "overallResult"
+        ],
+        "unit": "N/mm²"
+      }
+    },
+    {
+      "category": "steel",
+      "nameEn": "Bend Test",
+      "nameAr": "اختبار ثني قضبان حديد التسليح",
+      "code": "STEEL_BEND",
+      "unitPrice": "100",
+      "unit": "—",
+      "standardRef": "BS 4449",
+      "formTemplate": "steel_bend_rebend",
+      "sortOrder": 210,
+      "reportSection": {
+        "summaryInfo": [
+          "barSize",
+          "bendDiameter",
+          "result"
+        ],
+        "tableColumns": [
+          "specimenNo",
+          "diameter",
+          "bendResult",
+          "rebendResult",
+          "overallResult"
+        ],
+        "unit": "—"
+      }
+    },
+    {
+      "category": "steel",
+      "nameEn": "Tensile Strength of Anchor Bolts",
+      "nameAr": "قوة شد برغي تثبيت",
+      "code": "STEEL_ANCHOR",
+      "unitPrice": "300",
+      "unit": "kN",
+      "standardRef": "BS EN ISO 898-1",
+      "formTemplate": "steel_anchor_bolt",
+      "sortOrder": 220,
+      "reportSection": {
+        "summaryInfo": [
+          "boltType",
+          "grade"
+        ],
+        "tableColumns": [
+          "specimenNumber",
+          "trials",
+          "nominalSize",
+          "cutSectionDiameter",
+          "cutSectionArea",
+          "loadKN",
+          "tensileStrengthMPa",
+          "glMm",
+          "elongation",
+          "reductionOfArea",
+          "grade",
+          "overallResult"
+        ],
+        "unit": "kN / MPa"
+      }
+    },
+    {
+      "category": "steel",
+      "nameEn": "Tensile Strength of Structural Steel",
+      "nameAr": "قوة شد حديد إنشائي",
+      "code": "STEEL_STRUCTURAL",
+      "unitPrice": "300",
+      "unit": "N/mm²",
+      "standardRef": "BS EN 10025",
+      "formTemplate": "steel_structural",
+      "sortOrder": 230,
+      "reportSection": {
+        "summaryInfo": [
+          "grade",
+          "sectionType"
+        ],
+        "tableColumns": [
+          "sectionType",
+          "width",
+          "thickness",
+          "area",
+          "yieldLoad",
+          "maxLoad",
+          "yieldStrength",
+          "tensileStrength",
+          "elongation",
+          "overallResult"
+        ],
+        "unit": "N/mm²"
+      }
+    },
+    {
+      "category": "soil",
+      "nameEn": "Sieve Analysis",
+      "nameAr": "تحليل المناخل",
+      "code": "SOIL_SIEVE",
+      "unitPrice": "100",
+      "unit": "%",
+      "standardRef": "BS 1377 / BS EN 933-1",
+      "formTemplate": "sieve_analysis",
+      "sortOrder": 100,
+      "reportSection": {
+        "summaryInfo": [
+          "sieveStandard",
+          "overallResult",
+          "failedSieves"
+        ],
+        "tableColumns": [
+          "sieveSize",
+          "percentRetained",
+          "percentPassing",
+          "specLimit"
+        ],
+        "unit": "%"
+      }
+    },
+    {
+      "category": "soil",
+      "nameEn": "Atterberg Limits (Plasticity Index)",
+      "nameAr": "حدود أتربرج",
+      "code": "SOIL_ATTERBERG",
+      "unitPrice": "150",
+      "unit": "%",
+      "standardRef": "BS 1377-2",
+      "formTemplate": "soil_atterberg",
+      "sortOrder": 110,
+      "reportSection": {
+        "summaryInfo": [
+          "liquidLimit",
+          "plasticLimit",
+          "plasticityIndex",
+          "overallResult"
+        ],
+        "tableColumns": [
+          "trial",
+          "waterContent",
+          "blows",
+          "liquidLimit",
+          "plasticLimit",
+          "plasticityIndex"
+        ],
+        "unit": "%"
+      }
+    },
+    {
+      "category": "soil",
+      "nameEn": "MDD/OMC (Proctor) Test",
+      "nameAr": "اختبار بروكتور",
+      "code": "SOIL_PROCTOR",
+      "unitPrice": "300",
+      "unit": "kN/m³",
+      "standardRef": "BS 1377-4",
+      "formTemplate": "soil_proctor",
+      "sortOrder": 120,
+      "testSubType": [
+        "BS_HEAVY",
+        "BS_LIGHT",
+        "MODIFIED_PROCTOR"
+      ],
+      "reportSection": {
+        "summaryInfo": [
+          "mdd",
+          "omc",
+          "testMethod",
+          "cbrStandard"
+        ],
+        "tableColumns": [
+          "point",
+          "mouldSoil",
+          "mouldWeight",
+          "soilWeight",
+          "wetDensity",
+          "waterContent",
+          "dryDensity"
+        ],
+        "unit": "Mg/m³ / %"
+      }
+    },
+    {
+      "category": "soil",
+      "nameEn": "California Bearing Ratio (CBR)",
+      "nameAr": "نسبة تحمل كاليفورنيا",
+      "code": "SOIL_CBR",
+      "unitPrice": "250",
+      "unit": "%",
+      "standardRef": "BS 1377-4 / ASTM D1883",
+      "formTemplate": "soil_cbr",
+      "sortOrder": 130,
+      "requiredTests": [
+        "SOIL_PROCTOR"
+      ],
+      "testSubType": [
+        "BS_1377_4",
+        "ASTM_D1883"
+      ],
+      "reportSection": {
+        "summaryInfo": [
+          "mdd",
+          "omc",
+          "cbrAt95Mdd",
+          "cbrAt98Mdd",
+          "cbrAt100Mdd",
+          "retained20mm",
+          "finalCBR",
+          "cbrMin",
+          "standard"
+        ],
+        "tableColumns": [
+          "penetrationMm",
+          "loadKN",
+          "stressKPa",
+          "cbrPercent"
+        ],
+        "unit": "%"
+      }
+    },
+    {
+      "category": "soil",
+      "nameEn": "Field Density (Compaction Test)",
+      "nameAr": "كثافة حقلية",
+      "code": "SOIL_FIELD_DENSITY",
+      "unitPrice": "100",
+      "unit": "Mg/m³",
+      "standardRef": "BS 1377-9",
+      "formTemplate": "soil_field_density",
+      "sortOrder": 140,
+      "reportSection": {
+        "summaryInfo": [
+          "mdd",
+          "omc",
+          "requiredCompaction",
+          "avgCompaction",
+          "overallResult"
+        ],
+        "tableColumns": [
+          "location",
+          "wetDensity",
+          "dryDensity",
+          "moistureContent",
+          "compactionPercent",
+          "result"
+        ],
+        "unit": "Mg/m³ / %"
+      }
+    },
+    {
+      "category": "asphalt",
+      "nameEn": "Asphalt Trial Mix & Hotbin Aggregates",
+      "nameAr": "تدرج الخلاط الساخن",
+      "code": "ASPH_HOTBIN",
+      "unitPrice": "50",
+      "unit": "%",
+      "standardRef": "—",
+      "formTemplate": "asphalt_hotbin",
+      "sortOrder": 300,
+      "testSubType": [
+        "wearing_course",
+        "base_course"
+      ],
+      "reportSection": {
+        "summaryInfo": [
+          "course",
+          "overallResult"
+        ],
+        "tableColumns": [
+          "sieveSize",
+          "percentPassing",
+          "specMin",
+          "specMax"
+        ],
+        "unit": "%"
+      }
+    },
+    {
+      "category": "asphalt",
+      "nameEn": "Bitumen Extraction",
+      "nameAr": "استخلاص البيتومين",
+      "code": "ASPH_BITUMEN_EXTRACT",
+      "unitPrice": "200",
+      "unit": "%",
+      "standardRef": "ASTM D2172",
+      "formTemplate": "asphalt_bitumen_extraction",
+      "sortOrder": 310,
+      "testSubType": [
+        "wearing_course",
+        "base_course"
+      ],
+      "reportSection": {
+        "summaryInfo": [
+          "bitumenContent",
+          "course"
+        ],
+        "tableColumns": [
+          "trial",
+          "panWeight",
+          "panMixWeight",
+          "filterWeight",
+          "filterMixWeight",
+          "bitumenPercent"
+        ],
+        "unit": "%"
+      }
+    },
+    {
+      "category": "asphalt",
+      "nameEn": "Sieve Analysis of Extracted Aggregates",
+      "nameAr": "مناخل الركام المستخلص",
+      "code": "ASPH_EXTRACTED_SIEVE",
+      "unitPrice": "100",
+      "unit": "%",
+      "standardRef": "—",
+      "formTemplate": "asphalt_extracted_sieve",
+      "sortOrder": 320,
+      "testSubType": [
+        "wearing_course",
+        "base_course"
+      ],
+      "reportSection": {
+        "summaryInfo": [
+          "course",
+          "overallResult"
+        ],
+        "tableColumns": [
+          "sieveSize",
+          "percentRetained",
+          "percentPassing",
+          "specLimit"
+        ],
+        "unit": "%"
+      }
+    },
+    {
+      "category": "asphalt",
+      "nameEn": "Bulk Specific Gravity of Compacted HMA (ASTM D 2726)",
+      "nameAr": "الثقل النوعي الظاهري للخلطة الإسفلتية المدموكة (ASTM D 2726)",
+      "code": "ASPH_MARSHALL_DENSITY",
+      "unitPrice": "75",
+      "unit": "g/cm³",
+      "standardRef": "ASTM D 2726",
+      "formTemplate": "asphalt_marshall_density",
+      "sortOrder": 335,
+      "testSubType": [
+        "wearing_course",
+        "base_course"
+      ],
+      "requiredTests": [
+        "ASPH_BITUMEN_EXTRACT"
+      ],
+      "reportSection": {
+        "summaryInfo": [
+          "avgBulkDensity",
+          "avgAirVoids",
+          "course"
+        ],
+        "tableColumns": [
+          "specimenNo",
+          "weightAir",
+          "weightWater",
+          "weightSSD",
+          "volume",
+          "bulkDensity",
+          "airVoids"
+        ],
+        "unit": "g/cm³ / %"
+      }
+    },
+    {
+      "category": "asphalt",
+      "nameEn": "HMA Marshall Stability and Flow (ASTM D 6927)",
+      "nameAr": "الثبات والتدفق لخلطة HMA (ASTM D 6927)",
+      "code": "ASPH_MARSHALL",
+      "unitPrice": "100",
+      "unit": "kN",
+      "standardRef": "ASTM D 6927",
+      "formTemplate": "asphalt_marshall",
+      "sortOrder": 340,
+      "testSubType": [
+        "wearing_course",
+        "base_course"
+      ],
+      "requiredTests": [
+        "ASPH_MARSHALL_DENSITY"
+      ],
+      "reportSection": {
+        "summaryInfo": [
+          "avgStability",
+          "avgFlow",
+          "course"
+        ],
+        "tableColumns": [
+          "specimenNo",
+          "stability",
+          "flow",
+          "bulkDensity",
+          "airVoids",
+          "result"
+        ],
+        "unit": "kN / mm"
+      }
+    },
+    {
+      "category": "asphalt",
+      "nameEn": "HMA Pavement Thickness, Bulk Specific Gravity and Compaction Test (ASTM D 3549, D 2726)",
+      "nameAr": "اختبار سماكة الرصف HMA والثقل النوعي الظاهري ونسبة الدمك (ASTM D 3549, D 2726)",
+      "code": "ASPH_CORE",
+      "unitPrice": "75",
+      "unit": "%",
+      "standardRef": "ASTM D3549 / ASTM D2726 / BS EN 12697-36",
+      "formTemplate": "asphalt_core",
+      "sortOrder": 345,
+      "testSubType": [
+        "wearing_course",
+        "base_course"
+      ],
+      "reportSection": {
+        "summaryInfo": [
+          "avgThickness",
+          "avgBulkDensity",
+          "avgCompaction",
+          "coreCount"
+        ],
+        "tableColumns": [
+          "coreNo",
+          "thickness",
+          "bulkDensity",
+          "maxDensity",
+          "compactionPercent",
+          "result"
+        ],
+        "unit": "mm / %"
+      }
+    },
+    {
+      "category": "asphalt",
+      "nameEn": "Spray Rate",
+      "nameAr": "معدل الرش",
+      "code": "ASPH_SPRAY_RATE",
+      "unitPrice": "50",
+      "unit": "L/m²",
+      "standardRef": "—",
+      "formTemplate": "asphalt_spray_rate",
+      "sortOrder": 350,
+      "testSubType": [
+        "wearing_course",
+        "base_course"
+      ],
+      "reportSection": {
+        "summaryInfo": [
+          "requiredSprayRate",
+          "avgSprayRate",
+          "overallResult"
+        ],
+        "tableColumns": [
+          "location",
+          "area",
+          "bitumenUsed",
+          "sprayRate",
+          "result"
+        ],
+        "unit": "L/m²"
+      }
+    },
+    {
+      "category": "aggregates",
+      "nameEn": "Relative density and water absorption of coarse & fine aggregate",
+      "nameAr": "الكثافة النسبية وامتصاص الماء للركام الخشن والناعم",
+      "code": "AGG_SG",
+      "unitPrice": "75",
+      "unit": "—",
+      "standardRef": "BS 812-2 / ASTM C127 / C128",
+      "formTemplate": "agg_specific_gravity",
+      "sortOrder": 410,
+      "reportSection": {
+        "summaryInfo": [
+          "aggType",
+          "avgApparentSg",
+          "avgAbsorption"
+        ],
+        "tableColumns": [
+          "fraction",
+          "sampleWeightSSD",
+          "sampleWeightOven",
+          "sampleWeightWater",
+          "apparentSg",
+          "absorption"
+        ],
+        "unit": "— / %"
+      }
+    },
+    {
+      "category": "aggregates",
+      "nameEn": "Flakiness & Elongation Index",
+      "nameAr": "معامل التقشر والاستطالة",
+      "code": "AGG_FLAKINESS_ELONGATION",
+      "unitPrice": "100",
+      "unit": "%",
+      "standardRef": "BS EN 933-3 / BS EN 933-4",
+      "formTemplate": "agg_shape_index",
+      "sortOrder": 420,
+      "reportSection": {
+        "summaryInfo": [
+          "flakinessIndex",
+          "elongationIndex",
+          "overallResult"
+        ],
+        "tableColumns": [
+          "sieveFraction",
+          "flakiness",
+          "elongation"
+        ],
+        "unit": "%"
+      }
+    },
+    {
+      "category": "aggregates",
+      "nameEn": "Aggregate Crushing Value (ACV)",
+      "nameAr": "قيمة سحق الركام (ACV)",
+      "code": "AGG_CRUSHING",
+      "unitPrice": "100",
+      "unit": "%",
+      "standardRef": "BS 812-110",
+      "formTemplate": "acv",
+      "sortOrder": 430,
+      "reportSection": {
+        "summaryInfo": [
+          "acv",
+          "requiredMax",
+          "overallResult"
+        ],
+        "tableColumns": [
+          "trial",
+          "massFraction",
+          "load",
+          "acvPercent",
+          "result"
+        ],
+        "unit": "%"
+      }
+    },
+    {
+      "category": "aggregates",
+      "nameEn": "Aggregate Impact Value (AIV)",
+      "nameAr": "قيمة تأثير الركام (AIV)",
+      "code": "AGG_IMPACT",
+      "unitPrice": "100",
+      "unit": "%",
+      "standardRef": "BS 812-112",
+      "formTemplate": "aiv",
+      "sortOrder": 435,
+      "reportSection": {
+        "summaryInfo": [
+          "aiv",
+          "requiredMax",
+          "overallResult"
+        ],
+        "tableColumns": [
+          "trial",
+          "massFraction",
+          "load",
+          "aivPercent",
+          "result"
+        ],
+        "unit": "%"
+      }
+    },
+    {
+      "category": "aggregates",
+      "nameEn": "Los Angeles Abrasion Test",
+      "nameAr": "تآكل لوس أنجلوس",
+      "code": "AGG_LA",
+      "unitPrice": "150",
+      "unit": "%",
+      "standardRef": "BS EN 1097-2",
+      "formTemplate": "agg_la_abrasion",
+      "sortOrder": 450,
+      "reportSection": {
+        "summaryInfo": [
+          "laLoss",
+          "requiredMaxLoss",
+          "overallResult"
+        ],
+        "tableColumns": [
+          "charge",
+          "initialWeight",
+          "finalWeight",
+          "lossPercent",
+          "result"
+        ],
+        "unit": "%"
+      }
+    }
+  ]
+}
