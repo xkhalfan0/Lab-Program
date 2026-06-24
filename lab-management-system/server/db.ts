@@ -1107,6 +1107,8 @@ export async function getDistributionById(id: number) {
       createdAt: distributions.createdAt,
       updatedAt: distributions.updatedAt,
       batchDistributionId: distributions.batchDistributionId,
+      // Order FK (for batch detection)
+      orderId: labOrderItems.orderId,
       // Sample fields
       sampleCode: samples.sampleCode,
       contractNumber: samples.contractNumber,
@@ -1127,6 +1129,7 @@ export async function getDistributionById(id: number) {
     .from(distributions)
     .leftJoin(samples, eq(distributions.sampleId, samples.id))
     .leftJoin(testTypes, eq(distributions.testType, testTypes.code))
+    .leftJoin(labOrderItems, eq(labOrderItems.distributionId, distributions.id))
     .where(and(eq(distributions.id, id), isNull(distributions.deletedAt)))
     .limit(1);
   const row = result[0];
@@ -1163,28 +1166,33 @@ export async function getDistributionsByBatch(batchDistributionId: string) {
     .orderBy(distributions.id);
 }
 
-/** Distributions for the same lab order + sample (e.g. asphalt mix batch: extract → sieve → Gmb → Marshall). */
+/** Distributions for the same lab order (e.g. asphalt mix batch: extract → sieve → Gmb → Marshall).
+ *  Uses a direct JOIN on lab_order_items so the result is always consistent with the technician
+ *  task list (which uses the same join). */
 export async function getBatchSiblingDistributions(sampleId: number, orderId: number) {
   const db = await getDb();
   if (!db) return [];
 
-  const items = await getLabOrderItems(orderId);
-  const distIds = items.map(i => i.distributionId).filter((id): id is number => id != null);
-  if (distIds.length === 0) return [];
-
+  // Direct join: find all distributions whose lab_order_item belongs to this order.
+  // This mirrors the INNER JOIN used in getDistributionsByTechnician, so any distribution
+  // that is visible in the technician task list will also be found here.
   const siblingRows = await db
-    .select()
+    .select({ dist: distributions })
     .from(distributions)
-    .where(
+    .innerJoin(
+      labOrderItems,
       and(
-        inArray(distributions.id, distIds),
-        isNull(distributions.deletedAt),
+        eq(labOrderItems.distributionId, distributions.id),
+        eq(labOrderItems.orderId, orderId),
       ),
     )
+    .where(isNull(distributions.deletedAt))
     .orderBy(asc(distributions.createdAt));
 
+  if (siblingRows.length === 0) return [];
+
   return Promise.all(
-    siblingRows.map(async dist => {
+    siblingRows.map(async ({ dist }) => {
       const legacy = await getTestResultByDistribution(dist.id);
       const specialized = await getSpecializedTestResultByDistribution(dist.id);
       return {
