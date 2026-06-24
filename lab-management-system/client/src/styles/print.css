@@ -15,14 +15,22 @@
   }
 
   html,
-  body {
+  body,
+  #root {
     margin: 0 !important;
     padding: 0 !important;
+    width: 100% !important;
+    max-width: none !important;
   }
 
   body {
     print-color-adjust: exact;
     -webkit-print-color-adjust: exact;
+  }
+
+  /* Remove screen-only canvas spacing when printing */
+  .min-h-screen {
+    min-height: auto !important;
   }
 
   /* Printable surface fills the page content box (margins come from @page only) */

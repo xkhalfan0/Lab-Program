@@ -20,6 +20,7 @@ import {
   LAB_PRINT_PAGE_CLASS,
   LAB_PRINT_PAGE_STYLE,
   LAB_PRINT_TAIL_CLASS,
+  printLabReport,
 } from "@/lib/labPrintLayout";
 import { getOfficialTestDisplayName } from "@/lib/officialTestCatalog";
 import {
@@ -292,7 +293,6 @@ export default function BatchReport() {
 
   const { data: testTypes = [] } = trpc.testTypes.list.useQuery();
 
-  const [isPdfLoading, setIsPdfLoading] = useState(false);
   const [isDownloadLoading, setIsDownloadLoading] = useState(false);
 
   const sorted = useMemo(
@@ -351,17 +351,7 @@ export default function BatchReport() {
     else navigate(`/batch/${sampleId}/${orderId}`);
   };
 
-  const handlePrint = async () => {
-    if (!printRef.current) return window.print();
-    setIsPdfLoading(true);
-    const { generatePdfFromElement } = await import("@/lib/pdf");
-    const ok = await generatePdfFromElement(printRef.current, {
-      filename: `batch-report-${sample?.sampleCode ?? sampleId}-order-${orderId}`,
-      mode: "print",
-    });
-    if (!ok) window.print();
-    setIsPdfLoading(false);
-  };
+  const handlePrint = () => printLabReport();
 
   const handleDownload = async () => {
     if (!printRef.current) return;
@@ -405,8 +395,8 @@ export default function BatchReport() {
           >
             {isDownloadLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
           </Button>
-          <Button onClick={handlePrint} disabled={isPdfLoading} className="bg-blue-600 hover:bg-blue-700 gap-2">
-            {isPdfLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Printer className="w-4 h-4" />}
+          <Button onClick={handlePrint} className="bg-blue-600 hover:bg-blue-700 gap-2">
+            <Printer className="w-4 h-4" />
             {isAr ? "\u0637\u0628\u0627\u0639\u0629" : "Print"}
           </Button>
         </div>

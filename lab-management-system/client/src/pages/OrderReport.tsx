@@ -21,6 +21,7 @@ import {
   LAB_PRINT_PAGE_CLASS,
   LAB_PRINT_PAGE_STYLE,
   LAB_PRINT_TAIL_CLASS,
+  printLabReport,
 } from "@/lib/labPrintLayout";
 import {
   formatSummaryLabel,
@@ -498,7 +499,6 @@ export default function OrderReport() {
   const { lang, setLang } = useLanguage();
   const isAr = lang === "ar";
   const printRef = useRef<HTMLDivElement>(null);
-  const [isPdfLoading, setIsPdfLoading] = useState(false);
   const [isDownloadLoading, setIsDownloadLoading] = useState(false);
 
   const orderIdNum = parseInt(orderId ?? "0");
@@ -512,16 +512,7 @@ export default function OrderReport() {
     else window.history.back();
   };
 
-  const handlePrint = async () => {
-    if (!printRef.current) return window.print();
-    setIsPdfLoading(true);
-    const ok = await generatePdfFromElement(printRef.current, {
-      filename: `order-report-${data?.order?.orderCode ?? orderIdNum}`,
-      mode: "print",
-    });
-    if (!ok) window.print();
-    setIsPdfLoading(false);
-  };
+  const handlePrint = () => printLabReport();
 
   const handleDownload = async () => {
     if (!printRef.current) return;
@@ -610,8 +601,8 @@ export default function OrderReport() {
             {isDownloadLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
             {t("download", lang)}
           </Button>
-          <Button onClick={handlePrint} disabled={isPdfLoading} className="bg-blue-600 hover:bg-blue-700 gap-2">
-            {isPdfLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Printer className="w-4 h-4" />}
+          <Button onClick={handlePrint} className="bg-blue-600 hover:bg-blue-700 gap-2">
+            <Printer className="w-4 h-4" />
             {t("print", lang)}
           </Button>
         </div>

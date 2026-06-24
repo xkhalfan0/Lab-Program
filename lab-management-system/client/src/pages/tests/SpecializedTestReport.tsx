@@ -21,6 +21,7 @@ import {
   LAB_PRINT_PAGE_STYLE,
   LAB_PRINT_TAIL_CLASS,
   LAB_PRINT_LEGACY_CLASS,
+  printLabReport,
 } from "@/lib/labPrintLayout";
 import { formatInspectionReference, inspectionRefLabel, reportDocNo } from "@/lib/inspectionReference";
 import {
@@ -3972,20 +3973,9 @@ export default function SpecializedTestReport({ sectorResultId }: SpecializedTes
     }
   };
 
-  const [isPdfLoading, setIsPdfLoading] = useState(false);
   const [isDownloadLoading, setIsDownloadLoading] = useState(false);
 
-  const handlePrint = async () => {
-    if (!printRef.current) return window.print();
-    setIsPdfLoading(true);
-    const { generatePdfFromElement } = await import("@/lib/pdf");
-    const ok = await generatePdfFromElement(printRef.current, {
-      filename: `specialized-report-${distIdForRender}`,
-      mode: "print",
-    });
-    if (!ok) window.print();
-    setIsPdfLoading(false);
-  };
+  const handlePrint = () => printLabReport();
 
   const handleDownload = async () => {
     if (!printRef.current) return;
@@ -4083,8 +4073,8 @@ export default function SpecializedTestReport({ sectorResultId }: SpecializedTes
               {isDownloadLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
               {isAr ? "تحميل PDF" : "Download PDF"}
             </Button>
-            <Button onClick={handlePrint} disabled={isPdfLoading} className="bg-blue-600 hover:bg-blue-700 gap-2">
-              {isPdfLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Printer className="w-4 h-4" />}
+            <Button onClick={handlePrint} className="bg-blue-600 hover:bg-blue-700 gap-2">
+              <Printer className="w-4 h-4" />
               {isAr ? "طباعة / حفظ PDF" : "Print / Save PDF"}
             </Button>
           </div>
@@ -4217,8 +4207,8 @@ export default function SpecializedTestReport({ sectorResultId }: SpecializedTes
             {isDownloadLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
             {isAr ? "تحميل PDF" : "Download PDF"}
           </Button>
-          <Button onClick={handlePrint} disabled={isPdfLoading} className="bg-blue-600 hover:bg-blue-700 gap-2">
-            {isPdfLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Printer className="w-4 h-4" />}
+          <Button onClick={handlePrint} className="bg-blue-600 hover:bg-blue-700 gap-2">
+            <Printer className="w-4 h-4" />
             {isAr ? "طباعة / حفظ PDF" : "Print / Save PDF"}
           </Button>
         </div>

@@ -27,6 +27,7 @@ import {
   LAB_PRINT_CANVAS_CLASS,
   LAB_PRINT_PAGE_STYLE,
   LAB_PRINT_TAIL_CLASS,
+  printLabReport,
 } from "@/lib/labPrintLayout";
 
 /** Same marker as ConcreteTest — hidden JSON suffix must never appear on printed reports. */
@@ -279,7 +280,7 @@ function ReportPage({
 
   return (
     <div
-      className="report-page bg-white flex flex-col mx-auto shadow-lg print:shadow-none"
+      className="report-page bg-white flex flex-col mx-auto shadow-lg print:shadow-none print:mx-0 print:w-full print:max-w-none print:p-0"
       dir={ar ? "rtl" : "ltr"}
       style={LAB_PRINT_PAGE_STYLE}
     >
@@ -592,7 +593,6 @@ export default function ConcreteReport() {
   const { distributionId } = useParams<{ distributionId: string }>();
   const distId = parseInt(distributionId ?? "0");
   const printRef = useRef<HTMLDivElement>(null);
-  const [isPdfLoading, setIsPdfLoading] = useState(false);
   const [isDownloadLoading, setIsDownloadLoading] = useState(false);
 
   // Close this tab (opened via window.open) instead of navigating away
@@ -618,16 +618,7 @@ export default function ConcreteReport() {
     { enabled: distId > 0 }
   );
 
-  const handlePrint = async () => {
-    if (!printRef.current) return window.print();
-    setIsPdfLoading(true);
-    const ok = await generatePdfFromElement(printRef.current, {
-      filename: `concrete-report-${refNo}`,
-      mode: "print",
-    });
-    if (!ok) window.print();
-    setIsPdfLoading(false);
-  };
+  const handlePrint = () => printLabReport();
 
   const handleDownload = async () => {
     if (!printRef.current) return;
@@ -671,8 +662,8 @@ export default function ConcreteReport() {
             {isDownloadLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
             Download PDF
           </Button>
-          <Button onClick={handlePrint} disabled={isPdfLoading} className="bg-blue-600 hover:bg-blue-700 gap-2">
-            {isPdfLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Printer className="w-4 h-4" />}
+          <Button onClick={handlePrint} className="bg-blue-600 hover:bg-blue-700 gap-2">
+            <Printer className="w-4 h-4" />
             Print / Save PDF
           </Button>
         </div>
