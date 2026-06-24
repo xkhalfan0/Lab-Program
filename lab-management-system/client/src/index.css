@@ -442,7 +442,7 @@ input[type="number"] {
   }
 }
 
-/* Lab report screen preview — matches A4 print layout (see styles/print.css) */
+/* Lab report screen preview — A4 sheet; content height is natural (no forced blank space) */
 .lab-print-root.report-page,
 .report-page {
   box-sizing: border-box;
@@ -452,25 +452,13 @@ input[type="number"] {
   font-family: Arial, sans-serif;
   font-size: 10px;
   line-height: 1.35;
-  min-height: 297mm;
-  display: flex;
-  flex-direction: column;
-}
-
-.lab-print-root.report-page.report-page--compact,
-.report-page.report-page--compact {
   min-height: auto;
-}
-
-.lab-print-root.report-page .report-page-body,
-.report-page .report-page-body {
-  flex: 1 1 auto;
+  display: block;
 }
 
 .lab-print-root.report-page .report-page-tail,
 .report-page .report-page-tail {
-  flex-shrink: 0;
-  margin-top: auto;
+  margin-top: 10mm;
 }
 
 .lab-print-root.report-page .report-info-grid,

@@ -4,10 +4,10 @@ import type { CSSProperties } from "react";
 export const LAB_PRINT_PAGE_CLASS =
   "lab-print-root mx-auto bg-white shadow-lg print:shadow-none report-page";
 
-/** Wrapper around main report content (flex-grow; keeps signatures at page bottom). */
+/** Main report content (metadata, summary, detailed results). */
 export const LAB_PRINT_BODY_CLASS = "report-page-body";
 
-/** Signatures + footer — kept together at bottom / end of report. */
+/** Signatures + footer — flows directly after body content. */
 export const LAB_PRINT_TAIL_CLASS = "report-page-tail";
 
 /** Grey canvas behind the white report sheet (hidden padding when printing). */

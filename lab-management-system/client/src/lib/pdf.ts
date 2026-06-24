@@ -118,12 +118,23 @@ export async function generatePdfFromElement(
     .lab-print-root,
     .report-page {
       box-sizing: border-box !important;
+      display: block !important;
       width: 100% !important;
       max-width: 100% !important;
       min-height: auto !important;
+      height: auto !important;
       margin: 0 !important;
       padding: 0 !important;
       box-shadow: none !important;
+    }
+    .report-page-body,
+    .report-page-tail {
+      display: block !important;
+      flex: none !important;
+      margin-top: 0 !important;
+    }
+    .report-page-tail {
+      margin-top: 6mm !important;
     }
     .lab-print-root table,
     .report-page table { width: 100% !important; max-width: 100% !important; }

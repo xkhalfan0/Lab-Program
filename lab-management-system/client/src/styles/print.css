@@ -136,24 +136,18 @@
     width: 100% !important;
     max-width: 100% !important;
     padding: 0 !important;
-    min-height: 0;
-    display: flex !important;
-    flex-direction: column !important;
+    min-height: auto !important;
+    height: auto !important;
+    display: block !important;
   }
 
-  /* Short single-page reports: signatures sit at bottom of first printed page */
-  .report-page:not(.report-page--compact) {
-    min-height: calc(297mm - 24mm);
-  }
-
-  /* Single-page reports: footer block sits at bottom; multi-page: flows naturally */
   .report-page-body {
-    flex: 1 1 auto;
+    display: block !important;
   }
 
   .report-page-tail {
-    flex-shrink: 0;
-    margin-top: auto;
+    display: block !important;
+    margin-top: 8mm !important;
     page-break-before: avoid;
     break-before: avoid-page;
     page-break-inside: avoid;
