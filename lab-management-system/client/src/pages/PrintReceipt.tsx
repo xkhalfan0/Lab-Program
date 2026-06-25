@@ -215,7 +215,7 @@ export default function PrintReceipt({ sectorSampleId }: { sectorSampleId?: numb
     }, 0);
   }, [orders]);
 
-  const testNamesDisplay = useMemo(() => {
+  const testsList = useMemo(() => {
     const names: string[] = [];
     if (orders?.length) {
       for (const order of orders) {
@@ -227,7 +227,7 @@ export default function PrintReceipt({ sectorSampleId }: { sectorSampleId?: numb
         }
       }
     }
-    return names.length ? names.join(" · ") : "—";
+    return names;
   }, [orders]);
 
   let totalQuantity = 1;
@@ -480,7 +480,56 @@ export default function PrintReceipt({ sectorSampleId }: { sectorSampleId?: numb
                 <ValueTd>{totalQuantity}</ValueTd>
               </tr>
               <FullRow labelKey="location">{sampleLocation}</FullRow>
-              <FullRow labelKey="tests">{testNamesDisplay}</FullRow>
+              <tr>
+                <BilingualTh en={T.tests.en} ar={T.tests.ar} />
+                <ValueTd colSpan={3}>
+                  {testsList.length === 0 ? (
+                    <span style={{ color: "#94a3b8" }}>—</span>
+                  ) : (
+                    <div
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns: "1fr 1fr",
+                        gap: "4px 16px",
+                        padding: "2px 0",
+                      }}
+                    >
+                      {testsList.map((name, i) => (
+                        <div
+                          key={i}
+                          style={{
+                            display: "flex",
+                            alignItems: "flex-start",
+                            gap: "6px",
+                            fontSize: "11.5px",
+                            lineHeight: 1.4,
+                          }}
+                        >
+                          <span
+                            style={{
+                              minWidth: "18px",
+                              height: "18px",
+                              borderRadius: "50%",
+                              background: "#1e293b",
+                              color: "#fff",
+                              fontSize: "9px",
+                              fontWeight: 800,
+                              display: "inline-flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              flexShrink: 0,
+                              marginTop: "1px",
+                            }}
+                          >
+                            {i + 1}
+                          </span>
+                          <span style={{ color: "#0f172a", fontWeight: 500 }}>{name}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </ValueTd>
+              </tr>
               <tr>
                 {th("totalPrice")}
                 <ValueTd mono>{totalPrice > 0 ? fmtMoney(totalPrice, lang) : "—"}</ValueTd>
