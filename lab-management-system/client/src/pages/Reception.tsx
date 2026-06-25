@@ -1740,7 +1740,7 @@ export default function Reception() {
                     {/* Step 4 — Reception entry data (test-specific fields) */}
                     <FormSection
                       step={4}
-                      title={lang === "ar" ? "بيانات الإدخال" : "Entry data"}
+                      title={lang === "ar" ? "تفاصيل العينة" : "Sample details"}
                       subtitle={
                         lang === "ar"
                           ? "أدخل تفاصيل العينة حسب الاختبار/الاختبارات المختارة"

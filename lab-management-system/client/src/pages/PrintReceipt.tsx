@@ -58,7 +58,7 @@ const T = {
   notes: { ar: "ملاحظات", en: "Notes" },
   supplier: { ar: "المورد / المصدر", en: "Supplier / Source" },
   location: { ar: "موقع العينة", en: "Sample Location" },
-  entryData: { ar: "بيانات الإدخال", en: "Entry Data" },
+  entryData: { ar: "تفاصيل العينة", en: "Sample Details" },
   printedAt: { ar: "طُبع في", en: "Printed at" },
 } as const;
 
