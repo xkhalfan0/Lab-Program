@@ -318,12 +318,12 @@ function TechnicianAssignmentCard({
 
   const statusBadge = isCompleted ? (
     <Badge className="shrink-0 border border-green-200 bg-green-100 text-xs text-green-800">
-      <CheckCircle2 className="mr-1 h-3 w-3" />
+      <CheckCircle2 className="me-1 h-3 w-3" />
       {lang === "ar" ? "مكتمل" : "Completed"}
     </Badge>
   ) : (
     <Badge className="shrink-0 border border-amber-200 bg-amber-100 text-xs text-amber-900">
-      <Clock className="mr-1 h-3 w-3" />
+      <Clock className="me-1 h-3 w-3" />
       {lang === "ar" ? "نشط" : "Active"}
     </Badge>
   );
@@ -488,7 +488,7 @@ function TechnicianBatchCard({
     <button
       type="button"
       onClick={onOpenBatch}
-      className={`w-full rounded-lg border px-5 py-4 text-left transition-shadow hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
+      className={`w-full rounded-lg border px-5 py-4 text-start transition-shadow hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
         allDone ? "border-blue-200/80 bg-blue-50/40" : "border-blue-300/60 bg-blue-50/20"
       }`}
     >
@@ -502,12 +502,12 @@ function TechnicianBatchCard({
               </h2>
               {allDone ? (
                 <Badge className="border border-green-200 bg-green-100 text-xs text-green-800">
-                  <CheckCircle2 className="mr-1 h-3 w-3" />
+                  <CheckCircle2 className="me-1 h-3 w-3" />
                   {lang === "ar" ? "مكتمل" : "Complete"}
                 </Badge>
               ) : (
                 <Badge className="border border-blue-200 bg-blue-100 text-xs text-blue-900">
-                  <Clock className="mr-1 h-3 w-3" />
+                  <Clock className="me-1 h-3 w-3" />
                   {lang === "ar" ? "قيد التنفيذ" : "In progress"}
                 </Badge>
               )}
@@ -516,12 +516,12 @@ function TechnicianBatchCard({
               {completed}/{total} {tx("batchProgress", lang)}
             </p>
             <p className="text-xs text-muted-foreground truncate">
-              <Building2 className="inline h-3.5 w-3.5 mr-1 align-text-bottom" />
+              <Building2 className="inline h-3.5 w-3.5 me-1 align-text-bottom" />
               {contractor}
             </p>
           </div>
         </div>
-        <span className="shrink-0 text-sm font-medium text-blue-700">{tx("openBatch", lang)} →</span>
+        <span className="shrink-0 text-sm font-medium text-blue-700">{tx("openBatch", lang)} {lang === "ar" ? "←" : "→"}</span>
       </div>
     </button>
   );
