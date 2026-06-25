@@ -879,7 +879,7 @@ export default function Reception() {
               )}
               <TestPriceBadge
                 lang={catalogLang}
-                amount={isSelected && selectedItem ? selectedItem.unitPrice : tt.unitPrice}
+                amount={tt.code === HOT_BIN_REQUIRED_CODE ? 0 : (isSelected && selectedItem ? selectedItem.unitPrice : tt.unitPrice)}
               />
             </>
           }
@@ -1283,6 +1283,8 @@ export default function Reception() {
       const subtypeTotal = Object.values(subtypeMap).reduce((s, qty) => s + (qty > 0 ? t.unitPrice * qty : 0), 0);
       return sum + subtypeTotal;
     }
+    // ASPH_HOTBIN is the required container test; add-on tests carry the actual price
+    if (t.testTypeCode === HOT_BIN_REQUIRED_CODE) return sum;
     return sum + t.unitPrice * t.quantity;
   }, 0);
 
