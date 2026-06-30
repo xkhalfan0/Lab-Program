@@ -1175,7 +1175,24 @@ export async function repairOrderDistributionLinks(orderId: number): Promise<num
   if (!order?.sampleId) return 0;
 
   const items = await getLabOrderItems(orderId);
-  const unlinked = items.filter((i) => i.distributionId == null);
+
+  // Items that need repair: distributionId is null OR points to a soft-deleted distribution
+  const linkedIds = items
+    .map((i) => i.distributionId)
+    .filter((id): id is number => id != null);
+
+  const deletedLinkedIds = new Set<number>();
+  if (linkedIds.length > 0) {
+    const deletedRows = await db
+      .select({ id: distributions.id })
+      .from(distributions)
+      .where(and(inArray(distributions.id, linkedIds), isNotNull(distributions.deletedAt)));
+    deletedRows.forEach((r) => deletedLinkedIds.add(r.id));
+  }
+
+  const unlinked = items.filter(
+    (i) => i.distributionId == null || deletedLinkedIds.has(i.distributionId as number),
+  );
   if (unlinked.length === 0) return 0;
 
   const distRows = await db
@@ -1189,16 +1206,18 @@ export async function repairOrderDistributionLinks(orderId: number): Promise<num
     .where(and(eq(distributions.sampleId, order.sampleId), isNull(distributions.deletedAt)))
     .orderBy(asc(distributions.createdAt));
 
-  const linkedDistIds = new Set(
-    items.map((i) => i.distributionId).filter((id): id is number => id != null),
-  );
+  // Start with already-valid linked IDs (exclude deleted ones)
+  const linkedDistIds = new Set(linkedIds.filter((id) => !deletedLinkedIds.has(id)));
 
   let repaired = 0;
   for (const item of unlinked) {
     const candidates = distRows.filter(
       (d) =>
         !linkedDistIds.has(d.id) &&
-        d.testType === item.testTypeCode &&
+        (d.testType === item.testTypeCode ||
+          // Also match prefix: e.g. "CONC_BLOCK" order item may have "CONC_BLOCK_SOLID" dist
+          d.testType.startsWith(item.testTypeCode + "_") ||
+          item.testTypeCode.startsWith(d.testType + "_")) &&
         ((item.testSubType ?? null) === (d.testSubType ?? null) ||
           item.testSubType == null ||
           d.testSubType == null),
@@ -1234,7 +1253,8 @@ export async function getBatchSiblingDistributions(
 
   await repairOrderDistributionLinks(orderId);
 
-  const siblingRows = await db
+  // Primary: distributions directly linked to this order via lab_order_items
+  const linkedRows = await db
     .select({ dist: distributions })
     .from(distributions)
     .innerJoin(
@@ -1247,8 +1267,81 @@ export async function getBatchSiblingDistributions(
     .where(isNull(distributions.deletedAt))
     .orderBy(asc(distributions.createdAt));
 
+  // Fallback: if the INNER JOIN returned fewer distributions than the order has items,
+  // search by sampleId + testType for any unaccounted distributions.
+  const orderItems = await getLabOrderItems(orderId);
+  const foundIds = new Set(linkedRows.map((r) => r.dist.id));
+
+  const missingItems = orderItems.filter(
+    (item) =>
+      !item.distributionId ||
+      !foundIds.has(item.distributionId as number),
+  );
+
+  const extraRows: typeof linkedRows = [];
+
+  if (missingItems.length > 0) {
+    const order = await getLabOrderById(orderId);
+    if (order?.sampleId) {
+      // Build the set of test type codes we're looking for (including prefix variants)
+      const missingCodes = [
+        ...new Set(missingItems.flatMap((i) => [i.testTypeCode, `${i.testTypeCode}_%`])),
+      ].filter(Boolean);
+
+      // Distributions linked to OTHER orders — must not steal them
+      const otherLinked = await db
+        .select({ id: labOrderItems.distributionId })
+        .from(labOrderItems)
+        .where(
+          and(
+            ne(labOrderItems.orderId, orderId),
+            isNotNull(labOrderItems.distributionId),
+          ),
+        );
+      const otherOrderDistIds = new Set(
+        otherLinked.map((r) => r.id).filter((id): id is number => id != null),
+      );
+
+      // Candidates: same sample, not deleted, not already found, not claimed by another order
+      const candidateRows = await db
+        .select({ dist: distributions })
+        .from(distributions)
+        .where(
+          and(
+            eq(distributions.sampleId, order.sampleId),
+            isNull(distributions.deletedAt),
+          ),
+        )
+        .orderBy(asc(distributions.createdAt));
+
+      for (const { dist } of candidateRows) {
+        if (foundIds.has(dist.id)) continue;
+        if (otherOrderDistIds.has(dist.id)) continue;
+
+        // Check this distribution's testType matches a missing item
+        const matchesMissing = missingItems.some(
+          (item) =>
+            dist.testType === item.testTypeCode ||
+            dist.testType.startsWith(item.testTypeCode + "_") ||
+            item.testTypeCode.startsWith((dist.testType ?? "") + "_"),
+        );
+        if (!matchesMissing) continue;
+
+        extraRows.push({ dist });
+        foundIds.add(dist.id);
+      }
+    }
+  }
+
+  // Merge and re-sort
+  const allRows = [...linkedRows, ...extraRows].sort((a, b) => {
+    const tA = a.dist.createdAt ? new Date(a.dist.createdAt).getTime() : 0;
+    const tB = b.dist.createdAt ? new Date(b.dist.createdAt).getTime() : 0;
+    return tA !== tB ? tA - tB : a.dist.id - b.dist.id;
+  });
+
   if (!options.includeResults) {
-    return siblingRows.map(({ dist }) => ({
+    return allRows.map(({ dist }) => ({
       ...dist,
       testResults: [],
       specializedTestResults: [],
@@ -1256,7 +1349,7 @@ export async function getBatchSiblingDistributions(
   }
 
   return Promise.all(
-    siblingRows.map(async ({ dist }) => {
+    allRows.map(async ({ dist }) => {
       const legacy = await getTestResultByDistribution(dist.id);
       const specialized = await getSpecializedTestResultByDistribution(dist.id);
       return {
