@@ -464,7 +464,7 @@ export default function BatchReport() {
               </table>
             </div>
 
-            <div className="mb-5 space-y-4">
+            <div className="mb-5 space-y-6">
               <h3 className="text-xs font-bold text-gray-700 uppercase border-b border-gray-300 pb-1">
                 {isAr ? "\u0646\u062a\u0627\u0626\u062c \u0627\u0644\u0627\u062e\u062a\u0628\u0627\u0631\u0627\u062a" : "Test Results"}
               </h3>
@@ -473,28 +473,32 @@ export default function BatchReport() {
                 const summaryEntries = Object.entries(summaryValues).filter(
                   ([k, v]) => !SUMMARY_SKIP_KEYS.has(k) && v != null && v !== "" && typeof v !== "object",
                 );
+                const isCompleted = ["completed", "submitted", "reviewed", "qc_passed"].includes(sibling.status);
                 const hasDetailedForm =
-                  (sibling.status === "completed" || sibling.status === "submitted" || sibling.status === "reviewed" || sibling.status === "qc_passed") &&
+                  isCompleted &&
                   !!formTemplate &&
                   formData != null &&
                   typeof formData === "object";
                 return (
                   <div
                     key={sibling.id}
-                    className={`border border-gray-300 rounded overflow-hidden print-no-break`}
+                    className="border-2 border-slate-300 rounded-lg overflow-hidden"
+                    style={{ pageBreakInside: "avoid", breakInside: "avoid" }}
                   >
-                    <div className="bg-slate-100 border-b border-gray-300 px-3 py-2 flex flex-wrap justify-between items-start gap-2">
+                    {/* Test section header */}
+                    <div className="bg-slate-800 text-white px-4 py-2.5 flex flex-wrap justify-between items-center gap-2">
                       <div>
-                        <h2 className="text-[12px] font-bold text-gray-900">
+                        <h2 className="text-[13px] font-bold">
                           {index + 1}. {testName}
                         </h2>
-                        <p className="text-[9px] text-gray-500 mt-0.5">
+                        <p className="text-[9px] text-slate-300 mt-0.5">
                           {isAr ? "\u0627\u0644\u0645\u0639\u064a\u0627\u0631" : "Standard"}: {standard}
+                          {sibling.distributionCode ? ` \u2014 ${sibling.distributionCode}` : ""}
                         </p>
                       </div>
                       {isInformationalBatchTest(sibling.testType) ? (
                         sibling.status === "completed" ? (
-                          <span className="inline-flex items-center rounded-full text-xs px-2 py-0.5 font-semibold bg-slate-100 text-slate-700 border border-slate-300">
+                          <span className="inline-flex items-center rounded-full text-xs px-2.5 py-0.5 font-semibold bg-white/20 text-white border border-white/30">
                             {isAr ? "مكتمل" : "DONE"}
                           </span>
                         ) : (
@@ -504,12 +508,12 @@ export default function BatchReport() {
                         <PassFailBadge result={overallResult} size="sm" lang={isAr ? "ar" : "en"} />
                       )}
                     </div>
-                    <div className="p-3">
+                    <div className="p-4">
                       {hasDetailedForm ? (
                         renderFormData(formTemplate as string, formData, isAr, {
                           sieveReportTestedBy: sibling.specializedTestResults?.[0]?.testedBy ?? null,
                         })
-                      ) : ["completed", "submitted", "reviewed", "qc_passed"].includes(sibling.status) && summaryEntries.length > 0 ? (
+                      ) : isCompleted && summaryEntries.length > 0 ? (
                         <table className="metadata-table w-full border-collapse text-xs">
                           <tbody>
                             {(() => {
@@ -547,7 +551,7 @@ export default function BatchReport() {
                         </table>
                       ) : (
                         <p className="text-[10px] text-gray-500 italic">
-                          {["completed", "submitted", "reviewed", "qc_passed"].includes(sibling.status)
+                          {isCompleted
                             ? isAr ? "لا توجد بيانات محفوظة." : "No data recorded."
                             : isAr ? "الاختبار لم يكتمل بعد." : "Test not yet completed."}
                         </p>

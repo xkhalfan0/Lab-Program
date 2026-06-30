@@ -350,9 +350,16 @@
   }
 
   .lab-print-root .border-2.rounded-lg {
-    padding: 8pt !important;
-    margin-top: 8pt !important;
-    page-break-before: avoid;
+    margin-top: 12pt !important;
+    page-break-before: auto;
+    break-before: auto;
+    border: 1.5pt solid #334155 !important;
+  }
+
+  /* Keep each test section's header + first rows together */
+  .lab-print-root .border-2.rounded-lg > div:first-child {
+    page-break-after: avoid;
+    break-after: avoid;
   }
 
   .lab-print-root .recharts-wrapper,
@@ -450,6 +457,20 @@
   .lab-print-root .bg-gray-900,
   .lab-print-root .bg-gray-900 * {
     color: #fff !important;
+  }
+
+  /* Batch test section dark header */
+  .lab-print-root .bg-slate-800 {
+    background-color: #1e293b !important;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+  .lab-print-root .bg-slate-800,
+  .lab-print-root .bg-slate-800 * {
+    color: #fff !important;
+  }
+  .lab-print-root .bg-slate-800 .text-slate-300 {
+    color: #cbd5e1 !important;
   }
 
   * {
