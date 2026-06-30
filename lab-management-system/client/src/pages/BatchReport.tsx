@@ -476,10 +476,6 @@ export default function BatchReport() {
                   !!formTemplate &&
                   formData != null &&
                   typeof formData === "object";
-                const isMarshallDensity =
-                  formTemplate === "asphalt_marshall_density" ||
-                  sibling.testType === "ASPH_MARSHALL_DENSITY" ||
-                  sibling.testType === "DIST-2026-042";
                 return (
                   <div
                     key={sibling.id}
@@ -506,73 +502,54 @@ export default function BatchReport() {
                         <PassFailBadge result={overallResult} size="sm" lang={isAr ? "ar" : "en"} />
                       )}
                     </div>
-                    <div className="p-3 space-y-3">
-                      {isMarshallDensity && summaryEntries.length > 0 ? (
-                        <MarshallDensityBatchSummary summaryValues={summaryValues} isAr={isAr} />
-                      ) : summaryEntries.length > 0 ? (
-                        <div>
-                          <p className="text-[10px] font-semibold text-gray-600 mb-1.5 uppercase">
-                            {isAr ? "\u0627\u0644\u0646\u062a\u0627\u0626\u062c \u0627\u0644\u0631\u0626\u064a\u0633\u064a\u0629" : "Key results"}
-                          </p>
-                          <table className="metadata-table w-full border-collapse text-xs">
-                            <tbody>
-                              {(() => {
-                                const rows: Array<typeof summaryEntries> = [];
-                                for (let i = 0; i < summaryEntries.length; i += 2) {
-                                  rows.push(summaryEntries.slice(i, i + 2));
-                                }
-                                return rows.map((pair, ri) => {
-                                  const [a, b] = [pair[0], pair[1]];
-                                  return (
-                                    <tr key={ri}>
-                                      <td className={REPORT_META_LABEL_CLASS}>
-                                        {formatSummaryLabel(a[0], formTemplate ?? "", isAr)}
-                                      </td>
-                                      <td className={REPORT_META_VALUE_CLASS}>
-                                        {formatSummaryValue(a[0], a[1], isAr, formTemplate ?? "")}
-                                      </td>
-                                      {b ? (
-                                        <>
-                                          <td className={REPORT_META_LABEL_CLASS}>
-                                            {formatSummaryLabel(b[0], formTemplate ?? "", isAr)}
-                                          </td>
-                                          <td className={REPORT_META_VALUE_CLASS}>
-                                            {formatSummaryValue(b[0], b[1], isAr, formTemplate ?? "")}
-                                          </td>
-                                        </>
-                                      ) : (
-                                        <td className="border border-gray-200 px-2 py-1" colSpan={2} />
-                                      )}
-                                    </tr>
-                                  );
-                                });
-                              })()}
-                            </tbody>
-                          </table>
-                        </div>
+                    <div className="p-3">
+                      {hasDetailedForm ? (
+                        renderFormData(formTemplate as string, formData, isAr, {
+                          sieveReportTestedBy: sibling.specializedTestResults?.[0]?.testedBy ?? null,
+                        })
+                      ) : sibling.status === "completed" && summaryEntries.length > 0 ? (
+                        <table className="metadata-table w-full border-collapse text-xs">
+                          <tbody>
+                            {(() => {
+                              const rows: Array<typeof summaryEntries> = [];
+                              for (let i = 0; i < summaryEntries.length; i += 2) {
+                                rows.push(summaryEntries.slice(i, i + 2));
+                              }
+                              return rows.map((pair, ri) => {
+                                const [a, b] = [pair[0], pair[1]];
+                                return (
+                                  <tr key={ri}>
+                                    <td className={REPORT_META_LABEL_CLASS}>
+                                      {formatSummaryLabel(a[0], formTemplate ?? "", isAr)}
+                                    </td>
+                                    <td className={REPORT_META_VALUE_CLASS}>
+                                      {formatSummaryValue(a[0], a[1], isAr, formTemplate ?? "")}
+                                    </td>
+                                    {b ? (
+                                      <>
+                                        <td className={REPORT_META_LABEL_CLASS}>
+                                          {formatSummaryLabel(b[0], formTemplate ?? "", isAr)}
+                                        </td>
+                                        <td className={REPORT_META_VALUE_CLASS}>
+                                          {formatSummaryValue(b[0], b[1], isAr, formTemplate ?? "")}
+                                        </td>
+                                      </>
+                                    ) : (
+                                      <td className="border border-gray-200 px-2 py-1" colSpan={2} />
+                                    )}
+                                  </tr>
+                                );
+                              });
+                            })()}
+                          </tbody>
+                        </table>
                       ) : (
                         <p className="text-[10px] text-gray-500 italic">
                           {sibling.status === "completed"
-                            ? isAr
-                              ? "\u0644\u0627 \u062a\u0648\u062c\u062f \u0642\u064a\u0645 \u0645\u0644\u062e\u0635\u0629 \u0645\u062d\u0641\u0648\u0638\u0629."
-                              : "No summary values recorded."
-                            : isAr
-                              ? "\u0627\u0644\u0627\u062e\u062a\u0628\u0627\u0631 \u0644\u0645 \u064a\u0643\u062a\u0645\u0644 \u0628\u0639\u062f."
-                              : "Test not yet completed."}
+                            ? isAr ? "لا توجد بيانات محفوظة." : "No data recorded."
+                            : isAr ? "الاختبار لم يكتمل بعد." : "Test not yet completed."}
                         </p>
                       )}
-
-                      {hasDetailedForm && (
-                        <div className="pt-1 border-t border-gray-200">
-                          <p className="text-[10px] font-semibold text-gray-600 mb-1.5 uppercase">
-                            {isAr ? "\u0627\u0644\u0646\u062a\u0627\u0626\u062c \u0627\u0644\u062a\u0641\u0635\u064a\u0644\u064a\u0629" : "Detailed results"}
-                          </p>
-                          {renderFormData(formTemplate as string, formData, isAr, {
-                            sieveReportTestedBy: sibling.specializedTestResults?.[0]?.testedBy ?? null,
-                          })}
-                        </div>
-                      )}
-
                     </div>
                   </div>
                 );
