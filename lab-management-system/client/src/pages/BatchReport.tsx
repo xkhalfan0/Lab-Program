@@ -326,7 +326,9 @@ export default function BatchReport() {
 
   const evaluatableSections = sections.filter(s => !isInformationalBatchTest(s.sibling.testType));
   const total = evaluatableSections.length;
-  const completedCount = evaluatableSections.filter(s => s.sibling.status === "completed").length;
+  const completedCount = evaluatableSections.filter(s =>
+    ["completed", "submitted", "reviewed", "qc_passed"].includes(s.sibling.status)
+  ).length;
   const passCount = evaluatableSections.filter(s => s.overallResult === "pass").length;
   const batchStatus = computeBatchStatus(passCount, total, completedCount);
   const testedBy = sections.map(s => s.testedBy).find(Boolean);
@@ -472,7 +474,7 @@ export default function BatchReport() {
                   ([k, v]) => !SUMMARY_SKIP_KEYS.has(k) && v != null && v !== "" && typeof v !== "object",
                 );
                 const hasDetailedForm =
-                  sibling.status === "completed" &&
+                  (sibling.status === "completed" || sibling.status === "submitted" || sibling.status === "reviewed" || sibling.status === "qc_passed") &&
                   !!formTemplate &&
                   formData != null &&
                   typeof formData === "object";
@@ -507,7 +509,7 @@ export default function BatchReport() {
                         renderFormData(formTemplate as string, formData, isAr, {
                           sieveReportTestedBy: sibling.specializedTestResults?.[0]?.testedBy ?? null,
                         })
-                      ) : sibling.status === "completed" && summaryEntries.length > 0 ? (
+                      ) : ["completed", "submitted", "reviewed", "qc_passed"].includes(sibling.status) && summaryEntries.length > 0 ? (
                         <table className="metadata-table w-full border-collapse text-xs">
                           <tbody>
                             {(() => {
@@ -545,7 +547,7 @@ export default function BatchReport() {
                         </table>
                       ) : (
                         <p className="text-[10px] text-gray-500 italic">
-                          {sibling.status === "completed"
+                          {["completed", "submitted", "reviewed", "qc_passed"].includes(sibling.status)
                             ? isAr ? "لا توجد بيانات محفوظة." : "No data recorded."
                             : isAr ? "الاختبار لم يكتمل بعد." : "Test not yet completed."}
                         </p>
