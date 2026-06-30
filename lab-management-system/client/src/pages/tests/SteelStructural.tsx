@@ -223,6 +223,7 @@ export default function SteelStructural() {
 
   const [grade, setGrade] = useState<SteelGrade>("S355");
   const [heatNo, setHeatNo] = useState("");
+  const [gaugeLength, setGaugeLength] = useState("");
   const [notes, setNotes] = useState("");
   const [rows, setRows] = useState<SpecimenRow[]>([newRow(1)]);
   const [saving, setSaving] = useState(false);
@@ -312,7 +313,7 @@ export default function SteelStructural() {
         sampleId: dist.sampleId,
         testTypeCode: spec.code,
         formTemplate: "steel_structural",
-        formData: { grade, spec, heatNo, specimens: computedRows, overallResult },
+        formData: { grade, spec, heatNo, gaugeLength, specimens: computedRows, overallResult },
         overallResult,
         summaryValues: { grade: spec.label, specimensTested: validRows.length, overallResult },
         notes,
@@ -444,6 +445,17 @@ export default function SteelStructural() {
                   value={heatNo}
                   onChange={(e) => setHeatNo(e.target.value)}
                   placeholder={ar ? "رقم الصهر" : "Heat number"}
+                  disabled={submitted}
+                />
+              </div>
+              <div>
+                <Label className="text-xs text-slate-500 mb-1 block">
+                  {ar ? "طول القياس (مم)" : "Gauge Length (mm)"}
+                </Label>
+                <Input
+                  value={gaugeLength}
+                  onChange={(e) => setGaugeLength(e.target.value)}
+                  placeholder="e.g. 80"
                   disabled={submitted}
                 />
               </div>

@@ -244,6 +244,8 @@ export default function ConcreteCore() {
   const [specifiedStrength, setSpecifiedStrength] = useState("30");
   const [coreType, setCoreType] = useState("Drilled Core");
   const [endCondition, setEndCondition] = useState("as-drilled"); // as-drilled | grinded | capped
+  const [moistureCondition, setMoistureCondition] = useState("air_dry"); // air_dry | saturated | dry
+  const [reinforced, setReinforced] = useState("no"); // yes | no
   const [castDate, setCastDate] = useState("");
   const [coringDate, setCoringDate] = useState("");
   const [cementType, setCementType] = useState("");
@@ -292,6 +294,8 @@ export default function ConcreteCore() {
     if (fd.specifiedCubeStrength) setSpecifiedStrength(String(fd.specifiedCubeStrength));
     if (fd.coreType) setCoreType(fd.coreType);
     if (fd.endCondition) setEndCondition(fd.endCondition);
+    if (fd.moistureCondition) setMoistureCondition(fd.moistureCondition);
+    if (fd.reinforced) setReinforced(fd.reinforced);
     if (fd.castDate) setCastDate(String(fd.castDate).split("T")[0]);
     if (fd.coringDate) setCoringDate(String(fd.coringDate).split("T")[0]);
     if (fd.cementType) setCementType(String(fd.cementType));
@@ -376,6 +380,8 @@ export default function ConcreteCore() {
           specifiedCubeStrength: specStr,
           coreType,
           endCondition,
+          moistureCondition,
+          reinforced,
           castDate: castDate || undefined,
           coringDate: coringDate || undefined,
           cementType: cementType.trim() || undefined,
@@ -510,6 +516,27 @@ export default function ConcreteCore() {
                     <SelectItem value="as-drilled">{ar ? "كما حفر (As-Drilled)" : "As-Drilled"}</SelectItem>
                     <SelectItem value="grinded">{ar ? "مطحون (Grinded)" : "Grinded"}</SelectItem>
                     <SelectItem value="capped">{ar ? "مغطى (Capped)" : "Capped"}</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label className="text-xs text-slate-500 mb-1 block">{ar ? "حالة الرطوبة" : "Moisture Condition"}</Label>
+                <Select value={moistureCondition} onValueChange={setMoistureCondition} disabled={submitted}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="air_dry">{ar ? "جاف هوائي" : "Air Dry"}</SelectItem>
+                    <SelectItem value="saturated">{ar ? "مشبع" : "Saturated"}</SelectItem>
+                    <SelectItem value="dry">{ar ? "مجفف بالفرن" : "Oven Dry"}</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label className="text-xs text-slate-500 mb-1 block">{ar ? "محتوى حديد التسليح" : "Reinforcement"}</Label>
+                <Select value={reinforced} onValueChange={setReinforced} disabled={submitted}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="no">{ar ? "غير مسلح" : "Not Reinforced"}</SelectItem>
+                    <SelectItem value="yes">{ar ? "مسلح" : "Reinforced"}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

@@ -120,6 +120,8 @@ export default function AsphaltMarshall() {
   const bulkSGAverages = (bulkSGData.averages ?? bulkSGData) as Record<string, unknown>;
 
   const [specimens, setSpecimens] = useState<SpecimenInput[]>([]);
+  const [testTemperature, setTestTemperature] = useState("60");
+  const [soakingTime, setSoakingTime] = useState("35");
   const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
   const [submitted, setSubmitted] = useState(false);
@@ -144,6 +146,8 @@ export default function AsphaltMarshall() {
     if (existing?.formData) {
       const fd = existing.formData as Record<string, unknown>;
       if (fd.notes) setNotes(String(fd.notes));
+      if (fd.testTemperature != null) setTestTemperature(String(fd.testTemperature));
+      if (fd.soakingTime != null) setSoakingTime(String(fd.soakingTime));
       const saved = fd.specimens as Record<string, unknown>[] | undefined;
       if (Array.isArray(saved) && saved.length > 0) {
         const fromBulk = buildSpecimensFromBulkSG(bulkSGSpecimens);
@@ -226,6 +230,8 @@ export default function AsphaltMarshall() {
 
     const formData = {
       mixType,
+      testTemperature: parseFloat(testTemperature) || 60,
+      soakingTime: parseFloat(soakingTime) || 35,
       specimens: computedSpecimens,
       volumetricFromBulkSG: {
         avgAirVoids,
@@ -362,11 +368,23 @@ export default function AsphaltMarshall() {
 
         <Card>
           <CardContent className="pt-4">
-            <div className="flex items-center gap-2">
-              <Label className="text-xs text-slate-500">{ar ? "الفاحص" : "Tested By"}</Label>
-              <div className="flex items-center gap-2 px-3 py-2 bg-green-50 border border-green-200 rounded-lg">
-                <UserCheck size={14} className="text-green-600" />
-                <span className="text-sm font-semibold text-green-800">{user?.name ?? "—"}</span>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-end">
+              <div className="flex items-center gap-2">
+                <Label className="text-xs text-slate-500">{ar ? "الفاحص" : "Tested By"}</Label>
+                <div className="flex items-center gap-2 px-3 py-2 bg-green-50 border border-green-200 rounded-lg">
+                  <UserCheck size={14} className="text-green-600" />
+                  <span className="text-sm font-semibold text-green-800">{user?.name ?? "—"}</span>
+                </div>
+              </div>
+              <div>
+                <Label className="text-xs text-slate-500 mb-1 block">{ar ? "درجة حرارة الاختبار (°C)" : "Test Temperature (°C)"}</Label>
+                <Input value={testTemperature} onChange={e => setTestTemperature(e.target.value)}
+                  placeholder="60" className="h-9" disabled={submitted} />
+              </div>
+              <div>
+                <Label className="text-xs text-slate-500 mb-1 block">{ar ? "مدة النقع في حمام الماء (دقيقة)" : "Water Bath Soaking Time (min)"}</Label>
+                <Input value={soakingTime} onChange={e => setSoakingTime(e.target.value)}
+                  placeholder="35" className="h-9" disabled={submitted} />
               </div>
             </div>
           </CardContent>

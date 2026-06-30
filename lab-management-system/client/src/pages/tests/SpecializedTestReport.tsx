@@ -253,6 +253,25 @@ function renderConcreteCore(fd: any, isAr: boolean, castingDateMs?: number | nul
             <p className="font-bold text-slate-800">{fd.aggTypeMaxSize ?? fd.aggregateType}</p>
           </div>
         )}
+        {fd.moistureCondition && (
+          <div className="bg-sky-50 border border-sky-200 rounded p-2 text-center">
+            <p className="text-sky-600 font-semibold">{L("Moisture Condition", "حالة الرطوبة")}</p>
+            <p className="font-bold text-sky-800">
+              {fd.moistureCondition === "air_dry" ? L("Air Dry", "جاف هوائي")
+                : fd.moistureCondition === "saturated" ? L("Saturated", "مشبع")
+                : fd.moistureCondition === "dry" ? L("Oven Dry", "جاف بالفرن")
+                : String(fd.moistureCondition)}
+            </p>
+          </div>
+        )}
+        {fd.reinforced != null && (
+          <div className="bg-slate-50 border border-slate-200 rounded p-2 text-center">
+            <p className="text-slate-600 font-semibold">{L("Reinforcement", "حديد التسليح")}</p>
+            <p className="font-bold text-slate-800">
+              {fd.reinforced === "yes" ? L("Reinforced", "مسلح") : L("Not Reinforced", "غير مسلح")}
+            </p>
+          </div>
+        )}
       </div>
       <FlexibleResultsTable
         columns={coreColumns}
@@ -360,11 +379,42 @@ function renderConcreteBlocks(fd: any, isAr: boolean) {
             <p className={REPORT_INFO_VALUE_CLASS}>{fd.batchNo}</p>
           </div>
         )}
+        {fd.moistureCondition && (
+          <div className="bg-sky-50 border border-sky-200 rounded p-2">
+            <p className={REPORT_INFO_LABEL_CLASS}>{isAr ? "حالة الرطوبة عند الاختبار" : "Moisture Condition at Test"}</p>
+            <p className={REPORT_INFO_VALUE_CLASS}>
+              {fd.moistureCondition === "saturated_surface_dry" ? "Saturated Surface Dry (SSD)"
+                : fd.moistureCondition === "air_dry" ? "Air Dry"
+                : fd.moistureCondition === "oven_dry" ? "Oven Dry"
+                : fd.moistureCondition === "wet" ? "Wet"
+                : String(fd.moistureCondition)}
+            </p>
+          </div>
+        )}
+        {fd.cappingMethod && (
+          <div className="bg-gray-50 border rounded p-2">
+            <p className={REPORT_INFO_LABEL_CLASS}>{isAr ? "طريقة التكييف / التسوية" : "Capping / Bedding Method"}</p>
+            <p className={REPORT_INFO_VALUE_CLASS}>
+              {fd.cappingMethod === "flat_bedded" ? "Flat Bedded (as received)"
+                : fd.cappingMethod === "capped_sulfur" ? "Capped — Sulfur Mortar"
+                : fd.cappingMethod === "capped_plywood" ? "Capped — Plywood"
+                : fd.cappingMethod === "capped_rubber" ? "Capped — Rubber Pad"
+                : fd.cappingMethod === "ground" ? "Ground"
+                : String(fd.cappingMethod)}
+            </p>
+          </div>
+        )}
+        {fd.loadingRate && (
+          <div className="bg-gray-50 border rounded p-2">
+            <p className={REPORT_INFO_LABEL_CLASS}>{isAr ? "معدل التحميل" : "Loading Rate"}</p>
+            <p className={REPORT_INFO_VALUE_CLASS}>{fd.loadingRate} N/mm²/s</p>
+          </div>
+        )}
       </div>
       {blocks.length > 0 && <FlexibleResultsTable columns={blockColumns} rows={blocks.map((b: any, i: number) => ({ ...b, _bi: i }))} />}
       <div className="flex flex-wrap gap-3 justify-end text-xs">
         <span className="font-semibold">
-          {isAr ? "متوسط القوة:" : "Average Strength:"} {fmtS(avgCorrectedStrength)} N/mm²
+          {isAr ? "متوسط القوة المصححة (fb):" : "Avg. Normalised Strength (fb):"} {fmtS(avgCorrectedStrength)} N/mm²
           {" "}/ {isAr ? "المطلوب:" : "Required:"} {fmtS(spec.requiredStrength)} N/mm²
         </span>
         <span className={`font-bold px-2 py-1 rounded border ${fd.overallResult === "pass" ? "bg-green-50 border-green-200 text-green-800" : "bg-red-50 border-red-200 text-red-800"}`}>
@@ -376,36 +426,61 @@ function renderConcreteBlocks(fd: any, isAr: boolean) {
 }
 
 function renderSteelRebar(fd: any, isAr: boolean) {
-  const rows = fd.rows ?? [];
-  const headers = isAr
-    ? ["رقم القضيب", "القطر (مم)", "الوزن/م (كغ)", "حمل الخضوع (كن)", "مقاومة الخضوع (MPa)", "حمل UTS (كن)", "UTS (MPa)", "الاستطالة (%)", "الانحناء", "النتيجة"]
-    : ["Bar No.", "Dia (mm)", "Weight/m (kg)", "Yield Load (kN)", "Yield Strength (MPa)", "UTS Load (kN)", "UTS (MPa)", "Elong. (%)", "Bend", "Result"];
-  const bendResult = (_: unknown, row: Record<string, unknown>) => {
+  // Support both 'specimens' (new form key) and 'rows' (legacy)
+  const rows = fd.specimens ?? fd.rows ?? [];
+  const L = (en: string, ars: string) => isAr ? ars : en;
+  const bendResultRender = (_: unknown, row: Record<string, unknown>) => {
     const r = row as any;
     if (r.bendResult === "pass") return <span className="text-emerald-800 font-bold">{isAr ? "مطابق" : "PASS"}</span>;
     if (r.bendResult === "fail") return <span className="text-red-800 font-bold">{isAr ? "غير مطابق" : "FAIL"}</span>;
     return "—";
   };
-  const overallResult = (_: unknown, row: Record<string, unknown>) => {
+  const overallResultRender = (_: unknown, row: Record<string, unknown>) => {
     const r = row as any;
     if (r.overallResult === "pass") return <span className="text-emerald-800 font-bold">{isAr ? "مطابق" : "PASS"}</span>;
     if (r.overallResult === "fail") return <span className="text-red-800 font-bold">{isAr ? "غير مطابق" : "FAIL"}</span>;
     return "—";
   };
   const steelCols: Column[] = [
-    { header: headers[0], field: "_i", align: "center", render: (_v, row) => String((row as any)._i + 1) },
-    { header: headers[1], field: "diameter", type: "number", decimals: 0, align: "right" },
-    { header: headers[2], field: "weightPerMeter", type: "number", decimals: 2, align: "right" },
-    { header: headers[3], field: "yieldLoadKN", type: "number", decimals: 2, align: "right" },
-    { header: headers[4], field: "yieldStrength", type: "number", decimals: 2, align: "right" },
-    { header: headers[5], field: "utsLoadKN", type: "number", decimals: 2, align: "right" },
-    { header: headers[6], field: "uts", type: "number", decimals: 2, align: "right" },
-    { header: headers[7], field: "elongation", type: "number", decimals: 2, align: "right" },
-    { header: headers[8], field: "bendResult", align: "center", render: bendResult },
-    { header: headers[9], field: "overallResult", align: "center", render: overallResult },
+    { header: L("Bar No.", "رقم القضيب"), field: "_i", align: "center", render: (_v, row) => String((row as any)._i + 1) },
+    { header: L("Dia (mm)", "القطر (مم)"), field: "diameter", type: "number", decimals: 0, align: "right" },
+    { header: L("Wt/m (kg)", "الوزن/م (كغ)"), field: "weightPerMeter", type: "number", decimals: 2, align: "right" },
+    { header: L("Area (mm²)", "المساحة (مم²)"), field: "area", align: "right", render: (_v, row) => {
+      const r = row as any;
+      const area = r.area ?? r.actualArea;
+      return area != null ? String(Number(area).toFixed(2)) : "—";
+    }},
+    { header: L("GL₀ (mm)", "طول القياس (مم)"), field: "gaugeLength", align: "right", render: (_v, row) => {
+      const r = row as any;
+      const gl = r.gaugeLength ?? r.gaugeLength0 ?? r.gl0;
+      return gl != null && gl !== "" ? String(gl) : "—";
+    }},
+    { header: L("Yield (kN)", "حمل الخضوع (كن)"), field: "yieldLoadKN", type: "number", decimals: 2, align: "right" },
+    { header: L("Re (MPa)", "مقاومة الخضوع"), field: "yieldStrength", type: "number", decimals: 1, align: "right" },
+    { header: L("UTS (kN)", "حمل UTS (كن)"), field: "utsLoadKN", type: "number", decimals: 2, align: "right" },
+    { header: L("Rm (MPa)", "UTS"), field: "uts", type: "number", decimals: 1, align: "right" },
+    { header: L("Rm/Re", "نسبة Rm/Re"), field: "_rmre", align: "center", render: (_v, row) => {
+      const r = row as any;
+      const re = Number(r.yieldStrength);
+      const rm = Number(r.uts ?? r.tensileStrength);
+      if (!re || !rm) return "—";
+      return (rm / re).toFixed(2);
+    }},
+    { header: L("Agt (%)", "Agt (%)"), field: "elongation", type: "number", decimals: 2, align: "right" },
+    { header: L("Bend", "الانحناء"), field: "bendResult", align: "center", render: bendResultRender },
+    { header: L("Result", "النتيجة"), field: "overallResult", align: "center", render: overallResultRender },
   ];
   return (
-    <FlexibleResultsTable columns={steelCols} rows={rows.map((r: any, i: number) => ({ ...r, _i: i }))} />
+    <div className="space-y-2">
+      {(fd.standard || fd.spec?.label) && (
+        <div className="text-xs bg-slate-50 border border-slate-200 rounded p-2 flex gap-4">
+          {fd.standard && <span><span className="font-semibold">{L("Standard:", "المعيار:")} </span>{fd.standard}</span>}
+          {fd.heatNo && <span><span className="font-semibold">{L("Heat No.:", "رقم الصهر:")} </span>{fd.heatNo}</span>}
+          {fd.supplier && <span><span className="font-semibold">{L("Supplier:", "المورد:")} </span>{fd.supplier}</span>}
+        </div>
+      )}
+      <FlexibleResultsTable columns={steelCols} rows={rows.map((r: any, i: number) => ({ ...r, _i: i }))} />
+    </div>
   );
 }
 
@@ -483,6 +558,7 @@ function renderSteelStructural(fd: any, isAr: boolean) {
   const band: ([string, string] | undefined)[] = [
     [isAr ? "الدرجة" : "Grade", String(gradeLabel)],
     fd?.heatNo ? [isAr ? "رقم الصهر" : "Heat No.", String(fd.heatNo)] : undefined,
+    fd?.gaugeLength ? [isAr ? "طول القياس" : "Gauge Length", `${fd.gaugeLength} mm`] : undefined,
     spec.yieldMin != null ? [isAr ? "أدنى خضوع" : "Min Yield", `${spec.yieldMin} MPa`] : undefined,
     spec.tensileMin != null
       ? [isAr ? "نطاق الشد" : "Tensile Range", `${spec.tensileMin}–${spec.tensileMax} MPa`]
@@ -519,10 +595,12 @@ function renderSteelAnchorBolt(fd: any, isAr: boolean) {
     { header: isAr ? "النتيجة" : "Result", field: "overallResult", align: "center", render: (v) => steelResultBadge(v, isAr) },
   ];
   const boltLabel = fd?.testInfo?.boltType ?? fd?.boltType;
+  const proofLoad = fd?.proofLoad ?? fd?.testInfo?.proofLoad;
   const band: ([string, string] | undefined)[] = [
     boltLabel ? [isAr ? "نوع البرغي" : "Bolt Type", String(boltLabel)] : undefined,
     fd?.concreteGrade ? [isAr ? "درجة الخرسانة" : "Concrete Grade", String(fd.concreteGrade)] : undefined,
     fd?.embedmentDepth ? [isAr ? "عمق التثبيت (مم)" : "Embedment (mm)", String(fd.embedmentDepth)] : undefined,
+    proofLoad ? [isAr ? "حمل الإثبات" : "Proof Load", `${proofLoad} kN`] : undefined,
   ];
   return (
     <div className="space-y-3">
@@ -1367,8 +1445,57 @@ function renderSoilProctor(fd: any, isAr: boolean) {
     { header: headers[5], field: "waterContent", type: "number", decimals: 1, align: "right" },
     { header: headers[6], field: "dryDensity", type: "number", decimals: 3, align: "right", render: (v) => <span className="font-semibold">{fmt(v, 3)}</span> },
   ];
+  const prepMethodLabel = (m: string) => m === "air_dried" ? "Air Dried"
+    : m === "as_received" ? "As Received (Natural Moisture)"
+    : m === "oven_dried" ? "Oven Dried"
+    : m;
   return (
     <>
+      {/* Test Conditions — BS/ASTM required fields */}
+      <div className="grid grid-cols-3 md:grid-cols-6 gap-2 text-xs mb-3 report-info-grid">
+        {fd.moldType && (
+          <div className="bg-slate-50 border rounded p-2 text-center">
+            <p className={REPORT_INFO_LABEL_CLASS}>{isAr ? "نوع القالب" : "Mould Type"}</p>
+            <p className={REPORT_INFO_VALUE_CLASS}>{String(fd.moldType).replace(/_/g, " ")}</p>
+          </div>
+        )}
+        {(fd.mouldVolume ?? fd.moldVolume) != null && (
+          <div className="bg-slate-50 border rounded p-2 text-center">
+            <p className={REPORT_INFO_LABEL_CLASS}>{isAr ? "حجم القالب" : "Mould Volume"}</p>
+            <p className={REPORT_INFO_VALUE_CLASS}>{fmt(fd.mouldVolume ?? fd.moldVolume)} cm³</p>
+          </div>
+        )}
+        {fd.rammerMass != null && (
+          <div className="bg-slate-50 border rounded p-2 text-center">
+            <p className={REPORT_INFO_LABEL_CLASS}>{isAr ? "كتلة المطرقة" : "Rammer Mass"}</p>
+            <p className={REPORT_INFO_VALUE_CLASS}>{fd.rammerMass} kg</p>
+          </div>
+        )}
+        {fd.dropHeight != null && (
+          <div className="bg-slate-50 border rounded p-2 text-center">
+            <p className={REPORT_INFO_LABEL_CLASS}>{isAr ? "ارتفاع السقوط" : "Drop Height"}</p>
+            <p className={REPORT_INFO_VALUE_CLASS}>{fd.dropHeight} mm</p>
+          </div>
+        )}
+        {fd.numberOfLayers != null && (
+          <div className="bg-slate-50 border rounded p-2 text-center">
+            <p className={REPORT_INFO_LABEL_CLASS}>{isAr ? "عدد الطبقات" : "No. of Layers"}</p>
+            <p className={REPORT_INFO_VALUE_CLASS}>{fd.numberOfLayers}</p>
+          </div>
+        )}
+        {fd.blowsPerLayer != null && (
+          <div className="bg-slate-50 border rounded p-2 text-center">
+            <p className={REPORT_INFO_LABEL_CLASS}>{isAr ? "ضربات / طبقة" : "Blows / Layer"}</p>
+            <p className={REPORT_INFO_VALUE_CLASS}>{fd.blowsPerLayer}</p>
+          </div>
+        )}
+        {fd.samplePreparation && (
+          <div className="bg-slate-50 border rounded p-2 text-center md:col-span-2">
+            <p className={REPORT_INFO_LABEL_CLASS}>{isAr ? "تحضير العينة" : "Sample Preparation"}</p>
+            <p className={REPORT_INFO_VALUE_CLASS}>{prepMethodLabel(fd.samplePreparation)}</p>
+          </div>
+        )}
+      </div>
       <FlexibleResultsTable columns={proctorCols} rows={points.map((p: any, i: number) => ({ ...p, _pt: i + 1 }))} />
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">
         <div className="bg-blue-50 border border-blue-200 rounded p-3 text-center">
@@ -1391,10 +1518,6 @@ function renderSoilProctor(fd: any, isAr: boolean) {
             <p className="text-xl font-bold text-sky-800">{fmt(fd.correctedOMC, 1)} %</p>
           </div>
         )}
-        <div className="bg-gray-50 border border-gray-200 rounded p-3 text-center">
-          <p className="text-gray-600 font-semibold">{isAr ? "حجم القالب" : "Mould Volume"}</p>
-          <p className="text-xl font-bold text-gray-800">{fmt(fd.mouldVolume)} {isAr ? "سم³" : "cm³"}</p>
-        </div>
         {fd.cbrStandard && (
           <div className="bg-indigo-50 border border-indigo-200 rounded p-3 text-center">
             <p className="text-indigo-600 font-semibold">{isAr ? "معيار CBR المرتبط" : "Linked CBR Standard"}</p>
@@ -1448,17 +1571,34 @@ function renderSoilFieldDensity(fd: any, isAr: boolean) {
     },
   ];
 
+  const methodLabel = (m: string) => m === "SAND_REPLACEMENT" ? "Sand Replacement (BS 1377-9)"
+    : m === "NUCLEAR" ? "Nuclear Gauge"
+    : m === "CORE_CUTTER" ? "Core Cutter"
+    : String(m);
   return (
     <>
-      <div className="grid grid-cols-4 gap-2 text-xs mb-3">
+      {/* Test conditions info band */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs mb-3 report-info-grid">
+        {fd.testMethod && (
+          <div className="bg-slate-50 border rounded p-2 text-center md:col-span-2">
+            <p className={REPORT_INFO_LABEL_CLASS}>{L("Test Method", "طريقة الاختبار")}</p>
+            <p className={REPORT_INFO_VALUE_CLASS}>{methodLabel(fd.testMethod)}</p>
+          </div>
+        )}
         <div className="bg-blue-50 border border-blue-200 rounded p-2 text-center">
-          <p className="text-blue-600 font-semibold">{L("Max Dry Density (MDD)", "أقصى كثافة جافة")}</p>
-          <p className="font-bold text-blue-800 text-base">{fmtHalfUp(fd.mdd, 2)} {L("Mg/m³", "Mg/m³")}</p>
+          <p className="text-blue-600 font-semibold">{L("MDD (Mg/m³)", "أقصى كثافة جافة")}</p>
+          <p className="font-bold text-blue-800 text-base">{fmtHalfUp(fd.mdd, 2)}</p>
         </div>
         <div className="bg-amber-50 border border-amber-200 rounded p-2 text-center">
-          <p className="text-amber-700 font-semibold">{L("Required Compaction", "نسبة الدمك المطلوبة")}</p>
+          <p className="text-amber-700 font-semibold">{L("Required Compaction", "الدمك المطلوب")}</p>
           <p className="font-bold text-amber-800 text-base">≥ {required}%</p>
         </div>
+        {fd.mddReference && (
+          <div className="bg-slate-50 border rounded p-2 text-center md:col-span-2">
+            <p className={REPORT_INFO_LABEL_CLASS}>{L("MDD Source — Lab Test Ref.", "مرجع اختبار MDD")}</p>
+            <p className={REPORT_INFO_VALUE_CLASS}>{fd.mddReference}</p>
+          </div>
+        )}
         <div className="bg-emerald-50 border border-emerald-200 rounded p-2 text-center">
           <p className="text-emerald-700 font-semibold">{L("Points Passed", "نقاط ناجحة")}</p>
           <p className="font-bold text-emerald-800 text-base">{passed} / {total}</p>
@@ -2020,6 +2160,10 @@ function renderSoilAtterberg(fd: any, isAr: boolean) {
     { header: L("Moisture %", "الرطوبة %"), field: "waterContent", align: "center", render: v => <span className="font-semibold">{fmt(v, 2)}</span> },
   ];
 
+  const prepLabel = (m: string) => m === "air_dried" ? "Air Dried"
+    : m === "natural_moisture" ? "Natural Moisture (Undisturbed)"
+    : m === "wet_preparation" ? "Wet Preparation"
+    : String(m);
   return (
     <div className="space-y-4">
       {/* Results summary */}
@@ -2041,6 +2185,12 @@ function renderSoilAtterberg(fd: any, isAr: boolean) {
           <p className="font-bold text-purple-800 text-base">{pi != null ? `${pi}` : "—"}</p>
         </div>
       </div>
+      {fd.preparationMethod && (
+        <div className="text-xs bg-slate-50 border rounded p-2">
+          <span className="font-semibold">{L("Sample Preparation: ", "تحضير العينة: ")}</span>
+          {prepLabel(fd.preparationMethod)}
+        </div>
+      )}
       {fd.classification && (
         <p className="text-[11px] text-slate-600">{L("Classification", "التصنيف")}: <span className="font-semibold">{fd.classification}</span></p>
       )}
@@ -2086,9 +2236,22 @@ function renderAsphaltBitumenExtraction(fd: any, isAr: boolean) {
 
   const pgBinder = sample.pgBinder ?? fd.calculations?.pgBinder ?? fd.avgBitumen;
 
+  const extractMethodLabel = (m: string) => m === "ignition_furnace" ? "Ignition Furnace (ASTM D6307)"
+    : m === "centrifuge" ? "Centrifuge (ASTM D2172)"
+    : m ? String(m) : "Ignition Furnace";
   return (
     <>
-      <div className="mb-3 grid grid-cols-3 gap-2 text-xs">
+      <div className="mb-3 grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+        <div className="border rounded p-2">
+          <div className="text-slate-500">{L("Extraction Method", "طريقة الاستخلاص")}</div>
+          <div className="font-semibold">{extractMethodLabel(fd.extractionMethod ?? fd.method)}</div>
+        </div>
+        {fd.ignitionTemperature != null && (
+          <div className="border rounded p-2">
+            <div className="text-slate-500">{L("Ignition Temperature", "درجة حرارة الفرن")}</div>
+            <div className="font-semibold">{fd.ignitionTemperature}°C</div>
+          </div>
+        )}
         <div className="border rounded p-2">
           <div className="text-slate-500">{L("Design", "التصميم")}</div>
           <div className="font-semibold">{fmt(fd.designBitumen, 2)}%</div>
@@ -2293,6 +2456,23 @@ function renderAsphaltMarshallDensity(fd: any, isAr: boolean) {
         }));
   return (
     <>
+      {/* Test conditions — ASTM D2726 required fields */}
+      {(fd.compactionTemperature || fd.numberOfBlows) && (
+        <div className="mb-3 grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs report-info-grid">
+          {fd.compactionTemperature && (
+            <div className="border border-slate-200 rounded p-2 text-center">
+              <p className={REPORT_INFO_LABEL_CLASS}>{L("Compaction Temperature", "درجة حرارة الدمك")}</p>
+              <p className={REPORT_INFO_VALUE_CLASS}>{fd.compactionTemperature}°C</p>
+            </div>
+          )}
+          {fd.numberOfBlows && (
+            <div className="border border-slate-200 rounded p-2 text-center">
+              <p className={REPORT_INFO_LABEL_CLASS}>{L("Blows per Face", "ضربات لكل وجه")}</p>
+              <p className={REPORT_INFO_VALUE_CLASS}>{fd.numberOfBlows}</p>
+            </div>
+          )}
+        </div>
+      )}
       {(params.pb || params.gsb || params.gse || params.gb || gmm) && (
         <div className="mb-4 grid grid-cols-2 sm:grid-cols-5 gap-2 text-xs">
           {params.pb != null && params.pb !== "" && (
@@ -2410,14 +2590,23 @@ function renderAsphaltMarshall(fd: any, isAr: boolean) {
 
   return (
     <>
+      {/* Test conditions info band — ASTM D6927 required fields */}
+      <div className="mb-3 grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs report-info-grid">
+        <div className="border border-blue-200 bg-blue-50 rounded p-2">
+          <div className="text-blue-700">{L("Mix Type", "النوع")}</div>
+          <div className="font-semibold">{isWearing ? L("Wearing Course", "طبقة التآكل") : L("Base Course", "طبقة الأساس")}</div>
+        </div>
+        <div className="border border-slate-200 rounded p-2">
+          <div className="text-slate-600">{L("Test Temperature", "درجة حرارة الاختبار")}</div>
+          <div className="font-semibold">{fd.testTemperature != null ? `${fd.testTemperature}°C` : "60°C"}</div>
+        </div>
+        <div className="border border-slate-200 rounded p-2">
+          <div className="text-slate-600">{L("Water Bath Soaking", "نقع في حمام الماء")}</div>
+          <div className="font-semibold">{fd.soakingTime != null ? `${fd.soakingTime} min` : "30–40 min"}</div>
+        </div>
+      </div>
       {(vol.avgAirVoids != null || vol.avgVMA != null) && (
         <div className="mb-4 grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
-          <div className="border border-blue-200 bg-blue-50 rounded p-2">
-            <div className="text-blue-700">{L("Mix Type", "النوع")}</div>
-            <div className="font-semibold">
-              {isWearing ? L("Wearing Course", "طبقة التآكل") : L("Base Course", "طبقة الأساس")}
-            </div>
-          </div>
           <div className="border border-slate-200 rounded p-2">
             <div className="text-slate-600">{L("Air Voids", "الفراغات الهوائية")}</div>
             <div className="font-semibold">{fmt(vol.avgAirVoids, 1)}%</div>
@@ -2852,8 +3041,14 @@ function renderCementSettingTime(fd: any, isAr: boolean) {
         </div>
         <div className="bg-gray-50 border rounded p-2 text-center">
           <p className="text-gray-500 font-semibold">{isAr ? "درجة الحرارة" : "Temperature"}</p>
-          <p className="font-bold text-gray-800">{fd.testTemp ? `${fd.testTemp}°C` : "—"}</p>
+          <p className="font-bold text-gray-800">{fd.testTemp ? `${fd.testTemp}°C` : "20°C (std)"}</p>
         </div>
+        {fd.testRH && (
+          <div className="bg-gray-50 border rounded p-2 text-center">
+            <p className="text-gray-500 font-semibold">{isAr ? "الرطوبة النسبية" : "Relative Humidity"}</p>
+            <p className="font-bold text-gray-800">{fd.testRH}%</p>
+          </div>
+        )}
         <div className="bg-gray-50 border rounded p-2 text-center">
           <p className="text-gray-500 font-semibold">{isAr ? "رقم الدفعة" : "Batch No."}</p>
           <p className="font-bold text-gray-800">{fd.cementBatch || "—"}</p>
@@ -3041,6 +3236,21 @@ function renderInterlock(fd: any, isAr: boolean) {
             <p className="font-bold text-gray-800">{fd.mtsReference}</p>
           </div>
         )}
+        {fd.moistureCondition && (
+          <div className="bg-sky-50 border border-sky-200 rounded p-1.5">
+            <p className="text-sky-600 font-semibold">{isAr ? "حالة الرطوبة" : "Moisture Condition"}</p>
+            <p className="font-bold text-sky-800">
+              {fd.moistureCondition === "saturated_surface_dry" ? "SSD"
+                : fd.moistureCondition === "air_dry" ? "Air Dry"
+                : fd.moistureCondition === "wet" ? "Wet"
+                : String(fd.moistureCondition)}
+            </p>
+          </div>
+        )}
+        <div className="bg-slate-50 border rounded p-1.5">
+          <p className="text-slate-500 font-semibold">{isAr ? "عدد الوحدات المختبرة" : "No. of Units Tested"}</p>
+          <p className="font-bold text-slate-800">{blocks.length}</p>
+        </div>
       </div>
       <div className="report-results-tail">
       {/* Results Table */}
@@ -3549,6 +3759,24 @@ function renderAggSpecificGravity(fd: any, isAr: boolean) {
             </p>
           ) : null}
         </div>
+        {(fd?.soakingDuration || fd?.dryingCondition) && (
+          <div className="grid grid-cols-2 gap-2 text-xs mb-2 report-info-grid">
+            {fd.soakingDuration != null && (
+              <div className="bg-slate-50 border rounded p-2 text-center">
+                <p className={REPORT_INFO_LABEL_CLASS}>{L("Soaking Duration", "مدة النقع")}</p>
+                <p className={REPORT_INFO_VALUE_CLASS}>{fd.soakingDuration} {L("hrs", "ساعة")}</p>
+              </div>
+            )}
+            {fd.dryingCondition && (
+              <div className="bg-slate-50 border rounded p-2 text-center">
+                <p className={REPORT_INFO_LABEL_CLASS}>{L("Drying Condition", "ظروف التجفيف")}</p>
+                <p className={REPORT_INFO_VALUE_CLASS}>
+                  {fd.dryingCondition === "oven_dry" ? L("Oven Dry (105°C)", "جاف بالفرن (105°م)") : L("Air Dry", "جاف هوائي")}
+                </p>
+              </div>
+            )}
+          </div>
+        )}
         <table className="w-full border-collapse text-[10px]">
           <thead>
             <tr className="bg-slate-100">
@@ -3686,6 +3914,24 @@ function renderAggSpecificGravity(fd: any, isAr: boolean) {
           </p>
         ) : null}
       </div>
+      {(fd?.soakingDuration || fd?.dryingCondition) && (
+        <div className="grid grid-cols-2 gap-2 text-xs mb-2 report-info-grid">
+          {fd.soakingDuration != null && (
+            <div className="bg-slate-50 border rounded p-2 text-center">
+              <p className={REPORT_INFO_LABEL_CLASS}>{L("Soaking Duration", "مدة النقع")}</p>
+              <p className={REPORT_INFO_VALUE_CLASS}>{fd.soakingDuration} {L("hrs", "ساعة")}</p>
+            </div>
+          )}
+          {fd.dryingCondition && (
+            <div className="bg-slate-50 border rounded p-2 text-center">
+              <p className={REPORT_INFO_LABEL_CLASS}>{L("Drying Condition", "ظروف التجفيف")}</p>
+              <p className={REPORT_INFO_VALUE_CLASS}>
+                {fd.dryingCondition === "oven_dry" ? L("Oven Dry (105°C)", "جاف بالفرن (105°م)") : L("Air Dry", "جاف هوائي")}
+              </p>
+            </div>
+          )}
+        </div>
+      )}
       <table className="w-full border-collapse text-[10px]">
         <thead>
           <tr className="bg-slate-100">
@@ -3855,6 +4101,168 @@ function renderAggShapeIndex(fd: any, isAr: boolean) {
   );
 }
 
+function renderSteelBendRebend(fd: any, isAr: boolean) {
+  const L = (en: string, ars: string) => (isAr ? ars : en);
+  const specimens: any[] = Array.isArray(fd.specimens) ? fd.specimens : (Array.isArray(fd.rows) ? fd.rows : []);
+  const spec = fd.spec ?? {};
+  const band: ([string, string] | undefined)[] = [
+    fd.standard ? [L("Standard / Grade", "المعيار / الدرجة"), String(fd.standard)] : undefined,
+    fd.formerDiameter ? [L("Former Diameter", "قطر المحور"), String(fd.formerDiameter)] : undefined,
+    fd.bendAngle != null ? [L("Bend Angle", "زاوية الثني"), `${fd.bendAngle}°`] : (spec.bendAngle != null ? [L("Bend Angle", "زاوية الثني"), `${spec.bendAngle}°`] : undefined),
+    fd.testTemp ? [L("Test Temperature", "درجة الحرارة"), `${fd.testTemp}°C`] : undefined,
+    fd.heatNo ? [L("Heat No.", "رقم الصهر"), String(fd.heatNo)] : undefined,
+  ];
+  const cols: Column[] = [
+    { header: L("Sp. No.", "رقم"), field: "_i", align: "center", render: (_v, r) => String((r as any)._i + 1) },
+    { header: L("Bar Size", "القطر"), field: "barSize", align: "center" },
+    { header: L("Heat No.", "رقم الصهر"), field: "heatNo", align: "center", render: v => v ? String(v) : "—" },
+    { header: L("Bend Result", "نتيجة الثني"), field: "bendResult", align: "center", render: v => steelResultBadge(v, isAr) },
+    { header: L("Observations", "الملاحظات"), field: "observations", align: "center", render: v => v ? String(v) : "—" },
+    { header: L("Overall", "النتيجة"), field: "overallResult", align: "center", render: v => steelResultBadge(v, isAr) },
+  ];
+  return (
+    <div className="space-y-3">
+      <SteelSpecBand items={band.filter(Boolean) as [string, string][]} />
+      <FlexibleResultsTable columns={cols} rows={specimens.map((s, i) => ({ ...s, _i: i }))} />
+    </div>
+  );
+}
+
+function renderAggAcvAiv(fd: any, isAr: boolean) {
+  const L = (en: string, ars: string) => (isAr ? ars : en);
+  const variant = fd.testVariant ?? (fd.samples?.[0]?.cylinderNo != null ? "ACV" : "ACV");
+  const isAIV = variant === "AIV";
+  const samples: any[] = Array.isArray(fd.samples) ? fd.samples : [];
+  const avgValue = fd.avgValue;
+  const acceptanceLimit = fd.acceptanceLimit;
+  const overallResult = fd.overallResult;
+
+  const cols: Column[] = [
+    { header: L("Sample No.", "رقم العينة"), field: "sampleNumber", align: "center" },
+    { header: L("Cylinder No.", "رقم الأسطوانة"), field: "cylinderNo", align: "center", render: v => v ? String(v) : "—" },
+    { header: L("Condition", "الحالة"), field: "condition", align: "center" },
+    { header: L("M₁ Before (g)", "M₁ قبل (جم)"), field: "m1MassBeforeTest", align: "right", render: v => fmt(v, 1) },
+    { header: L("M₂ Passing (g)", "M₂ مار (جم)"), field: "m2MassPassingSieve", align: "right", render: v => fmt(v, 1) },
+    { header: isAIV ? L("AIV (%)", "AIV (%)") : L("ACV (%)", "ACV (%)"), field: "testValue", align: "center", render: v => v != null ? `${fmt(v, 1)}%` : "—" },
+    { header: L("Result", "النتيجة"), field: "result", align: "center", render: v => steelResultBadge(v, isAr) },
+  ];
+
+  const titleEn = isAIV ? "Aggregate Impact Value (AIV)" : "Aggregate Crushing Value (ACV)";
+  const titleAr = isAIV ? "معامل الصدم للركام (AIV)" : "معامل السحق للركام (ACV)";
+  const standardEn = isAIV ? "BS 812-112" : "BS 812-110";
+
+  return (
+    <div className="space-y-3 text-xs">
+      <div className="text-center border-b border-slate-300 pb-2">
+        <h3 className="font-semibold">{L(titleEn, titleAr)}</h3>
+        <p className="text-[10px] text-slate-500">{standardEn}</p>
+      </div>
+      {(fd.aggregateSource || fd.description) && (
+        <div className="grid grid-cols-2 gap-2 report-info-grid">
+          {fd.aggregateSource && (
+            <div className="bg-slate-50 border rounded p-2">
+              <p className={REPORT_INFO_LABEL_CLASS}>{L("Aggregate Source", "مصدر الركام")}</p>
+              <p className={REPORT_INFO_VALUE_CLASS}>{fd.aggregateSource}</p>
+            </div>
+          )}
+          {fd.description && (
+            <div className="bg-slate-50 border rounded p-2">
+              <p className={REPORT_INFO_LABEL_CLASS}>{L("Description", "الوصف")}</p>
+              <p className={REPORT_INFO_VALUE_CLASS}>{fd.description}</p>
+            </div>
+          )}
+          {acceptanceLimit != null && (
+            <div className="bg-amber-50 border border-amber-200 rounded p-2">
+              <p className={REPORT_INFO_LABEL_CLASS}>{L("Acceptance Limit", "حد القبول")}</p>
+              <p className={REPORT_INFO_VALUE_CLASS}>≤ {acceptanceLimit}%</p>
+            </div>
+          )}
+          {isAIV && (
+            <div className="bg-slate-50 border rounded p-2">
+              <p className={REPORT_INFO_LABEL_CLASS}>{L("Number of Blows", "عدد الضربات")}</p>
+              <p className={REPORT_INFO_VALUE_CLASS}>15 (standard)</p>
+            </div>
+          )}
+        </div>
+      )}
+      {samples.length > 0 && <FlexibleResultsTable columns={cols} rows={samples.map((s, i) => ({ ...s, _i: i }))} />}
+      <div className="flex justify-end gap-4 items-center">
+        {avgValue != null && (
+          <span className="font-semibold text-xs">
+            {L("Average:", "المتوسط:")} <span className="text-blue-800">{fmt(avgValue, 1)}%</span>
+          </span>
+        )}
+        {overallResult && (
+          <span className={`font-bold px-2 py-1 rounded text-xs ${overallResult === "pass" ? "bg-green-50 border border-green-200 text-green-800" : "bg-red-50 border border-red-200 text-red-800"}`}>
+            {overallResult === "pass" ? L("PASS", "مطابق") : L("FAIL", "غير مطابق")}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function renderAggLAAbrasion(fd: any, isAr: boolean) {
+  const L = (en: string, ars: string) => (isAr ? ars : en);
+  const samples: any[] = Array.isArray(fd.samples) ? fd.samples : [];
+  const avgLA = fd.avgLA;
+  const acceptanceLimit = fd.acceptanceLimit;
+  const overallResult = fd.overallResult;
+
+  const cols: Column[] = [
+    { header: L("Sample No.", "رقم العينة"), field: "sampleNumber", align: "center" },
+    { header: L("Grading Group", "مجموعة التدريج"), field: "gradingGroup", align: "center" },
+    { header: L("M₁ Before (g)", "M₁ قبل (جم)"), field: "m1BeforeTest", align: "right", render: v => fmt(v, 1) },
+    { header: L("M₂ After (g)", "M₂ بعد (جم)"), field: "m2RetainedOn1_7mm", align: "right", render: v => fmt(v, 1) },
+    { header: L("LA Value (%)", "معامل لوس أنجلوس (%)"), field: "laValue", align: "center", render: v => v != null ? `${fmt(v, 1)}%` : "—" },
+    { header: L("Result", "النتيجة"), field: "result", align: "center", render: v => steelResultBadge(v, isAr) },
+  ];
+
+  return (
+    <div className="space-y-3 text-xs">
+      <div className="text-center border-b border-slate-300 pb-2">
+        <h3 className="font-semibold">{L("Los Angeles Abrasion Test", "اختبار تآكل لوس أنجلوس")}</h3>
+        <p className="text-[10px] text-slate-500">BS EN 1097-2 | {L("500 revolutions required", "500 دورة مطلوبة")}</p>
+      </div>
+      {(fd.aggregateSource || fd.description) && (
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-2 report-info-grid">
+          {fd.aggregateSource && (
+            <div className="bg-slate-50 border rounded p-2">
+              <p className={REPORT_INFO_LABEL_CLASS}>{L("Aggregate Source", "مصدر الركام")}</p>
+              <p className={REPORT_INFO_VALUE_CLASS}>{fd.aggregateSource}</p>
+            </div>
+          )}
+          {fd.description && (
+            <div className="bg-slate-50 border rounded p-2">
+              <p className={REPORT_INFO_LABEL_CLASS}>{L("Description", "الوصف")}</p>
+              <p className={REPORT_INFO_VALUE_CLASS}>{fd.description}</p>
+            </div>
+          )}
+          {acceptanceLimit != null && (
+            <div className="bg-amber-50 border border-amber-200 rounded p-2">
+              <p className={REPORT_INFO_LABEL_CLASS}>{L("Acceptance Limit", "حد القبول")}</p>
+              <p className={REPORT_INFO_VALUE_CLASS}>≤ {acceptanceLimit}%</p>
+            </div>
+          )}
+        </div>
+      )}
+      {samples.length > 0 && <FlexibleResultsTable columns={cols} rows={samples.map((s, i) => ({ ...s, _i: i }))} />}
+      <div className="flex justify-end gap-4 items-center">
+        {avgLA != null && (
+          <span className="font-semibold text-xs">
+            {L("Average LA:", "متوسط LA:")} <span className="text-blue-800">{fmt(avgLA, 1)}%</span>
+          </span>
+        )}
+        {overallResult && (
+          <span className={`font-bold px-2 py-1 rounded text-xs ${overallResult === "pass" ? "bg-green-50 border border-green-200 text-green-800" : "bg-red-50 border border-red-200 text-red-800"}`}>
+            {overallResult === "pass" ? L("PASS", "مطابق") : L("FAIL", "غير مطابق")}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function renderFormData(formTemplate: string, formData: any, isAr: boolean, extras?: FormReportExtras) {
   const castingDateMs = extras?.castingDateMs;
   switch (formTemplate) {
@@ -3872,6 +4280,7 @@ export function renderFormData(formTemplate: string, formData: any, isAr: boolea
     case "concrete_cores": return renderConcreteCore(formData, isAr, castingDateMs);
     case "concrete_beam": return renderConcreteBeam(formData, isAr, castingDateMs);
     case "steel_rebar": return renderSteelRebar(formData, isAr);
+    case "steel_bend_rebend": return renderSteelBendRebend(formData, isAr);
     case "steel_structural": return renderSteelStructural(formData, isAr);
     case "steel_anchor_bolt": return renderSteelAnchorBolt(formData, isAr);
     case "sieve_analysis": return renderSieveAnalysis(formData, isAr, extras);
@@ -3892,6 +4301,11 @@ export function renderFormData(formTemplate: string, formData: any, isAr: boolea
     case "interlock": return renderInterlock(formData, isAr);
     case "agg_shape_index": return renderAggShapeIndex(formData, isAr);
     case "agg_specific_gravity": return renderAggSpecificGravity(formData, isAr);
+    case "acv":
+    case "aiv":
+      return renderAggAcvAiv(formData, isAr);
+    case "agg_la_abrasion":
+      return renderAggLAAbrasion(formData, isAr);
     default: return renderGeneric(formData, isAr);
   }
 }

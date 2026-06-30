@@ -82,6 +82,7 @@ export default function SteelBendRebend() {
   const [standard, setStandard] = useState<BendStandardKey>("BS4449_B500B");
   const [heatNo, setHeatNo] = useState("");
   const [supplier, setSupplier] = useState("");
+  const [testTemp, setTestTemp] = useState("");
   const [notes, setNotes] = useState("");
   const [rows, setRows] = useState<BendRow[]>([newRow(0), newRow(1), newRow(2)]);
   const [saving, setSaving] = useState(false);
@@ -127,7 +128,7 @@ export default function SteelBendRebend() {
         sampleId: dist.sampleId,
         testTypeCode: "STEEL_BEND",
         formTemplate: "steel_bend_rebend",
-        formData: { standard, spec, heatNo, supplier, specimens: computedRows, overallResult },
+        formData: { standard, spec, heatNo, supplier, testTemp, formerDiameter: spec.mandrelDiameter, bendAngle: spec.bendAngle, specimens: computedRows, overallResult },
         overallResult,
         summaryValues: {
           standard: spec.label,
@@ -252,6 +253,10 @@ export default function SteelBendRebend() {
                 <Input value={supplier} onChange={e => setSupplier(e.target.value)} placeholder="Steel supplier" />
               </div>
               <div>
+                <Label className="text-xs text-slate-500 mb-1 block">{ar ? "درجة حرارة الاختبار (°C)" : "Test Temperature (°C)"}</Label>
+                <Input value={testTemp} onChange={e => setTestTemp(e.target.value)} placeholder="e.g. 20" />
+              </div>
+              <div>
                 <Label className="text-xs text-slate-500 mb-1 block">Tested By / الفاحص</Label>
                 <div className="flex items-center gap-2 px-3 py-2 bg-green-50 border border-green-200 rounded-lg">
                   <UserCheck size={14} className="text-green-600 shrink-0" />
@@ -260,7 +265,8 @@ export default function SteelBendRebend() {
               </div>
               <div className="flex items-end">
                 <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 text-xs text-slate-600 w-full space-y-0.5">
-                  <div><span className="font-semibold">{ar ? "الثني:" : "Bend:"}</span> {spec.bendAngle}° {ar ? "حول" : "around"} {spec.mandrelDiameter}</div>
+                  <div><span className="font-semibold">{ar ? "قطر المحور:" : "Former Diameter:"}</span> {spec.mandrelDiameter}</div>
+                  <div><span className="font-semibold">{ar ? "زاوية الثني:" : "Bend Angle:"}</span> {spec.bendAngle}°</div>
                 </div>
               </div>
             </div>

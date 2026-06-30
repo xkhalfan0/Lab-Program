@@ -132,6 +132,7 @@ export default function CementSettingTime() {
   const [startingTime, setStartingTime] = useState("");
   const [endingTime, setEndingTime] = useState("");
   const [testTemp, setTestTemp] = useState("");
+  const [testRH, setTestRH] = useState("");
   const [cementBatch, setCementBatch] = useState("");
   const [notes, setNotes] = useState("");
   const [readings, setReadings] = useState<PenetrationReading[]>(() =>
@@ -212,6 +213,7 @@ export default function CementSettingTime() {
     if (typeof fd.startingTime === "string" && fd.startingTime) setStartingTime(fd.startingTime);
     if (typeof fd.endingTime === "string" && fd.endingTime) setEndingTime(fd.endingTime);
     if (fd.testTemp != null && fd.testTemp !== "") setTestTemp(String(fd.testTemp));
+    if (fd.testRH != null && fd.testRH !== "") setTestRH(String(fd.testRH));
     if (typeof fd.cementBatch === "string") setCementBatch(fd.cementBatch);
     if (typeof existing.notes === "string" && existing.notes) setNotes(existing.notes);
     if (Array.isArray(fd.readings)) {
@@ -298,6 +300,7 @@ export default function CementSettingTime() {
           startingTime,
           endingTime,
           testTemp,
+          testRH,
           cementBatch,
           readings: readingsOut,
           initialSetHours,
@@ -465,6 +468,10 @@ export default function CementSettingTime() {
               <div>
                 <Label className="text-xs text-slate-500 mb-1 block">{ar ? "درجة حرارة الاختبار (°م)" : "Test Temperature (°C)"}</Label>
                 <Input value={testTemp} onChange={e => setTestTemp(e.target.value)} className="font-mono" placeholder="20" />
+              </div>
+              <div>
+                <Label className="text-xs text-slate-500 mb-1 block">{ar ? "الرطوبة النسبية (%)" : "Relative Humidity (%)"}</Label>
+                <Input value={testRH} onChange={e => setTestRH(e.target.value)} className="font-mono" placeholder="65" />
               </div>
               <div>
                 <Label className="text-xs text-slate-500 mb-1 block">{ar ? "رقم الدفعة" : "Batch / Lot No."}</Label>

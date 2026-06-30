@@ -100,6 +100,7 @@ export default function SoilProctor() {
   const [moldType, setMoldType] = useState<ProctorMoldKey>("CBR_MOLD");
   const [mouldVolumeStr, setMouldVolumeStr] = useState(String(PROCTOR_MOLD_VOLUMES.CBR_MOLD.volume));
   const [soilDescription, setSoilDescription] = useState("");
+  const [samplePreparation, setSamplePreparation] = useState("air_dried");
   const [mouldBaseMass, setMouldBaseMass] = useState("");
   const [bulkSpGr, setBulkSpGr] = useState("2.65");
   const [oversizePct, setOversizePct] = useState("0");
@@ -145,6 +146,7 @@ export default function SoilProctor() {
       setMouldVolumeStr(String(fd.mouldVolume ?? fd.moldVolume));
     }
     if (typeof fd.soilDescription === "string") setSoilDescription(fd.soilDescription);
+    if (typeof fd.samplePreparation === "string") setSamplePreparation(fd.samplePreparation);
     if (fd.mouldBaseMass != null) setMouldBaseMass(String(fd.mouldBaseMass));
     if (fd.bulkSpGr != null) setBulkSpGr(String(fd.bulkSpGr));
     if (fd.oversizePct != null) setOversizePct(String(fd.oversizePct));
@@ -237,6 +239,11 @@ export default function SoilProctor() {
           mouldVolume: moldVolume,
           mouldBaseMass: Number.isFinite(mouldBaseMassNum) ? mouldBaseMassNum : null,
           soilDescription,
+          samplePreparation,
+          rammerMass: currentSpecs.hammerMass ?? null,
+          dropHeight: currentSpecs.dropHeight ?? null,
+          numberOfLayers: currentSpecs.layers ?? null,
+          blowsPerLayer: currentSpecs.blowsPerLayer ?? null,
           cbrStandard: isAstm ? currentSpecs.cbrStandard : "BS 1377-4",
           bulkSpGr: isAstm ? bulkSpGrNum : null,
           oversizePct: isAstm ? oversizeNum : null,
@@ -446,6 +453,15 @@ export default function SoilProctor() {
               <div>
                 <Label className="text-xs text-slate-500 mb-1 block">{ar ? "وصف التربة" : "Soil Description"}</Label>
                 <Input value={soilDescription} onChange={e => setSoilDescription(e.target.value)} placeholder={ar ? "مثال: طين رملي، مواد ردم" : "e.g. Sandy clay, Fill material"} />
+              </div>
+              <div>
+                <Label className="text-xs text-slate-500 mb-1 block">{ar ? "طريقة تحضير العينة" : "Sample Preparation"}</Label>
+                <select value={samplePreparation} onChange={e => setSamplePreparation(e.target.value)}
+                  className="w-full h-9 px-3 rounded-md border border-input bg-background text-sm">
+                  <option value="air_dried">{ar ? "جاف هوائياً" : "Air Dried"}</option>
+                  <option value="as_received">{ar ? "كما استلمت" : "As Received (Natural Moisture)"}</option>
+                  <option value="oven_dried">{ar ? "جاف فرنياً" : "Oven Dried"}</option>
+                </select>
               </div>
               <div className="md:col-span-4 flex items-end">
                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-xs text-blue-700 w-full">

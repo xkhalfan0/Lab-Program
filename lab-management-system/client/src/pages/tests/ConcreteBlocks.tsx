@@ -95,6 +95,9 @@ export default function ConcreteBlocks() {
   const [mtsReference, setMtsReference] = useState("");
   const [batchNo, setBatchNo] = useState("");
   const [testDate, setTestDate] = useState(() => new Date().toISOString().split("T")[0]);
+  const [moistureCondition, setMoistureCondition] = useState("saturated_surface_dry");
+  const [cappingMethod, setCappingMethod] = useState("flat_bedded");
+  const [loadingRate, setLoadingRate] = useState("0.05");
   const [notes, setNotes] = useState("");
   const [rows, setRows] = useState<BlockRow[]>(
     Array.from({ length: MIN_BLOCKS }, (_, i) => newRow(i))
@@ -153,6 +156,9 @@ export default function ConcreteBlocks() {
           mtsReference,
           batchNo,
           testDate,
+          moistureCondition,
+          cappingMethod,
+          loadingRate,
           blocks: computedRows.filter(r => r.loadKN && parseFloat(r.loadKN) > 0),
           avgStrength,
           overallResult,
@@ -298,6 +304,32 @@ export default function ConcreteBlocks() {
                   {ar ? "تاريخ الاختبار" : "Date Tested"} <span className="text-red-500">*</span>
                 </Label>
                 <Input type="date" value={testDate} onChange={e => setTestDate(e.target.value)} className="text-sm" />
+              </div>
+              <div>
+                <Label className="text-xs text-slate-500 mb-1 block">{ar ? "حالة الرطوبة عند الاختبار" : "Moisture Condition at Test"}</Label>
+                <select value={moistureCondition} onChange={e => setMoistureCondition(e.target.value)}
+                  className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm">
+                  <option value="saturated_surface_dry">{ar ? "مشبع سطحياً جاف" : "Saturated Surface Dry (SSD)"}</option>
+                  <option value="air_dry">{ar ? "جاف هوائياً" : "Air Dry"}</option>
+                  <option value="oven_dry">{ar ? "جاف فرنياً" : "Oven Dry"}</option>
+                  <option value="wet">{ar ? "مبلل" : "Wet"}</option>
+                </select>
+              </div>
+              <div>
+                <Label className="text-xs text-slate-500 mb-1 block">{ar ? "طريقة التكييف / التسوية" : "Capping / Bedding Method"}</Label>
+                <select value={cappingMethod} onChange={e => setCappingMethod(e.target.value)}
+                  className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm">
+                  <option value="flat_bedded">{ar ? "سطح مسطح" : "Flat Bedded (as received)"}</option>
+                  <option value="capped_sulfur">{ar ? "تسوية كبريتية" : "Capped — Sulfur Mortar"}</option>
+                  <option value="capped_plywood">{ar ? "تسوية خشب رقائقي" : "Capped — Plywood"}</option>
+                  <option value="capped_rubber">{ar ? "تسوية مطاطية" : "Capped — Rubber Pad"}</option>
+                  <option value="ground">{ar ? "مطحون" : "Ground"}</option>
+                </select>
+              </div>
+              <div>
+                <Label className="text-xs text-slate-500 mb-1 block">{ar ? "معدل التحميل (N/mm²/s)" : "Loading Rate (N/mm²/s)"}</Label>
+                <Input value={loadingRate} onChange={e => setLoadingRate(e.target.value)}
+                  placeholder="0.05" className="text-sm" />
               </div>
               <div>
                 <Label className="text-xs text-slate-500 mb-1 block">{ar ? "الفاحص" : "Tested By"}</Label>

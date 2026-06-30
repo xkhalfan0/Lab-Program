@@ -129,6 +129,8 @@ export default function AsphaltMarshallDensity() {
     newSpecimen(1),
     newSpecimen(2),
   ]);
+  const [compactionTemperature, setCompactionTemperature] = useState("");
+  const [numberOfBlows, setNumberOfBlows] = useState("75");
   const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
   const [submitted, setSubmitted] = useState(false);
@@ -160,6 +162,8 @@ export default function AsphaltMarshallDensity() {
     const fd = existing.formData as Record<string, unknown>;
 
     if (fd.notes) setNotes(String(fd.notes));
+    if (fd.compactionTemperature != null) setCompactionTemperature(String(fd.compactionTemperature));
+    if (fd.numberOfBlows != null) setNumberOfBlows(String(fd.numberOfBlows));
 
     const params = fd.parameters as TestParameters | undefined;
     if (params) {
@@ -273,6 +277,8 @@ export default function AsphaltMarshallDensity() {
 
     const formData = {
       mixType,
+      compactionTemperature: compactionTemperature || null,
+      numberOfBlows: parseInt(numberOfBlows) || 75,
       parameters: { ...parameters, gmm },
       specimens: computedSpecimens,
       volumetricData,
@@ -466,6 +472,34 @@ export default function AsphaltMarshallDensity() {
                   onChange={(e) => setParameters({ ...parameters, gb: e.target.value })}
                   className={`${LAB_NUMERIC_INPUT_MD} mt-1`}
                   placeholder="1.030"
+                  disabled={submitted}
+                />
+              </div>
+              <div>
+                <Label className="text-xs">
+                  {ar ? "درجة حرارة الدمك (°C)" : "Compaction Temperature (°C)"}
+                </Label>
+                <Input
+                  type="number"
+                  step="1"
+                  value={compactionTemperature}
+                  onChange={(e) => setCompactionTemperature(e.target.value)}
+                  className={`${LAB_NUMERIC_INPUT_MD} mt-1`}
+                  placeholder="150"
+                  disabled={submitted}
+                />
+              </div>
+              <div>
+                <Label className="text-xs">
+                  {ar ? "عدد الضربات لكل وجه" : "Number of Blows per Face"}
+                </Label>
+                <Input
+                  type="number"
+                  step="1"
+                  value={numberOfBlows}
+                  onChange={(e) => setNumberOfBlows(e.target.value)}
+                  className={`${LAB_NUMERIC_INPUT_MD} mt-1`}
+                  placeholder="75"
                   disabled={submitted}
                 />
               </div>

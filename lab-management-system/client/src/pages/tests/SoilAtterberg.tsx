@@ -94,6 +94,7 @@ export default function SoilAtterberg() {
   ]);
   const [soilDescription, setSoilDescription] = useState("");
   const [passing0425, setPassing0425] = useState("");
+  const [preparationMethod, setPreparationMethod] = useState("air_dried");
   const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
   const [submitted, setSubmitted] = useState(false);
@@ -163,6 +164,7 @@ export default function SoilAtterberg() {
         formData: {
           soilDescription,
           passing0425: parseFloat(passing0425) || null,
+          preparationMethod,
           llPoints: computedLlPoints,
           plRows: computedPlRows,
           ll,
@@ -268,6 +270,16 @@ export default function SoilAtterberg() {
             <div>
               <Label className="text-xs text-slate-500 mb-1 block">{ar ? "النسبة المارة من منخل 0.425 مم %" : "% Passing 0.425 mm sieve"}</Label>
               <Input value={passing0425} onChange={e => setPassing0425(e.target.value)} className="font-mono bg-amber-50/70 border-amber-200" placeholder={ar ? "مثال: 95" : "e.g. 95"} disabled={submitted} />
+            </div>
+            <div>
+              <Label className="text-xs text-slate-500 mb-1 block">{ar ? "طريقة تحضير العينة" : "Sample Preparation Method"}</Label>
+              <select value={preparationMethod} onChange={e => setPreparationMethod(e.target.value)}
+                className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm"
+                disabled={submitted}>
+                <option value="air_dried">{ar ? "جاف هوائياً" : "Air Dried"}</option>
+                <option value="natural_moisture">{ar ? "رطوبة طبيعية" : "Natural Moisture (Undisturbed)"}</option>
+                <option value="wet_preparation">{ar ? "تحضير رطب" : "Wet Preparation"}</option>
+              </select>
             </div>
           </CardContent>
         </Card>

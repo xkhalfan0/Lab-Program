@@ -65,6 +65,7 @@ interface TestInfo {
   boltType: BoltType;
   embedmentDepth: string;
   concreteGrade: string;
+  proofLoad: string;
 }
 
 interface AnchorBoltSpecimen {
@@ -266,6 +267,7 @@ export default function SteelAnchorBolt() {
     boltType: "M20",
     embedmentDepth: "",
     concreteGrade: "C25",
+    proofLoad: "",
   });
   const [specimens, setSpecimens] = useState<AnchorBoltSpecimen[]>(() => [newSpecimen(1, ar)]);
   const [notes, setNotes] = useState("");
@@ -305,6 +307,7 @@ export default function SteelAnchorBolt() {
         boltType: ti.boltType,
         embedmentDepth: String(ti.embedmentDepth ?? fd.embedmentDepth ?? ""),
         concreteGrade: String(ti.concreteGrade ?? fd.concreteGrade ?? "C25"),
+        proofLoad: String(ti.proofLoad ?? fd.proofLoad ?? ""),
       });
     } else {
       const legacyType = fd.anchorType as string | undefined;
@@ -375,6 +378,7 @@ export default function SteelAnchorBolt() {
           boltType: testInfo.boltType,
           concreteGrade: testInfo.concreteGrade,
           embedmentDepth: testInfo.embedmentDepth,
+          proofLoad: testInfo.proofLoad,
           specimens: computedSpecimens,
           overallResult,
         },
@@ -549,6 +553,19 @@ export default function SteelAnchorBolt() {
                     ))}
                   </SelectContent>
                 </Select>
+              </div>
+              <div>
+                <Label className="text-xs">
+                  {ar ? "حمل الإثبات (kN)" : "Proof Load (kN)"}
+                </Label>
+                <Input
+                  type="number"
+                  value={testInfo.proofLoad}
+                  onChange={(e) => setTestInfo((p) => ({ ...p, proofLoad: e.target.value }))}
+                  className="h-9"
+                  placeholder="e.g. 56.5"
+                  disabled={submitted}
+                />
               </div>
             </div>
           </CardContent>

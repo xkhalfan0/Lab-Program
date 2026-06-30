@@ -78,6 +78,8 @@ export default function AggSpecificGravity() {
 
   const [aggType, setAggType] = useState<AggSgType>("COARSE");
   const [source, setSource] = useState("");
+  const [soakingDuration, setSoakingDuration] = useState("24");
+  const [dryingCondition, setDryingCondition] = useState("oven_dry");
   const [notes, setNotes] = useState("");
   const [coarseRows, setCoarseRows] = useState<CoarseSgRow[]>([
     newCoarseRow(0),
@@ -138,6 +140,8 @@ export default function AggSpecificGravity() {
     const fd = existing.formData as Record<string, unknown>;
     if (fd.aggType === "COARSE" || fd.aggType === "FINE") setAggType(fd.aggType);
     if (typeof fd.source === "string") setSource(fd.source);
+    if (fd.soakingDuration != null) setSoakingDuration(String(fd.soakingDuration));
+    if (typeof fd.dryingCondition === "string") setDryingCondition(fd.dryingCondition);
     if (typeof existing.notes === "string") setNotes(existing.notes);
     if (existing.status === "submitted") setSubmitted(true);
 
@@ -187,6 +191,8 @@ export default function AggSpecificGravity() {
             aggType,
             spec,
             source,
+            soakingDuration: parseFloat(soakingDuration) || 24,
+            dryingCondition,
             testedBy: user?.name,
             rows: coarseComputed.map(r => ({
               id: r.id,
@@ -204,6 +210,8 @@ export default function AggSpecificGravity() {
             aggType,
             spec,
             source,
+            soakingDuration: parseFloat(soakingDuration) || 24,
+            dryingCondition,
             testedBy: user?.name,
             fineInput,
             result: fineComputed,
@@ -320,6 +328,20 @@ export default function AggSpecificGravity() {
               <div>
                 <Label className="text-xs text-slate-500 mb-1 block">{ar ? "المصدر / المحجر" : "Source / Quarry"}</Label>
                 <Input value={source} onChange={e => setSource(e.target.value)} disabled={submitted} placeholder="—" />
+              </div>
+              <div>
+                <Label className="text-xs text-slate-500 mb-1 block">{ar ? "مدة النقع (ساعة)" : "Soaking Duration (hrs)"}</Label>
+                <Input value={soakingDuration} onChange={e => setSoakingDuration(e.target.value)} disabled={submitted} placeholder="24" className="font-mono" />
+              </div>
+              <div>
+                <Label className="text-xs text-slate-500 mb-1 block">{ar ? "ظروف التجفيف" : "Drying Condition"}</Label>
+                <Select value={dryingCondition} onValueChange={setDryingCondition} disabled={submitted}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="oven_dry">{ar ? "جاف بالفرن (105°م)" : "Oven Dry (105°C)"}</SelectItem>
+                    <SelectItem value="air_dry">{ar ? "جاف هوائياً" : "Air Dry"}</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
               <div>
                 <Label className="text-xs text-slate-500 mb-1 block">{ar ? "الفاحص" : "Tested By"}</Label>

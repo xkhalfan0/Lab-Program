@@ -143,6 +143,7 @@ export default function AsphaltBitumenExtraction() {
   const ar = lang === "ar";
 
   const [method, setMethod] = useState<MethodKey>("IGNITION");
+  const [ignitionTemperature, setIgnitionTemperature] = useState("538");
   const [designBitumenStr, setDesignBitumenStr] = useState("5.0");
   const [toleranceStr, setToleranceStr] = useState("0.3");
   const [notes, setNotes] = useState("");
@@ -173,6 +174,7 @@ export default function AsphaltBitumenExtraction() {
     }
     if (fd.designBitumen != null) setDesignBitumenStr(String(fd.designBitumen));
     if (fd.tolerance != null) setToleranceStr(String(fd.tolerance));
+    if (fd.ignitionTemperature != null) setIgnitionTemperature(String(fd.ignitionTemperature));
     if (fd.notes) setNotes(String(fd.notes));
 
     const savedSample = fd.sample as Record<string, unknown> | undefined;
@@ -223,8 +225,9 @@ export default function AsphaltBitumenExtraction() {
         testTypeCode: spec.code,
         formTemplate: "asphalt_bitumen_extraction",
         formData: {
-          extractionMethod: "ignition_furnace",
+          extractionMethod: spec.code === "ASPH_BITUMEN_EXTRACTION_CENTRIFUGE" ? "centrifuge" : "ignition_furnace",
           method,
+          ignitionTemperature: method === "IGNITION" ? parseFloat(ignitionTemperature) || 538 : null,
           designBitumen,
           tolerance,
           sample: computedSample,
@@ -391,6 +394,18 @@ export default function AsphaltBitumenExtraction() {
                   disabled={submitted}
                 />
               </div>
+              {method === "IGNITION" && (
+                <div>
+                  <Label className="text-xs text-slate-500 mb-1 block">{ar ? "درجة حرارة الفرن (°C)" : "Ignition Temperature (°C)"}</Label>
+                  <Input
+                    value={ignitionTemperature}
+                    onChange={(e) => setIgnitionTemperature(e.target.value)}
+                    className="font-mono"
+                    placeholder="538"
+                    disabled={submitted}
+                  />
+                </div>
+              )}
               <div>
                 <Label className="text-xs text-slate-500 mb-1 block">{ar ? "الفاحص" : "Tested By"}</Label>
                 <div className="flex items-center gap-2 px-3 py-2 bg-green-50 border border-green-200 rounded-lg">

@@ -147,6 +147,7 @@ export default function Interlock() {
   const [mtsReference, setMtsReference] = useState("");
   const [blockShape, setBlockShape] = useState("");
   const [blockColor, setBlockColor] = useState("");
+  const [moistureCondition, setMoistureCondition] = useState("saturated_surface_dry");
   const [notes, setNotes] = useState("");
   const [rows, setRows] = useState<InterlockRow[]>(() => [newRow(0)]);
   const [saving, setSaving] = useState(false);
@@ -188,6 +189,7 @@ export default function Interlock() {
     if (fd.mtsReference) setMtsReference(String(fd.mtsReference));
     if (fd.blockShape) setBlockShape(String(fd.blockShape));
     if (fd.blockColor) setBlockColor(String(fd.blockColor));
+    if (fd.moistureCondition) setMoistureCondition(String(fd.moistureCondition));
     if (fd.notes) setNotes(String(fd.notes));
     if (Array.isArray(fd.blocks) && fd.blocks.length > 0) {
       setRows(
@@ -288,6 +290,7 @@ export default function Interlock() {
           mtsReference,
           blockShape,
           blockColor,
+          moistureCondition,
           blocks: computedRows,
           avgStrength,
           overallResult,
@@ -438,6 +441,16 @@ export default function Interlock() {
               <div>
                 <Label className="text-xs text-slate-500 mb-1 block">Color</Label>
                 <Input value={blockColor} onChange={e => setBlockColor(e.target.value)} placeholder="e.g. Grey, Red" disabled={submitted} />
+              </div>
+              <div>
+                <Label className="text-xs text-slate-500 mb-1 block">{ar ? "حالة الرطوبة عند الاختبار" : "Moisture Condition at Test"}</Label>
+                <select value={moistureCondition} onChange={e => setMoistureCondition(e.target.value)}
+                  className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm"
+                  disabled={submitted}>
+                  <option value="saturated_surface_dry">Saturated Surface Dry (SSD)</option>
+                  <option value="air_dry">Air Dry</option>
+                  <option value="wet">Wet</option>
+                </select>
               </div>
               <div className="flex items-end">
                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-xs text-blue-700 w-full">

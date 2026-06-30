@@ -26,6 +26,7 @@ type Method = keyof typeof METHODS;
 interface FieldDensityParams {
   testMethod: Method;
   mdd: string; // MDD (g/cm³)
+  mddReference: string; // lab test reference for MDD source
   coneNo: string;
   wtSandInCone: string; // g
   bulkDensityOfSand: string; // g/cc
@@ -141,6 +142,7 @@ export default function SoilFieldDensity() {
   const [params, setParams] = useState<FieldDensityParams>({
     testMethod: "SAND_REPLACEMENT",
     mdd: "",
+    mddReference: "",
     coneNo: "",
     wtSandInCone: "",
     bulkDensityOfSand: "",
@@ -200,6 +202,7 @@ export default function SoilFieldDensity() {
       const formData = {
         testMethod: params.testMethod,
         mdd: parseFloat(params.mdd) || 0,
+        mddReference: params.mddReference,
         coneNo: params.coneNo,
         wtSandInCone: parseFloat(params.wtSandInCone) || 0,
         bulkDensityOfSand: parseFloat(params.bulkDensityOfSand) || 0,
@@ -413,6 +416,19 @@ export default function SoilFieldDensity() {
                   onChange={(e) => setParams({ ...params, location: e.target.value })}
                   className="h-9 bg-white border border-slate-300"
                   placeholder={ar ? "مثال: طبقة الأساس، الطبقة 3" : "e.g. Road base layer, Layer 3"}
+                />
+              </div>
+            </div>
+            {/* Row 3 */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <Label className="text-xs text-slate-500 mb-1 block">{ar ? "مرجع اختبار MDD (رقم التقرير المختبري)" : "MDD Source — Lab Test Reference"}</Label>
+                <Input
+                  type="text"
+                  value={params.mddReference}
+                  onChange={(e) => setParams({ ...params, mddReference: e.target.value })}
+                  className="h-9 bg-white border border-slate-300"
+                  placeholder={ar ? "مثال: LAB-2026-01-12345" : "e.g. LAB-2026-01-12345"}
                 />
               </div>
             </div>
