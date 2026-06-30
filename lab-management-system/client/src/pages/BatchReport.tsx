@@ -27,6 +27,7 @@ import {
   formatSummaryLabel,
   formatSummaryValue,
   renderFormData,
+  renderLegacyConcreteCubeGroups,
 } from "@/pages/tests/SpecializedTestReport";
 import {
   REPORT_META_LABEL_CLASS,
@@ -289,6 +290,23 @@ export default function BatchReport() {
   const siblings = batchOverview?.siblings ?? [];
   const resolvedSampleId = sample?.id ?? sampleId;
 
+  const { data: concreteGroupsBySample = [] } = trpc.concrete.groupsBySample.useQuery(
+    { sampleId: resolvedSampleId },
+    { enabled: resolvedSampleId > 0 },
+  );
+
+  const concreteGroupsByDist = useMemo(() => {
+    const map = new Map<number, typeof concreteGroupsBySample>();
+    for (const g of concreteGroupsBySample) {
+      const did = g.distributionId;
+      if (!did) continue;
+      const list = map.get(did) ?? [];
+      list.push(g);
+      map.set(did, list);
+    }
+    return map;
+  }, [concreteGroupsBySample]);
+
   const { data: testTypes = [] } = trpc.testTypes.list.useQuery();
 
   const [isDownloadLoading, setIsDownloadLoading] = useState(false);
@@ -479,6 +497,12 @@ export default function BatchReport() {
                   !!formTemplate &&
                   formData != null &&
                   typeof formData === "object";
+                const legacyConcreteGroups = concreteGroupsByDist.get(sibling.id) ?? [];
+                const hasLegacyConcrete =
+                  isCompleted &&
+                  !hasDetailedForm &&
+                  legacyConcreteGroups.length > 0 &&
+                  legacyConcreteGroups.some(g => (g.cubes?.length ?? 0) > 0);
                 return (
                   <div
                     key={sibling.id}
@@ -513,6 +537,12 @@ export default function BatchReport() {
                         renderFormData(formTemplate as string, formData, isAr, {
                           sieveReportTestedBy: sibling.specializedTestResults?.[0]?.testedBy ?? null,
                         })
+                      ) : hasLegacyConcrete ? (
+                        renderLegacyConcreteCubeGroups(
+                          legacyConcreteGroups,
+                          isAr,
+                          sample?.castingDate ?? legacyConcreteGroups[0]?.batchDateTime,
+                        )
                       ) : isCompleted && summaryEntries.length > 0 ? (
                         <table className="metadata-table w-full border-collapse text-xs">
                           <tbody>

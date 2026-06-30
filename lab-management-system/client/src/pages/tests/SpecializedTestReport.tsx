@@ -3577,6 +3577,169 @@ function renderGeneric(fd: any, isAr: boolean) {
   );
 }
 
+export function renderLegacyConcreteCubeGroups(
+  groups: any[],
+  isAr: boolean,
+  castingDate?: Date | string | null,
+) {
+  if (!groups?.length) return null;
+  const L = (en: string, ar: string) => (isAr ? ar : en);
+  const fmtStrength = (val: string | null | undefined) => {
+    if (!val) return "—";
+    const n = parseFloat(val);
+    if (isNaN(n)) return "—";
+    return (Math.round(n * 2) / 2).toFixed(1);
+  };
+  const calcAge = (testDate?: Date | string | null) => {
+    if (!castingDate || !testDate) return null;
+    const c = new Date(castingDate);
+    const t = new Date(testDate);
+    if (isNaN(c.getTime()) || isNaN(t.getTime())) return null;
+    return Math.floor((t.getTime() - c.getTime()) / 86400000);
+  };
+
+  return (
+    <div className="space-y-4">
+      {groups.map((group: any) => {
+        const cubes: any[] = group.cubes ?? [];
+        const avg = group.avgCompressiveStrength != null ? parseFloat(group.avgCompressiveStrength) : null;
+        const minAcc = group.minAcceptable != null ? parseFloat(group.minAcceptable) : null;
+        const testAge = group.testAge ?? 28;
+
+        const cubeCols: Column[] = [
+          { header: L("Mark", "رقم"), field: "markNo", align: "center" },
+          { header: L("Cube ID", "معرف المكعب"), field: "cubeId", align: "center", render: v => (v ? String(v) : "—") },
+          { header: L("Date Tested", "تاريخ الفحص"), field: "dateTested", align: "center", render: v => (v ? formatCalendarDate(v) : "—") },
+          { header: L("Age (days)", "العمر (يوم)"), field: "_age", align: "center" },
+          {
+            header: L("L×W×H (mm)", "الأبعاد (مم)"),
+            field: "_dims",
+            align: "center",
+            render: (_, row) => {
+              const c = row as any;
+              const l = c.length ?? c.lengthMm;
+              const w = c.width ?? c.widthMm;
+              const h = c.height ?? c.heightMm;
+              if (l && w && h) return `${l}×${w}×${h}`;
+              if (l && w) return `${l}×${w}×${h ?? l}`;
+              return "150×150×150";
+            },
+          },
+          { header: L("Mass (kg)", "الكتلة (كغ)"), field: "massKg", align: "right", render: v => fmt(v, 3) },
+          { header: L("Load (kN)", "الحمل (كن)"), field: "maxLoadKN", align: "right", render: v => fmt(v, 1) },
+          { header: L("Density (kg/m³)", "الكثافة"), field: "densityKgM3", align: "right", render: v => (v != null && v !== "" ? String(Math.round(Number(v) / 10) * 10) : "—") },
+          {
+            header: L("Strength (N/mm²)", "المقاومة (N/mm²)"),
+            field: "compressiveStrengthMpa",
+            align: "center",
+            render: v => <span className="font-bold">{fmtStrength(v as string)}</span>,
+          },
+          { header: L("Fracture", "الكسر"), field: "fractureType", align: "center", render: v => (v ? String(v) : "—") },
+          {
+            header: L("Result", "النتيجة"),
+            field: "_result",
+            align: "center",
+            render: (_, row) => {
+              const c = row as any;
+              const s = parseFloat(c.compressiveStrengthMpa ?? "0");
+              if (c.withinSpec === true || (s > 0 && minAcc != null && s >= minAcc)) {
+                return <span className="text-emerald-800 font-bold">{L("PASS", "مطابق")}</span>;
+              }
+              if (c.withinSpec === false || (s > 0 && minAcc != null && s < minAcc)) {
+                return <span className="text-red-800 font-bold">{L("FAIL", "غير مطابق")}</span>;
+              }
+              return "—";
+            },
+          },
+        ];
+
+        return (
+          <div key={group.id} className="space-y-3">
+            <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-2 text-xs report-info-grid">
+              <div className="bg-blue-50 border border-blue-200 rounded p-2 text-center">
+                <p className={REPORT_INFO_LABEL_CLASS}>{L("Test Age", "عمر الاختبار")}</p>
+                <p className={REPORT_INFO_VALUE_CLASS}>{testAge} {L("days", "يوم")}</p>
+              </div>
+              {group.classOfConcrete && (
+                <div className="bg-gray-50 border rounded p-2 text-center">
+                  <p className={REPORT_INFO_LABEL_CLASS}>{L("Class of Concrete", "فئة الخرسانة")}</p>
+                  <p className={REPORT_INFO_VALUE_CLASS}>{group.classOfConcrete}</p>
+                </div>
+              )}
+              {group.slump && (
+                <div className="bg-gray-50 border rounded p-2 text-center">
+                  <p className={REPORT_INFO_LABEL_CLASS}>{L("Slump (mm)", "الهبوط (مم)")}</p>
+                  <p className={REPORT_INFO_VALUE_CLASS}>{group.slump}</p>
+                </div>
+              )}
+              {group.maxAggSize && (
+                <div className="bg-gray-50 border rounded p-2 text-center">
+                  <p className={REPORT_INFO_LABEL_CLASS}>{L("Max Agg. Size", "أقصى حجم ركام")}</p>
+                  <p className={REPORT_INFO_VALUE_CLASS}>{group.maxAggSize} mm</p>
+                </div>
+              )}
+              {group.placeOfSampling && (
+                <div className="bg-gray-50 border rounded p-2 text-center">
+                  <p className={REPORT_INFO_LABEL_CLASS}>{L("Place of Sampling", "مكان أخذ العينة")}</p>
+                  <p className={REPORT_INFO_VALUE_CLASS}>{group.placeOfSampling}</p>
+                </div>
+              )}
+              {group.sourceSupplier && (
+                <div className="bg-gray-50 border rounded p-2 text-center">
+                  <p className={REPORT_INFO_LABEL_CLASS}>{L("Source / Supplier", "المورد")}</p>
+                  <p className={REPORT_INFO_VALUE_CLASS}>{group.sourceSupplier}</p>
+                </div>
+              )}
+              {castingDate && (
+                <div className="bg-blue-50 border border-blue-200 rounded p-2 text-center">
+                  <p className={REPORT_INFO_LABEL_CLASS}>{L("Date of Casting", "تاريخ الصب")}</p>
+                  <p className={REPORT_INFO_VALUE_CLASS}>{formatCalendarDate(castingDate)}</p>
+                </div>
+              )}
+              {group.nominalCubeSize && (
+                <div className="bg-slate-50 border rounded p-2 text-center">
+                  <p className={REPORT_INFO_LABEL_CLASS}>{L("Nominal Cube Size", "الحجم الاسمي")}</p>
+                  <p className={REPORT_INFO_VALUE_CLASS}>{group.nominalCubeSize}</p>
+                </div>
+              )}
+            </div>
+
+            {cubes.length > 0 && (
+              <FlexibleResultsTable
+                columns={cubeCols}
+                rows={cubes.map((c: any, i: number) => ({
+                  ...c,
+                  _age: calcAge(c.dateTested) ?? testAge,
+                  _dims: `${c.length ?? 150}×${c.width ?? 150}×${c.height ?? c.length ?? 150}`,
+                  _result: c.withinSpec,
+                  markNo: c.markNo ?? i + 1,
+                }))}
+              />
+            )}
+
+            {(avg != null || minAcc != null) && (
+              <div className="flex flex-wrap gap-4 justify-end text-xs font-semibold">
+                {avg != null && (
+                  <span>
+                    {L("Avg. Compressive Strength:", "متوسط مقاومة الضغط:")}{" "}
+                    <span className="text-blue-800">{fmtStrength(String(avg))} N/mm²</span>
+                  </span>
+                )}
+                {minAcc != null && (
+                  <span>
+                    {L("Required:", "المطلوب:")}{" "}
+                    <span className="text-amber-800">{minAcc.toFixed(1)} N/mm²</span>
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function renderConcreteCubes(fd: any, isAr: boolean) {
   const cubes = fd.cubes ?? [];
   const castingDate = fd.castingDate ? new Date(fd.castingDate) : null;

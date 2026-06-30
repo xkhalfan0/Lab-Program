@@ -3,13 +3,13 @@
  * URL: /print-receipt/:id?lang=en|ar
  */
 import { useParams } from "wouter";
-import { useEffect, useMemo, type ReactNode } from "react";
+import { useEffect, useMemo, Fragment, type ReactNode } from "react";
 import { trpc } from "@/lib/trpc";
 import { Loader2, Printer, X, XCircle, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SAMPLE_TYPE_LABELS } from "@/lib/labTypes";
 import {
-  getReceptionEntryDisplayPairs,
+  getReceptionEntryDisplayGroups,
   parseSupplierFromNotes,
   stripStructuredNotes,
 } from "@shared/receptionEntryFields";
@@ -215,6 +215,25 @@ export default function PrintReceipt({ sectorSampleId }: { sectorSampleId?: numb
     }, 0);
   }, [orders]);
 
+  const orderTests = useMemo(() => {
+    const seen = new Set<string>();
+    const tests: Array<{ testTypeCode: string; testTypeName: string }> = [];
+    if (orders?.length) {
+      for (const order of orders) {
+        for (const item of (order as any).items ?? []) {
+          const code = item.testTypeCode;
+          if (!code || code === "__multi__" || seen.has(code)) continue;
+          seen.add(code);
+          tests.push({
+            testTypeCode: code,
+            testTypeName: item.testTypeName || item.testName || code,
+          });
+        }
+      }
+    }
+    return tests;
+  }, [orders]);
+
   const testsList = useMemo(() => {
     const names: string[] = [];
     if (orders?.length) {
@@ -288,11 +307,12 @@ export default function PrintReceipt({ sectorSampleId }: { sectorSampleId?: numb
   const supplierValue = parseSupplierFromNotes(rawNotes);
   const cleanNotes = stripStructuredNotes(rawNotes);
   const sampleLocation = (sample as any).location?.trim() || "—";
-  const entryDataRows = getReceptionEntryDisplayPairs({
+  const entryDataGroups = getReceptionEntryDisplayGroups({
     notes: rawNotes,
     castingDate: (sample as any).castingDate,
     nominalCubeSize: (sample as any).nominalCubeSize,
     lang,
+    tests: orderTests,
   });
 
   const th = (key: keyof typeof T) => {
@@ -559,7 +579,7 @@ export default function PrintReceipt({ sectorSampleId }: { sectorSampleId?: numb
               {supplierValue && (
                 <FullRow labelKey="supplier">{supplierValue}</FullRow>
               )}
-              {entryDataRows.length > 0 && (
+              {entryDataGroups.length > 0 && (
                 <>
                   <tr>
                     <td
@@ -576,10 +596,29 @@ export default function PrintReceipt({ sectorSampleId }: { sectorSampleId?: numb
                       {tx("entryData", lang)}
                     </td>
                   </tr>
-                  {entryDataRows.map((row) => (
-                    <SingleLabelRow key={row.label} label={row.label}>
-                      {row.value}
-                    </SingleLabelRow>
+                  {entryDataGroups.map((group) => (
+                    <Fragment key={group.testCode}>
+                      <tr>
+                        <td
+                          colSpan={4}
+                          style={{
+                            background: "#1e293b",
+                            color: "#fff",
+                            padding: "7px 12px",
+                            fontWeight: 700,
+                            fontSize: "11px",
+                            borderTop: "1px solid #334155",
+                          }}
+                        >
+                          {group.testName}
+                        </td>
+                      </tr>
+                      {group.rows.map((row) => (
+                        <SingleLabelRow key={`${group.testCode}-${row.label}`} label={row.label}>
+                          {row.value}
+                        </SingleLabelRow>
+                      ))}
+                    </Fragment>
                   ))}
                 </>
               )}

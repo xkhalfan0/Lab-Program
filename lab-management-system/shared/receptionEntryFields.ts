@@ -160,6 +160,111 @@ export function parseSupplierFromNotes(notes: string | null | undefined): string
   return match?.[1]?.trim() || null;
 }
 
+export type ReceptionEntryDisplayGroup = {
+  testCode: string;
+  testName: string;
+  rows: Array<{ label: string; value: string }>;
+};
+
+const COMPRESSIVE_CONC_CODES = new Set(["CONC_CUBE", "CONC_CORE", "CONC_BEAM", "CONC_FOAM"]);
+
+/** Group reception entry fields by test — for receipt / report sections with per-test headers. */
+export function getReceptionEntryDisplayGroups(options: {
+  notes?: string | null;
+  castingDate?: Date | string | null;
+  nominalCubeSize?: string | null;
+  lang: "ar" | "en";
+  tests: Array<{ testTypeCode: string; testTypeName: string }>;
+}): ReceptionEntryDisplayGroup[] {
+  const isAr = options.lang === "ar";
+  const entryData = parseEntryDataFromNotes(options.notes ?? "");
+  const groups: ReceptionEntryDisplayGroup[] = [];
+  const fieldGroups = getReceptionFieldGroupsForTests(options.tests);
+  let addedConcreteMeta = false;
+
+  for (const group of fieldGroups) {
+    const rows: Array<{ label: string; value: string }> = [];
+    for (const field of group.fields) {
+      const value = entryData[field.key]?.trim();
+      if (value) {
+        rows.push({
+          label: isAr ? field.labelAr : field.labelEn,
+          value,
+        });
+      }
+    }
+
+    if (!addedConcreteMeta && COMPRESSIVE_CONC_CODES.has(group.testCode)) {
+      if (options.castingDate) {
+        const d = new Date(options.castingDate);
+        if (!Number.isNaN(d.getTime())) {
+          rows.push({
+            label: isAr ? "تاريخ الصب" : "Casting Date",
+            value: d.toLocaleDateString(isAr ? "ar-AE" : "en-GB"),
+          });
+        }
+      }
+      if (options.nominalCubeSize?.trim()) {
+        rows.push({
+          label: isAr ? "الحجم الاسمي للمكعب" : "Nominal Cube Size",
+          value: options.nominalCubeSize.trim(),
+        });
+      }
+      addedConcreteMeta = true;
+    }
+
+    if (rows.length > 0) {
+      groups.push({
+        testCode: group.testCode,
+        testName: group.testName,
+        rows,
+      });
+    }
+  }
+
+  const notes = options.notes ?? "";
+  const generalRows: Array<{ label: string; value: string }> = [];
+  const curingMatch = notes.match(/^__CURING_DATE__:(.+?)(?:\n|$)/m);
+  if (curingMatch?.[1]?.trim()) {
+    generalRows.push({
+      label: isAr ? "تاريخ المعالجة" : "Date of Curing",
+      value: curingMatch[1].trim(),
+    });
+  }
+  const aggMatch = notes.match(/^__AGGREGATE_TYPE__:(.+?)(?:\n|$)/m);
+  if (aggMatch?.[1]?.trim()) {
+    generalRows.push({
+      label: isAr ? "نوع الركام" : "Type of Aggregate",
+      value: aggMatch[1].trim(),
+    });
+  }
+  if (generalRows.length > 0) {
+    groups.unshift({
+      testCode: "_general",
+      testName: isAr ? "بيانات عامة" : "General",
+      rows: generalRows,
+    });
+  }
+
+  if (groups.length === 0) {
+    const fallbackRows = getReceptionEntryDisplayPairs({
+      notes: options.notes,
+      castingDate: options.castingDate,
+      nominalCubeSize: options.nominalCubeSize,
+      lang: options.lang,
+    });
+    if (fallbackRows.length > 0) {
+      groups.push({
+        testCode: "_all",
+        testName: isAr ? "تفاصيل العينة" : "Sample Details",
+        rows: fallbackRows,
+      });
+    }
+  }
+
+  return groups;
+}
+
 export function getReceptionEntryDisplayPairs(options: {
   notes?: string | null;
   castingDate?: Date | string | null;
