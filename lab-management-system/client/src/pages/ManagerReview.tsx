@@ -277,7 +277,7 @@ function isConcreteCubeReport(
 
 /** One URL for “open report” from the manager dialog (matches App.tsx routes). */
 function computeManagerReviewReportUrl(opts: {
-  batchId?: string | null;
+  sampleId?: number;
   distId?: number;
   dist: { testType?: string } | undefined;
   legacyResult: { chartsData?: unknown } | undefined;
@@ -286,7 +286,7 @@ function computeManagerReviewReportUrl(opts: {
   hasLegacyResult: boolean;
 }): string | null {
   const {
-    batchId,
+    sampleId,
     distId,
     dist,
     legacyResult,
@@ -294,11 +294,11 @@ function computeManagerReviewReportUrl(opts: {
     orderId,
     hasLegacyResult,
   } = opts;
-  if (batchId) return `/batch-report/${encodeURIComponent(batchId)}`;
+  // If there's an order, always open the batch report (shows all tests together)
+  if (orderId != null && sampleId != null) return `/batch-report/${sampleId}/${orderId}`;
   if (!distId) return null;
   if (isConcreteCubeReport(dist, legacyResult)) return `/concrete-report/${distId}`;
   if (hasSpecializedForDistribution) return `/test-report/${distId}`;
-  if (orderId != null) return `/order-report/${orderId}`;
   if (hasLegacyResult) return `/test-report/${distId}`;
   return null;
 }
@@ -447,7 +447,7 @@ export default function ManagerReview() {
   const reportUrl = useMemo(
     () =>
       computeManagerReviewReportUrl({
-        batchId: (selectedSample as { batchId?: string } | null)?.batchId ?? null,
+        sampleId: selectedSample?.id,
         distId: dist?.id,
         dist,
         legacyResult: result,

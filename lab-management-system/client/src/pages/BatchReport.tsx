@@ -39,7 +39,6 @@ import {
   Printer,
   Globe,
   Download,
-  ExternalLink,
   AlertTriangle,
   ArrowLeft,
 } from "lucide-react";
@@ -481,14 +480,10 @@ export default function BatchReport() {
                   formTemplate === "asphalt_marshall_density" ||
                   sibling.testType === "ASPH_MARSHALL_DENSITY" ||
                   sibling.testType === "DIST-2026-042";
-                const hasReport =
-                  sibling.status === "completed" &&
-                  (sibling.specializedTestResults?.length || sibling.testResults?.length);
-
                 return (
                   <div
                     key={sibling.id}
-                    className={`border border-gray-300 rounded overflow-hidden ${index > 0 ? "print:break-before-page" : ""}`}
+                    className={`border border-gray-300 rounded overflow-hidden print-no-break`}
                   >
                     <div className="bg-slate-100 border-b border-gray-300 px-3 py-2 flex flex-wrap justify-between items-start gap-2">
                       <div>
@@ -578,17 +573,6 @@ export default function BatchReport() {
                         </div>
                       )}
 
-                      {hasReport && (
-                        <a
-                          href={`/test-report/${sibling.id}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="print:hidden inline-flex items-center gap-1.5 text-[11px] font-medium text-blue-700 hover:text-blue-900"
-                        >
-                          <ExternalLink className="w-3.5 h-3.5" />
-                          {isAr ? "\u0639\u0631\u0636 \u0627\u0644\u062a\u0642\u0631\u064a\u0631 \u0627\u0644\u062a\u0641\u0635\u064a\u0644\u064a" : "View detailed individual report"}
-                        </a>
-                      )}
                     </div>
                   </div>
                 );

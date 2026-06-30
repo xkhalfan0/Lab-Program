@@ -679,6 +679,10 @@ export default function QCReview() {
     { sampleId: selectedSampleId },
     { enabled: selectedSampleId > 0 }
   );
+  const { data: sampleOrders } = trpc.orders.bySample.useQuery(
+    { sampleId: selectedSampleId },
+    { enabled: selectedSampleId > 0 }
+  );
 
   const qcReview = trpc.reviews.qcReview.useMutation({
     onSuccess: () => {
@@ -743,10 +747,12 @@ export default function QCReview() {
   const specializedResult = specializedResults?.[0];
   const hasAnyResult = !!result || !!specializedResult;
 
-  // Compute report URL — use dist or fall back to result.distributionId
+  // Compute report URL — prefer batch report when an order exists
   const reportUrl = (() => {
-    const batchId = (selectedSample as { batchId?: string } | null)?.batchId;
-    if (batchId) return `/batch-report/${encodeURIComponent(batchId)}`;
+    const orderId = sampleOrders?.[0]?.id;
+    const sampleId = selectedSample?.id;
+    // If there's an order, always open the batch report (shows all tests together)
+    if (orderId != null && sampleId != null) return `/batch-report/${sampleId}/${orderId}`;
 
     // Resolve the best distribution ID available
     const distId = dist?.id ?? (result as { distributionId?: number } | undefined)?.distributionId ?? null;
