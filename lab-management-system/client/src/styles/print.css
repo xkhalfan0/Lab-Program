@@ -117,53 +117,56 @@
 
   .lab-print-root table.report-info-table td:nth-child(odd),
   .report-page table.report-info-table td:nth-child(odd) {
-    font-weight: 700 !important;
+    font-weight: 800 !important;
     text-transform: uppercase !important;
-    letter-spacing: 0.04em !important;
-    color: #334155 !important;
-    font-size: 7pt !important;
+    letter-spacing: 0.05em !important;
+    color: #0f172a !important;
+    font-size: 9pt !important;
   }
 
   .lab-print-root table.report-info-table td:nth-child(even),
   .report-page table.report-info-table td:nth-child(even) {
-    font-weight: 600 !important;
-    color: #0f172a !important;
-    font-size: 8pt !important;
+    font-weight: 400 !important;
+    color: #475569 !important;
+    font-size: 7.5pt !important;
   }
 
   .lab-print-root .report-field-label,
   .report-page .report-field-label {
-    font-weight: 700 !important;
+    font-weight: 800 !important;
     text-transform: uppercase !important;
-    letter-spacing: 0.04em !important;
-    color: #334155 !important;
+    letter-spacing: 0.05em !important;
+    color: #0f172a !important;
+    font-size: 9pt !important;
   }
 
   .lab-print-root .report-field-value,
   .report-page .report-field-value {
-    font-weight: 600 !important;
-    color: #0f172a !important;
+    font-weight: 400 !important;
+    color: #475569 !important;
+    font-size: 7.5pt !important;
   }
 
   .lab-print-root .report-section-heading,
   .report-page .report-section-heading {
-    font-size: 8pt !important;
-    font-weight: 700 !important;
-    letter-spacing: 0.06em !important;
-    border-bottom-width: 1pt !important;
-    border-bottom-color: #64748b !important;
-    margin-bottom: 5pt !important;
-    padding-bottom: 2pt !important;
+    font-size: 10pt !important;
+    font-weight: 800 !important;
+    letter-spacing: 0.08em !important;
+    border-bottom-width: 1.5pt !important;
+    border-bottom-color: #475569 !important;
+    margin-bottom: 6pt !important;
+    padding-bottom: 3pt !important;
   }
 
   .lab-print-root .report-reference-bar .report-field-label,
   .report-page .report-reference-bar .report-field-label {
-    font-size: 7pt !important;
+    font-size: 9pt !important;
   }
 
   .lab-print-root .report-reference-bar .report-field-value,
   .report-page .report-reference-bar .report-field-value {
-    font-size: 9pt !important;
+    font-size: 7.5pt !important;
+    font-weight: 400 !important;
   }
 
   .lab-print-root .report-info-section,
@@ -508,11 +511,11 @@
   .report-page .report-info-grid p:first-child,
   .lab-print-root .report-info-grid .report-field-label,
   .report-page .report-info-grid .report-field-label {
-    font-weight: 700 !important;
+    font-weight: 800 !important;
     text-transform: uppercase !important;
-    letter-spacing: 0.04em !important;
-    font-size: 6.5pt !important;
-    color: #334155 !important;
+    letter-spacing: 0.05em !important;
+    font-size: 8pt !important;
+    color: #0f172a !important;
     margin-bottom: 2pt !important;
   }
 
@@ -520,8 +523,9 @@
   .report-page .report-info-grid p:last-child,
   .lab-print-root .report-info-grid .report-field-value,
   .report-page .report-info-grid .report-field-value {
-    font-weight: 600 !important;
-    font-size: 8pt !important;
+    font-weight: 400 !important;
+    font-size: 7pt !important;
+    color: #475569 !important;
   }
 
   .lab-print-root .report-info-grid > div,

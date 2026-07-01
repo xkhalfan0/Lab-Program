@@ -21,7 +21,7 @@ export function ReportReferenceBar({ items }: { items: ReportReferenceItem[] }) 
   const cols = Math.min(Math.max(items.length, 1), 4);
   return (
     <div
-      className="report-reference-bar grid gap-x-6 gap-y-3 mb-4 text-xs text-center"
+      className="report-reference-bar grid gap-x-6 gap-y-3 mb-4 text-center"
       style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}
     >
       {items.map((item, i) => (
