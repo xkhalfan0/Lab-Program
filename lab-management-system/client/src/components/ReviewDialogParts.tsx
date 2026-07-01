@@ -38,8 +38,8 @@ export function ReviewDialogShell({
 }) {
   return (
     <DialogContent className={REVIEW_DIALOG_CLASS} dir={lang === "ar" ? "rtl" : "ltr"}>
-      <DialogHeader className="shrink-0 border-b bg-slate-50/90 px-6 py-5 space-y-0">
-        <DialogTitle className="flex items-center gap-4 text-base font-semibold leading-tight">
+      <DialogHeader className="shrink-0 space-y-0 border-b bg-slate-50/90 px-6 py-5 pe-14">
+        <DialogTitle className="flex items-start gap-4 text-base font-semibold leading-tight">
           <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
             <Icon className="h-6 w-6" />
           </span>
@@ -52,8 +52,10 @@ export function ReviewDialogShell({
                 {code}
               </span>
             )}
+            {badge && (
+              <div className="mt-2.5 flex flex-wrap items-center gap-2">{badge}</div>
+            )}
           </span>
-          {badge}
         </DialogTitle>
       </DialogHeader>
       <div className="min-h-0 flex-1 overflow-y-auto">{children}</div>
