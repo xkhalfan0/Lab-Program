@@ -526,7 +526,38 @@ input[type="number"] {
   .lab-print-root.report-page table.report-info-table td,
   .report-page table.report-info-table td {
     border: none !important;
-    padding: 2px 4px;
+    padding: 3px 6px;
+    vertical-align: top;
+  }
+
+  .lab-print-root.report-page table.report-info-table tbody tr,
+  .report-page table.report-info-table tbody tr {
+    border-bottom: 1px solid #f1f5f9;
+  }
+
+  .lab-print-root.report-page .report-field-label,
+  .report-page .report-field-label {
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #334155;
+  }
+
+  .lab-print-root.report-page .report-field-value,
+  .report-page .report-field-value {
+    font-weight: 600;
+    color: #0f172a;
+  }
+
+  .lab-print-root.report-page .report-section-heading,
+  .report-page .report-section-heading {
+    letter-spacing: 0.06em;
+  }
+
+  .lab-print-root.report-page .report-info-grid > div,
+  .report-page .report-info-grid > div {
+    border-radius: 4px;
+    padding: 6px 8px;
   }
 }
 

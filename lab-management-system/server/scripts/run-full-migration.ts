@@ -86,6 +86,9 @@ async function main() {
       console.warn("[migration] ⚠️ Sector seed skipped or failed — run: pnpm db:seed:sectors", e);
     }
 
+    console.log("[migration] Step 9: Concrete cube test condition columns");
+    execSync("tsx server/scripts/add-concrete-cube-test-conditions-columns.ts", { stdio: "inherit" });
+
     console.log("[migration] ✅ All steps complete!");
     process.exit(0);
   } catch (error) {

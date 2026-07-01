@@ -7,22 +7,26 @@ import { getOfficialTestByCode } from "@/lib/officialTestCatalog";
 
 export const REPORT_INFO_SECTION_CLASS = "report-info-section mb-5 pb-4 border-b border-gray-200";
 export const REPORT_INFO_TABLE_CLASS = "report-info-table w-full border-collapse text-xs";
+/** Section titles: Summary Results, Detailed Results, Notes */
+export const REPORT_SECTION_HEADING_CLASS =
+  "report-section-heading text-[11px] font-bold text-slate-800 uppercase tracking-[0.06em] border-b-2 border-slate-400 pb-1.5 mb-3 print:text-black";
+/** Metadata table labels — Test Type, Standard, Contractor, … */
 export const REPORT_META_LABEL_CLASS =
-  "px-0 py-1 text-gray-600 w-[18%] text-[11px] font-semibold align-top print:text-black";
+  "report-field-label px-0 py-1.5 text-slate-700 w-[22%] text-[10px] font-bold uppercase tracking-wide align-top leading-snug print:text-black";
 export const REPORT_META_VALUE_CLASS =
-  "px-2 py-1 font-normal text-gray-900 w-[32%] text-[12px] align-top print:text-black";
-export const REPORT_META_EMPTY_CLASS = "px-2 py-1 align-top";
+  "report-field-value px-2 py-1.5 font-medium text-slate-900 w-[28%] text-[12px] align-top leading-snug print:text-black";
+export const REPORT_META_EMPTY_CLASS = "px-2 py-1.5 align-top";
 /** @deprecated Use REPORT_INFO_TABLE_CLASS for borderless info; metadata-table kept for legacy results metadata only */
 export const REPORT_META_TABLE_CLASS = REPORT_INFO_TABLE_CLASS;
 export const REPORT_REF_LABEL_CLASS =
-  "text-gray-900 text-[11px] font-bold tracking-wide block mb-1 print:text-black";
+  "report-field-label text-slate-800 text-[10px] font-bold uppercase tracking-wide block mb-1 print:text-black";
 export const REPORT_REF_VALUE_CLASS =
-  "font-normal text-gray-900 text-[13px] print:text-black";
+  "report-field-value font-mono font-semibold text-slate-900 text-[13px] print:text-black";
 /** Label above a value in detailed-result info cards (Block Type, Size, etc.). */
 export const REPORT_INFO_LABEL_CLASS =
-  "text-gray-900 text-[11px] font-bold leading-tight print:text-black";
+  "report-field-label text-slate-700 text-[10px] font-bold uppercase tracking-wide leading-tight mb-1 print:text-black";
 export const REPORT_INFO_VALUE_CLASS =
-  "text-gray-900 text-[12px] font-normal leading-tight mt-0.5 print:text-black";
+  "report-field-value text-slate-900 text-[12px] font-semibold leading-snug print:text-black";
 
 /** Already shown in the report metadata table — hide from summary / detailed info cards. */
 export const REPORT_DUPLICATE_METADATA_KEYS = new Set(["standard"]);

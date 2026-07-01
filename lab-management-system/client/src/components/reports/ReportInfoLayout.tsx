@@ -6,6 +6,8 @@ import {
   REPORT_META_LABEL_CLASS,
   REPORT_META_VALUE_CLASS,
   REPORT_REF_LABEL_CLASS,
+  REPORT_REF_VALUE_CLASS,
+  REPORT_SECTION_HEADING_CLASS,
 } from "@/lib/reportFormatting";
 
 export type ReportReferenceItem = {
@@ -25,7 +27,7 @@ export function ReportReferenceBar({ items }: { items: ReportReferenceItem[] }) 
       {items.map((item, i) => (
         <div key={i} className="px-1 py-1">
           <span className={REPORT_REF_LABEL_CLASS}>{item.label}</span>
-          <div className="font-mono font-normal text-gray-900 text-sm">{item.value}</div>
+          <div className={REPORT_REF_VALUE_CLASS}>{item.value}</div>
           {item.extra}
         </div>
       ))}
@@ -103,9 +105,5 @@ export function ReportInfoSection({
 }
 
 export function ReportInfoHeading({ children }: { children: ReactNode }) {
-  return (
-    <h3 className="text-xs font-bold text-gray-900 uppercase border-b border-gray-300 pb-1 mb-3">
-      {children}
-    </h3>
-  );
+  return <h3 className={REPORT_SECTION_HEADING_CLASS}>{children}</h3>;
 }

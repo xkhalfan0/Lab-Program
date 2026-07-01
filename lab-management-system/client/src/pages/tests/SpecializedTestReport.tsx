@@ -4669,9 +4669,7 @@ export function SpecializedTestReportBody({
 
       {!skipDetailedResults && (
       <div className="mb-3">
-        <h3 className="text-xs font-bold text-gray-900 uppercase border-b border-gray-300 pb-1 mb-2">
-          {isAr ? "النتائج التفصيلية" : "Detailed Results"}
-        </h3>
+        <ReportInfoHeading>{isAr ? "النتائج التفصيلية" : "Detailed Results"}</ReportInfoHeading>
         {renderFormData(result.formTemplate, formData, isAr, {
           castingDateMs: dist?.castingDate ? new Date(dist.castingDate).getTime() : null,
           foamReceivedAt: dist?.receivedAt ?? null,
@@ -4682,9 +4680,7 @@ export function SpecializedTestReportBody({
       )}
 
       <div className="mb-3">
-        <h3 className="text-xs font-bold text-gray-900 uppercase border-b border-gray-300 pb-1 mb-2">
-          {isAr ? "ملاحظات" : "Notes"}
-        </h3>
+        <ReportInfoHeading>{isAr ? "ملاحظات" : "Notes"}</ReportInfoHeading>
         <p className="text-xs text-gray-700 bg-gray-50 border rounded p-3">
           {result.notes || (isAr ? "لا توجد ملاحظات إضافية" : "No additional remarks")}
         </p>
@@ -5111,9 +5107,9 @@ function BatchResultsSection({
 
   return (
     <div className="mb-5 space-y-6">
-      <h3 className="text-xs font-bold text-gray-900 uppercase border-b border-gray-300 pb-1 mb-3">
+      <ReportInfoHeading>
         {isAr ? "النتائج التفصيلية — دفعة متعددة الأنواع" : "Detailed Results — Multi-Type Batch"}
-      </h3>
+      </ReportInfoHeading>
       {batchDists.map((dist, idx) => {
         const result = resultByDistributionId.get(dist.id);
         const testLabel = isAr

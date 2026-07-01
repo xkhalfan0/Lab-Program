@@ -26,6 +26,7 @@
     "db:retest-columns": "tsx server/scripts/add-retest-columns.ts",
     "db:reference-no": "tsx server/scripts/add-reference-no-column.ts",
     "db:contractor-form-type": "tsx server/scripts/add-contractor-form-attachment-type.ts",
+    "db:concrete-cube-test-conditions": "tsx server/scripts/add-concrete-cube-test-conditions-columns.ts",
     "db:migration:phase1": "npm run db:check-integrity && npm run db:add-fks && npm run db:add-soft-delete",
     "db:rollback-fks": "tsx server/scripts/rollback-fks.ts",
     "db:reset:tests": "tsx server/scripts/reset-test-data.ts",

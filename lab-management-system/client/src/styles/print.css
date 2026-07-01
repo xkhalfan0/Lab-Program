@@ -117,13 +117,53 @@
 
   .lab-print-root table.report-info-table td:nth-child(odd),
   .report-page table.report-info-table td:nth-child(odd) {
-    font-weight: 600 !important;
-    color: #374151 !important;
+    font-weight: 700 !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.04em !important;
+    color: #334155 !important;
+    font-size: 7pt !important;
   }
 
   .lab-print-root table.report-info-table td:nth-child(even),
   .report-page table.report-info-table td:nth-child(even) {
-    font-weight: 400 !important;
+    font-weight: 600 !important;
+    color: #0f172a !important;
+    font-size: 8pt !important;
+  }
+
+  .lab-print-root .report-field-label,
+  .report-page .report-field-label {
+    font-weight: 700 !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.04em !important;
+    color: #334155 !important;
+  }
+
+  .lab-print-root .report-field-value,
+  .report-page .report-field-value {
+    font-weight: 600 !important;
+    color: #0f172a !important;
+  }
+
+  .lab-print-root .report-section-heading,
+  .report-page .report-section-heading {
+    font-size: 8pt !important;
+    font-weight: 700 !important;
+    letter-spacing: 0.06em !important;
+    border-bottom-width: 1pt !important;
+    border-bottom-color: #64748b !important;
+    margin-bottom: 5pt !important;
+    padding-bottom: 2pt !important;
+  }
+
+  .lab-print-root .report-reference-bar .report-field-label,
+  .report-page .report-reference-bar .report-field-label {
+    font-size: 7pt !important;
+  }
+
+  .lab-print-root .report-reference-bar .report-field-value,
+  .report-page .report-reference-bar .report-field-value {
+    font-size: 9pt !important;
   }
 
   .lab-print-root .report-info-section,
@@ -465,15 +505,29 @@
 
   /* Info cards in detailed results: label bold, value normal */
   .lab-print-root .report-info-grid p:first-child,
-  .report-page .report-info-grid p:first-child {
+  .report-page .report-info-grid p:first-child,
+  .lab-print-root .report-info-grid .report-field-label,
+  .report-page .report-info-grid .report-field-label {
     font-weight: 700 !important;
-    color: #000 !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.04em !important;
+    font-size: 6.5pt !important;
+    color: #334155 !important;
+    margin-bottom: 2pt !important;
   }
 
   .lab-print-root .report-info-grid p:last-child,
-  .report-page .report-info-grid p:last-child {
-    font-weight: 400 !important;
-    color: #000 !important;
+  .report-page .report-info-grid p:last-child,
+  .lab-print-root .report-info-grid .report-field-value,
+  .report-page .report-info-grid .report-field-value {
+    font-weight: 600 !important;
+    font-size: 8pt !important;
+  }
+
+  .lab-print-root .report-info-grid > div,
+  .report-page .report-info-grid > div {
+    border-radius: 2pt !important;
+    padding: 3pt 4pt !important;
   }
 
   .lab-print-root .signature-date,

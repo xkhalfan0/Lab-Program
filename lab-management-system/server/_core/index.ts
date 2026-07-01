@@ -14,7 +14,8 @@ import { handleUserSSE, handleSectorSSE } from "../sse";
 import { registerPdfRoutes } from "../pdfGenerator";
 import adminImportRouter from "../routes/admin-import.js";
 import { sdk } from "./sdk";
-import { createAuditLog, getSampleByIdIncludingDeleted, softDeleteSample } from "../db";
+import { createAuditLog, getSampleByIdIncludingDeleted, softDeleteSample, getDb } from "../db";
+import { ensureConcreteCubeTestConditionColumns } from "../migrations/ensureConcreteCubeTestConditionColumns";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -36,6 +37,15 @@ async function findAvailablePort(startPort: number = 3000): Promise<number> {
 }
 
 async function startServer() {
+  const db = await getDb();
+  if (db) {
+    try {
+      await ensureConcreteCubeTestConditionColumns(db);
+    } catch (err) {
+      console.error("[schema] concrete_test_groups column ensure failed:", err);
+    }
+  }
+
   const app = express();
   const server = createServer(app);
   // Configure body parser with larger size limit for file uploads

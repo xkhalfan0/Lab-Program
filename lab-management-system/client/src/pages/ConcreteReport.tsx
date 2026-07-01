@@ -370,9 +370,7 @@ export function ConcreteCubeReportPage({
 
       {/* Detailed Results */}
       <div className="mb-5">
-        <h3 className="text-xs font-bold text-gray-900 uppercase border-b border-gray-300 pb-1 mb-3">
-          {ar ? "النتائج التفصيلية" : "Detailed Results"}
-        </h3>
+        <ReportInfoHeading>{ar ? "النتائج التفصيلية" : "Detailed Results"}</ReportInfoHeading>
 
         <div className="grid grid-cols-3 gap-2 mb-4">
           <div
@@ -511,9 +509,7 @@ export function ConcreteCubeReportPage({
       <div className={embedInBatch ? undefined : LAB_PRINT_TAIL_CLASS}>
       {/* Notes */}
       <div className="mb-5 print:mb-2">
-        <h3 className="text-xs font-bold text-gray-900 uppercase border-b border-gray-300 pb-1 mb-2">
-          {ar ? "ملاحظات" : "Notes"}
-        </h3>
+        <ReportInfoHeading>{ar ? "ملاحظات" : "Notes"}</ReportInfoHeading>
         <p
           className={`text-xs border rounded p-3 ${
             userRemarks ? "text-gray-900 bg-gray-50" : "text-gray-900 bg-gray-50"
