@@ -6,6 +6,12 @@ import { readFileAsBase64 } from "@/lib/sampleFileUpload";
 import { ReceptionDynamicEntryFields } from "@/components/ReceptionDynamicEntryFields";
 import { ReceptionRetestPanel } from "@/components/ReceptionRetestPanel";
 import {
+  ReceptionProgressRail,
+  ReceptionSidebarChecklist,
+  ReceptionStepPanel,
+  type ReceptionStepStatus,
+} from "@/components/ReceptionRegisterSteps";
+import {
   ReceptionNominalCubeSizePanel,
   isValidNominalCubeSize,
 } from "@/components/ReceptionNominalCubeSizePanel";
@@ -35,15 +41,16 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { trpc } from "@/lib/trpc";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Search, Printer, Pencil, X, Trash2, CheckSquare, Package, CalendarIcon, AlertTriangle, ClipboardList, PackagePlus, RotateCcw } from "lucide-react";
+import { Search, Printer, Pencil, X, Trash2, CheckSquare, Package, CalendarIcon, AlertTriangle, ClipboardList, PackagePlus, RotateCcw, Box, Mountain, Building2, Layers, Grid3x3, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useState, useMemo, useEffect, useRef, type ReactElement, type ReactNode } from "react";
+import { useState, useMemo, useEffect, useRef, type ReactElement } from "react";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import { useAuth } from "@/_core/hooks/useAuth";
@@ -156,11 +163,11 @@ const SUBTYPES_BY_CODE: Record<string, { value: string; labelAr: string; labelEn
 const MIN_CONC_BLOCK_COUNT = 10;
 
 const CATEGORIES = [
-  { value: "concrete", labelAr: "خرسانة", labelEn: "Concrete" },
-  { value: "soil", labelAr: "تربة", labelEn: "Soil" },
-  { value: "steel", labelAr: "حديد", labelEn: "Steel" },
-  { value: "asphalt", labelAr: "أسفلت", labelEn: "Asphalt" },
-  { value: "aggregates", labelAr: "ركام", labelEn: "Aggregates" },
+  { value: "concrete", labelAr: "خرسانة", labelEn: "Concrete", icon: Box },
+  { value: "soil", labelAr: "تربة", labelEn: "Soil", icon: Mountain },
+  { value: "steel", labelAr: "حديد", labelEn: "Steel", icon: Building2 },
+  { value: "asphalt", labelAr: "أسفلت", labelEn: "Asphalt", icon: Layers },
+  { value: "aggregates", labelAr: "ركام", labelEn: "Aggregates", icon: Grid3x3 },
 ];
 
 // Tests that use casting date
@@ -227,39 +234,6 @@ const emptyForm = () => ({
   castingDate: undefined as Date | undefined,
   priority: "normal" as "low" | "normal" | "high" | "urgent",
 });
-
-function FormSection({
-  title,
-  step,
-  subtitle,
-  children,
-  className,
-}: {
-  title?: string;
-  step?: number;
-  subtitle?: string;
-  children: ReactNode;
-  className?: string;
-}) {
-  return (
-    <section className={cn("space-y-4 text-start", className)}>
-      {title ? (
-        <div className="space-y-1 text-start">
-          <h3 className="text-base font-semibold tracking-tight text-foreground flex items-center gap-2.5 rtl:flex-row-reverse">
-            {step != null && (
-              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs font-bold">
-                {step}
-              </span>
-            )}
-            {title}
-          </h3>
-          {subtitle ? <p className="text-xs text-muted-foreground ms-9 text-start">{subtitle}</p> : null}
-        </div>
-      ) : null}
-      {children}
-    </section>
-  );
-}
 
 function ReceptionOrderActionsCell({
   order,
@@ -391,6 +365,9 @@ export default function Reception() {
   const [aggregateType, setAggregateType] = useState("");
   const [entryData, setEntryData] = useState<Record<string, string>>({});
   const [contractorFormFile, setContractorFormFile] = useState<File | null>(null);
+  const [focusedStep, setFocusedStep] = useState(1);
+  const [step2Done, setStep2Done] = useState(false);
+  const [sampleSearchOpen, setSampleSearchOpen] = useState(false);
   const concCubePanelRef = useRef<HTMLDivElement>(null);
 
   const minQtyForTest = (code: string) => (code === "CONC_CUBE" ? MIN_CONC_CUBE_COUNT : 1);
@@ -477,6 +454,8 @@ export default function Reception() {
     setEntryData({});
     setFoamConcreteAge("");
     setContractorFormFile(null);
+    setFocusedStep(1);
+    setStep2Done(false);
   };
 
   const uploadAttachment = trpc.attachments.upload.useMutation();
@@ -1042,6 +1021,39 @@ export default function Reception() {
   const isConcCore = selectedTests.some(t => t.testTypeCode === "CONC_CORE");
   const contractSelected = !!form.contractId;
   const hasSelectedTests = selectedTests.length > 0;
+  const step1Complete = contractSelected && !!form.sectorKey;
+  const step3Complete = !!form.sampleType && hasSelectedTests;
+  const uiLang = lang === "ar" ? "ar" : "en";
+
+  const canOpenStep = (step: number) => {
+    if (step === 1) return true;
+    if (step === 2 || step === 3) return step1Complete;
+    if (step === 4) return step1Complete && step3Complete;
+    return false;
+  };
+
+  const stepComplete = (step: number) => {
+    if (step === 1) return step1Complete;
+    if (step === 2) return step2Done || step3Complete || focusedStep > 2;
+    if (step === 3) return step3Complete;
+    return false;
+  };
+
+  const stepStatus = (step: number): ReceptionStepStatus => {
+    if (!canOpenStep(step)) return "locked";
+    if (focusedStep === step) return "active";
+    if (stepComplete(step)) return "done";
+    return "ready";
+  };
+
+  const step1Summary =
+    step1Complete && form.contractNumber
+      ? `${form.contractNumber}${form.sectorKey ? ` · ${sectorLabel(form.sectorKey)}` : ""}`
+      : undefined;
+  const step2Summary = stepComplete(2)
+    ? form.referenceNo?.trim() || contractorFormFile?.name || (lang === "ar" ? "بدون مستندات" : "No documents")
+    : undefined;
+
   const getSelectedGroups = () => {
     const groups = new Set<string>();
     selectedTests.forEach(t => {
@@ -1277,6 +1289,33 @@ export default function Reception() {
     return type;
   };
 
+  const step3Summary =
+    step3Complete && form.sampleType
+      ? `${typeLabel(form.sampleType)} · ${selectedTests.length} ${lang === "ar" ? "اختبار" : "test(s)"}`
+      : undefined;
+
+  const sidebarChecklist = [
+    {
+      label: lang === "ar" ? "العقد والقطاع" : "Contract & sector",
+      done: step1Complete,
+      hint: lang === "ar" ? "اختر العقد والقطاع" : "Pick contract and sector",
+    },
+    {
+      label: lang === "ar" ? "اختبار واحد على الأقل" : "At least one test",
+      done: step3Complete,
+      hint: lang === "ar" ? "اختر المادة والاختبار" : "Choose material and test(s)",
+    },
+    {
+      label: lang === "ar" ? "بيانات العينة" : "Sample details",
+      done: step3Complete && !missingConcCubeSize && !hasInvalidQtyTests,
+      hint: missingConcCubeSize
+        ? (lang === "ar" ? "حدد حجم المكعب" : "Set nominal cube size")
+        : hasInvalidQtyTests
+          ? (lang === "ar" ? "صحّح الكميات" : "Fix test quantities")
+          : (lang === "ar" ? "أكمل الحقول المطلوبة" : "Fill required fields"),
+    },
+  ];
+
   const totalPrice = selectedTests.reduce((sum, t) => {
     if (MULTI_SUBTYPE_TESTS.includes(t.testTypeCode) && t.testSubType === "__multi__") {
       const subtypeMap = multiSubtypes[t.testTypeId] ?? {};
@@ -1427,43 +1466,57 @@ export default function Reception() {
               </div>
             </div>
 
-            {/* Search — sample lookup (new registration only) */}
+            {/* Sample lookup — collapsed by default so registration stays the focus */}
             {receptionMode === "new" && (
-            <>
-            <div className="relative">
-              <Search className="absolute start-3.5 top-1/2 -translate-y-1/2 w-[18px] h-[18px] text-muted-foreground" />
-              <Input
-                placeholder={t("reception.searchPlaceholder")}
-                className="ps-10 h-11 text-base"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-              />
-            </div>
-            {search.trim() && sampleLookupResults.length > 0 && (
-              <div className="rounded-lg border bg-muted/20 divide-y text-sm">
-                {sampleLookupResults.map((order: any) => (
-                  <div key={order.sampleId} className="flex items-center justify-between gap-3 px-3 py-2">
-                    <div className="min-w-0">
-                      <span className="font-mono font-semibold text-primary">{order.sampleCode}</span>
-                      <span className="text-muted-foreground text-xs ms-2">{order.contractorName}</span>
-                      <RetestBadge
-                        retestNumber={order.retestNumber}
-                        originalSampleId={order.originalSampleId}
-                        originalSampleCode={order.originalSampleCode}
-                        retestReason={order.retestReason}
-                        compact
-                      />
-                    </div>
-                    <div className="flex gap-1 shrink-0">
-                      <Button type="button" variant="ghost" size="sm" className="h-7 px-2" onClick={() => window.open(`/print-receipt/${order.sampleId}?lang=${lang}`, "_blank")}>
-                        <Printer className="w-3.5 h-3.5" />
-                      </Button>
-                    </div>
+              <Collapsible open={sampleSearchOpen} onOpenChange={setSampleSearchOpen}>
+                <CollapsibleTrigger asChild>
+                  <button
+                    type="button"
+                    className="flex w-full items-center justify-between gap-2 rounded-lg border border-dashed border-slate-200 bg-slate-50/50 px-4 py-2.5 text-sm text-muted-foreground hover:bg-slate-50 hover:text-foreground transition-colors"
+                  >
+                    <span className="flex items-center gap-2">
+                      <Search className="h-4 w-4 shrink-0" />
+                      {lang === "ar" ? "البحث عن عينة موجودة (اختياري)" : "Find an existing sample (optional)"}
+                    </span>
+                    <ChevronDown className={cn("h-4 w-4 shrink-0 transition-transform", sampleSearchOpen && "rotate-180")} />
+                  </button>
+                </CollapsibleTrigger>
+                <CollapsibleContent className="pt-3 space-y-3">
+                  <div className="relative">
+                    <Search className="absolute start-3.5 top-1/2 -translate-y-1/2 w-[18px] h-[18px] text-muted-foreground" />
+                    <Input
+                      placeholder={t("reception.searchPlaceholder")}
+                      className="ps-10 h-11 text-base"
+                      value={search}
+                      onChange={(e) => setSearch(e.target.value)}
+                    />
                   </div>
-                ))}
-              </div>
-            )}
-            </>
+                  {search.trim() && sampleLookupResults.length > 0 && (
+                    <div className="rounded-lg border bg-muted/20 divide-y text-sm max-h-48 overflow-y-auto">
+                      {sampleLookupResults.map((order: any) => (
+                        <div key={order.sampleId} className="flex items-center justify-between gap-3 px-3 py-2">
+                          <div className="min-w-0">
+                            <span className="font-mono font-semibold text-primary">{order.sampleCode}</span>
+                            <span className="text-muted-foreground text-xs ms-2">{order.contractorName}</span>
+                            <RetestBadge
+                              retestNumber={order.retestNumber}
+                              originalSampleId={order.originalSampleId}
+                              originalSampleCode={order.originalSampleCode}
+                              retestReason={order.retestReason}
+                              compact
+                            />
+                          </div>
+                          <div className="flex gap-1 shrink-0">
+                            <Button type="button" variant="ghost" size="sm" className="h-7 px-2" onClick={() => window.open(`/print-receipt/${order.sampleId}?lang=${lang}`, "_blank")}>
+                              <Printer className="w-3.5 h-3.5" />
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </CollapsibleContent>
+              </Collapsible>
             )}
 
         {receptionMode === "retest" ? (
@@ -1491,16 +1544,30 @@ export default function Reception() {
             <Card>
               <CardContent className="p-0">
                 <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] divide-y lg:divide-y-0 lg:divide-x min-h-0">
-                  <div className="p-6 lg:p-7 space-y-7 min-w-0">
-                    {/* Step 1 — Contract */}
-                    <FormSection
+                  <div className="p-6 lg:p-7 space-y-4 min-w-0">
+                    <ReceptionProgressRail
+                      lang={uiLang}
+                      focusedStep={focusedStep}
+                      stepComplete={stepComplete}
+                      canOpenStep={canOpenStep}
+                      onStepClick={setFocusedStep}
+                    />
+
+                    <ReceptionStepPanel
                       step={1}
+                      lang={uiLang}
                       title={lang === "ar" ? "العقد" : "Contract"}
                       subtitle={
                         lang === "ar"
                           ? "اختر رقم العقد — يُعبّأ المقاول تلقائياً"
                           : "Select the contract — contractor fills in automatically"
                       }
+                      status={stepStatus(1)}
+                      summary={step1Summary}
+                      onEdit={() => setFocusedStep(1)}
+                      onContinue={() => setFocusedStep(2)}
+                      continueDisabled={!step1Complete}
+                      continueLabel={lang === "ar" ? "متابعة إلى المستندات" : "Continue to documents"}
                     >
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div className="space-y-2 sm:col-span-2">
@@ -1547,89 +1614,100 @@ export default function Reception() {
                           </>
                         )}
                       </div>
-                    </FormSection>
+                    </ReceptionStepPanel>
 
-                    {/* Step 2 — Contractor form scan */}
-                    <FormSection
+                    <ReceptionStepPanel
                       step={2}
+                      lang={uiLang}
                       title={lang === "ar" ? "نموذج المقاول" : "Contractor form"}
                       subtitle={
                         lang === "ar"
                           ? "ارفع مسح نموذج المقاول (اختياري)"
                           : "Upload the contractor form scan (optional)"
                       }
-                      className="border-t pt-6"
+                      status={stepStatus(2)}
+                      summary={step2Summary}
+                      onEdit={() => setFocusedStep(2)}
+                      onSkip={() => {
+                        setStep2Done(true);
+                        setFocusedStep(3);
+                      }}
+                      skipLabel={lang === "ar" ? "تخطي — لا مستندات" : "Skip — no documents"}
+                      onContinue={() => {
+                        setStep2Done(true);
+                        setFocusedStep(3);
+                      }}
+                      continueLabel={lang === "ar" ? "متابعة إلى الاختبارات" : "Continue to tests"}
                     >
-                      {!contractSelected ? (
-                        <p className="text-sm text-muted-foreground rounded-lg border border-dashed px-4 py-3">
-                          {lang === "ar" ? "اختر العقد أولاً" : "Select a contract first"}
-                        </p>
-                      ) : (
-                        <div className="space-y-4">
-                          <div className="space-y-2">
-                            <Label className="text-[15px]">
-                              {t("reception.referenceNo")}
-                              <span className="text-muted-foreground text-xs font-normal ms-1">
-                                ({lang === "ar" ? "اختياري" : "optional"})
-                              </span>
-                            </Label>
-                            <Input
-                              className="h-10 text-base"
-                              placeholder={lang === "ar" ? "مرجع المقاول / RFQ / MTS..." : "Contractor ref., RFQ, MTS..."}
-                              value={form.referenceNo}
-                              onChange={(e) => setForm({ ...form, referenceNo: e.target.value.replace(/\s/g, "") })}
-                            />
-                          </div>
-                          <ReceptionContractorFormUpload
-                            file={contractorFormFile}
-                            onFileChange={setContractorFormFile}
-                            lang={lang}
-                            disabled={createOrder.isPending || uploadAttachment.isPending}
+                      <div className="space-y-4">
+                        <div className="space-y-2">
+                          <Label className="text-[15px]">
+                            {t("reception.referenceNo")}
+                            <span className="text-muted-foreground text-xs font-normal ms-1">
+                              ({lang === "ar" ? "اختياري" : "optional"})
+                            </span>
+                          </Label>
+                          <Input
+                            className="h-10 text-base"
+                            placeholder={lang === "ar" ? "مرجع المقاول / RFQ / MTS..." : "Contractor ref., RFQ, MTS..."}
+                            value={form.referenceNo}
+                            onChange={(e) => setForm({ ...form, referenceNo: e.target.value.replace(/\s/g, "") })}
                           />
                         </div>
-                      )}
-                    </FormSection>
+                        <ReceptionContractorFormUpload
+                          file={contractorFormFile}
+                          onFileChange={setContractorFormFile}
+                          lang={lang}
+                          disabled={createOrder.isPending || uploadAttachment.isPending}
+                        />
+                      </div>
+                    </ReceptionStepPanel>
 
-                    {/* Step 3 — Choose tests */}
-                    <FormSection
+                    <ReceptionStepPanel
                       step={3}
+                      lang={uiLang}
                       title={lang === "ar" ? "اختيار الاختبار" : "Choose test"}
                       subtitle={
                         lang === "ar"
                           ? "اختر نوع المادة ثم الاختبار/الاختبارات المطلوبة"
                           : "Pick material type, then select the required test(s)"
                       }
-                      className="border-t pt-6"
+                      status={stepStatus(3)}
+                      summary={step3Summary}
+                      onEdit={() => setFocusedStep(3)}
+                      onContinue={() => setFocusedStep(4)}
+                      continueDisabled={!step3Complete}
+                      continueLabel={lang === "ar" ? "متابعة إلى التفاصيل" : "Continue to details"}
                     >
-                      {!contractSelected ? (
-                        <p className="text-sm text-muted-foreground rounded-lg border border-dashed px-4 py-6 text-center">
-                          {lang === "ar" ? "اختر العقد أولاً لعرض الاختبارات" : "Select a contract first to choose tests"}
-                        </p>
-                      ) : (
                       <div className="space-y-4">
                         <div className="space-y-2">
                           <Label className="text-[15px]">{lang === "ar" ? "نوع المادة" : "Material"} <span className="text-red-500">*</span></Label>
-                          <div className="flex flex-wrap gap-2">
-                            {CATEGORIES.map(cat => (
-                              <button
-                                key={cat.value}
-                                type="button"
-                                onClick={() => {
-                                  setForm(f => ({ ...f, sampleType: cat.value }));
-                                  setSelectedTests([]);
-                                  setSubtypeFor(null);
-                                  setAsphaltKind("");
-                                }}
-                                className={cn(
-                                  "px-4 py-2 rounded-lg text-sm font-medium border transition-colors",
-                                  form.sampleType === cat.value
-                                    ? "bg-primary text-primary-foreground border-primary shadow-sm"
-                                    : "bg-background border-border text-muted-foreground hover:border-primary/50 hover:text-foreground"
-                                )}
-                              >
-                                {lang === "ar" ? cat.labelAr : cat.labelEn}
-                              </button>
-                            ))}
+                          <div className="flex flex-wrap gap-2.5">
+                            {CATEGORIES.map(cat => {
+                              const CatIcon = cat.icon;
+                              const selected = form.sampleType === cat.value;
+                              return (
+                                <button
+                                  key={cat.value}
+                                  type="button"
+                                  onClick={() => {
+                                    setForm(f => ({ ...f, sampleType: cat.value }));
+                                    setSelectedTests([]);
+                                    setSubtypeFor(null);
+                                    setAsphaltKind("");
+                                  }}
+                                  className={cn(
+                                    "inline-flex items-center gap-2.5 px-5 py-3 rounded-xl text-sm font-semibold border-2 transition-all",
+                                    selected
+                                      ? "bg-primary text-primary-foreground border-primary shadow-md scale-[1.02]"
+                                      : "bg-white border-slate-200 text-slate-600 hover:border-primary/40 hover:bg-slate-50",
+                                  )}
+                                >
+                                  <CatIcon className="h-5 w-5 shrink-0" />
+                                  {lang === "ar" ? cat.labelAr : cat.labelEn}
+                                </button>
+                              );
+                            })}
                           </div>
                         </div>
 
@@ -1729,28 +1807,28 @@ export default function Reception() {
                 )}
 
                     {!form.sampleType && (
-                      <p className="text-base text-muted-foreground text-center py-6">
-                        {lang === "ar" ? "اختر نوع المادة لعرض الاختبارات" : "Select a material type to see available tests"}
+                      <p className="text-base text-muted-foreground text-center py-8 rounded-xl border border-dashed bg-slate-50/50">
+                        {lang === "ar" ? "اختر نوع المادة أعلاه لعرض الاختبارات" : "Pick a material above to see available tests"}
                       </p>
                     )}
                       </div>
-                      )}
-                    </FormSection>
+                    </ReceptionStepPanel>
 
-                    {/* Step 4 — Reception entry data (test-specific fields) */}
-                    <FormSection
+                    <ReceptionStepPanel
                       step={4}
+                      lang={uiLang}
                       title={lang === "ar" ? "تفاصيل العينة" : "Sample details"}
                       subtitle={
                         lang === "ar"
                           ? "أدخل تفاصيل العينة حسب الاختبار/الاختبارات المختارة"
                           : "Enter sample details required for the selected test(s)"
                       }
-                      className="border-t pt-6"
+                      status={stepStatus(4)}
+                      onEdit={() => setFocusedStep(4)}
                     >
                       {!hasSelectedTests ? (
-                        <p className="text-sm text-muted-foreground rounded-lg border border-dashed px-4 py-6 text-center">
-                          {lang === "ar" ? "اختر اختباراً واحداً على الأقل لإدخال البيانات" : "Select at least one test to enter sample details"}
+                        <p className="text-sm text-muted-foreground rounded-xl border border-dashed bg-slate-50/50 px-4 py-8 text-center">
+                          {lang === "ar" ? "أكمل خطوة الاختبارات أولاً" : "Complete the tests step first"}
                         </p>
                       ) : (
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -1909,10 +1987,22 @@ export default function Reception() {
                         />
                       </div>
                       )}
-                    </FormSection>
+                    </ReceptionStepPanel>
                   </div>
 
                   <aside className="p-6 lg:p-7 bg-muted/20 space-y-5 lg:sticky lg:top-6 lg:z-10 lg:self-start lg:max-h-[calc(100vh-3rem)] lg:overflow-y-auto">
+                    <ReceptionSidebarChecklist lang={uiLang} items={sidebarChecklist} />
+
+                    {step1Complete && (
+                      <div className="rounded-xl border bg-white p-4 space-y-2 text-sm">
+                        <p className="font-semibold text-foreground truncate">{form.contractNumber}</p>
+                        <p className="text-muted-foreground truncate">{form.contractorName || "—"}</p>
+                        {form.sectorKey && (
+                          <p className="text-xs text-primary font-medium">{sectorLabel(form.sectorKey)}</p>
+                        )}
+                      </div>
+                    )}
+
                     <div className="space-y-2">
                       <p className="text-sm text-muted-foreground">{lang === "ar" ? "رمز العينة" : "Sample code"}</p>
                       <p className="font-mono text-base text-muted-foreground">{lang === "ar" ? "يُولَّد تلقائياً" : "Auto on save"}</p>
@@ -1920,7 +2010,7 @@ export default function Reception() {
                     <div className="space-y-3 text-base border-t pt-4">
                       <div className="flex justify-between gap-2">
                         <span className="text-muted-foreground">{lang === "ar" ? "المادة" : "Material"}</span>
-                        <span className="font-medium">{form.sampleType ? typeLabel(form.sampleType) : "—"}</span>
+                        <span className="font-medium text-end">{form.sampleType ? typeLabel(form.sampleType) : "—"}</span>
                       </div>
                       <div className="flex justify-between gap-2">
                         <span className="text-muted-foreground">{lang === "ar" ? "الاختبارات" : "Tests"}</span>
@@ -1931,6 +2021,13 @@ export default function Reception() {
                         <span className="text-primary">{totalPrice > 0 ? `${totalPrice.toFixed(0)} AED` : "—"}</span>
                       </div>
                     </div>
+                    {focusedStep < 4 && (
+                      <p className="text-xs text-muted-foreground text-center">
+                        {lang === "ar"
+                          ? "أكمل الخطوات على اليسار — زر التسجيل يُفعَّل عند إكمال التفاصيل"
+                          : "Finish the steps on the left — register unlocks when details are complete"}
+                      </p>
+                    )}
                     {hasInvalidQtyTests && selectedTests.length > 0 && (
                       <p className="text-sm text-amber-700">{lang === "ar" ? "أصلح الكميات أولاً" : "Fix quantities first"}</p>
                     )}
