@@ -18,6 +18,7 @@ import {
   ReviewDialogShell,
   ReviewNotesField,
   ReviewReportAction,
+  ReviewSection,
   ReviewSignatureField,
   ReviewStatusNotice,
   ReviewTimeline,
@@ -505,20 +506,24 @@ function ClearanceQCSection() {
           {selectedReq ? (
             <>
               <ReviewDialogBody>
-                {/* Stats — unique to modal, not on list card */}
-                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                  {[
-                    { label: lang === "ar" ? "الاختبارات" : "Tests", value: selectedReq.totalTests, color: "text-slate-800" },
-                    { label: lang === "ar" ? "مطابق" : "Pass", value: selectedReq.passedTests, color: "text-green-700" },
-                    { label: lang === "ar" ? "غير مطابق" : "Fail", value: selectedReq.failedTests, color: "text-red-700" },
-                    { label: lang === "ar" ? "AED" : "AED", value: Number(selectedReq.totalAmount).toFixed(0), color: "text-blue-700" },
-                  ].map((s) => (
-                    <div key={s.label} className="rounded-xl border bg-slate-50/80 px-3 py-2.5 text-center">
-                      <div className={`text-lg font-bold tabular-nums ${s.color}`}>{s.value}</div>
-                      <div className="text-[11px] text-muted-foreground">{s.label}</div>
-                    </div>
-                  ))}
-                </div>
+                <ReviewSection
+                  title={lang === "ar" ? "ملخص الطلب" : "Request Summary"}
+                  description={lang === "ar" ? "إحصائيات الاختبارات والمبالغ" : "Test counts and amounts"}
+                >
+                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                    {[
+                      { label: lang === "ar" ? "الاختبارات" : "Tests", value: selectedReq.totalTests, color: "text-slate-800" },
+                      { label: lang === "ar" ? "مطابق" : "Pass", value: selectedReq.passedTests, color: "text-green-700" },
+                      { label: lang === "ar" ? "غير مطابق" : "Fail", value: selectedReq.failedTests, color: "text-red-700" },
+                      { label: lang === "ar" ? "AED" : "AED", value: Number(selectedReq.totalAmount).toFixed(0), color: "text-blue-700" },
+                    ].map((s) => (
+                      <div key={s.label} className="rounded-xl border bg-slate-50/80 px-4 py-3 text-center">
+                        <div className={`text-2xl font-bold tabular-nums ${s.color}`}>{s.value}</div>
+                        <div className="mt-0.5 text-sm text-muted-foreground">{s.label}</div>
+                      </div>
+                    ))}
+                  </div>
+                </ReviewSection>
 
               {/* Inventory Table */}
               {inventory.length > 0 && (() => {
@@ -549,34 +554,37 @@ function ClearanceQCSection() {
                   return Object.values(m);
                 };
                 return (
-                  <div className="space-y-3">
-                    <p className="text-xs font-semibold">{lang === "ar" ? "قائمة الاختبارات" : "Test Inventory"}</p>
+                  <ReviewSection
+                    title={lang === "ar" ? "قائمة الاختبارات" : "Test Inventory"}
+                    description={lang === "ar" ? "تفاصيل الاختبارات حسب الفئة" : "Breakdown by test category"}
+                  >
+                    <div className="space-y-3">
                     {Object.entries(grouped).map(([cat, items]) => {
                       const catLabel = CATEGORY_LABELS[cat] ?? { en: cat, ar: cat, badgeClass: "bg-slate-100 text-slate-800 border-slate-200" };
                       const rows = countByType(items);
                       return (
-                        <div key={cat} className="border rounded-lg overflow-hidden">
-                          <div className={`px-3 py-1.5 text-xs font-semibold border-b ${catLabel.badgeClass}`}>
+                        <div key={cat} className="overflow-hidden rounded-xl border">
+                          <div className={`border-b px-4 py-2 text-sm font-bold ${catLabel.badgeClass}`}>
                             {lang === "ar" ? catLabel.ar : catLabel.en}
                           </div>
-                          <table className="w-full text-xs">
+                          <table className="w-full text-sm">
                             <thead className="bg-muted/30">
                               <tr>
-                                <th className="text-start px-3 py-1.5">{lang === "ar" ? "نوع الاختبار" : "Test Type"}</th>
-                                <th className="text-center px-2 py-1.5">{lang === "ar" ? "العدد" : "Count"}</th>
-                                <th className="text-center px-2 py-1.5">{lang === "ar" ? "ناجح" : "Pass"}</th>
-                                <th className="text-center px-2 py-1.5">{lang === "ar" ? "راسب" : "Fail"}</th>
-                                <th className="text-end px-3 py-1.5">{lang === "ar" ? "المبلغ" : "Amount"}</th>
+                                <th className="px-4 py-2.5 text-start text-xs font-semibold uppercase tracking-wide text-muted-foreground">{lang === "ar" ? "نوع الاختبار" : "Test Type"}</th>
+                                <th className="px-3 py-2.5 text-center text-xs font-semibold uppercase tracking-wide text-muted-foreground">{lang === "ar" ? "العدد" : "Count"}</th>
+                                <th className="px-3 py-2.5 text-center text-xs font-semibold uppercase tracking-wide text-muted-foreground">{lang === "ar" ? "ناجح" : "Pass"}</th>
+                                <th className="px-3 py-2.5 text-center text-xs font-semibold uppercase tracking-wide text-muted-foreground">{lang === "ar" ? "راسب" : "Fail"}</th>
+                                <th className="px-4 py-2.5 text-end text-xs font-semibold uppercase tracking-wide text-muted-foreground">{lang === "ar" ? "المبلغ" : "Amount"}</th>
                               </tr>
                             </thead>
                             <tbody>
                               {rows.map((r, i) => (
                                 <tr key={i} className="border-t">
-                                  <td className="px-3 py-1.5">{lang === "ar" ? r.nameAr : r.name}</td>
-                                  <td className="text-center px-2 py-1.5">{r.count}</td>
-                                  <td className="text-center px-2 py-1.5 text-green-700 font-medium">{r.pass}</td>
-                                  <td className="text-center px-2 py-1.5 text-red-700 font-medium">{r.fail || "—"}</td>
-                                  <td className="text-end px-3 py-1.5 font-mono">{r.amount.toFixed(2)}</td>
+                                  <td className="px-4 py-2.5 font-medium">{lang === "ar" ? r.nameAr : r.name}</td>
+                                  <td className="px-3 py-2.5 text-center tabular-nums">{r.count}</td>
+                                  <td className="px-3 py-2.5 text-center font-semibold text-green-700 tabular-nums">{r.pass}</td>
+                                  <td className="px-3 py-2.5 text-center font-semibold text-red-700 tabular-nums">{r.fail || "—"}</td>
+                                  <td className="px-4 py-2.5 text-end font-mono tabular-nums">{r.amount.toFixed(2)}</td>
                                 </tr>
                               ))}
                             </tbody>
@@ -584,20 +592,24 @@ function ClearanceQCSection() {
                         </div>
                       );
                     })}
-                  </div>
+                    </div>
+                  </ReviewSection>
                 );
               })()}
 
               {/* Decision */}
               {selectedReq.status === "pending" ? (
-                <>
+                <ReviewSection
+                  title={lang === "ar" ? "قرار ضبط الجودة" : "QC Decision"}
+                  description={lang === "ar" ? "اعتماد أو رفض طلب شهادة براءة الذمة" : "Approve or reject the clearance request"}
+                >
                   <ReviewNotesField
                     lang={lang}
                     decision={null}
                     value={qcNotes}
                     onChange={setQcNotes}
                   />
-                </>
+                </ReviewSection>
               ) : (
                 <ReviewStatusNotice variant="success">
                   {lang === "ar" ? "تمت مراجعة هذا الطلب." : "This request has already been reviewed."}
@@ -605,22 +617,24 @@ function ClearanceQCSection() {
               )}
               </ReviewDialogBody>
               {selectedReq.status === "pending" && (
-                <div className="sticky bottom-0 flex gap-2 border-t bg-white/95 px-5 py-3 backdrop-blur-sm">
+                <div className="sticky bottom-0 flex gap-3 border-t bg-white/95 px-6 py-4 backdrop-blur-sm">
                   <Button
-                    className="flex-1 bg-green-600 hover:bg-green-700"
+                    size="lg"
+                    className="flex-1 bg-green-600 text-base hover:bg-green-700"
                     disabled={qcReview.isPending}
                     onClick={() => qcReview.mutate({ id: selectedReq.id, approved: true, notes: qcNotes || undefined })}
                   >
                     {qcReview.isPending ? (lang === "ar" ? "جاري..." : "Submitting...") : (lang === "ar" ? "اعتماد QC" : "QC Approve")}
                   </Button>
                   <Button
-                    className="flex-1 bg-red-600 hover:bg-red-700"
+                    size="lg"
+                    className="flex-1 bg-red-600 text-base hover:bg-red-700"
                     disabled={qcReview.isPending}
                     onClick={() => qcReview.mutate({ id: selectedReq.id, approved: false, notes: qcNotes || undefined })}
                   >
                     {lang === "ar" ? "رفض" : "Reject"}
                   </Button>
-                  <Button variant="outline" onClick={() => { setReviewOpen(false); setSelectedReqId(null); }}>
+                  <Button size="lg" variant="outline" className="text-base" onClick={() => { setReviewOpen(false); setSelectedReqId(null); }}>
                     {lang === "ar" ? "إلغاء" : "Cancel"}
                   </Button>
                 </div>
@@ -1071,7 +1085,10 @@ export default function QCReview() {
                   <ReviewReportAction lang={lang} onClick={() => window.open(reportUrl, "_blank")} />
                 )}
 
-                <ReviewTimeline items={timelineItems} />
+                <ReviewTimeline
+                  title={lang === "ar" ? "سجل المراجعات" : "Review History"}
+                  items={timelineItems}
+                />
 
                 {selectedSample?.status === "revision_requested" && (
                   <ReviewStatusNotice variant="warning">
@@ -1093,10 +1110,10 @@ export default function QCReview() {
                       }
                     />
 
-                    <div className="space-y-3">
-                      <p className="text-sm font-semibold">
-                        {lang === "ar" ? "قرار ضبط الجودة" : "Your decision"}
-                      </p>
+                    <ReviewSection
+                      title={lang === "ar" ? "قرار ضبط الجودة" : "Your Decision"}
+                      description={lang === "ar" ? "اختر أحد الخيارات ثم أضف ملاحظاتك" : "Select an option, then add your notes"}
+                    >
                       {wrapDisabledWithTooltip(
                         dialogSamplePending,
                         dialogSampleDisabledWarning,
@@ -1107,21 +1124,25 @@ export default function QCReview() {
                           onSelect={setDecision}
                         />,
                       )}
-                    </div>
+                    </ReviewSection>
 
-                    <ReviewNotesField
-                      lang={lang}
-                      decision={decision}
-                      value={comments}
-                      disabled={dialogSamplePending}
-                      onChange={setComments}
-                    />
+                    <ReviewSection title={lang === "ar" ? "التفاصيل والتوقيع" : "Details & Signature"}>
+                      <div className="space-y-4">
+                        <ReviewNotesField
+                          lang={lang}
+                          decision={decision}
+                          value={comments}
+                          disabled={dialogSamplePending}
+                          onChange={setComments}
+                        />
 
-                    <ReviewSignatureField
-                      lang={lang}
-                      signature={currentUserSignature}
-                      loading={authLoading}
-                    />
+                        <ReviewSignatureField
+                          lang={lang}
+                          signature={currentUserSignature}
+                          loading={authLoading}
+                        />
+                      </div>
+                    </ReviewSection>
                   </>
                 )}
               </ReviewDialogBody>

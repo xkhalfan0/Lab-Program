@@ -19,7 +19,7 @@ import {
 import type { ReactNode } from "react";
 
 export const REVIEW_DIALOG_CLASS =
-  "max-w-lg sm:max-w-xl max-h-[88vh] overflow-hidden flex flex-col gap-0 p-0";
+  "max-w-2xl sm:max-w-3xl lg:max-w-4xl max-h-[92vh] overflow-hidden flex flex-col gap-0 p-0";
 
 export function ReviewDialogShell({
   lang,
@@ -38,14 +38,20 @@ export function ReviewDialogShell({
 }) {
   return (
     <DialogContent className={REVIEW_DIALOG_CLASS} dir={lang === "ar" ? "rtl" : "ltr"}>
-      <DialogHeader className="shrink-0 border-b bg-slate-50/80 px-5 py-4 space-y-0">
-        <DialogTitle className="flex items-center gap-2.5 text-base font-semibold leading-tight">
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-            <Icon className="h-4 w-4" />
+      <DialogHeader className="shrink-0 border-b bg-slate-50/90 px-6 py-5 space-y-0">
+        <DialogTitle className="flex items-center gap-4 text-base font-semibold leading-tight">
+          <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+            <Icon className="h-6 w-6" />
           </span>
           <span className="min-w-0 flex-1">
-            <span className="block text-[13px] font-medium text-muted-foreground">{title}</span>
-            {code && <span className="font-mono text-sm font-bold text-foreground">{code}</span>}
+            <span className="block text-sm font-medium uppercase tracking-wide text-muted-foreground">
+              {title}
+            </span>
+            {code && (
+              <span className="mt-0.5 block font-mono text-xl font-bold tracking-tight text-foreground">
+                {code}
+              </span>
+            )}
           </span>
           {badge}
         </DialogTitle>
@@ -56,15 +62,38 @@ export function ReviewDialogShell({
 }
 
 export function ReviewDialogBody({ children }: { children: ReactNode }) {
-  return <div className="space-y-4 px-5 py-4">{children}</div>;
+  return <div className="space-y-6 px-6 py-5">{children}</div>;
+}
+
+/** Section heading inside the dialog body — creates clear visual hierarchy. */
+export function ReviewSection({
+  title,
+  description,
+  children,
+}: {
+  title: string;
+  description?: string;
+  children: ReactNode;
+}) {
+  return (
+    <section className="space-y-3">
+      <div className="border-b border-slate-100 pb-2">
+        <h3 className="text-base font-bold tracking-tight text-foreground">{title}</h3>
+        {description && (
+          <p className="mt-0.5 text-sm leading-relaxed text-muted-foreground">{description}</p>
+        )}
+      </div>
+      {children}
+    </section>
+  );
 }
 
 export function ReviewDialogLoading({ lang }: { lang: string }) {
   return (
     <ReviewDialogBody>
-      <div className="flex flex-col items-center justify-center py-10 text-center">
-        <div className="mb-3 h-8 w-8 animate-spin rounded-full border-[3px] border-primary border-t-transparent" />
-        <p className="text-sm text-muted-foreground">
+      <div className="flex flex-col items-center justify-center py-12 text-center">
+        <div className="mb-4 h-10 w-10 animate-spin rounded-full border-[3px] border-primary border-t-transparent" />
+        <p className="text-base text-muted-foreground">
           {lang === "ar" ? "جاري تحميل النتائج..." : "Loading results..."}
         </p>
       </div>
@@ -83,16 +112,16 @@ export function ReviewReportAction({
     <button
       type="button"
       onClick={onClick}
-      className="group flex w-full items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 text-start shadow-sm transition-all hover:border-primary/30 hover:bg-primary/[0.03] hover:shadow"
+      className="group flex w-full items-center gap-4 rounded-xl border border-slate-200 bg-white px-5 py-4 text-start shadow-sm transition-all hover:border-primary/30 hover:bg-primary/[0.03] hover:shadow-md"
     >
-      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-blue-600 group-hover:bg-blue-100">
-        <ExternalLink className="h-4 w-4" />
+      <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600 group-hover:bg-blue-100">
+        <ExternalLink className="h-5 w-5" />
       </span>
       <span className="min-w-0 flex-1">
-        <span className="block text-sm font-semibold text-foreground">
+        <span className="block text-base font-bold text-foreground">
           {lang === "ar" ? "فتح تقرير الاختبار" : "Open Test Report"}
         </span>
-        <span className="block text-xs text-muted-foreground">
+        <span className="mt-0.5 block text-sm text-muted-foreground">
           {lang === "ar" ? "عرض النتائج الكاملة في نافذة جديدة" : "View full results in a new tab"}
         </span>
       </span>
@@ -136,8 +165,10 @@ const TIMELINE_STYLES: Record<TimelineKind, { dot: string; border: string; bg: s
 };
 
 export function ReviewTimeline({
+  title,
   items,
 }: {
+  title?: string;
   items: Array<{
     id: string | number;
     kind: TimelineKind;
@@ -151,42 +182,44 @@ export function ReviewTimeline({
 }) {
   if (!items.length) return null;
   return (
-    <div className="space-y-2">
-      {items.map((item) => {
-        const style = TIMELINE_STYLES[item.kind];
-        return (
-          <div
-            key={item.id}
-            className={`relative rounded-xl border ${style.border} ${style.bg} px-4 py-3 ps-8`}
-          >
-            <span className={`absolute start-3 top-4 h-2 w-2 rounded-full ${style.dot}`} />
-            <p className={`text-xs font-semibold ${style.title}`}>{item.title}</p>
-            {item.decision && (
-              <p className="mt-1 text-sm">
-                <span className="text-muted-foreground">
-                  {item.lang === "ar" ? "القرار: " : "Decision: "}
-                </span>
-                <span className="font-medium capitalize">{item.decision.replace(/_/g, " ")}</span>
-              </p>
-            )}
-            {item.comments && (
-              <p className="mt-1 text-sm text-foreground/90 leading-relaxed">{item.comments}</p>
-            )}
-            {item.signature && (
-              <p className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-0.5 border-t border-black/5 pt-2 text-xs text-muted-foreground">
-                <UserCheck className="h-3.5 w-3.5 shrink-0" />
-                <span className="font-medium text-foreground/80">{item.signature}</span>
-                {item.date && (
-                  <span>
-                    · {new Date(item.date).toLocaleDateString(item.lang === "ar" ? "ar-AE" : "en-GB")}
+    <ReviewSection title={title ?? (items[0]?.lang === "ar" ? "سجل المراجعات" : "Review History")}>
+      <div className="space-y-3">
+        {items.map((item) => {
+          const style = TIMELINE_STYLES[item.kind];
+          return (
+            <div
+              key={item.id}
+              className={`relative rounded-xl border ${style.border} ${style.bg} px-5 py-4 ps-9`}
+            >
+              <span className={`absolute start-3.5 top-5 h-2.5 w-2.5 rounded-full ${style.dot}`} />
+              <p className={`text-sm font-bold uppercase tracking-wide ${style.title}`}>{item.title}</p>
+              {item.decision && (
+                <p className="mt-2 text-base">
+                  <span className="text-sm text-muted-foreground">
+                    {item.lang === "ar" ? "القرار: " : "Decision: "}
                   </span>
-                )}
-              </p>
-            )}
-          </div>
-        );
-      })}
-    </div>
+                  <span className="font-semibold capitalize">{item.decision.replace(/_/g, " ")}</span>
+                </p>
+              )}
+              {item.comments && (
+                <p className="mt-2 text-sm leading-relaxed text-foreground/90">{item.comments}</p>
+              )}
+              {item.signature && (
+                <p className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-0.5 border-t border-black/5 pt-3 text-sm text-muted-foreground">
+                  <UserCheck className="h-4 w-4 shrink-0" />
+                  <span className="font-semibold text-foreground/80">{item.signature}</span>
+                  {item.date && (
+                    <span>
+                      · {new Date(item.date).toLocaleDateString(item.lang === "ar" ? "ar-AE" : "en-GB")}
+                    </span>
+                  )}
+                </p>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </ReviewSection>
   );
 }
 
@@ -209,8 +242,8 @@ export function ReviewStatusNotice({
   };
   const Icon = icons[variant];
   return (
-    <div className={`flex gap-3 rounded-xl border px-4 py-3 text-sm leading-relaxed ${styles[variant]}`}>
-      <Icon className="mt-0.5 h-4 w-4 shrink-0 opacity-70" />
+    <div className={`flex gap-3 rounded-xl border px-5 py-4 text-base leading-relaxed ${styles[variant]}`}>
+      <Icon className="mt-0.5 h-5 w-5 shrink-0 opacity-70" />
       <div>{children}</div>
     </div>
   );
@@ -233,7 +266,7 @@ export function ReviewDecisionTiles({
       icon: CheckSquare,
       label: lang === "ar" ? "اعتماد" : "Approve",
       hint: lang === "ar" ? "النتيجة مقبولة" : "Result accepted",
-      active: "border-green-500 bg-green-50 text-green-800 shadow-sm",
+      active: "border-green-500 bg-green-50 text-green-800 shadow-md",
       idle: "border-slate-200 hover:border-green-300 hover:bg-green-50/40",
       iconActive: "text-green-600",
     },
@@ -242,7 +275,7 @@ export function ReviewDecisionTiles({
       icon: RotateCcw,
       label: lang === "ar" ? "طلب مراجعة" : "Revision",
       hint: lang === "ar" ? "إعادة للفني" : "Return to technician",
-      active: "border-amber-500 bg-amber-50 text-amber-800 shadow-sm",
+      active: "border-amber-500 bg-amber-50 text-amber-800 shadow-md",
       idle: "border-slate-200 hover:border-amber-300 hover:bg-amber-50/40",
       iconActive: "text-amber-600",
     },
@@ -251,14 +284,14 @@ export function ReviewDecisionTiles({
       icon: XCircle,
       label: lang === "ar" ? "رفض" : "Reject",
       hint: lang === "ar" ? "النتيجة مرفوضة" : "Result rejected",
-      active: "border-red-500 bg-red-50 text-red-800 shadow-sm",
+      active: "border-red-500 bg-red-50 text-red-800 shadow-md",
       idle: "border-slate-200 hover:border-red-300 hover:bg-red-50/40",
       iconActive: "text-red-600",
     },
   ];
 
   return (
-    <div className="grid grid-cols-3 gap-2">
+    <div className="grid grid-cols-3 gap-3">
       {options.map((opt) => {
         const selected = decision === opt.id;
         const Icon = opt.icon;
@@ -268,13 +301,13 @@ export function ReviewDecisionTiles({
             type="button"
             disabled={disabled}
             onClick={() => onSelect(opt.id)}
-            className={`flex flex-col items-center gap-1.5 rounded-xl border-2 px-2 py-3 transition-all ${
+            className={`flex flex-col items-center gap-2 rounded-xl border-2 px-3 py-4 transition-all ${
               selected ? opt.active : opt.idle
             } ${disabled ? "cursor-not-allowed opacity-60" : ""}`}
           >
-            <Icon className={`h-6 w-6 ${selected ? opt.iconActive : "text-muted-foreground"}`} />
-            <span className="text-xs font-semibold">{opt.label}</span>
-            <span className="text-[10px] leading-tight text-center opacity-70">{opt.hint}</span>
+            <Icon className={`h-7 w-7 ${selected ? opt.iconActive : "text-muted-foreground"}`} />
+            <span className="text-sm font-bold">{opt.label}</span>
+            <span className="text-xs leading-tight text-center opacity-75">{opt.hint}</span>
           </button>
         );
       })}
@@ -297,17 +330,21 @@ export function ReviewNotesField({
 }) {
   const required = decision === "rejected" || decision === "needs_revision";
   return (
-    <div className="space-y-1.5">
-      <Label className="text-sm font-medium">
+    <div className="space-y-2">
+      <Label className="text-base font-bold text-foreground">
         {lang === "ar" ? "ملاحظات" : "Notes"}
         {required ? (
-          <span className="ms-1 text-xs text-red-500">{lang === "ar" ? "(إلزامي)" : "(required)"}</span>
+          <span className="ms-2 text-sm font-medium text-red-500">
+            {lang === "ar" ? "(إلزامي)" : "(required)"}
+          </span>
         ) : (
-          <span className="ms-1 text-xs text-muted-foreground">{lang === "ar" ? "(اختياري)" : "(optional)"}</span>
+          <span className="ms-2 text-sm font-normal text-muted-foreground">
+            {lang === "ar" ? "(اختياري)" : "(optional)"}
+          </span>
         )}
       </Label>
       <Textarea
-        rows={3}
+        rows={4}
         disabled={disabled}
         value={value}
         onChange={(e) => onChange(e.target.value)}
@@ -324,10 +361,12 @@ export function ReviewNotesField({
                 ? "ملاحظات إضافية..."
                 : "Additional notes..."
         }
-        className={`resize-none ${required && !value.trim() ? "border-amber-300 focus-visible:ring-amber-400/30" : ""}`}
+        className={`min-h-[100px] resize-none text-sm leading-relaxed ${
+          required && !value.trim() ? "border-amber-300 focus-visible:ring-amber-400/30" : ""
+        }`}
       />
       {required && !value.trim() && (
-        <p className="text-xs text-amber-600">
+        <p className="text-sm text-amber-600">
           {lang === "ar" ? "يجب كتابة سبب القرار" : "A reason is required for this decision"}
         </p>
       )}
@@ -345,16 +384,16 @@ export function ReviewSignatureField({
   loading?: boolean;
 }) {
   return (
-    <div className="space-y-1.5">
-      <Label className="text-sm font-medium text-muted-foreground">
+    <div className="space-y-2">
+      <Label className="text-base font-bold text-foreground">
         {lang === "ar" ? "التوقيع الرقمي" : "Digital signature"}
       </Label>
-      <div className="flex items-center gap-2 rounded-lg border bg-slate-50/80 px-3 py-2.5 text-sm">
-        <UserCheck className="h-4 w-4 shrink-0 text-primary/70" />
+      <div className="flex items-center gap-3 rounded-xl border bg-slate-50/80 px-4 py-3 text-base">
+        <UserCheck className="h-5 w-5 shrink-0 text-primary/70" />
         <span className="flex-1 font-semibold text-foreground">
           {loading ? (lang === "ar" ? "جاري التحميل..." : "Loading...") : signature || "—"}
         </span>
-        <span className="text-xs text-muted-foreground">
+        <span className="text-sm text-muted-foreground">
           {new Date().toLocaleDateString(lang === "ar" ? "ar-AE" : "en-GB")}
         </span>
       </div>
@@ -373,15 +412,15 @@ export function ReviewAttestation({
 }) {
   return (
     <details className="group rounded-xl border border-slate-200 bg-slate-50/60">
-      <summary className="cursor-pointer list-none px-4 py-3 text-sm font-medium text-slate-800 marker:content-none [&::-webkit-details-marker]:hidden">
+      <summary className="cursor-pointer list-none px-5 py-4 text-base font-semibold text-slate-800 marker:content-none [&::-webkit-details-marker]:hidden">
         <span className="flex items-center justify-between gap-2">
           {title}
-          <span className="text-xs font-normal text-muted-foreground group-open:hidden">
+          <span className="text-sm font-normal text-muted-foreground group-open:hidden">
             {lang === "ar" ? "عرض" : "Show"}
           </span>
         </span>
       </summary>
-      <p className="border-t border-slate-200 px-4 pb-3 pt-2 text-xs leading-relaxed text-slate-600">{body}</p>
+      <p className="border-t border-slate-200 px-5 pb-4 pt-3 text-sm leading-relaxed text-slate-600">{body}</p>
     </details>
   );
 }
@@ -415,10 +454,11 @@ export function ReviewDialogFooter({
           : "";
 
   return (
-    <div className="sticky bottom-0 flex gap-2 border-t bg-white/95 px-5 py-3 backdrop-blur-sm">
+    <div className="sticky bottom-0 flex gap-3 border-t bg-white/95 px-6 py-4 backdrop-blur-sm">
       {!readOnly && onSubmit && (
         <Button
-          className={`flex-1 ${submitClass}`}
+          size="lg"
+          className={`flex-1 text-base ${submitClass}`}
           disabled={submitDisabled || submitting}
           onClick={onSubmit}
         >
@@ -429,7 +469,12 @@ export function ReviewDialogFooter({
             : submitLabel ?? (lang === "ar" ? "إرسال" : "Submit")}
         </Button>
       )}
-      <Button variant="outline" className={readOnly ? "flex-1" : ""} onClick={onClose}>
+      <Button
+        size="lg"
+        variant="outline"
+        className={`text-base ${readOnly ? "flex-1" : ""}`}
+        onClick={onClose}
+      >
         {readOnly ? (lang === "ar" ? "إغلاق" : "Close") : lang === "ar" ? "إلغاء" : "Cancel"}
       </Button>
     </div>

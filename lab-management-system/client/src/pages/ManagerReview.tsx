@@ -17,6 +17,7 @@ import {
   ReviewDialogShell,
   ReviewNotesField,
   ReviewReportAction,
+  ReviewSection,
   ReviewSignatureField,
   ReviewStatusNotice,
 } from "@/components/ReviewDialogParts";
@@ -629,43 +630,48 @@ export default function ManagerReview() {
                 {!alreadyDecided && (
                   <>
                     {isSpecialized && specResult && (
-                      <div className="flex items-center justify-between gap-3 rounded-xl border bg-slate-50/80 px-4 py-3">
-                        <div className="min-w-0">
-                          <p className="text-sm font-semibold">{specResult.testTypeCode}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {specResult.testedBy ?? "—"}
-                            {specResult.testDate &&
-                              ` · ${new Date(specResult.testDate).toLocaleDateString(lang === "ar" ? "ar-AE" : "en-GB")}`}
-                          </p>
-                        </div>
-                        <Badge
-                          className={
-                            specResult.overallResult === "pass"
-                              ? "bg-green-100 text-green-800"
-                              : specResult.overallResult === "fail"
-                                ? "bg-red-100 text-red-800"
-                                : "bg-slate-100 text-slate-700"
-                          }
-                        >
-                          {specResult.overallResult === "pass"
-                            ? lang === "ar"
-                              ? "ناجح"
-                              : "PASS"
-                            : specResult.overallResult === "fail"
+                      <ReviewSection
+                        title={lang === "ar" ? "نتيجة الاختبار" : "Test Result"}
+                        description={lang === "ar" ? "ملخص الاختبار المتخصص" : "Specialized test summary"}
+                      >
+                        <div className="flex items-center justify-between gap-4 rounded-xl border bg-slate-50/80 px-5 py-4">
+                          <div className="min-w-0">
+                            <p className="text-lg font-bold">{specResult.testTypeCode}</p>
+                            <p className="mt-0.5 text-sm text-muted-foreground">
+                              {specResult.testedBy ?? "—"}
+                              {specResult.testDate &&
+                                ` · ${new Date(specResult.testDate).toLocaleDateString(lang === "ar" ? "ar-AE" : "en-GB")}`}
+                            </p>
+                          </div>
+                          <Badge
+                            className={`px-3 py-1 text-sm font-bold ${
+                              specResult.overallResult === "pass"
+                                ? "bg-green-100 text-green-800"
+                                : specResult.overallResult === "fail"
+                                  ? "bg-red-100 text-red-800"
+                                  : "bg-slate-100 text-slate-700"
+                            }`}
+                          >
+                            {specResult.overallResult === "pass"
                               ? lang === "ar"
-                                ? "راسب"
-                                : "FAIL"
-                              : lang === "ar"
-                                ? "قيد المراجعة"
-                                : "Pending"}
-                        </Badge>
-                      </div>
+                                ? "ناجح"
+                                : "PASS"
+                              : specResult.overallResult === "fail"
+                                ? lang === "ar"
+                                  ? "راسب"
+                                  : "FAIL"
+                                : lang === "ar"
+                                  ? "قيد المراجعة"
+                                  : "Pending"}
+                          </Badge>
+                        </div>
+                      </ReviewSection>
                     )}
 
-                    <div className="space-y-3">
-                      <p className="text-sm font-semibold">
-                        {lang === "ar" ? "قرار المراجعة" : "Your decision"}
-                      </p>
+                    <ReviewSection
+                      title={lang === "ar" ? "قرار المراجعة" : "Your Decision"}
+                      description={lang === "ar" ? "اختر أحد الخيارات ثم أضف ملاحظاتك" : "Select an option, then add your notes"}
+                    >
                       {wrapDisabledWithTooltip(
                         dialogSamplePending,
                         dialogSampleDisabledWarning,
@@ -676,21 +682,25 @@ export default function ManagerReview() {
                           onSelect={setDecision}
                         />,
                       )}
-                    </div>
+                    </ReviewSection>
 
-                    <ReviewNotesField
-                      lang={lang}
-                      decision={decision}
-                      value={comments}
-                      disabled={dialogSamplePending}
-                      onChange={setComments}
-                    />
+                    <ReviewSection title={lang === "ar" ? "التفاصيل والتوقيع" : "Details & Signature"}>
+                      <div className="space-y-4">
+                        <ReviewNotesField
+                          lang={lang}
+                          decision={decision}
+                          value={comments}
+                          disabled={dialogSamplePending}
+                          onChange={setComments}
+                        />
 
-                    <ReviewSignatureField
-                      lang={lang}
-                      signature={currentUserSignature}
-                      loading={authLoading}
-                    />
+                        <ReviewSignatureField
+                          lang={lang}
+                          signature={currentUserSignature}
+                          loading={authLoading}
+                        />
+                      </div>
+                    </ReviewSection>
                   </>
                 )}
               </ReviewDialogBody>
