@@ -1485,17 +1485,6 @@ ${testSummaries.length > 0 ? testSummaries.join("\n\n") : "لم تُجرَ اخ�
       )
       .mutation(async ({ ctx, input }) => {
         requireRole(ctx.user.role, ["admin", "qc_inspector"]);
-        if (!input.testResultId && !input.specializedTestResultId) {
-          throw new TRPCError({ code: "BAD_REQUEST", message: "No test result found for QC review" });
-        }
-        const existingReviews = await getReviewsBySample(input.sampleId);
-        const existingQc = existingReviews.find((r) => r.reviewType === "qc_review");
-        if (existingQc) {
-          throw new TRPCError({
-            code: "CONFLICT",
-            message: "QC review has already been submitted for this sample | تمت مراجعة ضبط الجودة لهذه العينة مسبقاً",
-          });
-        }
         const sampleBefore = await getSampleById(input.sampleId);
         if (sampleBefore && ["qc_passed", "qc_failed", "clearance_issued"].includes(sampleBefore.status)) {
           throw new TRPCError({
@@ -1503,13 +1492,37 @@ ${testSummaries.length > 0 ? testSummaries.join("\n\n") : "لم تُجرَ اخ�
             message: "This sample has already completed QC review | تمت مراجعة ضبط الجودة لهذه العينة مسبقاً",
           });
         }
+        if (sampleBefore?.status !== "approved") {
+          throw new TRPCError({
+            code: "PRECONDITION_FAILED",
+            message: "Sample is not ready for QC review | العينة غير جاهزة لمراجعة ضبط الجودة",
+          });
+        }
+        const allLegacyResults = await getTestResultBySample(input.sampleId);
+        const allSpecializedResults = await getSpecializedTestResultsBySample(input.sampleId);
+        let hasConcreteData = false;
+        if (allLegacyResults.length === 0 && allSpecializedResults.length === 0) {
+          const dists = await getDistributionsBySample(input.sampleId);
+          for (const d of dists) {
+            const groups = await getConcreteGroupsByDistribution(d.id);
+            if (groups.some((g) => g.status === "submitted" || g.avgCompressiveStrength != null)) {
+              hasConcreteData = true;
+              break;
+            }
+          }
+        }
+        const anchorLegacyId = input.testResultId ?? allLegacyResults[0]?.id;
+        const anchorSpecializedId = input.specializedTestResultId ?? allSpecializedResults[0]?.id;
+        if (!anchorLegacyId && !anchorSpecializedId && !hasConcreteData) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "No test result found for QC review" });
+        }
         // Enforce mandatory notes on reject/revision
         if ((input.decision === "rejected" || input.decision === "needs_revision") && !input.comments?.trim()) {
           throw new TRPCError({ code: "BAD_REQUEST", message: "يجب إدخال ملاحظات عند الرفض أو طلب المراجعة | Notes are required when rejecting or requesting revision" });
         }
         const review = await createReview({
-          testResultId: input.testResultId ?? null,
-          specializedTestResultId: input.specializedTestResultId ?? null,
+          testResultId: anchorLegacyId ?? null,
+          specializedTestResultId: anchorSpecializedId ?? null,
           sampleId: input.sampleId,
           reviewerId: ctx.user.id,
           reviewType: "qc_review",
@@ -1518,32 +1531,41 @@ ${testSummaries.length > 0 ? testSummaries.join("\n\n") : "لم تُجرَ اخ�
           signature: input.signature,
         });
         const sample = await getSampleById(input.sampleId);
-        // Auto-sign: record reviewer name and timestamp
         const qcReviewerName = ctx.user.name || ctx.user.username || "";
         const qcReviewedAt = new Date();
+        const legacyQcFields = {
+          qcReviewedById: ctx.user.id,
+          qcReviewedByName: qcReviewerName,
+          qcReviewedAt,
+          qcNotes: input.comments,
+        };
+        const applyLegacyQc = async () => {
+          for (const tr of allLegacyResults) {
+            await updateTestResult(tr.id, legacyQcFields);
+          }
+        };
+        const applySpecializedQc = async (
+          status: "approved" | "revision_requested" | "rejected",
+        ) => {
+          for (const sr of allSpecializedResults) {
+            await updateSpecializedTestResult(sr.id, {
+              status,
+              qcReviewedByName: qcReviewerName,
+              qcReviewedAt,
+              qcNotes: input.comments,
+            });
+          }
+        };
+        const fromStatus = sampleBefore?.status ?? "approved";
         if (input.decision === "approved") {
-          if (input.testResultId) {
-            await updateTestResult(input.testResultId, {
-              qcReviewedById: ctx.user.id,
-              qcReviewedByName: qcReviewerName,
-              qcReviewedAt: qcReviewedAt,
-              qcNotes: input.comments,
-            });
-          }
-          if (input.specializedTestResultId) {
-            await updateSpecializedTestResult(input.specializedTestResultId, {
-              status: "approved",
-              qcReviewedByName: qcReviewerName,
-              qcReviewedAt: qcReviewedAt,
-              qcNotes: input.comments,
-            });
-          }
+          await applyLegacyQc();
+          await applySpecializedQc("approved");
           await updateSampleStatus(input.sampleId, "qc_passed");
           await addSampleHistory({
             sampleId: input.sampleId,
             userId: ctx.user.id,
             action: "QC approved results",
-            fromStatus: "approved",
+            fromStatus,
             toStatus: "qc_passed",
             notes: input.comments,
           });
@@ -1571,28 +1593,14 @@ ${testSummaries.length > 0 ? testSummaries.join("\n\n") : "لم تُجرَ اخ�
             } catch (_e) { /* non-critical */ }
           }
         } else if (input.decision === "needs_revision") {
-          if (input.testResultId) {
-            await updateTestResult(input.testResultId, {
-              qcReviewedById: ctx.user.id,
-              qcReviewedByName: qcReviewerName,
-              qcReviewedAt: qcReviewedAt,
-              qcNotes: input.comments,
-            });
-          }
-          if (input.specializedTestResultId) {
-            await updateSpecializedTestResult(input.specializedTestResultId, {
-              status: "revision_requested",
-              qcReviewedByName: qcReviewerName,
-              qcReviewedAt: qcReviewedAt,
-              qcNotes: input.comments,
-            });
-          }
+          await applyLegacyQc();
+          await applySpecializedQc("revision_requested");
           await updateSampleStatus(input.sampleId, "revision_requested");
           await addSampleHistory({
             sampleId: input.sampleId,
             userId: ctx.user.id,
             action: "QC requested revision",
-            fromStatus: "approved",
+            fromStatus,
             toStatus: "revision_requested",
             notes: input.comments,
           });
@@ -1607,28 +1615,14 @@ ${testSummaries.length > 0 ? testSummaries.join("\n\n") : "لم تُجرَ اخ�
             });
           }
         } else {
-          if (input.testResultId) {
-            await updateTestResult(input.testResultId, {
-              qcReviewedById: ctx.user.id,
-              qcReviewedByName: qcReviewerName,
-              qcReviewedAt: qcReviewedAt,
-              qcNotes: input.comments,
-            });
-          }
-          if (input.specializedTestResultId) {
-            await updateSpecializedTestResult(input.specializedTestResultId, {
-              status: "rejected",
-              qcReviewedByName: qcReviewerName,
-              qcReviewedAt: qcReviewedAt,
-              qcNotes: input.comments,
-            });
-          }
+          await applyLegacyQc();
+          await applySpecializedQc("rejected");
           await updateSampleStatus(input.sampleId, "qc_failed");
           await addSampleHistory({
             sampleId: input.sampleId,
             userId: ctx.user.id,
             action: "QC rejected results",
-            fromStatus: "approved",
+            fromStatus,
             toStatus: "qc_failed",
             notes: input.comments,
           });

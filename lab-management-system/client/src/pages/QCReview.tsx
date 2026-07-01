@@ -77,17 +77,14 @@ function getSampleTaskState(sample: any): "new" | "incomplete" | "completed" {
   return "completed";
 }
 
-function isQcReviewComplete(
-  sample: { status?: string } | null | undefined,
-  qcReview: { decision?: string } | null | undefined,
-  legacyResult: { qcReviewedAt?: Date | string | null } | null | undefined,
-  specializedResult: { qcReviewedAt?: Date | string | null } | null | undefined,
-): boolean {
-  if (sample?.status && QC_DONE_SAMPLE_STATUSES.has(sample.status)) return true;
-  if (qcReview) return true;
-  if (legacyResult?.qcReviewedAt) return true;
-  if (specializedResult?.qcReviewedAt) return true;
-  return false;
+/** QC can act only when the manager has approved and the sample awaits QC (including re-review after revision). */
+function canTakeQcAction(sample: { status?: string } | null | undefined): boolean {
+  return sample?.status === "approved";
+}
+
+function pickPrimaryResult<T extends { qcReviewedAt?: Date | string | null }>(rows: T[] | undefined): T | undefined {
+  if (!rows?.length) return undefined;
+  return rows.find((r) => !r.qcReviewedAt) ?? rows[0];
 }
 
 function ClearanceStatusBadge({ status, lang }: { status: string; lang: string }) {
@@ -742,10 +739,14 @@ export default function QCReview() {
     setLoadTimedOut(false);
   };
 
+  const isBatchSample = (distributions?.length ?? 0) > 1 || (sampleOrders?.length ?? 0) > 0;
   const dist = distributions?.[0];
-  const result = results?.[0];
-  const specializedResult = specializedResults?.[0];
-  const hasAnyResult = !!result || !!specializedResult;
+  const result = pickPrimaryResult(results);
+  const specializedResult = pickPrimaryResult(specializedResults);
+  const hasAnyResult =
+    (results?.length ?? 0) > 0 ||
+    (specializedResults?.length ?? 0) > 0 ||
+    (distributions?.some((d) => d.status === "completed") ?? false);
 
   // Compute report URL — prefer batch report when an order exists
   const reportUrl = (() => {
@@ -777,8 +778,9 @@ export default function QCReview() {
     isReviewsLoading
   );
   const managerReview = reviews?.find((r) => r.reviewType === "manager_review");
-  const qcExistingReview = reviews?.find((r) => r.reviewType === "qc_review");
-  const isQcAlreadyDone = isQcReviewComplete(selectedSample, qcExistingReview, result, specializedResult);
+  const priorQcReviews = reviews?.filter((r) => r.reviewType === "qc_review") ?? [];
+  const canAct = canTakeQcAction(selectedSample);
+  const isQcAlreadyDone = !canAct;
 
   const overallCompliance = specializedResult
     ? (specializedResult.overallResult ?? "pending")
@@ -797,10 +799,19 @@ export default function QCReview() {
     result?.managerReviewedAt ||
     null;
 
-  const testTypeDisplay =
-    lang === "ar"
+  const testTypeDisplay = (() => {
+    if (isBatchSample && distributions?.length) {
+      const names = distributions.map((d) =>
+        lang === "ar"
+          ? ((d as { testNameAr?: string }).testNameAr ?? d.testName)
+          : ((d as { testNameEn?: string }).testNameEn ?? d.testName),
+      );
+      return names.join(" · ");
+    }
+    return lang === "ar"
       ? ((dist as { testNameAr?: string } | undefined)?.testNameAr ?? dist?.testName ?? specializedResult?.testTypeCode ?? "—")
       : ((dist as { testNameEn?: string } | undefined)?.testNameEn ?? dist?.testName ?? specializedResult?.testTypeCode ?? "—");
+  })();
   const contractorDisplay =
     selectedSample?.contractorName ?? specializedResult?.contractorName ?? (dist as { contractorName?: string } | undefined)?.contractorName ?? "—";
   const contractNameDisplay =
@@ -850,7 +861,7 @@ export default function QCReview() {
       return;
     }
     if (!decision) { toast.error(lang === "ar" ? "يرجى اختيار قرار" : "Please select a decision"); return; }
-    if (!result && !specializedResult) {
+    if (!hasAnyResult) {
       toast.error(lang === "ar" ? "لم يتم العثور على نتيجة" : "No test result found");
       return;
     }
@@ -1087,45 +1098,47 @@ export default function QCReview() {
                 </div>
               )}
 
-              {/* QC review record (read-only when already completed) */}
-              {isQcAlreadyDone && (
-                <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3 text-xs space-y-1">
-                  <p className="font-semibold text-emerald-800">
-                    {lang === "ar" ? "تمت مراجعة ضبط الجودة" : "QC Review Completed"}
+              {/* Prior QC review history */}
+              {priorQcReviews.length > 0 && (
+                <div className={`rounded-lg border p-3 text-xs space-y-2 ${canAct ? "bg-slate-50 border-slate-200" : "bg-emerald-50 border-emerald-200"}`}>
+                  <p className={`font-semibold ${canAct ? "text-slate-800" : "text-emerald-800"}`}>
+                    {canAct
+                      ? (lang === "ar" ? "مراجعة ضبط الجودة السابقة" : "Previous QC Review")
+                      : (lang === "ar" ? "تمت مراجعة ضبط الجودة" : "QC Review Completed")}
                   </p>
-                  {qcExistingReview ? (
-                    <>
+                  {priorQcReviews.map((review) => (
+                    <div key={review.id} className="space-y-1 border-t border-current/10 pt-2 first:border-0 first:pt-0">
                       <p>
                         <span className="text-muted-foreground">{lang === "ar" ? "القرار:" : "Decision:"}</span>{" "}
-                        <span className="font-medium capitalize">{qcExistingReview.decision.replace(/_/g, " ")}</span>
+                        <span className="font-medium capitalize">{review.decision.replace(/_/g, " ")}</span>
                       </p>
-                      {qcExistingReview.comments && (
+                      {review.comments && (
                         <p>
                           <span className="text-muted-foreground">{lang === "ar" ? "الملاحظات:" : "Notes:"}</span>{" "}
-                          {qcExistingReview.comments}
+                          {review.comments}
                         </p>
                       )}
-                      {(qcExistingReview.signature || specializedResult?.qcReviewedByName || result?.qcReviewedByName) && (
+                      {review.signature && (
                         <p>
                           <span className="text-muted-foreground">{lang === "ar" ? "موقع من:" : "Signed by:"}</span>{" "}
-                          <span className="font-semibold">
-                            {qcExistingReview.signature || specializedResult?.qcReviewedByName || result?.qcReviewedByName}
-                          </span>
-                          {(qcExistingReview.createdAt || specializedResult?.qcReviewedAt || result?.qcReviewedAt) && (
+                          <span className="font-semibold">{review.signature}</span>
+                          {review.createdAt && (
                             <span className="text-muted-foreground ms-2">
-                              · {new Date(qcExistingReview.createdAt || specializedResult?.qcReviewedAt || result?.qcReviewedAt!).toLocaleDateString(lang === "ar" ? "ar-AE" : "en-GB")}
+                              · {new Date(review.createdAt).toLocaleDateString(lang === "ar" ? "ar-AE" : "en-GB")}
                             </span>
                           )}
                         </p>
                       )}
-                    </>
-                  ) : (
-                    <p className="text-emerald-900/80">
-                      {lang === "ar"
-                        ? "تم اعتماد هذه العينة مسبقاً. لا يلزم إجراء إضافي."
-                        : "This sample has already been QC approved. No further action is required."}
-                    </p>
-                  )}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {selectedSample?.status === "revision_requested" && (
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-900">
+                  {lang === "ar"
+                    ? "في انتظار إعادة الفني للاختبار واعتماد المشرف قبل مراجعة ضبط الجودة مرة أخرى."
+                    : "Waiting for the technician to revise and the supervisor to re-approve before QC can review again."}
                 </div>
               )}
 
