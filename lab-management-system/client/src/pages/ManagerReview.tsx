@@ -6,14 +6,20 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
 } from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  ReviewDecisionTiles,
+  ReviewDialogBody,
+  ReviewDialogFooter,
+  ReviewDialogLoading,
+  ReviewDialogShell,
+  ReviewNotesField,
+  ReviewReportAction,
+  ReviewSignatureField,
+  ReviewStatusNotice,
+} from "@/components/ReviewDialogParts";
 import { trpc } from "@/lib/trpc";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useDeletionStatus } from "@/hooks/useDeletionStatus";
@@ -22,16 +28,11 @@ import { ListFilterBar } from "@/components/ListFilterBar";
 import { applySampleFilters, hasActiveListFilters } from "@/lib/listFilters";
 import { ReviewSampleListBody } from "@/components/TestDisplay";
 import {
-  CheckSquare,
-  XCircle,
-  RotateCcw,
   CheckCircle2,
   AlertCircle,
   Building2,
   ClipboardCheck,
-  FileText,
   ChevronRight,
-  ExternalLink,
 } from "lucide-react";
 import { useState, useMemo, type ReactElement } from "react";
 import { toast } from "sonner";
@@ -596,262 +597,153 @@ export default function ManagerReview() {
 
       {/* Review Dialog */}
       <Dialog open={!!selectedSample} onOpenChange={(o) => !o && setSelectedSample(null)}>
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto" dir={lang === "ar" ? "rtl" : "ltr"}>
-          <DialogHeader>
-            <DialogTitle className="text-center text-base font-bold flex flex-wrap items-center justify-center gap-2">
-              {lang === "ar"
-                ? `مراجعة النتائج — ${selectedSample?.sampleCode}`
-                : `Review Results — ${selectedSample?.sampleCode}`}
+        <ReviewDialogShell
+          lang={lang}
+          icon={ClipboardCheck}
+          title={lang === "ar" ? "مراجعة النتائج" : "Supervisor Review"}
+          code={selectedSample?.sampleCode}
+          badge={selectedSample ? (
+            <span className="flex items-center gap-2">
               {dialogSamplePendingBadge}
-            </DialogTitle>
-          </DialogHeader>
-
+              <StatusBadge status={selectedSample.status} />
+            </span>
+          ) : undefined}
+        >
           {isLoadingResults ? (
-            <div className="p-8 text-center">
-              <div className="inline-block w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin mb-3" />
-              <p className="text-sm text-muted-foreground">{lang === "ar" ? "جاري تحميل النتائج..." : "Loading results..."}</p>
-            </div>
+            <ReviewDialogLoading lang={lang} />
           ) : hasResult ? (
-            <div className="space-y-5 mt-2">
-              {/* Specialized test info banner */}
-              {isSpecialized && specResult && (
-                <div className="rounded-lg bg-blue-50 border border-blue-200 p-3 flex items-center gap-3">
-                  <FileText className="w-5 h-5 text-blue-600 shrink-0" />
-                  <div className="flex-1">
-                    <p className="text-sm font-semibold text-blue-800">
-                      {lang === "ar" ? "اختبار متخصص" : "Specialized Test"}: {specResult.testTypeCode}
-                    </p>
-                    <p className="text-xs text-blue-600">
-                      {lang === "ar" ? "أُدخل بواسطة" : "Entered by"}: {specResult.testedBy ?? "—"} · {specResult.testDate ? new Date(specResult.testDate).toLocaleDateString() : "—"}
-                    </p>
-                  </div>
-                  <div className={`px-3 py-1 rounded-full text-xs font-bold ${
-                    specResult.overallResult === "pass" ? "bg-green-100 text-green-700" :
-                    specResult.overallResult === "fail" ? "bg-red-100 text-red-700" :
-                    "bg-gray-100 text-gray-600"
-                  }`}>
-                    {specResult.overallResult === "pass" ? (lang === "ar" ? "ناجح" : "PASS") :
-                     specResult.overallResult === "fail" ? (lang === "ar" ? "راسب" : "FAIL") :
-                     (lang === "ar" ? "قيد المراجعة" : "Pending")}
-                  </div>
-                </div>
-              )}
-
-              {/* Open Report Button — always visible when report exists */}
-              {reportUrl && (
-                <Button
-                  variant="outline"
-                  className="w-full gap-2 border-blue-200 text-blue-700 hover:bg-blue-50 hover:border-blue-400"
-                  onClick={handleOpenReport}
-                >
-                  <ExternalLink className="w-4 h-4" />
-                  {lang === "ar" ? "فتح تقرير الاختبار" : "Open Test Report"}
-                </Button>
-              )}
-
-              {/* Already-decided banner */}
-              {alreadyDecided && (
-                <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-3 flex items-center gap-3">
-                  <CheckCircle2 className="w-5 h-5 text-green-600 shrink-0" />
-                  <div>
-                    <p className="text-sm font-semibold text-green-800">
-                      {lang === "ar" ? "تمت المراجعة بالفعل" : "Review already completed"}
-                    </p>
-                    <p className="text-xs text-green-700">
-                      {lang === "ar"
-                        ? "تم اتخاذ قرار على هذه العينة. يمكنك مراجعة التقرير أعلاه."
-                        : "A decision has already been made for this sample. You can view the report above."}
-                    </p>
-                  </div>
-                  <div className="ms-auto shrink-0">
-                    <StatusBadge status={selectedSample?.status} />
-                  </div>
-                </div>
-              )}
-
-              {/* ── Decision Buttons — only shown if not already decided ─── */}
-              {!alreadyDecided && <><div className="grid grid-cols-3 gap-3">
-                {wrapDisabledWithTooltip(
-                  dialogSamplePending,
-                  dialogSampleDisabledWarning,
-                  <button
-                    type="button"
-                    disabled={dialogSamplePending}
-                    onClick={() => setDecision("approved")}
-                    className={`flex flex-col items-center gap-2 rounded-xl border-2 p-3 transition-all ${
-                      decision === "approved"
-                        ? "border-green-500 bg-green-50 text-green-800 shadow-md"
-                        : "border-border bg-background text-muted-foreground hover:border-green-300 hover:bg-green-50/50"
-                    } ${dialogSamplePending ? "opacity-60" : ""}`}
-                  >
-                    <CheckSquare className={`w-7 h-7 ${decision === "approved" ? "text-green-600" : "text-muted-foreground"}`} />
-                    <span className="text-xs font-semibold">
-                      {lang === "ar" ? "اعتماد ✓" : "Approve ✓"}
-                    </span>
-                    <span className="text-[10px] opacity-70 text-center leading-tight">
-                      {lang === "ar" ? "النتيجة مقبولة" : "Result accepted"}
-                    </span>
-                  </button>
+            <>
+              <ReviewDialogBody>
+                {reportUrl && (
+                  <ReviewReportAction lang={lang} onClick={handleOpenReport} />
                 )}
-                {wrapDisabledWithTooltip(
-                  dialogSamplePending,
-                  dialogSampleDisabledWarning,
-                  <button
-                    type="button"
-                    disabled={dialogSamplePending}
-                    onClick={() => setDecision("needs_revision")}
-                    className={`flex flex-col items-center gap-2 rounded-xl border-2 p-3 transition-all ${
-                      decision === "needs_revision"
-                        ? "border-amber-500 bg-amber-50 text-amber-800 shadow-md"
-                        : "border-border bg-background text-muted-foreground hover:border-amber-300 hover:bg-amber-50/50"
-                    } ${dialogSamplePending ? "opacity-60" : ""}`}
-                  >
-                    <RotateCcw className={`w-7 h-7 ${decision === "needs_revision" ? "text-amber-600" : "text-muted-foreground"}`} />
-                    <span className="text-xs font-semibold">
-                      {lang === "ar" ? "طلب مراجعة ↺" : "Revision ↺"}
-                    </span>
-                    <span className="text-[10px] opacity-70 text-center leading-tight">
-                      {lang === "ar" ? "إعادة للفني" : "Return to technician"}
-                    </span>
-                  </button>
-                )}
-                {wrapDisabledWithTooltip(
-                  dialogSamplePending,
-                  dialogSampleDisabledWarning,
-                  <button
-                    type="button"
-                    disabled={dialogSamplePending}
-                    onClick={() => setDecision("rejected")}
-                    className={`flex flex-col items-center gap-2 rounded-xl border-2 p-3 transition-all ${
-                      decision === "rejected"
-                        ? "border-red-500 bg-red-50 text-red-800 shadow-md"
-                        : "border-border bg-background text-muted-foreground hover:border-red-300 hover:bg-red-50/50"
-                    } ${dialogSamplePending ? "opacity-60" : ""}`}
-                  >
-                    <XCircle className={`w-7 h-7 ${decision === "rejected" ? "text-red-600" : "text-muted-foreground"}`} />
-                    <span className="text-xs font-semibold">
-                      {lang === "ar" ? "رفض ✗" : "Reject ✗"}
-                    </span>
-                    <span className="text-[10px] opacity-70 text-center leading-tight">
-                      {lang === "ar" ? "النتيجة مرفوضة" : "Result is rejected"}
-                    </span>
-                  </button>
-                )}
-              </div>
 
-              {/* Reason / Comments — required only for rejection/revision */}
-              <div className="space-y-1.5">
-                <Label htmlFor="comments" className="flex items-center gap-1">
-                  {lang === "ar" ? "الملاحظات / سبب القرار" : "Notes / Reason"}
-                  {(decision === "rejected" || decision === "needs_revision") && (
-                    <span className="text-red-500 text-xs">
-                      {lang === "ar" ? " (إلزامي)" : " (required)"}
-                    </span>
-                  )}
-                  {decision === "approved" && (
-                    <span className="text-muted-foreground text-xs">
-                      {lang === "ar" ? " (اختياري)" : " (optional)"}
-                    </span>
-                  )}
-                </Label>
-                <Textarea
-                  id="comments"
-                  rows={3}
-                  placeholder={
-                    decision === "rejected"
-                      ? (lang === "ar" ? "اكتب سبب الرفض بوضوح..." : "Clearly state the reason for rejection...")
-                      : decision === "needs_revision"
-                      ? (lang === "ar" ? "اكتب ما يجب تعديله أو إعادة فحصه..." : "Describe what needs to be revised or retested...")
-                      : (lang === "ar" ? "ملاحظات إضافية (اختياري)..." : "Additional notes (optional)...")
-                  }
-                  value={comments}
-                  disabled={dialogSamplePending}
-                  onChange={(e) => setComments(e.target.value)}
-                  className={
-                    (decision === "rejected" || decision === "needs_revision") && !comments.trim()
-                      ? "border-amber-400 focus:border-amber-500"
-                      : ""
-                  }
-                />
-                {(decision === "rejected" || decision === "needs_revision") && !comments.trim() && (
-                  <p className="text-xs text-amber-600">
+                {alreadyDecided && (
+                  <ReviewStatusNotice variant="success">
                     {lang === "ar"
-                      ? "⚠ يجب كتابة سبب القرار عند الرفض أو طلب المراجعة"
-                      : "⚠ A reason is required when rejecting or requesting revision"}
-                  </p>
+                      ? "تم اتخاذ قرار على هذه العينة. يمكنك مراجعة التقرير أعلاه."
+                      : "A decision has already been made. You can view the report above."}
+                  </ReviewStatusNotice>
                 )}
-              </div>
 
-              {/* Digital Signature — auto-filled from logged-in user */}
-              <div className="space-y-1.5">
-                <Label htmlFor="signature">
-                  {lang === "ar" ? "التوقيع الرقمي" : "Digital Signature"}
-                  <span className="ms-1.5 text-xs text-muted-foreground font-normal">
-                    ({lang === "ar" ? "تلقائي باسم المستخدم الحالي" : "auto-filled from current user"})
-                  </span>
-                </Label>
-                <div className="flex items-center gap-2 border rounded px-3 py-2 text-sm bg-muted/30">
-                  <span className="text-primary font-semibold flex-1">
-                    {currentUserSignature || (authLoading ? (lang === "ar" ? "جاري التحميل..." : "Loading...") : "—")}
-                  </span>
-                  <span className="text-xs text-muted-foreground">{new Date().toLocaleDateString(lang === "ar" ? "ar-AE" : "en-AE")}</span>
-                </div>
-              </div>
+                {!alreadyDecided && (
+                  <>
+                    {isSpecialized && specResult && (
+                      <div className="flex items-center justify-between gap-3 rounded-xl border bg-slate-50/80 px-4 py-3">
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold">{specResult.testTypeCode}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {specResult.testedBy ?? "—"}
+                            {specResult.testDate &&
+                              ` · ${new Date(specResult.testDate).toLocaleDateString(lang === "ar" ? "ar-AE" : "en-GB")}`}
+                          </p>
+                        </div>
+                        <Badge
+                          className={
+                            specResult.overallResult === "pass"
+                              ? "bg-green-100 text-green-800"
+                              : specResult.overallResult === "fail"
+                                ? "bg-red-100 text-red-800"
+                                : "bg-slate-100 text-slate-700"
+                          }
+                        >
+                          {specResult.overallResult === "pass"
+                            ? lang === "ar"
+                              ? "ناجح"
+                              : "PASS"
+                            : specResult.overallResult === "fail"
+                              ? lang === "ar"
+                                ? "راسب"
+                                : "FAIL"
+                              : lang === "ar"
+                                ? "قيد المراجعة"
+                                : "Pending"}
+                        </Badge>
+                      </div>
+                    )}
 
-              {/* Submit */}
-              <div className="flex gap-2 pt-1">
-                {wrapDisabledWithTooltip(
-                  dialogSamplePending,
-                  dialogSampleDisabledWarning,
-                  <Button
-                    className={`flex-1 ${
-                      decision === "approved"
-                        ? "bg-green-600 hover:bg-green-700"
-                        : decision === "needs_revision"
-                        ? "bg-amber-600 hover:bg-amber-700"
-                        : decision === "rejected"
-                        ? "bg-red-600 hover:bg-red-700"
-                        : ""
-                    }`}
-                    disabled={
-                      dialogSamplePending ||
-                      !decision ||
-                      managerReview.isPending ||
-                      ((decision === "rejected" || decision === "needs_revision") && !comments.trim())
-                    }
-                    onClick={() => handleReview()}
-                  >
-                    {managerReview.isPending
-                      ? (lang === "ar" ? "جاري الإرسال..." : "Submitting...")
-                      : decision === "approved"
-                      ? (lang === "ar" ? "✓ تأكيد الاعتماد" : "✓ Confirm Approval")
+                    <div className="space-y-3">
+                      <p className="text-sm font-semibold">
+                        {lang === "ar" ? "قرار المراجعة" : "Your decision"}
+                      </p>
+                      {wrapDisabledWithTooltip(
+                        dialogSamplePending,
+                        dialogSampleDisabledWarning,
+                        <ReviewDecisionTiles
+                          lang={lang}
+                          decision={decision}
+                          disabled={dialogSamplePending}
+                          onSelect={setDecision}
+                        />,
+                      )}
+                    </div>
+
+                    <ReviewNotesField
+                      lang={lang}
+                      decision={decision}
+                      value={comments}
+                      disabled={dialogSamplePending}
+                      onChange={setComments}
+                    />
+
+                    <ReviewSignatureField
+                      lang={lang}
+                      signature={currentUserSignature}
+                      loading={authLoading}
+                    />
+                  </>
+                )}
+              </ReviewDialogBody>
+
+              <ReviewDialogFooter
+                lang={lang}
+                readOnly={alreadyDecided}
+                onClose={() => setSelectedSample(null)}
+                onSubmit={() => handleReview()}
+                submitLabel={
+                  managerReview.isPending
+                    ? lang === "ar"
+                      ? "جاري الإرسال..."
+                      : "Submitting..."
+                    : decision === "approved"
+                      ? lang === "ar"
+                        ? "تأكيد الاعتماد"
+                        : "Confirm Approval"
                       : decision === "needs_revision"
-                      ? (lang === "ar" ? "↺ إرسال طلب المراجعة" : "↺ Send Revision Request")
-                      : decision === "rejected"
-                      ? (lang === "ar" ? "✗ تأكيد الرفض" : "✗ Confirm Rejection")
-                      : (lang === "ar" ? "تقديم المراجعة" : "Submit Review")}
-                  </Button>
-                )}
-                <Button variant="outline" onClick={() => setSelectedSample(null)}>
-                  {lang === "ar" ? "إلغاء" : "Cancel"}
-                </Button>
-              </div>
-              </>}
-              {/* Close button for already-decided samples */}
-              {alreadyDecided && (
-                <Button variant="outline" className="w-full" onClick={() => setSelectedSample(null)}>
-                  {lang === "ar" ? "إغلاق" : "Close"}
-                </Button>
-              )}
-            </div>
+                        ? lang === "ar"
+                          ? "إرسال طلب المراجعة"
+                          : "Send Revision Request"
+                        : decision === "rejected"
+                          ? lang === "ar"
+                            ? "تأكيد الرفض"
+                            : "Confirm Rejection"
+                          : lang === "ar"
+                            ? "تقديم المراجعة"
+                            : "Submit Review"
+                }
+                submitting={managerReview.isPending}
+                submitDisabled={
+                  dialogSamplePending ||
+                  !decision ||
+                  ((decision === "rejected" || decision === "needs_revision") && !comments.trim())
+                }
+                submitVariant={decision}
+              />
+            </>
           ) : (
-            <div className="p-8 text-center space-y-3">
-              <AlertCircle className="w-10 h-10 text-amber-400 mx-auto" />
-              <p className="text-sm font-medium">{lang === "ar" ? "لم يتم إدخال نتائج الاختبار بعد" : "No test results submitted yet"}</p>
-              <p className="text-xs text-muted-foreground">{lang === "ar" ? "يجب على الفني إدخال نتائج الاختبار أولاً" : "The technician must submit test results first"}</p>
-            </div>
+            <ReviewDialogBody>
+              <div className="flex flex-col items-center py-6 text-center">
+                <AlertCircle className="mb-3 h-10 w-10 text-amber-400" />
+                <p className="text-sm font-medium">
+                  {lang === "ar" ? "لم يتم إدخال نتائج الاختبار بعد" : "No test results submitted yet"}
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {lang === "ar" ? "يجب على الفني إدخال نتائج الاختبار أولاً" : "The technician must submit test results first"}
+                </p>
+              </div>
+            </ReviewDialogBody>
           )}
-        </DialogContent>
+        </ReviewDialogShell>
       </Dialog>
     </DashboardLayout>
   );

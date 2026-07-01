@@ -6,14 +6,22 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
 } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+import {
+  ReviewAttestation,
+  ReviewDecisionTiles,
+  ReviewDialogBody,
+  ReviewDialogFooter,
+  ReviewDialogLoading,
+  ReviewDialogShell,
+  ReviewNotesField,
+  ReviewReportAction,
+  ReviewSignatureField,
+  ReviewStatusNotice,
+  ReviewTimeline,
+} from "@/components/ReviewDialogParts";
 import { trpc } from "@/lib/trpc";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useDeletionStatus } from "@/hooks/useDeletionStatus";
@@ -22,9 +30,9 @@ import { ListFilterBar } from "@/components/ListFilterBar";
 import { applyClearanceFilters, applySampleFilters, hasActiveListFilters } from "@/lib/listFilters";
 import { ReviewSampleListBody } from "@/components/TestDisplay";
 import {
-  ShieldCheck, CheckCircle, XCircle, RotateCcw, ClipboardCheck,
+  ShieldCheck, CheckCircle, XCircle, ClipboardCheck,
   BadgeCheck, FlaskConical, DollarSign, CheckCircle2, Clock,
-  ChevronRight, ExternalLink,
+  ChevronRight,
 } from "lucide-react";
 import { useState, useEffect, useMemo, type ReactElement } from "react";
 import { useAuth } from "@/_core/hooks/useAuth";
@@ -488,49 +496,29 @@ function ClearanceQCSection() {
 
       {/* QC Clearance Review Dialog */}
       <Dialog open={reviewOpen} onOpenChange={o => { if (!o) { setReviewOpen(false); setSelectedReqId(null); } }}>
-        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <BadgeCheck className="w-5 h-5 text-green-600" />
-              {lang === "ar" ? "مراجعة QC لطلب شهادة براءة الذمة" : "QC Review — Clearance Request"}
-              {selectedReq && <span className="text-sm font-mono text-muted-foreground">{selectedReq.requestCode}</span>}
-            </DialogTitle>
-          </DialogHeader>
-
+        <ReviewDialogShell
+          lang={lang}
+          icon={BadgeCheck}
+          title={lang === "ar" ? "مراجعة شهادة براءة الذمة" : "Clearance QC Review"}
+          code={selectedReq?.requestCode}
+        >
           {selectedReq ? (
-            <div className="space-y-4 mt-2">
-              {/* Contractor Info */}
-              <div className="bg-muted/40 rounded-lg p-3 text-sm space-y-1">
-                <div className="flex gap-2">
-                  <span className="text-muted-foreground w-28">{lang === "ar" ? "المقاول:" : "Contractor:"}</span>
-                  <span className="font-semibold">{selectedReq.contractorName}</span>
+            <>
+              <ReviewDialogBody>
+                {/* Stats — unique to modal, not on list card */}
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                  {[
+                    { label: lang === "ar" ? "الاختبارات" : "Tests", value: selectedReq.totalTests, color: "text-slate-800" },
+                    { label: lang === "ar" ? "مطابق" : "Pass", value: selectedReq.passedTests, color: "text-green-700" },
+                    { label: lang === "ar" ? "غير مطابق" : "Fail", value: selectedReq.failedTests, color: "text-red-700" },
+                    { label: lang === "ar" ? "AED" : "AED", value: Number(selectedReq.totalAmount).toFixed(0), color: "text-blue-700" },
+                  ].map((s) => (
+                    <div key={s.label} className="rounded-xl border bg-slate-50/80 px-3 py-2.5 text-center">
+                      <div className={`text-lg font-bold tabular-nums ${s.color}`}>{s.value}</div>
+                      <div className="text-[11px] text-muted-foreground">{s.label}</div>
+                    </div>
+                  ))}
                 </div>
-                <div className="flex gap-2">
-                  <span className="text-muted-foreground w-28">{lang === "ar" ? "رقم العقد:" : "Contract No:"}</span>
-                  <span className="font-mono">{selectedReq.contractNumber}</span>
-                </div>
-                {selectedReq.contractName && (
-                  <div className="flex gap-2">
-                    <span className="text-muted-foreground w-28">{lang === "ar" ? "المشروع:" : "Project:"}</span>
-                    <span>{selectedReq.contractName}</span>
-                  </div>
-                )}
-              </div>
-
-              {/* Stats */}
-              <div className="grid grid-cols-4 gap-2">
-                {[
-                  { label: lang === "ar" ? "إجمالي الاختبارات" : "Total Tests", value: selectedReq.totalTests, color: "text-slate-700" },
-                  { label: lang === "ar" ? "مطابق" : "Pass", value: selectedReq.passedTests, color: "text-green-700" },
-                  { label: lang === "ar" ? "غير مطابق" : "Fail", value: selectedReq.failedTests, color: "text-red-700" },
-                  { label: lang === "ar" ? "الإجمالي (AED)" : "Total (AED)", value: Number(selectedReq.totalAmount).toFixed(0), color: "text-blue-700" },
-                ].map(s => (
-                  <div key={s.label} className="bg-muted/40 rounded-lg p-2.5 text-center">
-                    <div className={`text-lg font-bold ${s.color}`}>{s.value}</div>
-                    <div className="text-xs text-muted-foreground">{s.label}</div>
-                  </div>
-                ))}
-              </div>
 
               {/* Inventory Table */}
               {inventory.length > 0 && (() => {
@@ -601,40 +589,54 @@ function ClearanceQCSection() {
               })()}
 
               {/* Decision */}
-              <div className="space-y-3 border-t pt-4">
-                <Label className="text-sm font-semibold">{lang === "ar" ? "قرار ضبط الجودة" : "QC Final Decision"}</Label>
-                <div className="space-y-1.5">
-                  <Label>{lang === "ar" ? "ملاحظات الجودة" : "QC Notes"}</Label>
-                  <Textarea
-                    rows={3}
-                    placeholder={lang === "ar" ? "أضف ملاحظات ونتائج الفحص..." : "Add QC notes and findings..."}
+              {selectedReq.status === "pending" ? (
+                <>
+                  <ReviewNotesField
+                    lang={lang}
+                    decision={null}
                     value={qcNotes}
-                    onChange={(e) => setQcNotes(e.target.value)}
+                    onChange={setQcNotes}
                   />
-                </div>
-                <div className="flex gap-2">
-                  <Button className="flex-1 bg-green-600 hover:bg-green-700 gap-1.5" disabled={qcReview.isPending}
-                    onClick={() => qcReview.mutate({ id: selectedReq.id, approved: true, notes: qcNotes || undefined })}>
-                    <CheckCircle className="w-3.5 h-3.5" />
+                </>
+              ) : (
+                <ReviewStatusNotice variant="success">
+                  {lang === "ar" ? "تمت مراجعة هذا الطلب." : "This request has already been reviewed."}
+                </ReviewStatusNotice>
+              )}
+              </ReviewDialogBody>
+              {selectedReq.status === "pending" && (
+                <div className="sticky bottom-0 flex gap-2 border-t bg-white/95 px-5 py-3 backdrop-blur-sm">
+                  <Button
+                    className="flex-1 bg-green-600 hover:bg-green-700"
+                    disabled={qcReview.isPending}
+                    onClick={() => qcReview.mutate({ id: selectedReq.id, approved: true, notes: qcNotes || undefined })}
+                  >
                     {qcReview.isPending ? (lang === "ar" ? "جاري..." : "Submitting...") : (lang === "ar" ? "اعتماد QC" : "QC Approve")}
                   </Button>
-                  <Button className="flex-1 bg-red-600 hover:bg-red-700 gap-1.5" disabled={qcReview.isPending}
-                    onClick={() => qcReview.mutate({ id: selectedReq.id, approved: false, notes: qcNotes || undefined })}>
-                    <XCircle className="w-3.5 h-3.5" />
+                  <Button
+                    className="flex-1 bg-red-600 hover:bg-red-700"
+                    disabled={qcReview.isPending}
+                    onClick={() => qcReview.mutate({ id: selectedReq.id, approved: false, notes: qcNotes || undefined })}
+                  >
                     {lang === "ar" ? "رفض" : "Reject"}
                   </Button>
                   <Button variant="outline" onClick={() => { setReviewOpen(false); setSelectedReqId(null); }}>
                     {lang === "ar" ? "إلغاء" : "Cancel"}
                   </Button>
                 </div>
-              </div>
-            </div>
+              )}
+              {selectedReq.status !== "pending" && (
+                <ReviewDialogFooter
+                  lang={lang}
+                  readOnly
+                  onClose={() => { setReviewOpen(false); setSelectedReqId(null); }}
+                />
+              )}
+            </>
           ) : (
-            <div className="p-8 text-center text-sm text-muted-foreground">
-              {lang === "ar" ? "جاري التحميل..." : "Loading..."}
-            </div>
+            <ReviewDialogLoading lang={lang} />
           )}
-        </DialogContent>
+        </ReviewDialogShell>
       </Dialog>
     </div>
   );
@@ -739,7 +741,6 @@ export default function QCReview() {
     setLoadTimedOut(false);
   };
 
-  const isBatchSample = (distributions?.length ?? 0) > 1 || (sampleOrders?.length ?? 0) > 0;
   const dist = distributions?.[0];
   const result = pickPrimaryResult(results);
   const specializedResult = pickPrimaryResult(specializedResults);
@@ -782,12 +783,6 @@ export default function QCReview() {
   const canAct = canTakeQcAction(selectedSample);
   const isQcAlreadyDone = !canAct;
 
-  const overallCompliance = specializedResult
-    ? (specializedResult.overallResult ?? "pending")
-    : (result?.complianceStatus ?? "pending");
-  const isPass = overallCompliance === "pass";
-  const isFail = overallCompliance === "fail";
-
   const lastApprovalSignature =
     managerReview?.signature ||
     specializedResult?.managerReviewedByName ||
@@ -799,25 +794,49 @@ export default function QCReview() {
     result?.managerReviewedAt ||
     null;
 
-  const testTypeDisplay = (() => {
-    if (isBatchSample && distributions?.length) {
-      const names = distributions.map((d) =>
-        lang === "ar"
-          ? ((d as { testNameAr?: string }).testNameAr ?? d.testName)
-          : ((d as { testNameEn?: string }).testNameEn ?? d.testName),
-      );
-      return names.join(" · ");
+  const timelineItems = useMemo(() => {
+    const items: Array<{
+      id: string | number;
+      kind: "supervisor" | "qc" | "neutral";
+      title: string;
+      decision?: string;
+      comments?: string | null;
+      signature?: string | null;
+      date?: Date | string | null;
+      lang: string;
+    }> = [];
+    if (managerReview) {
+      items.push({
+        id: `mgr-${managerReview.id}`,
+        kind: "supervisor",
+        title: lang === "ar" ? "مراجعة المشرف" : "Supervisor Review",
+        decision: managerReview.decision,
+        comments: managerReview.comments,
+        signature: managerReview.signature || lastApprovalSignature,
+        date: managerReview.createdAt || lastApprovalDate,
+        lang,
+      });
     }
-    return lang === "ar"
-      ? ((dist as { testNameAr?: string } | undefined)?.testNameAr ?? dist?.testName ?? specializedResult?.testTypeCode ?? "—")
-      : ((dist as { testNameEn?: string } | undefined)?.testNameEn ?? dist?.testName ?? specializedResult?.testTypeCode ?? "—");
-  })();
-  const contractorDisplay =
-    selectedSample?.contractorName ?? specializedResult?.contractorName ?? (dist as { contractorName?: string } | undefined)?.contractorName ?? "—";
-  const contractNameDisplay =
-    selectedSample?.contractName ?? specializedResult?.projectName ?? "—";
-  const contractNumberDisplay =
-    selectedSample?.contractNumber ?? specializedResult?.contractNo ?? "—";
+    for (const review of priorQcReviews) {
+      items.push({
+        id: review.id,
+        kind: canAct ? "neutral" : "qc",
+        title: canAct
+          ? lang === "ar"
+            ? "مراجعة ضبط الجودة السابقة"
+            : "Previous QC Review"
+          : lang === "ar"
+            ? "مراجعة ضبط الجودة"
+            : "QC Review",
+        decision: review.decision,
+        comments: review.comments,
+        signature: review.signature,
+        date: review.createdAt,
+        lang,
+      });
+    }
+    return items;
+  }, [managerReview, priorQcReviews, canAct, lang, lastApprovalSignature, lastApprovalDate]);
 
 
   useEffect(() => {
@@ -1016,299 +1035,138 @@ export default function QCReview() {
 
       {/* QC Review Dialog */}
       <Dialog open={!!selectedSample} onOpenChange={(o) => !o && setSelectedSample(null)}>
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 flex-wrap">
-              <ShieldCheck className="w-5 h-5" />
-              {lang === "ar" ? `ضبط الجودة — ${selectedSample?.sampleCode}` : `QC Review — ${selectedSample?.sampleCode}`}
+        <ReviewDialogShell
+          lang={lang}
+          icon={ShieldCheck}
+          title={lang === "ar" ? "ضبط الجودة" : "Quality Control"}
+          code={selectedSample?.sampleCode}
+          badge={selectedSample ? (
+            <span className="flex items-center gap-2">
               {dialogSamplePendingBadge}
-            </DialogTitle>
-          </DialogHeader>
-
+              <StatusBadge status={selectedSample.status} />
+            </span>
+          ) : undefined}
+        >
           {isModalDataLoading ? (
-            <div className="p-8 text-center text-sm text-muted-foreground">
-              {loadTimedOut ? (
-                <div className="space-y-3">
-                  <p>{lang === "ar" ? "تعذر تحميل النتائج" : "Could not load results"}</p>
-                  {wrapDisabledWithTooltip(
-                    dialogSamplePending,
-                    dialogSampleDisabledWarning,
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      disabled={dialogSamplePending}
-                      onClick={handleRetryLoad}
-                    >
-                      {lang === "ar" ? "إعادة المحاولة" : "Retry"}
-                    </Button>
-                  )}
-                </div>
-              ) : (
-                <p>{lang === "ar" ? "جاري تحميل النتائج..." : "Loading results..."}</p>
-              )}
-            </div>
+            loadTimedOut ? (
+              <ReviewDialogBody>
+                <ReviewStatusNotice variant="warning">
+                  {lang === "ar" ? "تعذر تحميل النتائج." : "Could not load results."}
+                </ReviewStatusNotice>
+                {wrapDisabledWithTooltip(
+                  dialogSamplePending,
+                  dialogSampleDisabledWarning,
+                  <Button variant="outline" size="sm" disabled={dialogSamplePending} onClick={handleRetryLoad}>
+                    {lang === "ar" ? "إعادة المحاولة" : "Retry"}
+                  </Button>,
+                )}
+              </ReviewDialogBody>
+            ) : (
+              <ReviewDialogLoading lang={lang} />
+            )
           ) : hasAnyResult ? (
-            <div className="space-y-5 mt-2">
-              {/* Sample / test context */}
-              <div className="rounded-lg border bg-muted/30 p-3">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2 text-xs">
-                  {[
-                    { label: lang === "ar" ? "نوع الاختبار" : "Test Type", value: testTypeDisplay },
-                    { label: lang === "ar" ? "المقاول" : "Contractor", value: contractorDisplay },
-                    { label: lang === "ar" ? "اسم العقد" : "Contract Name", value: contractNameDisplay },
-                    { label: lang === "ar" ? "رقم العقد" : "Contract Number", value: contractNumberDisplay },
-                  ].map(({ label, value }) => (
-                    <div key={label}>
-                      <span className="text-muted-foreground">{label}: </span>
-                      <span className="font-medium">{value}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
+            <>
+              <ReviewDialogBody>
+                {reportUrl && (
+                  <ReviewReportAction lang={lang} onClick={() => window.open(reportUrl, "_blank")} />
+                )}
 
-              {/* Open Report Button */}
-              {reportUrl && (
-                <Button
-                  variant="outline"
-                  className="w-full gap-2 border-blue-200 text-blue-700 hover:bg-blue-50 hover:border-blue-400"
-                  onClick={() => window.open(reportUrl, "_blank")}
-                >
-                  <ExternalLink className="w-4 h-4" />
-                  {lang === "ar" ? "فتح تقرير الاختبار" : "Open Test Report"}
-                </Button>
-              )}
+                <ReviewTimeline items={timelineItems} />
 
-              {/* Supervisor Review Summary */}
-              {managerReview && (
-                <div className="bg-teal-50 border border-teal-200 rounded-lg p-3 text-xs space-y-1">
-                  <p className="font-semibold text-teal-800">{lang === "ar" ? "مراجعة المشرف" : "Supervisor Review"}</p>
-                  <p><span className="text-muted-foreground">{lang === "ar" ? "القرار:" : "Decision:"}</span> <span className="font-medium capitalize">{managerReview.decision.replace(/_/g, " ")}</span></p>
-                  {managerReview.comments && <p><span className="text-muted-foreground">{lang === "ar" ? "التعليقات:" : "Comments:"}</span> {managerReview.comments}</p>}
-                  {(managerReview.signature || lastApprovalSignature) && (
-                    <p className="pt-1 border-t border-teal-200 mt-1">
-                      <span className="text-muted-foreground">{lang === "ar" ? "موقع من:" : "Signed by:"}</span>{" "}
-                      <span className="font-semibold text-teal-900">{managerReview.signature || lastApprovalSignature}</span>
-                      {lastApprovalDate && (
-                        <span className="text-muted-foreground ms-2">
-                          · {new Date(lastApprovalDate).toLocaleDateString(lang === "ar" ? "ar-AE" : "en-GB")}
-                        </span>
-                      )}
-                    </p>
-                  )}
-                </div>
-              )}
+                {selectedSample?.status === "revision_requested" && (
+                  <ReviewStatusNotice variant="warning">
+                    {lang === "ar"
+                      ? "في انتظار إعادة الفني للاختبار واعتماد المشرف قبل مراجعة ضبط الجودة مرة أخرى."
+                      : "Waiting for the technician to revise and the supervisor to re-approve before QC can review again."}
+                  </ReviewStatusNotice>
+                )}
 
-              {/* Prior QC review history */}
-              {priorQcReviews.length > 0 && (
-                <div className={`rounded-lg border p-3 text-xs space-y-2 ${canAct ? "bg-slate-50 border-slate-200" : "bg-emerald-50 border-emerald-200"}`}>
-                  <p className={`font-semibold ${canAct ? "text-slate-800" : "text-emerald-800"}`}>
-                    {canAct
-                      ? (lang === "ar" ? "مراجعة ضبط الجودة السابقة" : "Previous QC Review")
-                      : (lang === "ar" ? "تمت مراجعة ضبط الجودة" : "QC Review Completed")}
-                  </p>
-                  {priorQcReviews.map((review) => (
-                    <div key={review.id} className="space-y-1 border-t border-current/10 pt-2 first:border-0 first:pt-0">
-                      <p>
-                        <span className="text-muted-foreground">{lang === "ar" ? "القرار:" : "Decision:"}</span>{" "}
-                        <span className="font-medium capitalize">{review.decision.replace(/_/g, " ")}</span>
-                      </p>
-                      {review.comments && (
-                        <p>
-                          <span className="text-muted-foreground">{lang === "ar" ? "الملاحظات:" : "Notes:"}</span>{" "}
-                          {review.comments}
-                        </p>
-                      )}
-                      {review.signature && (
-                        <p>
-                          <span className="text-muted-foreground">{lang === "ar" ? "موقع من:" : "Signed by:"}</span>{" "}
-                          <span className="font-semibold">{review.signature}</span>
-                          {review.createdAt && (
-                            <span className="text-muted-foreground ms-2">
-                              · {new Date(review.createdAt).toLocaleDateString(lang === "ar" ? "ar-AE" : "en-GB")}
-                            </span>
-                          )}
-                        </p>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {selectedSample?.status === "revision_requested" && (
-                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-900">
-                  {lang === "ar"
-                    ? "في انتظار إعادة الفني للاختبار واعتماد المشرف قبل مراجعة ضبط الجودة مرة أخرى."
-                    : "Waiting for the technician to revise and the supervisor to re-approve before QC can review again."}
-                </div>
-              )}
-
-              {!isQcAlreadyDone && (
-              <>
-              {/* QC attestation */}
-              <div className="rounded-lg border border-blue-200 bg-blue-50/60 p-3.5 space-y-2">
-                <p className="text-xs font-semibold text-blue-900">
-                  {lang === "ar" ? "إقرار ضبط الجودة" : "QC Inspector Attestation"}
-                </p>
-                <p className="text-xs leading-relaxed text-blue-950/90">
-                  {lang === "ar"
-                    ? "بالضغط على «اعتماد الجودة»، أُقرّ بصفتي مسؤول ضبط الجودة أنني راجعت نتائج هذا الاختبار وفق مؤهلات وصلاحيات ضبط الجودة المعتمدة في المختبر، وأن الاختبار نُفّذ وفق المعايير المعتمدة، والحسابات والنتائج دقيقة ومتوافقة مع متطلبات المشروع، والتوثيق مكتمل، والإجراءات اتُبعت بشكل صحيح."
-                    : "By selecting QC Approved, I confirm—as the authorized QC inspector—that I have reviewed this test result in accordance with the laboratory’s QC qualifications and procedures; that the test was performed per applicable standards; that calculations, results, charts, and documentation are accurate, complete, and consistent with project requirements; and that all QC requirements for release have been satisfied."}
-                </p>
-              </div>
-
-              {/* Decision */}
-              <div className="space-y-3 border-t pt-4">
-                <Label className="text-sm font-semibold">{lang === "ar" ? "قرار ضبط الجودة" : "QC Final Decision"}</Label>
-                <div className="flex gap-2">
-                  {wrapDisabledWithTooltip(
-                    dialogSamplePending,
-                    dialogSampleDisabledWarning,
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant={decision === "approved" ? "default" : "outline"}
-                      className={`gap-1.5 flex-1 ${decision === "approved" ? "bg-green-600 hover:bg-green-700" : ""} ${dialogSamplePending ? "opacity-60" : ""}`}
-                      disabled={dialogSamplePending}
-                      onClick={() => setDecision("approved")}
-                    >
-                      <CheckCircle className="w-3.5 h-3.5" />
-                      {lang === "ar" ? "اعتماد الجودة" : "QC Approved"}
-                    </Button>
-                  )}
-                  {wrapDisabledWithTooltip(
-                    dialogSamplePending,
-                    dialogSampleDisabledWarning,
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant={decision === "needs_revision" ? "default" : "outline"}
-                      className={`gap-1.5 flex-1 ${decision === "needs_revision" ? "bg-amber-600 hover:bg-amber-700" : ""} ${dialogSamplePending ? "opacity-60" : ""}`}
-                      disabled={dialogSamplePending}
-                      onClick={() => setDecision("needs_revision")}
-                    >
-                      <RotateCcw className="w-3.5 h-3.5" />
-                      {lang === "ar" ? "طلب مراجعة" : "Request Revision"}
-                    </Button>
-                  )}
-                  {wrapDisabledWithTooltip(
-                    dialogSamplePending,
-                    dialogSampleDisabledWarning,
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant={decision === "rejected" ? "default" : "outline"}
-                      className={`gap-1.5 flex-1 ${decision === "rejected" ? "bg-red-600 hover:bg-red-700" : ""} ${dialogSamplePending ? "opacity-60" : ""}`}
-                      disabled={dialogSamplePending}
-                      onClick={() => setDecision("rejected")}
-                    >
-                      <XCircle className="w-3.5 h-3.5" />
-                      {lang === "ar" ? "رفض" : "Reject"}
-                    </Button>
-                  )}
-                </div>
-
-                <div className="space-y-1.5">
-                  <Label className="flex items-center gap-1">
-                    {lang === "ar" ? "ملاحظات الجودة" : "QC Notes"}
-                    {(decision === "rejected" || decision === "needs_revision") && (
-                      <span className="text-red-500 text-xs">{lang === "ar" ? " (إلزامي)" : " (required)"}</span>
-                    )}
-                  </Label>
-                  <Textarea
-                    rows={3}
-                    placeholder={
-                      decision === "rejected"
-                        ? (lang === "ar" ? "اكتب سبب الرفض بوضوح..." : "Clearly state the reason for rejection...")
-                        : decision === "needs_revision"
-                        ? (lang === "ar" ? "اكتب ما يجب تعديله أو إعادة فحصه..." : "Describe what needs to be revised...")
-                        : (lang === "ar" ? "أضف ملاحظات ونتائج الفحص..." : "Add QC notes and findings...")
-                    }
-                    value={comments}
-                    disabled={dialogSamplePending}
-                    onChange={(e) => setComments(e.target.value)}
-                    className={(decision === "rejected" || decision === "needs_revision") && !comments.trim() ? "border-amber-400 focus:border-amber-500" : ""}
-                  />
-                  {(decision === "rejected" || decision === "needs_revision") && !comments.trim() && (
-                    <p className="text-xs text-amber-600">
-                      {lang === "ar" ? "⚠ يجب كتابة سبب القرار عند الرفض أو طلب المراجعة" : "⚠ A reason is required when rejecting or requesting revision"}
-                    </p>
-                  )}
-                </div>
-
-                {/* Digital Signature — auto-filled from logged-in user */}
-                <div className="space-y-1.5">
-                  <Label>
-                    {lang === "ar" ? "التوقيع الرقمي — ضبط الجودة" : "Digital Signature — QC"}
-                    <span className="ms-1.5 text-xs text-muted-foreground font-normal">
-                      ({lang === "ar" ? "تلقائي باسم المستخدم الحالي" : "auto-filled from current user"})
-                    </span>
-                  </Label>
-                  <div className="flex items-center gap-2 border rounded px-3 py-2 text-sm bg-muted/30">
-                    <span className="text-primary font-semibold flex-1">
-                      {currentUserSignature || (authLoading ? (lang === "ar" ? "جاري التحميل..." : "Loading...") : "—")}
-                    </span>
-                    <span className="text-xs text-muted-foreground">{new Date().toLocaleDateString(lang === "ar" ? "ar-AE" : "en-AE")}</span>
-                  </div>
-                  {lastApprovalSignature && (
-                    <p className="text-xs text-muted-foreground">
-                      {lang === "ar" ? "آخر اعتماد:" : "Last approval:"}{" "}
-                      <span className="font-medium text-foreground">{lastApprovalSignature}</span>
-                      {lastApprovalDate && (
-                        <span> · {new Date(lastApprovalDate).toLocaleDateString(lang === "ar" ? "ar-AE" : "en-GB")}</span>
-                      )}
-                    </p>
-                  )}
-                </div>
-
-                <div className="flex gap-2">
-                  {wrapDisabledWithTooltip(
-                    dialogSamplePending,
-                    dialogSampleDisabledWarning,
-                    <Button
-                      className={`flex-1 ${
-                        decision === "approved"
-                          ? "bg-green-600 hover:bg-green-700"
-                          : decision === "needs_revision"
-                          ? "bg-amber-600 hover:bg-amber-700"
-                          : decision === "rejected"
-                          ? "bg-red-600 hover:bg-red-700"
-                          : ""
-                      }`}
-                      disabled={
-                        dialogSamplePending ||
-                        !decision ||
-                        qcReview.isPending ||
-                        ((decision === "rejected" || decision === "needs_revision") && !comments.trim())
+                {!isQcAlreadyDone && (
+                  <>
+                    <ReviewAttestation
+                      lang={lang}
+                      title={lang === "ar" ? "إقرار ضبط الجودة" : "QC Inspector Attestation"}
+                      body={
+                        lang === "ar"
+                          ? "بالضغط على «اعتماد الجودة»، أُقرّ بصفتي مسؤول ضبط الجودة أنني راجعت نتائج هذا الاختبار وفق مؤهلات وصلاحيات ضبط الجودة المعتمدة في المختبر، وأن الاختبار نُفّذ وفق المعايير المعتمدة، والحسابات والنتائج دقيقة ومتوافقة مع متطلبات المشروع."
+                          : "By selecting QC Approved, I confirm—as the authorized QC inspector—that I have reviewed this test result per laboratory QC procedures; that the test was performed per applicable standards; and that calculations, results, and documentation are accurate and complete."
                       }
-                      onClick={handleReview}
-                    >
-                      {qcReview.isPending
-                        ? (lang === "ar" ? "جاري الإرسال..." : "Submitting...")
-                        : (lang === "ar" ? "إرسال ضبط الجودة" : "Submit QC Review")}
-                    </Button>
-                  )}
-                  <Button variant="outline" onClick={() => setSelectedSample(null)}>
-                    {lang === "ar" ? "إلغاء" : "Cancel"}
-                  </Button>
-                </div>
-              </div>
-              </>
-              )}
+                    />
 
-              {isQcAlreadyDone && (
-                <div className="flex justify-end pt-2">
-                  <Button variant="outline" onClick={() => setSelectedSample(null)}>
-                    {lang === "ar" ? "إغلاق" : "Close"}
-                  </Button>
-                </div>
-              )}
-            </div>
+                    <div className="space-y-3">
+                      <p className="text-sm font-semibold">
+                        {lang === "ar" ? "قرار ضبط الجودة" : "Your decision"}
+                      </p>
+                      {wrapDisabledWithTooltip(
+                        dialogSamplePending,
+                        dialogSampleDisabledWarning,
+                        <ReviewDecisionTiles
+                          lang={lang}
+                          decision={decision}
+                          disabled={dialogSamplePending}
+                          onSelect={setDecision}
+                        />,
+                      )}
+                    </div>
+
+                    <ReviewNotesField
+                      lang={lang}
+                      decision={decision}
+                      value={comments}
+                      disabled={dialogSamplePending}
+                      onChange={setComments}
+                    />
+
+                    <ReviewSignatureField
+                      lang={lang}
+                      signature={currentUserSignature}
+                      loading={authLoading}
+                    />
+                  </>
+                )}
+              </ReviewDialogBody>
+
+              <ReviewDialogFooter
+                lang={lang}
+                readOnly={isQcAlreadyDone}
+                onClose={() => setSelectedSample(null)}
+                onSubmit={handleReview}
+                submitLabel={
+                  decision === "approved"
+                    ? lang === "ar"
+                      ? "اعتماد الجودة"
+                      : "QC Approved"
+                    : decision === "needs_revision"
+                      ? lang === "ar"
+                        ? "طلب مراجعة"
+                        : "Request Revision"
+                      : decision === "rejected"
+                        ? lang === "ar"
+                          ? "تأكيد الرفض"
+                          : "Confirm Rejection"
+                        : lang === "ar"
+                          ? "إرسال ضبط الجودة"
+                          : "Submit QC Review"
+                }
+                submitting={qcReview.isPending}
+                submitDisabled={
+                  dialogSamplePending ||
+                  !decision ||
+                  ((decision === "rejected" || decision === "needs_revision") && !comments.trim())
+                }
+                submitVariant={decision}
+              />
+            </>
           ) : (
-            <div className="p-8 text-center text-sm text-muted-foreground">
-              {lang === "ar" ? "لا توجد نتائج اختبار مُدخلة لهذه العينة" : "No test results submitted yet for this sample"}
-            </div>
+            <ReviewDialogBody>
+              <ReviewStatusNotice variant="info">
+                {lang === "ar"
+                  ? "لا توجد نتائج اختبار مُدخلة لهذه العينة بعد."
+                  : "No test results have been submitted for this sample yet."}
+              </ReviewStatusNotice>
+            </ReviewDialogBody>
           )}
-        </DialogContent>
+        </ReviewDialogShell>
       </Dialog>
     </DashboardLayout>
   );
