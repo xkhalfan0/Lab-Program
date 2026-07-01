@@ -57,10 +57,21 @@
     display: none !important;
   }
 
-  /* Full-width data tables only — keep small header tables (e.g. ref box) auto-sized */
-  table.metadata-table,
-  table.signatures-table,
-  table.lab-results-table {
+  /* Results tables only — info sections stay borderless */
+  table.lab-results-table,
+  table.signatures-table {
+    border: 0.5pt solid #000 !important;
+    border-collapse: collapse !important;
+    width: 100% !important;
+  }
+
+  table.report-info-table,
+  table.report-info-table th,
+  table.report-info-table td {
+    border: none !important;
+  }
+
+  table.metadata-table {
     border: 0.5pt solid #000 !important;
     border-collapse: collapse !important;
     width: 100% !important;
@@ -91,11 +102,40 @@
     border-color: #000 !important;
   }
 
-  .report-page th,
-  .report-page td {
-    border-width: 0.5pt !important;
-    border-style: solid !important;
-    border-color: #000 !important;
+  table.report-info-table th,
+  table.report-info-table td {
+    border: none !important;
+  }
+
+  .lab-print-root table.report-info-table,
+  .report-page table.report-info-table {
+    table-layout: fixed !important;
+    font-size: 8pt;
+    margin-top: 4pt;
+    margin-bottom: 4pt;
+  }
+
+  .lab-print-root table.report-info-table td:nth-child(odd),
+  .report-page table.report-info-table td:nth-child(odd) {
+    font-weight: 600 !important;
+    color: #374151 !important;
+  }
+
+  .lab-print-root table.report-info-table td:nth-child(even),
+  .report-page table.report-info-table td:nth-child(even) {
+    font-weight: 400 !important;
+  }
+
+  .lab-print-root .report-info-section,
+  .report-page .report-info-section {
+    border-bottom: 0.5pt solid #d1d5db !important;
+    margin-bottom: 8pt !important;
+    padding-bottom: 6pt !important;
+  }
+
+  .lab-print-root .report-reference-bar,
+  .report-page .report-reference-bar {
+    margin-bottom: 6pt !important;
   }
 
   table.metadata-table th,

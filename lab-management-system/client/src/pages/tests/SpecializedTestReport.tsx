@@ -37,6 +37,14 @@ import {
   resolveReportStandardDisplay,
 } from "@/lib/reportFormatting";
 import { calculateFinalBlend, formatDisplaySieveMm } from "@/pages/tests/SieveAnalysis";
+import { buildConcreteCubeTestConditionPairs } from "@/lib/concreteCubeTestConditions";
+import {
+  ReportDetailGrid,
+  ReportInfoHeading,
+  ReportInfoPairsTable,
+  ReportInfoSection,
+  ReportReferenceBar,
+} from "@/components/reports/ReportInfoLayout";
 import {
   formatBlendPct,
   formatSpecLimit,
@@ -3763,6 +3771,18 @@ function renderConcreteCubes(fd: any, isAr: boolean) {
     curingKey && curingLabels[curingKey]
       ? (isAr ? curingLabels[curingKey].ar : curingLabels[curingKey].en)
       : curingKey || "—";
+  const testConditionPairs = buildConcreteCubeTestConditionPairs(
+    {
+      moistureCondition: fd.moistureCondition,
+      labCuringTemperature: fd.labCuringTemperature,
+      labCuringRh: fd.labCuringRh,
+      loadingRate: fd.loadingRate,
+      surfaceConditionAtTest: fd.surfaceConditionAtTest,
+      cappingMethod: fd.cappingMethod,
+      curingConditionLabel: curingLabel !== "—" ? curingLabel : null,
+    },
+    isAr,
+  );
   // Nominal cube size: from saved formData or inferred from first cube row
   const nominalCubeSize = fd.nominalCubeSize ?? (cubes.length > 0 ? `${cubes[0].cubeSize ?? 150}mm` : "150mm");
   const headers = isAr
@@ -3770,6 +3790,10 @@ function renderConcreteCubes(fd: any, isAr: boolean) {
     : ["Cube No.", "Location", "Size (mm)", "Load (kN)", "Area (mm²)", "Raw Str. (N/mm²)", "Corrected Str. (N/mm²)", "Result"];
   return (
     <>
+      <div className="mb-4">
+        <ReportInfoHeading>{isAr ? "ظروف الاختبار والتحضير" : "Test Conditions & Preparation"}</ReportInfoHeading>
+        <ReportInfoPairsTable pairs={testConditionPairs} />
+      </div>
       <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3 mb-4 text-xs">
         <div className="bg-blue-50 border border-blue-200 rounded p-2 text-center">
           <p className="text-blue-600 font-semibold">{isAr ? "تاريخ الصب" : "Casting Date"}</p>
@@ -4586,110 +4610,60 @@ export function SpecializedTestReportBody({
         </div>
       )}
 
-      <div className="border border-gray-200 rounded mb-3 overflow-hidden">
-        <table className="metadata-table w-full border-collapse text-xs bg-gray-50">
-          <tbody>
-            <tr>
-              <td className="border border-gray-200 px-2 py-2 text-center align-top w-1/3">
-                <span className={REPORT_REF_LABEL_CLASS}>{isAr ? "رقم العينة" : "Sample No."}</span>
-                <span className="font-mono font-normal text-gray-900 text-sm">{dist?.sampleCode ?? "—"}</span>
-                {dist?.retestNumber != null && (
+      <ReportInfoSection className="mb-3">
+        <ReportReferenceBar
+          items={[
+            {
+              label: isAr ? "رقم العينة" : "Sample No.",
+              value: dist?.sampleCode ?? "—",
+              extra:
+                dist?.retestNumber != null ? (
                   <span className="block text-[10px] text-amber-700 mt-0.5">
                     {isAr ? `إعادة ${dist.retestNumber}` : `Retest ${dist.retestNumber}`}
                     {dist?.originalSampleCode
                       ? ` · ${isAr ? "الأصل" : "Original"}: ${dist.originalSampleCode}`
                       : ""}
                   </span>
-                )}
-              </td>
-              <td className="border border-gray-200 px-2 py-2 text-center align-top w-1/3">
-                <span className={REPORT_REF_LABEL_CLASS}>{inspectionRefLabel(isAr ? "ar" : "en")}</span>
-                <span className="font-mono font-normal text-gray-900 text-sm">
-                  {formatInspectionReference(dist?.referenceNo)}
-                </span>
-              </td>
-              <td className="border border-gray-200 px-2 py-2 text-center align-top w-1/3">
-                <span className={REPORT_REF_LABEL_CLASS}>{isAr ? "تاريخ الاستلام" : "Received Date"}</span>
-                <span className={REPORT_REF_VALUE_CLASS}>{fmtDate(dist?.receivedAt)}</span>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-        <table className="metadata-table w-full border-collapse text-xs">
-          <tbody>
-            {(() => {
-              const detailLeft: [string, string][] = [
-                [isAr ? "نوع الفحص" : "Test Type", String(testNameDisplay)],
-                [isAr ? "المعيار" : "Standard", standardDisplay],
-                [isAr ? "المقاول" : "Contractor", String(dist?.contractorName ?? result.contractorName ?? "—")],
-                [isAr ? "رقم العقد" : "Contract No.", String(dist?.contractNumber ?? result.contractNo ?? "—")],
-              ];
-              const detailRight: [string, string][] = [
-                [isAr ? "اسم المشروع" : "Project Name", String(dist?.contractName ?? result.projectName ?? "—")],
-                [isAr ? "القطاع" : "Sector", dist?.sector ? String(dist.sector).replace("_", " ").toUpperCase() : "—"],
-                [isAr ? "موقع العينة" : "Sample Location", String(dist?.sampleLocation ?? "—")],
-                [isAr ? "تاريخ الفحص" : "Test date", fmtDate(result.testDate)],
-                [isAr ? "تاريخ التقرير" : "Report Date", reportDateStr],
-              ];
-              const n = Math.max(detailLeft.length, detailRight.length);
-              return Array.from({ length: n }, (_, i) => {
-                const L = detailLeft[i];
-                const R = detailRight[i];
-                return (
-                  <tr key={i}>
-                    <td className={REPORT_META_LABEL_CLASS}>{L?.[0] ?? ""}</td>
-                    <td className={REPORT_META_VALUE_CLASS}>{L?.[1] ?? ""}</td>
-                    <td className={REPORT_META_LABEL_CLASS}>{R?.[0] ?? ""}</td>
-                    <td className={REPORT_META_VALUE_CLASS}>{R?.[1] ?? ""}</td>
-                  </tr>
-                );
-              });
-            })()}
-          </tbody>
-        </table>
-      </div>
+                ) : undefined,
+            },
+            {
+              label: inspectionRefLabel(isAr ? "ar" : "en"),
+              value: formatInspectionReference(dist?.referenceNo),
+            },
+            {
+              label: isAr ? "تاريخ الاستلام" : "Received Date",
+              value: fmtDate(dist?.receivedAt),
+            },
+          ]}
+        />
+        <ReportDetailGrid
+          left={[
+            [isAr ? "نوع الفحص" : "Test Type", String(testNameDisplay)],
+            [isAr ? "المعيار" : "Standard", standardDisplay],
+            [isAr ? "المقاول" : "Contractor", String(dist?.contractorName ?? result.contractorName ?? "—")],
+            [isAr ? "رقم العقد" : "Contract No.", String(dist?.contractNumber ?? result.contractNo ?? "—")],
+          ]}
+          right={[
+            [isAr ? "اسم المشروع" : "Project Name", String(dist?.contractName ?? result.projectName ?? "—")],
+            [isAr ? "القطاع" : "Sector", dist?.sector ? String(dist.sector).replace("_", " ").toUpperCase() : "—"],
+            [isAr ? "موقع العينة" : "Sample Location", String(dist?.sampleLocation ?? "—")],
+            [isAr ? "تاريخ الفحص" : "Test date", fmtDate(result.testDate)],
+            [isAr ? "تاريخ التقرير" : "Report Date", reportDateStr],
+          ]}
+        />
+      </ReportInfoSection>
 
       {summaryValues && Object.keys(summaryValues).length > 0 && result.formTemplate !== "interlock" && (
         <div className="mb-3">
-          <h3 className="text-xs font-bold text-gray-900 uppercase border-b border-gray-300 pb-1 mb-2">
-            {isAr ? "ملخص النتائج" : "Summary Results"}
-          </h3>
-          <table className="metadata-table w-full border-collapse text-xs">
-            <tbody>
-              {(() => {
-                const entries = Object.entries(summaryValues).filter(
-                  ([k]) => !REPORT_DUPLICATE_METADATA_KEYS.has(k),
-                );
-                const rows: Array<typeof entries> = [];
-                for (let i = 0; i < entries.length; i += 2) rows.push(entries.slice(i, i + 2));
-                return rows.map((pair, ri) => {
-                  const [a, b] = [pair[0], pair[1]];
-                  return (
-                    <tr key={ri}>
-                      <td className={REPORT_META_LABEL_CLASS}>
-                        {formatSummaryLabel(a[0], result.formTemplate, isAr)}
-                      </td>
-                      <td className={REPORT_META_VALUE_CLASS}>
-                        {formatSummaryValue(a[0], a[1], isAr, result.formTemplate)}
-                      </td>
-                      {b ? (
-                        <>
-                          <td className={REPORT_META_LABEL_CLASS}>
-                            {formatSummaryLabel(b[0], result.formTemplate, isAr)}
-                          </td>
-                          <td className={REPORT_META_VALUE_CLASS}>
-                            {formatSummaryValue(b[0], b[1], isAr, result.formTemplate)}
-                          </td>
-                        </>
-                      ) : (
-                        <td className="border border-gray-200 px-2 py-1" colSpan={2} />
-                      )}
-                    </tr>
-                  );
-                });
-              })()}
-            </tbody>
-          </table>
+          <ReportInfoHeading>{isAr ? "ملخص النتائج" : "Summary Results"}</ReportInfoHeading>
+          <ReportInfoPairsTable
+            pairs={Object.entries(summaryValues)
+              .filter(([k]) => !REPORT_DUPLICATE_METADATA_KEYS.has(k))
+              .map(([k, v]) => [
+                formatSummaryLabel(k, result.formTemplate, isAr),
+                formatSummaryValue(k, v, isAr, result.formTemplate),
+              ] as [string, string])}
+          />
         </div>
       )}
 

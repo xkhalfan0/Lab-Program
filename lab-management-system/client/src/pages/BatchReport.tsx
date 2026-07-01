@@ -23,17 +23,13 @@ import {
   printLabReport,
 } from "@/lib/labPrintLayout";
 import { getOfficialTestDisplayName } from "@/lib/officialTestCatalog";
+import { ReportReferenceBar, ReportInfoSection, ReportInfoPairsTable } from "@/components/reports/ReportInfoLayout";
 import {
   formatSummaryLabel,
   formatSummaryValue,
   SpecializedTestReportBody,
 } from "@/pages/tests/SpecializedTestReport";
 import { ConcreteCubeReportPage } from "@/pages/ConcreteReport";
-import {
-  REPORT_META_LABEL_CLASS,
-  REPORT_META_VALUE_CLASS,
-  REPORT_REF_LABEL_CLASS,
-} from "@/lib/reportFormatting";
 import { ReportSignatures, pickReviewSignatures } from "@/components/reports/ReportSignatures";
 import {
   Loader2,
@@ -497,38 +493,19 @@ export default function BatchReport() {
             />
             <BatchStatusPanel status={batchStatus} passCount={passCount} total={total} isAr={isAr} />
 
-            <div className="border border-gray-200 rounded mb-5 overflow-hidden">
-              <table className="metadata-table w-full border-collapse text-xs bg-gray-50">
-                <tbody>
-                  <tr>
-                    <td className="border border-gray-200 px-2 py-2 text-center w-1/4">
-                      <span className={REPORT_REF_LABEL_CLASS}>
-                        {isAr ? "\u0631\u0642\u0645 \u0627\u0644\u0639\u064a\u0646\u0629" : "Sample No."}
-                      </span>
-                      <span className="font-mono font-bold text-sm">{sample?.sampleCode ?? EM_DASH}</span>
-                    </td>
-                    <td className="border border-gray-200 px-2 py-2 text-center w-1/4">
-                      <span className={REPORT_REF_LABEL_CLASS}>
-                        {inspectionRefLabel(isAr ? "ar" : "en")}
-                      </span>
-                      <span className="font-mono font-bold text-sm">{formatInspectionReference(sample?.referenceNo)}</span>
-                    </td>
-                    <td className="border border-gray-200 px-2 py-2 text-center w-1/4">
-                      <span className={REPORT_REF_LABEL_CLASS}>
-                        {isAr ? "\u0627\u0644\u0645\u0642\u0627\u0648\u0644" : "Contractor"}
-                      </span>
-                      <span className="font-semibold text-[11px]">{sample?.contractorName ?? EM_DASH}</span>
-                    </td>
-                    <td className="border border-gray-200 px-2 py-2 text-center w-1/4">
-                      <span className={REPORT_REF_LABEL_CLASS}>
-                        {isAr ? "\u0627\u0644\u0645\u0634\u0631\u0648\u0639" : "Project"}
-                      </span>
-                      <span className="font-semibold text-[11px]">{sample?.contractName ?? EM_DASH}</span>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
+            <ReportInfoSection>
+              <ReportReferenceBar
+                items={[
+                  { label: isAr ? "رقم العينة" : "Sample No.", value: sample?.sampleCode ?? EM_DASH },
+                  {
+                    label: inspectionRefLabel(isAr ? "ar" : "en"),
+                    value: formatInspectionReference(sample?.referenceNo),
+                  },
+                  { label: isAr ? "المقاول" : "Contractor", value: sample?.contractorName ?? EM_DASH },
+                  { label: isAr ? "المشروع" : "Project", value: sample?.contractName ?? EM_DASH },
+                ]}
+              />
+            </ReportInfoSection>
 
             <div className="mb-5 space-y-6">
               <h3 className="text-xs font-bold text-gray-700 uppercase border-b border-gray-300 pb-1">
@@ -639,41 +616,12 @@ export default function BatchReport() {
                           standardDisplay={standard}
                         />
                       ) : isCompleted && summaryEntries.length > 0 ? (
-                        <table className="metadata-table w-full border-collapse text-xs">
-                          <tbody>
-                            {(() => {
-                              const rows: Array<typeof summaryEntries> = [];
-                              for (let i = 0; i < summaryEntries.length; i += 2) {
-                                rows.push(summaryEntries.slice(i, i + 2));
-                              }
-                              return rows.map((pair, ri) => {
-                                const [a, b] = [pair[0], pair[1]];
-                                return (
-                                  <tr key={ri}>
-                                    <td className={REPORT_META_LABEL_CLASS}>
-                                      {formatSummaryLabel(a[0], formTemplate ?? "", isAr)}
-                                    </td>
-                                    <td className={REPORT_META_VALUE_CLASS}>
-                                      {formatSummaryValue(a[0], a[1], isAr, formTemplate ?? "")}
-                                    </td>
-                                    {b ? (
-                                      <>
-                                        <td className={REPORT_META_LABEL_CLASS}>
-                                          {formatSummaryLabel(b[0], formTemplate ?? "", isAr)}
-                                        </td>
-                                        <td className={REPORT_META_VALUE_CLASS}>
-                                          {formatSummaryValue(b[0], b[1], isAr, formTemplate ?? "")}
-                                        </td>
-                                      </>
-                                    ) : (
-                                      <td className="border border-gray-200 px-2 py-1" colSpan={2} />
-                                    )}
-                                  </tr>
-                                );
-                              });
-                            })()}
-                          </tbody>
-                        </table>
+                        <ReportInfoPairsTable
+                          pairs={summaryEntries.map(([k, v]) => [
+                            formatSummaryLabel(k, formTemplate ?? "", isAr),
+                            formatSummaryValue(k, v, isAr, formTemplate ?? ""),
+                          ] as [string, string])}
+                        />
                       ) : (
                         <p className="text-[10px] text-gray-500 italic">
                           {isCompleted

@@ -1758,6 +1758,13 @@ export async function updateConcreteGroupSummary(groupId: number, data: {
   minAcceptable?: string;
   maxAcceptable?: string;
   dateSampled?: Date;
+  moistureCondition?: string;
+  labCuringTemperature?: string;
+  labCuringRh?: string;
+  loadingRate?: string;
+  surfaceConditionAtTest?: string;
+  cappingMethod?: string;
+  curingMethod?: string;
 }) {
   const db = await getDb();
   if (!db) return;

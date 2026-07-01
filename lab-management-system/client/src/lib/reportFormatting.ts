@@ -5,10 +5,15 @@
 
 import { getOfficialTestByCode } from "@/lib/officialTestCatalog";
 
+export const REPORT_INFO_SECTION_CLASS = "report-info-section mb-5 pb-4 border-b border-gray-200";
+export const REPORT_INFO_TABLE_CLASS = "report-info-table w-full border-collapse text-xs";
 export const REPORT_META_LABEL_CLASS =
-  "border border-gray-200 px-2 py-1.5 text-gray-900 w-[18%] text-[11px] font-bold print:text-black";
+  "px-0 py-1 text-gray-600 w-[18%] text-[11px] font-semibold align-top print:text-black";
 export const REPORT_META_VALUE_CLASS =
-  "border border-gray-200 px-2 py-1.5 font-normal text-gray-900 w-[32%] text-[12px] print:text-black";
+  "px-2 py-1 font-normal text-gray-900 w-[32%] text-[12px] align-top print:text-black";
+export const REPORT_META_EMPTY_CLASS = "px-2 py-1 align-top";
+/** @deprecated Use REPORT_INFO_TABLE_CLASS for borderless info; metadata-table kept for legacy results metadata only */
+export const REPORT_META_TABLE_CLASS = REPORT_INFO_TABLE_CLASS;
 export const REPORT_REF_LABEL_CLASS =
   "text-gray-900 text-[11px] font-bold tracking-wide block mb-1 print:text-black";
 export const REPORT_REF_VALUE_CLASS =

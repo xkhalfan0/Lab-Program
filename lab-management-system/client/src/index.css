@@ -453,15 +453,29 @@ input[type="number"] {
   .report-page table {
     border-collapse: collapse !important;
   }
-  .lab-print-root th,
-  .lab-print-root td,
-  .report-page th,
-  .report-page td {
+  /* Results + signature cells only — info sections use report-info-table (borderless) */
+  .lab-print-root table.lab-results-table th,
+  .lab-print-root table.lab-results-table td,
+  .lab-print-root table.signatures-table th,
+  .lab-print-root table.signatures-table td,
+  .report-page table.lab-results-table th,
+  .report-page table.lab-results-table td,
+  .report-page table.signatures-table th,
+  .report-page table.signatures-table td,
+  .report-page table.border-collapse th,
+  .report-page table.border-collapse td {
     border-width: 0.5pt !important;
     border-style: solid !important;
     border-color: #000 !important;
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
+  }
+
+  .lab-print-root table.report-info-table th,
+  .lab-print-root table.report-info-table td,
+  .report-page table.report-info-table th,
+  .report-page table.report-info-table td {
+    border: none !important;
   }
 }
 
@@ -502,6 +516,17 @@ input[type="number"] {
   .report-page table.lab-results-table th,
   .report-page table.lab-results-table td {
     padding: 4px 5px;
+  }
+
+  .lab-print-root.report-page table.report-info-table,
+  .report-page table.report-info-table {
+    font-size: 10px;
+  }
+
+  .lab-print-root.report-page table.report-info-table td,
+  .report-page table.report-info-table td {
+    border: none !important;
+    padding: 2px 4px;
   }
 }
 

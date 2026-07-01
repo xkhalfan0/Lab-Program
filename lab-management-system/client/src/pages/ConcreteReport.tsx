@@ -7,12 +7,6 @@ import { generatePdfFromElement } from "@/lib/pdf";
 import { formatCalendarDate, formatReportDate } from "@/lib/dateFormat";
 import { ReportPrintNote } from "@/components/reports/ReportPrintNote";
 import { formatInspectionReference, inspectionRefLabel } from "@/lib/inspectionReference";
-import {
-  REPORT_META_LABEL_CLASS,
-  REPORT_META_VALUE_CLASS,
-  REPORT_REF_LABEL_CLASS,
-  REPORT_REF_VALUE_CLASS,
-} from "@/lib/reportFormatting";
 import { useLanguage } from "@/contexts/LanguageContext";
 import {
   calcActualAgeDays,
@@ -29,6 +23,14 @@ import {
   LAB_PRINT_TAIL_CLASS,
   printLabReport,
 } from "@/lib/labPrintLayout";
+import { buildConcreteCubeTestConditionPairs } from "@/lib/concreteCubeTestConditions";
+import {
+  ReportDetailGrid,
+  ReportInfoHeading,
+  ReportInfoPairsTable,
+  ReportInfoSection,
+  ReportReferenceBar,
+} from "@/components/reports/ReportInfoLayout";
 
 /** Same marker as ConcreteTest — hidden JSON suffix must never appear on printed reports. */
 const AGE_META_MARKER = "\n__AGE_META__:";
@@ -282,7 +284,7 @@ export function ConcreteCubeReportPage({
     [ar ? "تاريخ الفحص" : "Test date", fmtDate(testDate) || "—"],
     [ar ? "تاريخ التقرير" : "Report Date", reportDateStr],
   ];
-  const detailRows = Math.max(detailLeft.length, detailRight.length);
+  const testConditionPairs = buildConcreteCubeTestConditionPairs(group, ar);
 
   return (
     <div
@@ -322,91 +324,48 @@ export function ConcreteCubeReportPage({
       )}
       {/* PASS badge only on standalone reports — batch section header shows status */}
 
-      {/* Sample identification */}
-      <div className="border border-gray-200 rounded mb-5 overflow-hidden">
-        <table className="metadata-table w-full border-collapse text-xs bg-gray-50">
-          <tbody>
-            <tr>
-              <td className="border border-gray-200 px-2 py-2 text-center align-top w-1/3">
-                <span className={REPORT_REF_LABEL_CLASS}>
-                  {ar ? "رقم العينة" : "Sample No."}
-                </span>
-                <span className="font-mono font-normal text-gray-900 text-sm">
-                  {distribution?.sampleCode ?? "—"}
-                </span>
-                {(distribution as { retestNumber?: number })?.retestNumber != null && (
+      {/* Sample identification — borderless; results tables below keep borders */}
+      <ReportInfoSection>
+        <ReportReferenceBar
+          items={[
+            {
+              label: ar ? "رقم العينة" : "Sample No.",
+              value: distribution?.sampleCode ?? "—",
+              extra:
+                (distribution as { retestNumber?: number })?.retestNumber != null ? (
                   <span className="block text-[10px] text-amber-700 mt-0.5">
-                    {ar ? `إعادة ${(distribution as { retestNumber?: number }).retestNumber}` : `Retest ${(distribution as { retestNumber?: number }).retestNumber}`}
+                    {ar
+                      ? `إعادة ${(distribution as { retestNumber?: number }).retestNumber}`
+                      : `Retest ${(distribution as { retestNumber?: number }).retestNumber}`}
                     {(distribution as { originalSampleCode?: string })?.originalSampleCode
                       ? ` · ${ar ? "الأصل" : "Original"}: ${(distribution as { originalSampleCode?: string }).originalSampleCode}`
                       : ""}
                   </span>
-                )}
-              </td>
-              <td className="border border-gray-200 px-2 py-2 text-center align-top w-1/3">
-                <span className={REPORT_REF_LABEL_CLASS}>
-                  {inspectionRefLabel(lang)}
-                </span>
-                <span className="font-mono font-normal text-gray-900 text-sm">
-                  {formatInspectionReference((distribution as { referenceNo?: string | null })?.referenceNo)}
-                </span>
-              </td>
-              <td className="border border-gray-200 px-2 py-2 text-center align-top w-1/3">
-                <span className={REPORT_REF_LABEL_CLASS}>
-                  {ar ? "تاريخ الاستلام" : "Received Date"}
-                </span>
-                <span className={REPORT_REF_VALUE_CLASS}>
-                  {formatCalendarDate(distribution?.receivedAt)}
-                </span>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-        <table className="metadata-table w-full border-collapse text-xs">
-          <tbody>
-            {Array.from({ length: detailRows }, (_, i) => {
-              const L = detailLeft[i];
-              const R = detailRight[i];
-              return (
-                <tr key={i}>
-                  <td className={REPORT_META_LABEL_CLASS}>{L?.[0] ?? ""}</td>
-                  <td className={REPORT_META_VALUE_CLASS}>{L?.[1] ?? ""}</td>
-                  <td className={REPORT_META_LABEL_CLASS}>{R?.[0] ?? ""}</td>
-                  <td className={REPORT_META_VALUE_CLASS}>{R?.[1] ?? ""}</td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+                ) : undefined,
+            },
+            {
+              label: inspectionRefLabel(lang),
+              value: formatInspectionReference((distribution as { referenceNo?: string | null })?.referenceNo),
+            },
+            {
+              label: ar ? "تاريخ الاستلام" : "Received Date",
+              value: formatCalendarDate(distribution?.receivedAt),
+            },
+          ]}
+        />
+        <ReportDetailGrid left={detailLeft} right={detailRight} />
+      </ReportInfoSection>
 
       {/* Summary Results */}
       <div className="mb-5">
-        <h3 className="text-xs font-bold text-gray-900 uppercase border-b border-gray-300 pb-1 mb-3">
-          {ar ? "ملخص النتائج" : "Summary Results"}
-        </h3>
-        <table className="metadata-table w-full border-collapse text-xs">
-          <tbody>
-            {Array.from({ length: Math.ceil(summaryPairs.length / 2) }, (_, ri) => {
-              const a = summaryPairs[ri * 2];
-              const b = summaryPairs[ri * 2 + 1];
-              return (
-                <tr key={ri}>
-                  <td className={REPORT_META_LABEL_CLASS}>{a[0]}</td>
-                  <td className={REPORT_META_VALUE_CLASS}>{a[1]}</td>
-                  {b ? (
-                    <>
-                      <td className={REPORT_META_LABEL_CLASS}>{b[0]}</td>
-                      <td className={REPORT_META_VALUE_CLASS}>{b[1]}</td>
-                    </>
-                  ) : (
-                    <td className="border border-gray-200 px-2 py-1" colSpan={2} />
-                  )}
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+        <ReportInfoHeading>{ar ? "ملخص النتائج" : "Summary Results"}</ReportInfoHeading>
+        <ReportInfoPairsTable pairs={summaryPairs} />
+      </div>
+
+      {/* Test preparation & loading (BS 1881) */}
+      <div className="mb-5">
+        <ReportInfoHeading>{ar ? "ظروف الاختبار والتحضير" : "Test Conditions & Preparation"}</ReportInfoHeading>
+        <ReportInfoPairsTable pairs={testConditionPairs} />
       </div>
 
       {/* Detailed Results */}
