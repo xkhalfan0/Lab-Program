@@ -25,10 +25,9 @@ import {
 import { getOfficialTestDisplayName } from "@/lib/officialTestCatalog";
 import { ReportReferenceBar, ReportInfoSection, ReportInfoPairsTable } from "@/components/reports/ReportInfoLayout";
 import {
-  formatSummaryLabel,
-  formatSummaryValue,
   SpecializedTestReportBody,
 } from "@/pages/tests/SpecializedTestReport";
+import { buildReportSummaryPairs } from "@/lib/reportFormatting";
 import { ConcreteCubeReportPage } from "@/pages/ConcreteReport";
 import { ReportSignatures, pickReviewSignatures } from "@/components/reports/ReportSignatures";
 import {
@@ -41,7 +40,6 @@ import {
 } from "lucide-react";
 
 const EM_DASH = "\u2014";
-const SUMMARY_SKIP_KEYS = new Set(["overallResult", "overallPass", "passesSpec", "standard"]);
 
 /** Proctor supplies MDD/OMC only — no pass/fail; batch verdict uses CBR (and similar) tests only. */
 const INFORMATIONAL_BATCH_TESTS = new Set(["SOIL_PROCTOR"]);
@@ -513,9 +511,7 @@ export default function BatchReport() {
               </h3>
 
               {sections.map(({ sibling, overallResult, summaryValues, testName, standard, formTemplate, formData }, index) => {
-                const summaryEntries = Object.entries(summaryValues).filter(
-                  ([k, v]) => !SUMMARY_SKIP_KEYS.has(k) && v != null && v !== "" && typeof v !== "object",
-                );
+                const summaryPairs = buildReportSummaryPairs(summaryValues, formTemplate ?? "", isAr);
                 const isCompleted = ["completed", "submitted", "reviewed", "qc_passed"].includes(sibling.status);
                 const specResult = sibling.specializedTestResults?.[0];
                 const legacyTr = sibling.testResults?.[0];
@@ -615,13 +611,8 @@ export default function BatchReport() {
                           testNameDisplay={testName}
                           standardDisplay={standard}
                         />
-                      ) : isCompleted && summaryEntries.length > 0 ? (
-                        <ReportInfoPairsTable
-                          pairs={summaryEntries.map(([k, v]) => [
-                            formatSummaryLabel(k, formTemplate ?? "", isAr),
-                            formatSummaryValue(k, v, isAr, formTemplate ?? ""),
-                          ] as [string, string])}
-                        />
+                      ) : isCompleted && summaryPairs.length > 0 ? (
+                        <ReportInfoPairsTable pairs={summaryPairs} />
                       ) : (
                         <p className="text-[10px] text-gray-500 italic">
                           {isCompleted

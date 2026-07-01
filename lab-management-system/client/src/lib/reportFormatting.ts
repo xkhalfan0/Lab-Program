@@ -29,7 +29,17 @@ export const REPORT_INFO_VALUE_CLASS =
   "report-field-value text-slate-700 text-[11px] font-normal leading-snug print:text-black";
 
 /** Already shown in the report metadata table — hide from summary / detailed info cards. */
-export const REPORT_DUPLICATE_METADATA_KEYS = new Set(["standard"]);
+export const REPORT_DUPLICATE_METADATA_KEYS = new Set([
+  "standard",
+  "overallResult",
+  "overallPass",
+  "passesSpec",
+]);
+
+/** Summary keys redundant when another key is present (e.g. coreCount + registeredQuantity). */
+export const SUMMARY_REDUNDANT_WHEN: Record<string, string> = {
+  registeredQuantity: "coreCount",
+};
 
 type RequiredSpec = { labelEn: string; labelAr: string; unit: string };
 
@@ -214,6 +224,49 @@ export function formatReportSummaryValue(
     : String(value);
 
   return appendEnglishUnit(str, unit);
+}
+
+type SummaryPairFormatters = {
+  formatSg?: (v: unknown) => string;
+  formatAbsorption?: (v: unknown) => string;
+};
+
+/** Build de-duplicated summary label/value pairs for reports and batch sections. */
+export function buildReportSummaryPairs(
+  summaryValues: Record<string, unknown>,
+  formTemplate: string,
+  isAr: boolean,
+  opts?: {
+    skipKeys?: Set<string>;
+    formatters?: SummaryPairFormatters;
+  },
+): [string, string][] {
+  const extraSkip = opts?.skipKeys ?? new Set<string>();
+  const formatters = opts?.formatters;
+
+  const entries = Object.entries(summaryValues).filter(([k, v]) => {
+    if (REPORT_DUPLICATE_METADATA_KEYS.has(k) || extraSkip.has(k)) return false;
+    if (v == null || v === "" || typeof v === "object") return false;
+    const redundantWhen = SUMMARY_REDUNDANT_WHEN[k];
+    if (redundantWhen) {
+      const other = summaryValues[redundantWhen];
+      if (other != null && other !== "") return false;
+    }
+    return true;
+  });
+
+  const seenLabels = new Set<string>();
+  const pairs: [string, string][] = [];
+  for (const [k, v] of entries) {
+    const label = formatReportSummaryLabel(k, formTemplate, isAr);
+    if (seenLabels.has(label)) continue;
+    seenLabels.add(label);
+    pairs.push([
+      label,
+      formatReportSummaryValue(k, v, formTemplate, isAr, formatters),
+    ]);
+  }
+  return pairs;
 }
 
 /** Format flat form-data keys for generic report tables. */

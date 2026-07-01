@@ -269,6 +269,8 @@ export function ConcreteCubeReportPage({
     [ar ? "تاريخ الصب" : "Date of Casting", fmtDate(distCastingDate ?? group.batchDateTime) || "—"],
     [ar ? "عدد العينات" : "Sample count", String(cubes.length || "—")],
   ];
+  /** In batch embed, stat cards already show avg / required / test age. */
+  const displaySummaryPairs = embedInBatch ? summaryPairs.slice(3) : summaryPairs;
 
   const detailLeft: [string, string][] = [
     [ar ? "نوع الفحص" : "Test Type", ar ? "مقاومة ضغط المكعبات الخرسانية" : "Compressive Strength of Concrete Cubes"],
@@ -280,6 +282,16 @@ export function ConcreteCubeReportPage({
   const detailRight: [string, string][] = [
     [ar ? "اسم المشروع" : "Project Name", String(distribution?.contractName ?? group.projectName ?? "—")],
     [ar ? "القطاع" : "Sector", distribution?.sector ? String(distribution.sector).replace("_", " ").toUpperCase() : "—"],
+    [ar ? "موقع العينة" : "Sample Location", String(distribution?.sampleLocation ?? group.location ?? "—")],
+    [ar ? "تاريخ الفحص" : "Test date", fmtDate(testDate) || "—"],
+    [ar ? "تاريخ التقرير" : "Report Date", reportDateStr],
+  ];
+  const batchDetailLeft: [string, string][] = [
+    [ar ? "رقم العقد" : "Contract No.", String(distribution?.contractNumber ?? group.contractNo ?? "—")],
+    [ar ? "المورد" : "Source / Supplier", group.sourceSupplier ?? "—"],
+    [ar ? "القطاع" : "Sector", distribution?.sector ? String(distribution.sector).replace("_", " ").toUpperCase() : "—"],
+  ];
+  const batchDetailRight: [string, string][] = [
     [ar ? "موقع العينة" : "Sample Location", String(distribution?.sampleLocation ?? group.location ?? "—")],
     [ar ? "تاريخ الفحص" : "Test date", fmtDate(testDate) || "—"],
     [ar ? "تاريخ التقرير" : "Report Date", reportDateStr],
@@ -326,6 +338,7 @@ export function ConcreteCubeReportPage({
 
       {/* Sample identification — borderless; results tables below keep borders */}
       <ReportInfoSection>
+        {!embedInBatch && (
         <ReportReferenceBar
           items={[
             {
@@ -353,14 +366,20 @@ export function ConcreteCubeReportPage({
             },
           ]}
         />
-        <ReportDetailGrid left={detailLeft} right={detailRight} />
+        )}
+        <ReportDetailGrid
+          left={embedInBatch ? batchDetailLeft : detailLeft}
+          right={embedInBatch ? batchDetailRight : detailRight}
+        />
       </ReportInfoSection>
 
-      {/* Summary Results */}
+      {/* Summary Results — in batch embed, omit rows duplicated by stat cards above */}
+      {displaySummaryPairs.length > 0 && (
       <div className="mb-5">
         <ReportInfoHeading>{ar ? "ملخص النتائج" : "Summary Results"}</ReportInfoHeading>
-        <ReportInfoPairsTable pairs={summaryPairs} />
+        <ReportInfoPairsTable pairs={displaySummaryPairs} />
       </div>
+      )}
 
       {/* Test preparation & loading (BS 1881) */}
       <div className="mb-5">
@@ -416,16 +435,28 @@ export function ConcreteCubeReportPage({
         <table className="w-full text-xs border-collapse mb-2">
           <thead>
             <tr className="bg-slate-50">
-              {[
-                ar ? "رقم" : "Mark",
-                ar ? "معرف المكعب" : "Cube ID",
-                ar ? "تاريخ الفحص" : "Date Tested",
-                ar ? "العمر (يوم)" : "Age (days)",
-                ar ? "الحمل (kN)" : "Load (kN)",
-                ar ? "المقاومة (N/mm²)" : "Strength (N/mm²)",
-                ar ? "النتيجة" : "Result",
-                ar ? "الكسر" : "Fracture",
-              ].map(h => (
+              {(
+                embedInBatch
+                  ? [
+                      ar ? "رقم" : "Mark",
+                      ar ? "معرف المكعب" : "Cube ID",
+                      ar ? "تاريخ الفحص" : "Date Tested",
+                      ar ? "العمر (يوم)" : "Age (days)",
+                      ar ? "الحمل (kN)" : "Load (kN)",
+                      ar ? "المقاومة (N/mm²)" : "Strength (N/mm²)",
+                      ar ? "الكسر" : "Fracture",
+                    ]
+                  : [
+                      ar ? "رقم" : "Mark",
+                      ar ? "معرف المكعب" : "Cube ID",
+                      ar ? "تاريخ الفحص" : "Date Tested",
+                      ar ? "العمر (يوم)" : "Age (days)",
+                      ar ? "الحمل (kN)" : "Load (kN)",
+                      ar ? "المقاومة (N/mm²)" : "Strength (N/mm²)",
+                      ar ? "النتيجة" : "Result",
+                      ar ? "الكسر" : "Fracture",
+                    ]
+              ).map(h => (
                 <th key={h} className="border border-slate-300 px-2 py-1 text-center font-semibold text-slate-600">
                   {h}
                 </th>
@@ -454,6 +485,7 @@ export function ConcreteCubeReportPage({
                   >
                     {strength || "—"}
                   </td>
+                  {!embedInBatch && (
                   <td className="border border-slate-300 px-2 py-1 text-center font-semibold">
                     {pass ? (
                       <span className="text-emerald-800">{ar ? "مطابق" : "PASS"}</span>
@@ -463,6 +495,7 @@ export function ConcreteCubeReportPage({
                       "—"
                     )}
                   </td>
+                  )}
                   <td className="border border-slate-300 px-2 py-1 text-center">{cube.fractureType ?? "—"}</td>
                 </tr>
               );

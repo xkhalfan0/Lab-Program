@@ -33,7 +33,7 @@ import {
   REPORT_REF_VALUE_CLASS,
   REPORT_INFO_LABEL_CLASS,
   REPORT_INFO_VALUE_CLASS,
-  REPORT_DUPLICATE_METADATA_KEYS,
+  buildReportSummaryPairs,
   resolveReportStandardDisplay,
 } from "@/lib/reportFormatting";
 import { calculateFinalBlend, formatDisplaySieveMm } from "@/pages/tests/SieveAnalysis";
@@ -111,10 +111,23 @@ type FormReportExtras = {
   foamDistCreatedAt?: string | Date | null;
   /** When formData lacks `testedBy`, use DB row (e.g. older sieve saves). */
   sieveReportTestedBy?: string | null;
+  /** Batch embed: hide per-row PASS/FAIL — section header shows verdict */
+  embedInBatch?: boolean;
 };
 
+/** Omit per-specimen Result columns when batch section already shows pass/fail. */
+function omitRowResultColumns(columns: Column[]): Column[] {
+  return columns.filter(
+    (c) =>
+      c.type !== "status" &&
+      c.field !== "result" &&
+      c.field !== "overallResult" &&
+      c.field !== "bendResult",
+  );
+}
+
 // ─── Section renderers per formTemplate ───────────────────────────────────────
-function renderConcreteCore(fd: any, isAr: boolean, castingDateMs?: number | null) {
+function renderConcreteCore(fd: any, isAr: boolean, castingDateMs?: number | null, embedInBatch = false) {
   // Support both field name conventions: cores[] (new) or rows[] (old)
   const rows = fd.cores ?? fd.rows ?? [];
   const coreType = fd.coreType;
@@ -205,6 +218,8 @@ function renderConcreteCore(fd: any, isAr: boolean, castingDateMs?: number | nul
     },
   ];
 
+  const tableColumns = embedInBatch ? omitRowResultColumns(coreColumns) : coreColumns;
+
   return (
     <>
       {/* Summary header */}
@@ -282,7 +297,7 @@ function renderConcreteCore(fd: any, isAr: boolean, castingDateMs?: number | nul
         )}
       </div>
       <FlexibleResultsTable
-        columns={coreColumns}
+        columns={tableColumns}
         rows={rows.map((r: any, i: number) => ({
           ...r,
           _idx: i,
@@ -293,7 +308,7 @@ function renderConcreteCore(fd: any, isAr: boolean, castingDateMs?: number | nul
   );
 }
 
-function renderConcreteBlocks(fd: any, isAr: boolean) {
+function renderConcreteBlocks(fd: any, isAr: boolean, embedInBatch = false) {
   if (typeof fd.blocks === "string") {
     try {
       fd.blocks = JSON.parse(fd.blocks);
@@ -425,9 +440,11 @@ function renderConcreteBlocks(fd: any, isAr: boolean) {
           {isAr ? "متوسط القوة المصححة (fb):" : "Avg. Normalised Strength (fb):"} {fmtS(avgCorrectedStrength)} N/mm²
           {" "}/ {isAr ? "المطلوب:" : "Required:"} {fmtS(spec.requiredStrength)} N/mm²
         </span>
+        {!embedInBatch && (
         <span className={`font-bold px-2 py-1 rounded border ${fd.overallResult === "pass" ? "bg-green-50 border-green-200 text-green-800" : "bg-red-50 border-red-200 text-red-800"}`}>
           {isAr ? "النتيجة الكلية:" : "Overall:"} {fd.overallResult === "pass" ? (isAr ? "مطابق" : "PASS") : fd.overallResult === "fail" ? (isAr ? "راسب" : "FAIL") : "—"}
         </span>
+        )}
       </div>
     </div>
   );
@@ -4456,7 +4473,7 @@ export function renderFormData(formTemplate: string, formData: any, isAr: boolea
     case "concrete_cubes": return renderConcreteCubes(formData, isAr);
     case "concrete_blocks":
       try {
-        return renderConcreteBlocks(formData, isAr);
+        return renderConcreteBlocks(formData, isAr, extras?.embedInBatch);
       } catch {
         return (
           <div className="text-xs border border-red-200 bg-red-50 rounded p-3 text-red-700">
@@ -4464,7 +4481,7 @@ export function renderFormData(formTemplate: string, formData: any, isAr: boolea
           </div>
         );
       }
-    case "concrete_cores": return renderConcreteCore(formData, isAr, castingDateMs);
+    case "concrete_cores": return renderConcreteCore(formData, isAr, castingDateMs, extras?.embedInBatch);
     case "concrete_beam": return renderConcreteBeam(formData, isAr, castingDateMs);
     case "steel_rebar": return renderSteelRebar(formData, isAr);
     case "steel_bend_rebend": return renderSteelBendRebend(formData, isAr);
@@ -4593,6 +4610,28 @@ export function SpecializedTestReportBody({
           : null,
     });
 
+  const summaryPairs =
+    summaryValues && Object.keys(summaryValues).length > 0
+      ? buildReportSummaryPairs(summaryValues, result.formTemplate, isAr, {
+          formatters: {
+            formatSg: formatSgDisplay,
+            formatAbsorption: formatAbsorptionDisplay,
+          },
+        })
+      : [];
+
+  /** Batch cover + section header already show sample/ref/contractor/project/test name/standard. */
+  const batchSupplementLeft: [string, string][] = [
+    [isAr ? "رقم العقد" : "Contract No.", String(dist?.contractNumber ?? result.contractNo ?? "—")],
+    [isAr ? "المورد" : "Source / Supplier", String(formData.source ?? formData.sourceSupplier ?? "—")],
+    [isAr ? "القطاع" : "Sector", dist?.sector ? String(dist.sector).replace("_", " ").toUpperCase() : "—"],
+  ];
+  const batchSupplementRight: [string, string][] = [
+    [isAr ? "موقع العينة" : "Sample Location", String(dist?.sampleLocation ?? "—")],
+    [isAr ? "تاريخ الفحص" : "Test date", fmtDate(result.testDate)],
+    [isAr ? "تاريخ التقرير" : "Report Date", reportDateStr],
+  ];
+
   return (
     <div className={embedInBatch ? "batch-test-report-body space-y-3" : undefined}>
       {!embedInBatch && (
@@ -4610,6 +4649,11 @@ export function SpecializedTestReportBody({
         </div>
       )}
 
+      {embedInBatch ? (
+        <ReportInfoSection className="mb-3">
+          <ReportDetailGrid left={batchSupplementLeft} right={batchSupplementRight} />
+        </ReportInfoSection>
+      ) : (
       <ReportInfoSection className="mb-3">
         <ReportReferenceBar
           items={[
@@ -4652,18 +4696,12 @@ export function SpecializedTestReportBody({
           ]}
         />
       </ReportInfoSection>
+      )}
 
-      {summaryValues && Object.keys(summaryValues).length > 0 && result.formTemplate !== "interlock" && (
+      {!embedInBatch && summaryPairs.length > 0 && result.formTemplate !== "interlock" && (
         <div className="mb-3">
           <ReportInfoHeading>{isAr ? "ملخص النتائج" : "Summary Results"}</ReportInfoHeading>
-          <ReportInfoPairsTable
-            pairs={Object.entries(summaryValues)
-              .filter(([k]) => !REPORT_DUPLICATE_METADATA_KEYS.has(k))
-              .map(([k, v]) => [
-                formatSummaryLabel(k, result.formTemplate, isAr),
-                formatSummaryValue(k, v, isAr, result.formTemplate),
-              ] as [string, string])}
-          />
+          <ReportInfoPairsTable pairs={summaryPairs} />
         </div>
       )}
 
@@ -4675,6 +4713,7 @@ export function SpecializedTestReportBody({
           foamReceivedAt: dist?.receivedAt ?? null,
           foamDistCreatedAt: dist?.createdAt ?? null,
           sieveReportTestedBy: result.testedBy ?? null,
+          embedInBatch,
         })}
       </div>
       )}
