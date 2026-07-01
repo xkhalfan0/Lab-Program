@@ -6,27 +6,30 @@
 import { getOfficialTestByCode } from "@/lib/officialTestCatalog";
 
 export const REPORT_INFO_SECTION_CLASS = "report-info-section mb-5 pb-4 border-b border-gray-200";
-export const REPORT_INFO_TABLE_CLASS = "report-info-table w-full border-collapse text-xs";
+export const REPORT_INFO_TABLE_CLASS = "report-info-table w-full border-collapse text-[11px]";
 /** Section titles: Summary Results, Detailed Results, Notes */
 export const REPORT_SECTION_HEADING_CLASS =
-  "report-section-heading text-sm font-extrabold text-slate-900 uppercase tracking-[0.08em] border-b-2 border-slate-500 pb-2 mb-3 print:text-black";
+  "report-section-heading text-[15px] font-extrabold text-slate-900 uppercase tracking-[0.08em] border-b-2 border-slate-500 pb-2 mb-3 print:text-black";
 /** Metadata table labels — Test Type, Standard, Contractor, … (larger than values) */
 export const REPORT_META_LABEL_CLASS =
-  "report-field-label px-0 py-2 text-slate-900 w-[24%] text-xs font-extrabold uppercase tracking-wide align-top leading-tight print:text-black";
+  "report-field-label px-0 py-2 text-slate-900 w-[24%] text-[13px] font-extrabold uppercase tracking-wide align-top leading-tight print:text-black";
 export const REPORT_META_VALUE_CLASS =
-  "report-field-value px-2 py-2 font-normal text-slate-700 w-[26%] text-[11px] align-top leading-snug print:text-black";
+  "report-field-value px-2 py-2 font-normal text-slate-700 w-[26%] text-xs align-top leading-snug print:text-black";
 export const REPORT_META_EMPTY_CLASS = "px-2 py-2 align-top";
 /** @deprecated Use REPORT_INFO_TABLE_CLASS for borderless info; metadata-table kept for legacy results metadata only */
 export const REPORT_META_TABLE_CLASS = REPORT_INFO_TABLE_CLASS;
 export const REPORT_REF_LABEL_CLASS =
-  "report-field-label text-slate-900 text-xs font-extrabold uppercase tracking-wide block mb-1.5 print:text-black";
+  "report-field-label text-slate-900 text-[13px] font-extrabold uppercase tracking-wide block mb-1.5 print:text-black";
 export const REPORT_REF_VALUE_CLASS =
-  "report-field-value font-mono font-normal text-slate-700 text-[11px] print:text-black";
+  "report-field-value font-mono font-normal text-slate-700 text-xs print:text-black";
+/** Secondary line under a bilingual label (e.g. Arabic under English in table headers). */
+export const REPORT_BILINGUAL_SUB_CLASS =
+  "report-bilingual-sub block text-[11px] font-normal normal-case tracking-normal text-slate-600 print:text-black";
 /** Label above a value in detailed-result info cards (Block Type, Size, etc.). */
 export const REPORT_INFO_LABEL_CLASS =
-  "report-field-label text-slate-900 text-xs font-extrabold uppercase tracking-wide leading-tight mb-1.5 print:text-black";
+  "report-field-label text-slate-900 text-[13px] font-extrabold uppercase tracking-wide leading-tight mb-1.5 print:text-black";
 export const REPORT_INFO_VALUE_CLASS =
-  "report-field-value text-slate-700 text-[11px] font-normal leading-snug print:text-black";
+  "report-field-value text-slate-700 text-xs font-normal leading-snug print:text-black";
 
 /** Already shown in the report metadata table — hide from summary / detailed info cards. */
 export const REPORT_DUPLICATE_METADATA_KEYS = new Set([

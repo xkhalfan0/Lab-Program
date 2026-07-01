@@ -62,17 +62,19 @@ export function LabReportHeader({
         <div className="flex items-start gap-4">
           <LabLogo />
           <div className="flex-1 min-w-0">
-            <h1 className="text-[16px] font-extrabold text-gray-900 leading-snug print:text-black">
+            <h1 className="text-[17px] font-extrabold text-gray-900 leading-snug print:text-black">
               {namePrimary}
             </h1>
-            <p className="text-[11px] text-gray-900 mt-0.5 print:text-black">{nameSecondary}</p>
+            <p className="report-header-secondary text-[13px] text-gray-900 mt-0.5 print:text-black">
+              {nameSecondary}
+            </p>
             {LAB_PRINT_BRANDING.address ? (
-              <p className="text-[10px] text-gray-900 mt-0.5 print:text-black">{LAB_PRINT_BRANDING.address}</p>
+              <p className="text-[11px] text-gray-900 mt-0.5 print:text-black">{LAB_PRINT_BRANDING.address}</p>
             ) : null}
             {contact ? (
-              <p className="text-[10px] text-gray-900 mt-0.5 print:text-black">{contact}</p>
+              <p className="text-[11px] text-gray-900 mt-0.5 print:text-black">{contact}</p>
             ) : null}
-            <div className="flex flex-wrap items-baseline gap-x-5 gap-y-1 mt-2 pt-2 border-t border-gray-300 text-[11px] text-gray-900 print:text-black">
+            <div className="flex flex-wrap items-baseline gap-x-5 gap-y-1 mt-2 pt-2 border-t border-gray-300 text-xs text-gray-900 print:text-black">
               <div>
                 <span className="font-bold">{docLabelText}</span>{" "}
                 <span className="font-mono font-normal">{docNo}</span>
@@ -92,9 +94,11 @@ export function LabReportHeader({
         </div>
       </div>
       <div className="bg-gray-900 text-white text-center py-1.5 mt-1">
-        <p className="text-[13px] font-bold">{titlePrimary}</p>
+        <p className="text-[14px] font-bold">{titlePrimary}</p>
         {titleSecondary ? (
-          <p className="text-[9px] text-gray-200 mt-0.5 tracking-wider uppercase">{titleSecondary}</p>
+          <p className="report-title-secondary text-[12px] text-gray-100 mt-0.5 tracking-wide">
+            {titleSecondary}
+          </p>
         ) : null}
       </div>
     </header>

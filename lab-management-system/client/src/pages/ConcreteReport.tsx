@@ -429,10 +429,10 @@ export function ConcreteCubeReportPage({
           </div>
         </div>
 
-        <p className="text-xs font-semibold text-slate-700 mb-1">
+        <p className="text-[11px] font-semibold text-slate-700 mb-1">
           {ar ? "نتائج المكعبات" : "Cube Test Results"}
         </p>
-        <table className="w-full text-xs border-collapse mb-2">
+        <table className="w-full text-[11px] border-collapse mb-2">
           <thead>
             <tr className="bg-slate-50">
               {(
@@ -503,7 +503,7 @@ export function ConcreteCubeReportPage({
           </tbody>
         </table>
 
-        <table className="w-full text-xs border-collapse">
+        <table className="w-full text-[11px] border-collapse">
           <thead>
             <tr className="bg-slate-50">
               {[

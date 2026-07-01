@@ -543,7 +543,7 @@ export default function BatchReport() {
                         <h2 className="text-[13px] font-bold">
                           {index + 1}. {testName}
                         </h2>
-                        <p className="text-[9px] text-slate-300 mt-0.5">
+                        <p className="text-[10px] text-slate-300 mt-0.5">
                           {isAr ? "\u0627\u0644\u0645\u0639\u064a\u0627\u0631" : "Standard"}: {standard}
                           {sibling.distributionCode ? ` \u2014 ${sibling.distributionCode}` : ""}
                         </p>

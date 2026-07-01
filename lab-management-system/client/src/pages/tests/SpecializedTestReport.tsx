@@ -34,6 +34,7 @@ import {
   REPORT_INFO_LABEL_CLASS,
   REPORT_INFO_VALUE_CLASS,
   buildReportSummaryPairs,
+  REPORT_BILINGUAL_SUB_CLASS,
   resolveReportStandardDisplay,
 } from "@/lib/reportFormatting";
 import { calculateFinalBlend, formatDisplaySieveMm } from "@/pages/tests/SieveAnalysis";
@@ -1129,12 +1130,12 @@ function renderSieveAnalysis(fd: any, isAr: boolean, extras?: FormReportExtras) 
                 <th rowSpan={2} className="border border-slate-300 px-2 py-1 text-center align-middle font-semibold text-[10px]">
                   {L("Sieve Size (mm)", "مقاس المنخل (مم)")}
                   <br />
-                  <span className="font-normal text-[9px] text-slate-600">{L("مقاس المنخل", "Sieve Size")}</span>
+                  <span className={REPORT_BILINGUAL_SUB_CLASS}>{L("مقاس المنخل", "Sieve Size")}</span>
                 </th>
                 <th colSpan={2} className="border border-slate-300 px-2 py-1 text-center bg-slate-50 font-semibold text-[10px]">
                   {L("Specification Limits (%)", "حدود المواصفات (%)")}
                   <br />
-                  <span className="font-normal text-[9px]">{L("حدود المواصفات", "Spec limits")}</span>
+                  <span className={REPORT_BILINGUAL_SUB_CLASS}>{L("حدود المواصفات", "Spec limits")}</span>
                 </th>
                 <th colSpan={2} className="border border-slate-300 px-2 py-1 text-center bg-blue-50 font-semibold text-[10px]">
                   {L("White Sand", "الرمل الأبيض")}
