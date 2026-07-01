@@ -32,6 +32,7 @@ import {
   CheckCircle2,
   AlertCircle,
   Building2,
+  CheckSquare,
   ClipboardCheck,
   ChevronRight,
 } from "lucide-react";
