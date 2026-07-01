@@ -5,7 +5,7 @@ export const DEFAULT_LAB_CURING_TEMP = "20 ± 2 °C";
 export const DEFAULT_LAB_CURING_RH = "≥ 95%";
 
 export function normalizeMoistureKey(value?: string | null): string {
-  if (!value) return "saturated_surface_dry";
+  if (!value?.trim()) return "";
   const v = value.toLowerCase().replace(/\s+/g, "_");
   if (v === "saturated" || v === "ssd" || v === "saturated_surface_dry") return "saturated_surface_dry";
   if (v === "air_dry") return "air_dry";
@@ -15,6 +15,7 @@ export function normalizeMoistureKey(value?: string | null): string {
 }
 
 export function formatMoistureCondition(value: string | null | undefined, isAr: boolean): string {
+  if (!value?.trim()) return "—";
   const key = normalizeMoistureKey(value);
   const map: Record<string, { en: string; ar: string }> = {
     saturated_surface_dry: {
@@ -29,7 +30,7 @@ export function formatMoistureCondition(value: string | null | undefined, isAr: 
 }
 
 export function formatCappingMethod(value: string | null | undefined, isAr: boolean): string {
-  if (!value) return isAr ? "سطح مسطح (كما استلم)" : "Flat Bedded (as received)";
+  if (!value?.trim()) return "—";
   const map: Record<string, { en: string; ar: string }> = {
     flat_bedded: { en: "Flat Bedded (as received)", ar: "سطح مسطح (كما استلم)" },
     capped_sulfur: { en: "Capped — Sulfur Mortar", ar: "تسوية — ملاط كبريتي" },
@@ -41,7 +42,7 @@ export function formatCappingMethod(value: string | null | undefined, isAr: bool
 }
 
 export function formatSurfaceCondition(value: string | null | undefined, isAr: boolean): string {
-  if (!value) return isAr ? "كما صُبّ (سطح طبيعي)" : "As cast (natural surface)";
+  if (!value?.trim()) return "—";
   const map: Record<string, { en: string; ar: string }> = {
     as_cast: { en: "As cast (natural surface)", ar: "كما صُبّ (سطح طبيعي)" },
     smooth: { en: "Smooth", ar: "ناعم" },
@@ -59,20 +60,20 @@ export function formatLabCuringConditions(
   curingMethod: string | null | undefined,
   isAr: boolean,
 ): string {
-  const t = temp?.trim() || DEFAULT_LAB_CURING_TEMP;
-  const r = rh?.trim() || DEFAULT_LAB_CURING_RH;
-  if (temp || rh) {
-    return isAr ? `${t}، RH ${r}` : `${t}, RH ${r}`;
+  const hasTemp = !!temp?.trim();
+  const hasRh = !!rh?.trim();
+  if (!hasTemp && !hasRh && !curingMethod?.trim()) return "—";
+  if (hasTemp || hasRh) {
+    const t = temp?.trim() ?? "—";
+    const r = rh?.trim() ?? "—";
+    return isAr ? `${t} °C، RH ${r}%` : `${t} °C, RH ${r}%`;
   }
-  if (curingMethod?.trim()) return curingMethod.trim();
-  return isAr
-    ? `${DEFAULT_LAB_CURING_TEMP}، RH ${DEFAULT_LAB_CURING_RH}`
-    : `${DEFAULT_LAB_CURING_TEMP}, RH ${DEFAULT_LAB_CURING_RH}`;
+  return curingMethod!.trim();
 }
 
 export function formatLoadingRate(value: string | null | undefined): string {
   const v = value?.trim();
-  if (!v) return `${DEFAULT_CUBE_LOADING_RATE} N/mm²/s`;
+  if (!v) return "—";
   return v.includes("N/mm") ? v : `${v} N/mm²/s`;
 }
 

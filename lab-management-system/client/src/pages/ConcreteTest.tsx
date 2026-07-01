@@ -26,11 +26,11 @@ import {
   resolveBs1881AgeFactor,
 } from "@shared/concreteCubeBs1881";
 import {
-  DEFAULT_CUBE_LOADING_RATE,
-  DEFAULT_LAB_CURING_RH,
-  DEFAULT_LAB_CURING_TEMP,
-  normalizeMoistureKey,
-} from "@/lib/concreteCubeTestConditions";
+  ConcreteCubeTestConditionsFields,
+  cubeTestConditionsFromGroup,
+  cubeTestConditionsPayload,
+  type ConcreteCubeTestConditionsValues,
+} from "@/components/ConcreteCubeTestConditionsFields";
 import {
   parseConcCubePlan,
   MIN_CONC_CUBE_COUNT,
@@ -281,18 +281,9 @@ function GroupPanel({ group, distributionId, onRefresh, castingDate: distCasting
     surfaceConditionAtTest?: string | null;
     cappingMethod?: string | null;
   };
-  const [moistureCondition, setMoistureCondition] = useState(() =>
-    normalizeMoistureKey(groupAny.moistureCondition),
+  const [testConditions, setTestConditions] = useState<ConcreteCubeTestConditionsValues>(() =>
+    cubeTestConditionsFromGroup({ ...groupAny, appearance: group.appearance }),
   );
-  const [labCuringTemperature, setLabCuringTemperature] = useState(
-    groupAny.labCuringTemperature ?? DEFAULT_LAB_CURING_TEMP,
-  );
-  const [labCuringRh, setLabCuringRh] = useState(groupAny.labCuringRh ?? DEFAULT_LAB_CURING_RH);
-  const [loadingRate, setLoadingRate] = useState(groupAny.loadingRate ?? DEFAULT_CUBE_LOADING_RATE);
-  const [surfaceConditionAtTest, setSurfaceConditionAtTest] = useState(
-    groupAny.surfaceConditionAtTest ?? group.appearance ?? "as_cast",
-  );
-  const [cappingMethod, setCappingMethod] = useState(groupAny.cappingMethod ?? "flat_bedded");
 
   const saveCube = trpc.concrete.saveCube.useMutation();
   const deleteCubeMut = trpc.concrete.deleteCube.useMutation();
@@ -309,12 +300,7 @@ function GroupPanel({ group, distributionId, onRefresh, castingDate: distCasting
     setComments(stripAgeMetaFromComments(group.comments ?? ""));
     setTestAge(initialSelectedTestAge(group));
     setDesignStrength(group.minAcceptable ?? "");
-    setMoistureCondition(normalizeMoistureKey(groupAny.moistureCondition));
-    setLabCuringTemperature(groupAny.labCuringTemperature ?? DEFAULT_LAB_CURING_TEMP);
-    setLabCuringRh(groupAny.labCuringRh ?? DEFAULT_LAB_CURING_RH);
-    setLoadingRate(groupAny.loadingRate ?? DEFAULT_CUBE_LOADING_RATE);
-    setSurfaceConditionAtTest(groupAny.surfaceConditionAtTest ?? group.appearance ?? "as_cast");
-    setCappingMethod(groupAny.cappingMethod ?? "flat_bedded");
+    setTestConditions(cubeTestConditionsFromGroup({ ...groupAny, appearance: group.appearance }));
   }, [group.id]);
 
   const castingIso = distCastingDate
@@ -470,12 +456,7 @@ function GroupPanel({ group, distributionId, onRefresh, castingDate: distCasting
     if (isSubmitted) return;
     await updateGroup.mutateAsync({
       groupId: group.id,
-      moistureCondition: moistureCondition || undefined,
-      labCuringTemperature: labCuringTemperature.trim() || undefined,
-      labCuringRh: labCuringRh.trim() || undefined,
-      loadingRate: loadingRate.trim() || undefined,
-      surfaceConditionAtTest: surfaceConditionAtTest || undefined,
-      cappingMethod: cappingMethod || undefined,
+      ...cubeTestConditionsPayload(testConditions),
     });
   };
 
@@ -562,12 +543,7 @@ function GroupPanel({ group, distributionId, onRefresh, castingDate: distCasting
         cscRef: cscRef || undefined,
         placeOfSampling: placeOfSampling || undefined,
         location: location || undefined,
-        moistureCondition: moistureCondition || undefined,
-        labCuringTemperature: labCuringTemperature.trim() || undefined,
-        labCuringRh: labCuringRh.trim() || undefined,
-        loadingRate: loadingRate.trim() || undefined,
-        surfaceConditionAtTest: surfaceConditionAtTest || undefined,
-        cappingMethod: cappingMethod || undefined,
+        ...cubeTestConditionsPayload(testConditions),
       });
       toast.success("Header info saved");
       onRefresh();
@@ -839,92 +815,13 @@ function GroupPanel({ group, distributionId, onRefresh, castingDate: distCasting
             </div>
           )}
 
-          <div className="mb-4 p-3 rounded-lg border bg-slate-50/80">
-            <p className="text-xs font-semibold text-slate-700 mb-3">
-              {ar ? "ظروف الاختبار والتحضير" : "Test Conditions & Preparation"}
-            </p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              <div>
-                <Label className="text-xs">{ar ? "حالة الرطوبة عند الاختبار" : "Moisture Condition at Test"}</Label>
-                <select
-                  className="w-full h-8 text-sm border rounded px-2 bg-white mt-0.5"
-                  value={moistureCondition}
-                  disabled={inputsDisabled}
-                  onChange={e => setMoistureCondition(e.target.value)}
-                  onBlur={() => { if (!isSubmitted) void saveTestConditions(); }}
-                >
-                  <option value="saturated_surface_dry">{ar ? "مشبع سطحياً جاف (SSD)" : "Saturated Surface Dry (SSD)"}</option>
-                  <option value="air_dry">{ar ? "جاف هوائياً" : "Air Dry"}</option>
-                  <option value="oven_dry">{ar ? "جاف فرنياً" : "Oven Dry"}</option>
-                  <option value="wet">{ar ? "مبلل" : "Wet"}</option>
-                </select>
-              </div>
-              <div>
-                <Label className="text-xs">{ar ? "درجة حرارة المعالجة بالمختبر" : "Lab Curing Temperature"}</Label>
-                <Input
-                  value={labCuringTemperature}
-                  onChange={e => setLabCuringTemperature(e.target.value)}
-                  onBlur={() => { if (!isSubmitted) void saveTestConditions(); }}
-                  className="h-8 text-sm mt-0.5"
-                  placeholder="20 ± 2 °C"
-                  disabled={inputsDisabled}
-                />
-              </div>
-              <div>
-                <Label className="text-xs">{ar ? "الرطوبة النسبية بالمختبر" : "Lab Curing RH"}</Label>
-                <Input
-                  value={labCuringRh}
-                  onChange={e => setLabCuringRh(e.target.value)}
-                  onBlur={() => { if (!isSubmitted) void saveTestConditions(); }}
-                  className="h-8 text-sm mt-0.5"
-                  placeholder="≥ 95%"
-                  disabled={inputsDisabled}
-                />
-              </div>
-              <div>
-                <Label className="text-xs">{ar ? "معدل التحميل (N/mm²/s)" : "Loading Rate (N/mm²/s)"}</Label>
-                <Input
-                  value={loadingRate}
-                  onChange={e => setLoadingRate(e.target.value)}
-                  onBlur={() => { if (!isSubmitted) void saveTestConditions(); }}
-                  className="h-8 text-sm mt-0.5"
-                  placeholder="0.6"
-                  disabled={inputsDisabled}
-                />
-              </div>
-              <div>
-                <Label className="text-xs">{ar ? "حالة السطح عند الاختبار" : "Surface Condition at Test"}</Label>
-                <select
-                  className="w-full h-8 text-sm border rounded px-2 bg-white mt-0.5"
-                  value={surfaceConditionAtTest}
-                  disabled={inputsDisabled}
-                  onChange={e => setSurfaceConditionAtTest(e.target.value)}
-                  onBlur={() => { if (!isSubmitted) void saveTestConditions(); }}
-                >
-                  <option value="as_cast">{ar ? "كما صُبّ" : "As cast"}</option>
-                  <option value="smooth">{ar ? "ناعم" : "Smooth"}</option>
-                  <option value="rough">{ar ? "خشن" : "Rough"}</option>
-                  <option value="ground">{ar ? "مطحون / مُجهّز" : "Ground / prepared"}</option>
-                </select>
-              </div>
-              <div>
-                <Label className="text-xs">{ar ? "التكييف / الطحن" : "Capping / Grinding"}</Label>
-                <select
-                  className="w-full h-8 text-sm border rounded px-2 bg-white mt-0.5"
-                  value={cappingMethod}
-                  disabled={inputsDisabled}
-                  onChange={e => setCappingMethod(e.target.value)}
-                  onBlur={() => { if (!isSubmitted) void saveTestConditions(); }}
-                >
-                  <option value="flat_bedded">{ar ? "سطح مسطح" : "Flat Bedded (as received)"}</option>
-                  <option value="capped_sulfur">{ar ? "تسوية كبريتية" : "Capped — Sulfur Mortar"}</option>
-                  <option value="capped_plywood">{ar ? "تسوية خشب رقائقي" : "Capped — Plywood"}</option>
-                  <option value="capped_rubber">{ar ? "تسوية مطاطية" : "Capped — Rubber Pad"}</option>
-                  <option value="ground">{ar ? "مطحون" : "Ground"}</option>
-                </select>
-              </div>
-            </div>
-          </div>
+          <ConcreteCubeTestConditionsFields
+            lang={lang}
+            values={testConditions}
+            onChange={patch => setTestConditions(prev => ({ ...prev, ...patch }))}
+            disabled={inputsDisabled}
+            onBlur={() => { if (!isSubmitted) void saveTestConditions(); }}
+          />
 
           {/* Expandable header info — legacy orders only */}
           {!cubeOrderFlow && <div className="mb-4">

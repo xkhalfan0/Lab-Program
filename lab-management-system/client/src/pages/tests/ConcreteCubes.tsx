@@ -16,11 +16,12 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { formatCalendarDate } from "@/lib/dateFormat";
 import {
-  DEFAULT_CUBE_LOADING_RATE,
-  DEFAULT_LAB_CURING_RH,
-  DEFAULT_LAB_CURING_TEMP,
-  normalizeMoistureKey,
-} from "@/lib/concreteCubeTestConditions";
+  ConcreteCubeTestConditionsFields,
+  EMPTY_CUBE_TEST_CONDITIONS,
+  cubeTestConditionsPayload,
+  type ConcreteCubeTestConditionsValues,
+} from "@/components/ConcreteCubeTestConditionsFields";
+import { normalizeMoistureKey } from "@/lib/concreteCubeTestConditions";
 
 // ─── Cube size factor → equivalent 150 mm cube strength (BS EN 12390-3 style) ─
 // Reference specimen is 150 mm; smaller cubes tend to read higher, larger slightly lower.
@@ -122,12 +123,7 @@ export default function ConcreteCubes() {
   const [placeOfSampling, setPlaceOfSampling] = useState("");
   const [structureType, setStructureType] = useState("");
   const [curingCondition, setCuringCondition] = useState("water_20c");
-  const [moistureCondition, setMoistureCondition] = useState("saturated_surface_dry");
-  const [labCuringTemperature, setLabCuringTemperature] = useState(DEFAULT_LAB_CURING_TEMP);
-  const [labCuringRh, setLabCuringRh] = useState(DEFAULT_LAB_CURING_RH);
-  const [loadingRate, setLoadingRate] = useState(DEFAULT_CUBE_LOADING_RATE);
-  const [surfaceConditionAtTest, setSurfaceConditionAtTest] = useState("as_cast");
-  const [cappingMethod, setCappingMethod] = useState("flat_bedded");
+  const [testConditions, setTestConditions] = useState<ConcreteCubeTestConditionsValues>(EMPTY_CUBE_TEST_CONDITIONS);
   const [batchReference, setBatchReference] = useState("");
   const [notes, setNotes] = useState("");
   const [rows, setRows] = useState<CubeRow[]>([newRow(0), newRow(1), newRow(2)]);
@@ -181,12 +177,16 @@ export default function ConcreteCubes() {
     if (fd.placeOfSampling) setPlaceOfSampling(String(fd.placeOfSampling));
     if (fd.structureType) setStructureType(fd.structureType);
     if (fd.curingCondition) setCuringCondition(String(fd.curingCondition));
-    if (fd.moistureCondition) setMoistureCondition(normalizeMoistureKey(fd.moistureCondition));
-    if (fd.labCuringTemperature) setLabCuringTemperature(String(fd.labCuringTemperature));
-    if (fd.labCuringRh) setLabCuringRh(String(fd.labCuringRh));
-    if (fd.loadingRate) setLoadingRate(String(fd.loadingRate));
-    if (fd.surfaceConditionAtTest) setSurfaceConditionAtTest(String(fd.surfaceConditionAtTest));
-    if (fd.cappingMethod) setCappingMethod(String(fd.cappingMethod));
+    if (fd.moistureCondition || fd.labCuringTemperature || fd.labCuringRh || fd.loadingRate || fd.surfaceConditionAtTest || fd.cappingMethod) {
+      setTestConditions({
+        moistureCondition: fd.moistureCondition ? normalizeMoistureKey(String(fd.moistureCondition)) : "",
+        labCuringTemperature: fd.labCuringTemperature ? String(fd.labCuringTemperature) : "",
+        labCuringRh: fd.labCuringRh ? String(fd.labCuringRh) : "",
+        loadingRate: fd.loadingRate ? String(fd.loadingRate) : "",
+        surfaceConditionAtTest: fd.surfaceConditionAtTest ? String(fd.surfaceConditionAtTest) : "",
+        cappingMethod: fd.cappingMethod ? String(fd.cappingMethod) : "",
+      });
+    }
     if (fd.batchReference) setBatchReference(String(fd.batchReference));
     if (fd.notes) setNotes(fd.notes);
     if (fd.testAge === 7 || fd.testAge === 14 || fd.testAge === 28) {
@@ -266,12 +266,7 @@ export default function ConcreteCubes() {
           placeOfSampling: placeOfSampling.trim() || undefined,
           structureType,
           curingCondition,
-          moistureCondition,
-          labCuringTemperature: labCuringTemperature.trim() || undefined,
-          labCuringRh: labCuringRh.trim() || undefined,
-          loadingRate: loadingRate.trim() || undefined,
-          surfaceConditionAtTest,
-          cappingMethod,
+          ...cubeTestConditionsPayload(testConditions),
           batchReference: batchReference.trim() || undefined,
           castingDate: castingDate?.toISOString(),
           sampleAgeDays,
@@ -583,76 +578,18 @@ export default function ConcreteCubes() {
                   <option value="other">{ar ? "أخرى (انظر الملاحظات)" : "Other (see notes)"}</option>
                 </select>
               </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs">{ar ? "حالة الرطوبة عند الاختبار" : "Moisture Condition at Test"}</Label>
-                <select
-                  className="w-full h-9 text-sm border rounded px-2 bg-white"
-                  value={moistureCondition}
-                  disabled={submitted}
-                  onChange={e => setMoistureCondition(e.target.value)}
-                >
-                  <option value="saturated_surface_dry">{ar ? "مشبع سطحياً جاف (SSD)" : "Saturated Surface Dry (SSD)"}</option>
-                  <option value="air_dry">{ar ? "جاف هوائياً" : "Air Dry"}</option>
-                  <option value="oven_dry">{ar ? "جاف فرنياً" : "Oven Dry"}</option>
-                  <option value="wet">{ar ? "مبلل" : "Wet"}</option>
-                </select>
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs">{ar ? "درجة حرارة المعالجة بالمختبر" : "Lab Curing Temperature"}</Label>
-                <Input
-                  value={labCuringTemperature}
-                  onChange={e => setLabCuringTemperature(e.target.value)}
-                  placeholder="20 ± 2 °C"
-                  disabled={submitted}
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs">{ar ? "الرطوبة النسبية بالمختبر" : "Lab Curing RH"}</Label>
-                <Input
-                  value={labCuringRh}
-                  onChange={e => setLabCuringRh(e.target.value)}
-                  placeholder="≥ 95%"
-                  disabled={submitted}
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs">{ar ? "معدل التحميل (N/mm²/s)" : "Loading Rate (N/mm²/s)"}</Label>
-                <Input
-                  value={loadingRate}
-                  onChange={e => setLoadingRate(e.target.value)}
-                  placeholder="0.6"
-                  disabled={submitted}
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs">{ar ? "حالة السطح عند الاختبار" : "Surface Condition at Test"}</Label>
-                <select
-                  className="w-full h-9 text-sm border rounded px-2 bg-white"
-                  value={surfaceConditionAtTest}
-                  disabled={submitted}
-                  onChange={e => setSurfaceConditionAtTest(e.target.value)}
-                >
-                  <option value="as_cast">{ar ? "كما صُبّ" : "As cast"}</option>
-                  <option value="smooth">{ar ? "ناعم" : "Smooth"}</option>
-                  <option value="rough">{ar ? "خشن" : "Rough"}</option>
-                  <option value="ground">{ar ? "مطحون / مُجهّز" : "Ground / prepared"}</option>
-                </select>
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs">{ar ? "التكييف / الطحن" : "Capping / Grinding"}</Label>
-                <select
-                  className="w-full h-9 text-sm border rounded px-2 bg-white"
-                  value={cappingMethod}
-                  disabled={submitted}
-                  onChange={e => setCappingMethod(e.target.value)}
-                >
-                  <option value="flat_bedded">{ar ? "سطح مسطح" : "Flat Bedded (as received)"}</option>
-                  <option value="capped_sulfur">{ar ? "تسوية كبريتية" : "Capped — Sulfur Mortar"}</option>
-                  <option value="capped_plywood">{ar ? "تسوية خشب رقائقي" : "Capped — Plywood"}</option>
-                  <option value="capped_rubber">{ar ? "تسوية مطاطية" : "Capped — Rubber Pad"}</option>
-                  <option value="ground">{ar ? "مطحون" : "Ground"}</option>
-                </select>
-              </div>
+            </div>
+
+            <ConcreteCubeTestConditionsFields
+              lang={lang}
+              values={testConditions}
+              onChange={patch => setTestConditions(prev => ({ ...prev, ...patch }))}
+              disabled={submitted}
+              compact
+              className="mt-4"
+            />
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-4">
               <div className="space-y-1.5">
                 <Label className="text-xs">{ar ? "مرجع الدفعة / الشهادة" : "Batch / certificate ref."}</Label>
                 <Input
