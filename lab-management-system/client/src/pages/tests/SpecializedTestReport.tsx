@@ -4473,6 +4473,252 @@ export function renderFormData(formTemplate: string, formData: any, isAr: boolea
   }
 }
 
+// ─── Embeddable report body (single + batch) ───────────────────────────────────
+export type SpecializedTestReportBodyProps = {
+  dist: {
+    sampleCode?: string | null;
+    referenceNo?: string | null;
+    receivedAt?: Date | string | null;
+    retestNumber?: number | null;
+    originalSampleCode?: string | null;
+    contractorName?: string | null;
+    contractNumber?: string | null;
+    contractName?: string | null;
+    sector?: string | null;
+    sampleLocation?: string | null;
+    castingDate?: Date | string | null;
+    createdAt?: Date | string | null;
+    testNameEn?: string | null;
+    testNameAr?: string | null;
+    testName?: string | null;
+    standardRef?: string | null;
+    testType?: string | null;
+  } | null;
+  result: {
+    formTemplate: string;
+    formData: unknown;
+    summaryValues?: Record<string, unknown> | null;
+    testTypeCode: string;
+    overallResult?: string | null;
+    testDate?: Date | string | null;
+    contractorName?: string | null;
+    projectName?: string | null;
+    contractNo?: string | null;
+    testedBy?: string | null;
+    notes?: string | null;
+    qcReviewedAt?: Date | string | null;
+    managerReviewedAt?: Date | string | null;
+  };
+  isAr: boolean;
+  /** Omits duplicate PASS badge when batch section header already shows status */
+  embedInBatch?: boolean;
+  testNameDisplay?: string;
+  standardDisplay?: string;
+  reportDateStr?: string;
+  /** When set, omits the detailed results block (e.g. multi-type batchDistributionId reports) */
+  skipDetailedResults?: boolean;
+};
+
+export function SpecializedTestReportBody({
+  dist,
+  result,
+  isAr,
+  embedInBatch = false,
+  testNameDisplay: testNameOverride,
+  standardDisplay: standardOverride,
+  reportDateStr: reportDateOverride,
+  skipDetailedResults = false,
+}: SpecializedTestReportBodyProps) {
+  const formData = (result.formData as Record<string, unknown>) ?? {};
+  const summaryValues = (result.summaryValues as Record<string, unknown>) ?? {};
+  const isPassed = result.overallResult === "pass";
+  const reportDateStr =
+    reportDateOverride ?? formatReportDate(result.qcReviewedAt ?? result.managerReviewedAt ?? null);
+
+  const isMarshallDensityReport =
+    result.formTemplate === "asphalt_marshall_density" ||
+    result.testTypeCode === "ASPH_MARSHALL_DENSITY" ||
+    result.testTypeCode === "DIST-2026-042";
+  const isMarshallStabilityReport =
+    result.formTemplate === "asphalt_marshall" ||
+    result.testTypeCode === "ASPH_MARSHALL" ||
+    result.testTypeCode === "DIST-2026-040";
+  const testNameDisplay =
+    testNameOverride ??
+    (isMarshallDensityReport
+      ? isAr
+        ? "الثقل النوعي الظاهري للخلطة الإسفلتية المدموكة (ASTM D 2726)"
+        : "Bulk Specific Gravity of Compacted HMA (ASTM D 2726)"
+      : isMarshallStabilityReport
+        ? isAr
+          ? "الثبات والتدفق لخلطة HMA (ASTM D 6927)"
+          : "HMA Marshall Stability and Flow (ASTM D 6927)"
+        : isAr
+          ? (dist?.testNameAr ?? dist?.testName ?? result.testTypeCode)
+          : (dist?.testNameEn ?? dist?.testName ?? result.testTypeCode));
+  const standardDisplay =
+    standardOverride ??
+    resolveReportStandardDisplay({
+      formData,
+      dist,
+      testTypeCode: result.testTypeCode,
+      override: isMarshallDensityReport
+        ? "ASTM D 2726"
+        : isMarshallStabilityReport
+          ? "ASTM D 6927"
+          : null,
+    });
+
+  return (
+    <div className={embedInBatch ? "batch-test-report-body space-y-3" : undefined}>
+      {!embedInBatch && (
+        <div className={`flex ${isAr ? "justify-start" : "justify-end"} mb-2`}>
+          <div
+            className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-bold ${
+              isPassed ? "bg-green-100 text-green-800 border border-green-300" : "bg-red-100 text-red-800 border border-red-300"
+            }`}
+          >
+            {isPassed ? <CheckCircle size={14} /> : <XCircle size={14} />}
+            {isPassed
+              ? isAr ? "مطابق — PASS" : "PASS — مطابق"
+              : isAr ? "غير مطابق — FAIL" : "FAIL — غير مطابق"}
+          </div>
+        </div>
+      )}
+
+      <div className="border border-gray-200 rounded mb-3 overflow-hidden">
+        <table className="metadata-table w-full border-collapse text-xs bg-gray-50">
+          <tbody>
+            <tr>
+              <td className="border border-gray-200 px-2 py-2 text-center align-top w-1/3">
+                <span className={REPORT_REF_LABEL_CLASS}>{isAr ? "رقم العينة" : "Sample No."}</span>
+                <span className="font-mono font-normal text-gray-900 text-sm">{dist?.sampleCode ?? "—"}</span>
+                {dist?.retestNumber != null && (
+                  <span className="block text-[10px] text-amber-700 mt-0.5">
+                    {isAr ? `إعادة ${dist.retestNumber}` : `Retest ${dist.retestNumber}`}
+                    {dist?.originalSampleCode
+                      ? ` · ${isAr ? "الأصل" : "Original"}: ${dist.originalSampleCode}`
+                      : ""}
+                  </span>
+                )}
+              </td>
+              <td className="border border-gray-200 px-2 py-2 text-center align-top w-1/3">
+                <span className={REPORT_REF_LABEL_CLASS}>{inspectionRefLabel(isAr ? "ar" : "en")}</span>
+                <span className="font-mono font-normal text-gray-900 text-sm">
+                  {formatInspectionReference(dist?.referenceNo)}
+                </span>
+              </td>
+              <td className="border border-gray-200 px-2 py-2 text-center align-top w-1/3">
+                <span className={REPORT_REF_LABEL_CLASS}>{isAr ? "تاريخ الاستلام" : "Received Date"}</span>
+                <span className={REPORT_REF_VALUE_CLASS}>{fmtDate(dist?.receivedAt)}</span>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+        <table className="metadata-table w-full border-collapse text-xs">
+          <tbody>
+            {(() => {
+              const detailLeft: [string, string][] = [
+                [isAr ? "نوع الفحص" : "Test Type", String(testNameDisplay)],
+                [isAr ? "المعيار" : "Standard", standardDisplay],
+                [isAr ? "المقاول" : "Contractor", String(dist?.contractorName ?? result.contractorName ?? "—")],
+                [isAr ? "رقم العقد" : "Contract No.", String(dist?.contractNumber ?? result.contractNo ?? "—")],
+              ];
+              const detailRight: [string, string][] = [
+                [isAr ? "اسم المشروع" : "Project Name", String(dist?.contractName ?? result.projectName ?? "—")],
+                [isAr ? "القطاع" : "Sector", dist?.sector ? String(dist.sector).replace("_", " ").toUpperCase() : "—"],
+                [isAr ? "موقع العينة" : "Sample Location", String(dist?.sampleLocation ?? "—")],
+                [isAr ? "تاريخ الفحص" : "Test date", fmtDate(result.testDate)],
+                [isAr ? "تاريخ التقرير" : "Report Date", reportDateStr],
+              ];
+              const n = Math.max(detailLeft.length, detailRight.length);
+              return Array.from({ length: n }, (_, i) => {
+                const L = detailLeft[i];
+                const R = detailRight[i];
+                return (
+                  <tr key={i}>
+                    <td className={REPORT_META_LABEL_CLASS}>{L?.[0] ?? ""}</td>
+                    <td className={REPORT_META_VALUE_CLASS}>{L?.[1] ?? ""}</td>
+                    <td className={REPORT_META_LABEL_CLASS}>{R?.[0] ?? ""}</td>
+                    <td className={REPORT_META_VALUE_CLASS}>{R?.[1] ?? ""}</td>
+                  </tr>
+                );
+              });
+            })()}
+          </tbody>
+        </table>
+      </div>
+
+      {summaryValues && Object.keys(summaryValues).length > 0 && result.formTemplate !== "interlock" && (
+        <div className="mb-3">
+          <h3 className="text-xs font-bold text-gray-900 uppercase border-b border-gray-300 pb-1 mb-2">
+            {isAr ? "ملخص النتائج" : "Summary Results"}
+          </h3>
+          <table className="metadata-table w-full border-collapse text-xs">
+            <tbody>
+              {(() => {
+                const entries = Object.entries(summaryValues).filter(
+                  ([k]) => !REPORT_DUPLICATE_METADATA_KEYS.has(k),
+                );
+                const rows: Array<typeof entries> = [];
+                for (let i = 0; i < entries.length; i += 2) rows.push(entries.slice(i, i + 2));
+                return rows.map((pair, ri) => {
+                  const [a, b] = [pair[0], pair[1]];
+                  return (
+                    <tr key={ri}>
+                      <td className={REPORT_META_LABEL_CLASS}>
+                        {formatSummaryLabel(a[0], result.formTemplate, isAr)}
+                      </td>
+                      <td className={REPORT_META_VALUE_CLASS}>
+                        {formatSummaryValue(a[0], a[1], isAr, result.formTemplate)}
+                      </td>
+                      {b ? (
+                        <>
+                          <td className={REPORT_META_LABEL_CLASS}>
+                            {formatSummaryLabel(b[0], result.formTemplate, isAr)}
+                          </td>
+                          <td className={REPORT_META_VALUE_CLASS}>
+                            {formatSummaryValue(b[0], b[1], isAr, result.formTemplate)}
+                          </td>
+                        </>
+                      ) : (
+                        <td className="border border-gray-200 px-2 py-1" colSpan={2} />
+                      )}
+                    </tr>
+                  );
+                });
+              })()}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {!skipDetailedResults && (
+      <div className="mb-3">
+        <h3 className="text-xs font-bold text-gray-900 uppercase border-b border-gray-300 pb-1 mb-2">
+          {isAr ? "النتائج التفصيلية" : "Detailed Results"}
+        </h3>
+        {renderFormData(result.formTemplate, formData, isAr, {
+          castingDateMs: dist?.castingDate ? new Date(dist.castingDate).getTime() : null,
+          foamReceivedAt: dist?.receivedAt ?? null,
+          foamDistCreatedAt: dist?.createdAt ?? null,
+          sieveReportTestedBy: result.testedBy ?? null,
+        })}
+      </div>
+      )}
+
+      <div className="mb-3">
+        <h3 className="text-xs font-bold text-gray-900 uppercase border-b border-gray-300 pb-1 mb-2">
+          {isAr ? "ملاحظات" : "Notes"}
+        </h3>
+        <p className="text-xs text-gray-700 bg-gray-50 border rounded p-3">
+          {result.notes || (isAr ? "لا توجد ملاحظات إضافية" : "No additional remarks")}
+        </p>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main Report Component ────────────────────────────────────────────────────
 type SpecializedTestReportProps = {
   /** When set, loads approved report data via sector portal auth (same UI as lab). */
@@ -4716,8 +4962,6 @@ export default function SpecializedTestReport({ sectorResultId }: SpecializedTes
   }
 
   const formData = result.formData as any ?? {};
-  const summaryValues = result.summaryValues as any ?? {};
-  const isPassed = result.overallResult === "pass";
   const reportSignatures = pickReviewSignatures([result, legacyResult]);
   const reportDateStr = formatReportDate(reportSignatures.approvedAt);
   const docNo = reportDocNo({
@@ -4808,147 +5052,44 @@ export default function SpecializedTestReport({ sectorResultId }: SpecializedTes
             titleSecondary={isAr ? "Laboratory Test Report" : "تقرير نتيجة الفحص"}
             className="mb-3"
           />
-          {/* Pass/Fail badge */}
-          <div className={`flex ${isAr ? "justify-start" : "justify-end"} mb-2`}>
-            <div className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-bold ${isPassed ? "bg-green-100 text-green-800 border border-green-300" : "bg-red-100 text-red-800 border border-red-300"}`}>
-              {isPassed ? <CheckCircle size={14} /> : <XCircle size={14} />}
-              {isPassed
-                ? (isAr ? "مطابق — PASS" : "PASS — مطابق")
-                : (isAr ? "غير مطابق — FAIL" : "FAIL — غير مطابق")}
-            </div>
-          </div>
 
-          {/* Sample Info */}
-          <div className="border border-gray-200 rounded mb-3 overflow-hidden">
-            {/* Reference numbers bar */}
-            <table className="metadata-table w-full border-collapse text-xs bg-gray-50">
-              <tbody>
-                <tr>
-                  <td className="border border-gray-200 px-2 py-2 text-center align-top w-1/3">
-                    <span className={REPORT_REF_LABEL_CLASS}>{isAr ? "رقم العينة" : "Sample No."}</span>
-                    <span className="font-mono font-normal text-gray-900 text-sm">{(dist as any)?.sampleCode ?? "—"}</span>
-                    {(dist as any)?.retestNumber != null && (
-                      <span className="block text-[10px] text-amber-700 mt-0.5">
-                        {isAr ? `إعادة ${(dist as any).retestNumber}` : `Retest ${(dist as any).retestNumber}`}
-                        {(dist as any)?.originalSampleCode
-                          ? ` · ${isAr ? "الأصل" : "Original"}: ${(dist as any).originalSampleCode}`
-                          : ""}
-                      </span>
-                    )}
-                  </td>
-                  <td className="border border-gray-200 px-2 py-2 text-center align-top w-1/3">
-                    <span className={REPORT_REF_LABEL_CLASS}>{inspectionRefLabel(isAr ? "ar" : "en")}</span>
-                    <span className="font-mono font-normal text-gray-900 text-sm">{formatInspectionReference((dist as any)?.referenceNo)}</span>
-                  </td>
-                  <td className="border border-gray-200 px-2 py-2 text-center align-top w-1/3">
-                    <span className={REPORT_REF_LABEL_CLASS}>{isAr ? "تاريخ الاستلام" : "Received Date"}</span>
-                    <span className={REPORT_REF_VALUE_CLASS}>{fmtDate((dist as any)?.receivedAt)}</span>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-            {/* Details — 4-column table for stable print layout */}
-            <table className="metadata-table w-full border-collapse text-xs">
-              <tbody>
-                {(() => {
-                  const detailLeft: [string, string][] = [
-                    [isAr ? "نوع الفحص" : "Test Type", String(testNameDisplay)],
-                    [isAr ? "المعيار" : "Standard", standardDisplay],
-                    [isAr ? "المقاول" : "Contractor", String((dist as any)?.contractorName ?? result.contractorName ?? "—")],
-                    [isAr ? "رقم العقد" : "Contract No.", String((dist as any)?.contractNumber ?? result.contractNo ?? "—")],
-                  ];
-                  const detailRight: [string, string][] = [
-                    [isAr ? "اسم المشروع" : "Project Name", String((dist as any)?.contractName ?? result.projectName ?? "—")],
-                    [isAr ? "القطاع" : "Sector", (dist as any)?.sector ? String((dist as any).sector).replace("_", " ").toUpperCase() : "—"],
-                    [isAr ? "موقع العينة" : "Sample Location", String((dist as any)?.sampleLocation ?? "—")],
-                    [isAr ? "تاريخ الفحص" : "Test date", fmtDate(result.testDate)],
-                    [isAr ? "تاريخ التقرير" : "Report Date", reportDateStr],
-                  ];
-                  const n = Math.max(detailLeft.length, detailRight.length);
-                  return Array.from({ length: n }, (_, i) => {
-                    const L = detailLeft[i];
-                    const R = detailRight[i];
-                    return (
-                      <tr key={i}>
-                        <td className={REPORT_META_LABEL_CLASS}>{L?.[0] ?? ""}</td>
-                        <td className={REPORT_META_VALUE_CLASS}>{L?.[1] ?? ""}</td>
-                        <td className={REPORT_META_LABEL_CLASS}>{R?.[0] ?? ""}</td>
-                        <td className={REPORT_META_VALUE_CLASS}>{R?.[1] ?? ""}</td>
-                      </tr>
-                    );
-                  });
-                })()}
-              </tbody>
-            </table>
-          </div>
+          <SpecializedTestReportBody
+            dist={dist as SpecializedTestReportBodyProps["dist"]}
+            result={{
+              formTemplate: result.formTemplate,
+              formData: result.formData,
+              summaryValues: result.summaryValues as Record<string, unknown> | null,
+              testTypeCode: result.testTypeCode,
+              overallResult: result.overallResult,
+              testDate: result.testDate,
+              contractorName: result.contractorName,
+              projectName: result.projectName,
+              contractNo: result.contractNo,
+              testedBy: result.testedBy,
+              notes: result.notes,
+              qcReviewedAt: result.qcReviewedAt,
+              managerReviewedAt: result.managerReviewedAt,
+            }}
+            isAr={isAr}
+            testNameDisplay={testNameDisplay}
+            standardDisplay={standardDisplay}
+            reportDateStr={reportDateStr}
+            skipDetailedResults={!!(batchDists && batchDists.length > 1)}
+          />
 
-          {/* Summary Values */}
-          {summaryValues && Object.keys(summaryValues).length > 0 && result.formTemplate !== "interlock" && (
-            <div className="mb-3">
-              <h3 className="text-xs font-bold text-gray-900 uppercase border-b border-gray-300 pb-1 mb-2">
-                {isAr ? "ملخص النتائج" : "Summary Results"}
-              </h3>
-              <table className="metadata-table w-full border-collapse text-xs">
-                <tbody>
-                  {(() => {
-                    const entries = Object.entries(summaryValues).filter(
-                      ([k]) => !REPORT_DUPLICATE_METADATA_KEYS.has(k),
-                    );
-                    const rows: Array<typeof entries> = [];
-                    for (let i = 0; i < entries.length; i += 2) rows.push(entries.slice(i, i + 2));
-                    return rows.map((pair, ri) => {
-                      const [a, b] = [pair[0], pair[1]];
-                      return (
-                        <tr key={ri}>
-                          <td className={REPORT_META_LABEL_CLASS}>{formatSummaryLabel(a[0], result.formTemplate, isAr)}</td>
-                          <td className={REPORT_META_VALUE_CLASS}>{formatSummaryValue(a[0], a[1], isAr, result.formTemplate)}</td>
-                          {b ? (
-                            <>
-                              <td className={REPORT_META_LABEL_CLASS}>{formatSummaryLabel(b[0], result.formTemplate, isAr)}</td>
-                              <td className={REPORT_META_VALUE_CLASS}>{formatSummaryValue(b[0], b[1], isAr, result.formTemplate)}</td>
-                            </>
-                          ) : (
-                            <td className="border border-gray-200 px-2 py-1" colSpan={2} />
-                          )}
-                        </tr>
-                      );
-                    });
-                  })()}
-                </tbody>
-              </table>
-            </div>
-          )}
-
-          {/* Detailed Results — Batch (multiple types) or Single */}
           {batchDists && batchDists.length > 1 ? (
-            <BatchResultsSection batchDists={batchDists ?? []} distId={distIdForRender} isAr={isAr} prefetchedBatchResults={sectorBatchResults} />
-          ) : (
-            <div className="mb-3">
-              <h3 className="text-xs font-bold text-gray-900 uppercase border-b border-gray-300 pb-1 mb-2">
-                {isAr ? "النتائج التفصيلية" : "Detailed Results"}
-              </h3>
-              {renderFormData(result.formTemplate, formData, isAr, {
-                castingDateMs: dist?.castingDate ? new Date(dist.castingDate).getTime() : null,
-                foamReceivedAt: dist?.receivedAt ?? null,
-                foamDistCreatedAt: dist?.createdAt ?? null,
-                sieveReportTestedBy: result.testedBy ?? null,
-              })}
-            </div>
-          )}
+            <BatchResultsSection
+              batchDists={batchDists ?? []}
+              distId={distIdForRender}
+              isAr={isAr}
+              prefetchedBatchResults={sectorBatchResults}
+            />
+          ) : null}
 
           </div>{/* report-page-body */}
 
-          {/* Notes + signatures + footer — kept together at page bottom */}
+          {/* Signatures + footer — kept together at page bottom */}
           <div className={LAB_PRINT_TAIL_CLASS}>
-          {result.notes && (
-            <div className="mb-5 print:mb-2">
-              <h3 className="text-xs font-bold text-gray-900 uppercase border-b border-gray-300 pb-1 mb-2">
-                {isAr ? "ملاحظات" : "Notes"}
-              </h3>
-              <p className="text-xs text-gray-700 bg-gray-50 border rounded p-3">{result.notes}</p>
-            </div>
-          )}
-
           <ReportSignatures sig={reportSignatures} labels={signatureLabels} lang={isAr ? "ar" : "en"} />
 
           <div className="mt-4 pt-2 border-t border-gray-200" style={{ fontSize: "8px" }}>

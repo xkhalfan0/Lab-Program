@@ -123,7 +123,7 @@ function extractTargetFromClass(classStr: string | null | undefined): number | n
 }
 
 // ─── Single Report Page (one age group = one page) ────────────────────────────
-function ReportPage({
+export function ConcreteCubeReportPage({
   group,
   refNo,
   distribution,
@@ -139,6 +139,8 @@ function ReportPage({
   testedSignedAt,
   managerSignedAt,
   qcSignedAt,
+  embedInBatch = false,
+  showSignatures,
 }: {
   group: any;
   refNo: string;
@@ -155,7 +157,11 @@ function ReportPage({
   testedSignedAt?: Date | string | null;
   managerSignedAt?: Date | string | null;
   qcSignedAt?: Date | string | null;
+  /** When true, omits lab header/footer — used inside combined batch reports */
+  embedInBatch?: boolean;
+  showSignatures?: boolean;
 }) {
+  const signaturesVisible = showSignatures ?? !embedInBatch;
   const ar = lang === "ar";
   const userRemarks = getUserRemarksForReport(group.comments);
   const remarksDisplay = userRemarks || (ar ? "لا توجد ملاحظات إضافية" : "No additional remarks");
@@ -280,11 +286,16 @@ function ReportPage({
 
   return (
     <div
-      className="report-page bg-white flex flex-col mx-auto shadow-lg print:shadow-none print:mx-0 print:w-full print:max-w-none print:p-0"
+      className={
+        embedInBatch
+          ? "batch-test-report-body space-y-5"
+          : "report-page bg-white flex flex-col mx-auto shadow-lg print:shadow-none print:mx-0 print:w-full print:max-w-none print:p-0"
+      }
       dir={ar ? "rtl" : "ltr"}
-      style={LAB_PRINT_PAGE_STYLE}
+      style={embedInBatch ? undefined : LAB_PRINT_PAGE_STYLE}
     >
-      <div className={LAB_PRINT_BODY_CLASS}>
+      <div className={embedInBatch ? undefined : LAB_PRINT_BODY_CLASS}>
+      {!embedInBatch && (
       <div className="mb-5">
         <LabReportHeader
           lang={lang}
@@ -308,6 +319,8 @@ function ReportPage({
           </div>
         </div>
       </div>
+      )}
+      {/* PASS badge only on standalone reports — batch section header shows status */}
 
       {/* Sample identification */}
       <div className="border border-gray-200 rounded mb-5 overflow-hidden">
@@ -536,7 +549,7 @@ function ReportPage({
       </div>
       </div>
 
-      <div className={LAB_PRINT_TAIL_CLASS}>
+      <div className={embedInBatch ? undefined : LAB_PRINT_TAIL_CLASS}>
       {/* Notes */}
       <div className="mb-5 print:mb-2">
         <h3 className="text-xs font-bold text-gray-900 uppercase border-b border-gray-300 pb-1 mb-2">
@@ -552,6 +565,7 @@ function ReportPage({
       </div>
 
       {/* Signatures */}
+      {signaturesVisible && (
       <ReportSignatures
         sig={{
           testedBy: testedDisplay || null,
@@ -570,7 +584,9 @@ function ReportPage({
         }}
         lang={lang}
       />
+      )}
 
+      {!embedInBatch && (
       <div className="mt-4 pt-2 border-t border-gray-200" style={{ fontSize: "8px" }}>
         <div className="flex justify-between text-gray-900">
           <span>
@@ -582,6 +598,7 @@ function ReportPage({
         </div>
         <ReportPrintNote lang={lang} />
       </div>
+      )}
       </div>
     </div>
   );
@@ -679,7 +696,7 @@ export default function ConcreteReport() {
         ) : (
           (groups as any[]).map((group: any, idx: number, arr: any[]) => (
             <div key={group.id} className={`mb-6 print:mb-0 ${idx > 0 ? "print-break-before" : ""}`}>
-              <ReportPage
+              <ConcreteCubeReportPage
                 group={group}
                 refNo={refNo}
                 distribution={distributionAny}

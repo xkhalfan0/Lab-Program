@@ -26,9 +26,9 @@ import { getOfficialTestDisplayName } from "@/lib/officialTestCatalog";
 import {
   formatSummaryLabel,
   formatSummaryValue,
-  renderFormData,
-  renderLegacyConcreteCubeGroups,
+  SpecializedTestReportBody,
 } from "@/pages/tests/SpecializedTestReport";
+import { ConcreteCubeReportPage } from "@/pages/ConcreteReport";
 import {
   REPORT_META_LABEL_CLASS,
   REPORT_META_VALUE_CLASS,
@@ -74,7 +74,23 @@ type BatchSibling = {
     complianceStatus?: string | null;
     average?: string | null;
     unit?: string | null;
+    testedBy?: string | null;
+    managerReviewedByName?: string | null;
+    qcReviewedByName?: string | null;
+    managerNotes?: string | null;
+    qcNotes?: string | null;
+    processedAt?: string | Date | null;
+    managerReviewedAt?: string | Date | null;
+    qcReviewedAt?: string | Date | null;
   }>;
+  contractorName?: string | null;
+  contractName?: string | null;
+  contractNumber?: string | null;
+  sampleLocation?: string | null;
+  sector?: string | null;
+  receivedAt?: string | Date | null;
+  castingDate?: string | Date | null;
+  referenceNo?: string | null;
 };
 
 type ResultKind = "pass" | "fail" | "pending";
@@ -173,6 +189,38 @@ function MarshallDensityBatchSummary({
       </p>
     </div>
   );
+}
+
+function mergeDistForReport(
+  sibling: BatchSibling,
+  sample: {
+    sampleCode?: string | null;
+    referenceNo?: string | null;
+    receivedAt?: string | Date | null;
+    contractorName?: string | null;
+    contractName?: string | null;
+    contractNumber?: string | null;
+    sampleLocation?: string | null;
+    sector?: string | null;
+    castingDate?: string | Date | null;
+    retestNumber?: number | null;
+    originalSampleCode?: string | null;
+  } | null,
+) {
+  return {
+    ...sibling,
+    sampleCode: sample?.sampleCode ?? null,
+    referenceNo: sample?.referenceNo ?? sibling.referenceNo ?? null,
+    receivedAt: sample?.receivedAt ?? sibling.receivedAt ?? null,
+    contractorName: sample?.contractorName ?? sibling.contractorName ?? null,
+    contractName: sample?.contractName ?? sibling.contractName ?? null,
+    contractNumber: sample?.contractNumber ?? sibling.contractNumber ?? null,
+    sampleLocation: sample?.sampleLocation ?? sibling.sampleLocation ?? null,
+    sector: sample?.sector ?? sibling.sector ?? null,
+    castingDate: sample?.castingDate ?? sibling.castingDate ?? null,
+    retestNumber: sample?.retestNumber ?? null,
+    originalSampleCode: sample?.originalSampleCode ?? null,
+  };
 }
 
 function computeBatchStatus(passCount: number, total: number, completedCount: number) {
@@ -492,6 +540,8 @@ export default function BatchReport() {
                   ([k, v]) => !SUMMARY_SKIP_KEYS.has(k) && v != null && v !== "" && typeof v !== "object",
                 );
                 const isCompleted = ["completed", "submitted", "reviewed", "qc_passed"].includes(sibling.status);
+                const specResult = sibling.specializedTestResults?.[0];
+                const legacyTr = sibling.testResults?.[0];
                 const hasDetailedForm =
                   isCompleted &&
                   !!formTemplate &&
@@ -503,13 +553,18 @@ export default function BatchReport() {
                   !hasDetailedForm &&
                   legacyConcreteGroups.length > 0 &&
                   legacyConcreteGroups.some(g => (g.cubes?.length ?? 0) > 0);
+                const mergedDist = mergeDistForReport(sibling, sample);
+                const refNo = sibling.distributionCode ?? `DIST-${sibling.id}`;
+
                 return (
                   <div
                     key={sibling.id}
-                    className="border-2 border-slate-300 rounded-lg overflow-hidden"
-                    style={{ pageBreakInside: "avoid", breakInside: "avoid" }}
+                    className={index > 0 ? "print-break-before pt-6" : undefined}
                   >
-                    {/* Test section header */}
+                  <div
+                    className="border-2 border-slate-300 rounded-lg overflow-hidden"
+                  >
+                    {/* Test section header — batch connector */}
                     <div className="bg-slate-800 text-white px-4 py-2.5 flex flex-wrap justify-between items-center gap-2">
                       <div>
                         <h2 className="text-[13px] font-bold">
@@ -533,16 +588,56 @@ export default function BatchReport() {
                       )}
                     </div>
                     <div className="p-4">
-                      {hasDetailedForm ? (
-                        renderFormData(formTemplate as string, formData, isAr, {
-                          sieveReportTestedBy: sibling.specializedTestResults?.[0]?.testedBy ?? null,
-                        })
-                      ) : hasLegacyConcrete ? (
-                        renderLegacyConcreteCubeGroups(
-                          legacyConcreteGroups,
-                          isAr,
-                          sample?.castingDate ?? legacyConcreteGroups[0]?.batchDateTime,
-                        )
+                      {hasLegacyConcrete ? (
+                        legacyConcreteGroups.map((group, gi) => (
+                          <div
+                            key={group.id ?? gi}
+                            className={gi > 0 ? "mt-8 pt-6 border-t border-slate-200 print-break-before" : undefined}
+                          >
+                            <ConcreteCubeReportPage
+                              group={group}
+                              refNo={refNo}
+                              distribution={mergedDist}
+                              castingDate={sample?.castingDate ?? group.batchDateTime}
+                              testedByName={legacyTr?.testedBy ?? group.testedBy}
+                              managerReviewedByName={legacyTr?.managerReviewedByName ?? null}
+                              qcReviewedByName={legacyTr?.qcReviewedByName ?? null}
+                              managerNotes={legacyTr?.managerNotes ?? null}
+                              qcNotes={legacyTr?.qcNotes ?? null}
+                              lang={isAr ? "ar" : "en"}
+                              pageIndex={gi}
+                              totalPages={legacyConcreteGroups.length}
+                              testedSignedAt={legacyTr?.processedAt ?? null}
+                              managerSignedAt={legacyTr?.managerReviewedAt ?? null}
+                              qcSignedAt={legacyTr?.qcReviewedAt ?? null}
+                              embedInBatch
+                              showSignatures={false}
+                            />
+                          </div>
+                        ))
+                      ) : hasDetailedForm && specResult ? (
+                        <SpecializedTestReportBody
+                          dist={mergedDist}
+                          result={{
+                            formTemplate: (specResult.formTemplate ?? formTemplate) as string,
+                            formData: specResult.formData ?? formData,
+                            summaryValues: specResult.summaryValues as Record<string, unknown> | null,
+                            testTypeCode: sibling.testType,
+                            overallResult: specResult.overallResult,
+                            testDate: specResult.testDate,
+                            contractorName: mergedDist.contractorName,
+                            projectName: mergedDist.contractName,
+                            contractNo: mergedDist.contractNumber,
+                            testedBy: specResult.testedBy,
+                            notes: (specResult as { notes?: string | null }).notes,
+                            qcReviewedAt: (specResult as { qcReviewedAt?: Date | string | null }).qcReviewedAt,
+                            managerReviewedAt: (specResult as { managerReviewedAt?: Date | string | null }).managerReviewedAt,
+                          }}
+                          isAr={isAr}
+                          embedInBatch
+                          testNameDisplay={testName}
+                          standardDisplay={standard}
+                        />
                       ) : isCompleted && summaryEntries.length > 0 ? (
                         <table className="metadata-table w-full border-collapse text-xs">
                           <tbody>
@@ -587,6 +682,7 @@ export default function BatchReport() {
                         </p>
                       )}
                     </div>
+                  </div>
                   </div>
                 );
               })}
