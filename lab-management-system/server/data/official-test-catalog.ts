@@ -221,8 +221,8 @@ export const OFFICIAL_TEST_CATALOG: OfficialTest[] = [
   { category: "aggregates", nameEn: "Los Angeles Abrasion Test", nameAr: "تآكل لوس أنجلوس", code: "AGG_LA", unitPrice: "150", unit: "%", standardRef: "BS EN 1097-2", formTemplate: "agg_la_abrasion", sortOrder: 450 },
 ];
 
-if (OFFICIAL_TEST_CATALOG.length !== 29) {
-  throw new Error(`Official test catalog must contain exactly 29 tests, found ${OFFICIAL_TEST_CATALOG.length}`);
+if (OFFICIAL_TEST_CATALOG.length !== 30) {
+  throw new Error(`Official test catalog must contain exactly 30 tests, found ${OFFICIAL_TEST_CATALOG.length}`);
 }
 
 const catalogByCode = new Map(OFFICIAL_TEST_CATALOG.map((t) => [t.code, t]));
