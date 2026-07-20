@@ -38,6 +38,7 @@ import {
   resolveReportStandardDisplay,
 } from "@/lib/reportFormatting";
 import { calculateFinalBlend, formatDisplaySieveMm } from "@/pages/tests/SieveAnalysis";
+import { FOAM_DENSITY_TEST_CODE } from "@shared/foamConcreteTests";
 import { buildConcreteCubeTestConditionPairs } from "@/lib/concreteCubeTestConditions";
 import {
   ReportDetailGrid,
@@ -2676,8 +2677,12 @@ function renderAsphaltMarshall(fd: any, isAr: boolean) {
 
 function renderConcreteFoam(fd: any, isAr: boolean, extras?: FormReportExtras) {
   const lang = isAr ? "ar" : "en";
-  const cubes = fd.cubes ?? [];
-  const densitySpecimens = fd.densitySpecimens ?? [];
+  const mode =
+    fd.testMode ??
+    (fd.testType === FOAM_DENSITY_TEST_CODE || fd.testType === "CONC_FOAM_DENSITY" ? "density" : "strength");
+  const isDensityReport = mode === "density";
+  const cubes = isDensityReport ? [] : (fd.cubes ?? []);
+  const densitySpecimens = isDensityReport ? (fd.densitySpecimens ?? []) : [];
   const hasCubes = cubes.length > 0;
   const hasDensity = densitySpecimens.length > 0;
   const strengthIsKgCm2 = fd.strengthUnit === "kg/cm2";
@@ -2727,7 +2732,7 @@ function renderConcreteFoam(fd: any, isAr: boolean, extras?: FormReportExtras) {
             </p>
           </div>
         )}
-        {fd.avgStrength !== undefined && fd.avgStrength !== null && (
+        {fd.avgStrength !== undefined && fd.avgStrength !== null && !isDensityReport && (
           <div className="bg-blue-50 border border-blue-200 rounded p-2 text-center">
             <p className="text-blue-600 font-semibold">{isAr ? "متوسط المقاومة" : "Avg. Strength"}</p>
             <p className="font-bold text-blue-800">
@@ -2737,7 +2742,7 @@ function renderConcreteFoam(fd: any, isAr: boolean, extras?: FormReportExtras) {
         )}
         {(() => {
           const avgOven = fd.avgOvenDryDensity ?? fd.avgDryDensity;
-          if (avgOven == null || avgOven === "" || !Number.isFinite(Number(avgOven))) return null;
+          if (!isDensityReport || avgOven == null || avgOven === "" || !Number.isFinite(Number(avgOven))) return null;
           return (
             <div className="bg-purple-50 border border-purple-200 rounded p-2 text-center">
               <p className="text-purple-600 font-semibold">{isAr ? "متوسط الكثافة الجافة في الفرن" : "Avg. oven dry density"}</p>
@@ -2745,7 +2750,7 @@ function renderConcreteFoam(fd: any, isAr: boolean, extras?: FormReportExtras) {
             </div>
           );
         })()}
-        {minStr !== undefined && minStr !== null && minStr !== "" && (
+        {minStr !== undefined && minStr !== null && minStr !== "" && !isDensityReport && (
           <div className="bg-gray-50 border rounded p-2 text-center">
             <p className="text-gray-500 font-semibold">{isAr ? "الحد الأدنى للمقاومة" : "Min. strength"}</p>
             <p className="font-bold text-gray-800">
@@ -2753,7 +2758,7 @@ function renderConcreteFoam(fd: any, isAr: boolean, extras?: FormReportExtras) {
             </p>
           </div>
         )}
-        {maxDen !== undefined && maxDen !== null && maxDen !== "" && (
+        {maxDen !== undefined && maxDen !== null && maxDen !== "" && isDensityReport && (
           <div className="bg-gray-50 border rounded p-2 text-center">
             <p className="text-gray-500 font-semibold">{isAr ? "أقصى كثافة جافة" : "Max dry density"}</p>
             <p className="font-bold text-gray-800">{maxDen} kg/m³</p>

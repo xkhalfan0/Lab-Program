@@ -16,6 +16,7 @@ import adminImportRouter from "../routes/admin-import.js";
 import { sdk } from "./sdk";
 import { createAuditLog, getSampleByIdIncludingDeleted, softDeleteSample, getDb } from "../db";
 import { ensureConcreteCubeTestConditionColumns } from "../migrations/ensureConcreteCubeTestConditionColumns";
+import { ensureFoamConcreteTestTypes } from "../migrations/ensureFoamConcreteTestTypes";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -41,6 +42,7 @@ async function startServer() {
   if (db) {
     try {
       await ensureConcreteCubeTestConditionColumns(db);
+      await ensureFoamConcreteTestTypes(db);
     } catch (err) {
       console.error("[schema] concrete_test_groups column ensure failed:", err);
     }

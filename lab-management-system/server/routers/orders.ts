@@ -19,6 +19,7 @@ import {
   MIN_CONC_INTERLOCK_COUNT,
   validateConcInterlockReceptionQuantity,
 } from "@shared/receptionTestQuantityLimits";
+import { isFoamConcreteTestCode, validateFoamDensityReceptionQuantity } from "@shared/foamConcreteTests";
 
 export const labOrderReceptionCreateInputSchema = z.object({
   contractId: z.number().optional(),
@@ -66,9 +67,11 @@ export async function runLabOrderReceptionCreate(ctx: ReceptionCtx, input: LabOr
   for (const t of input.tests) {
     if (t.testTypeCode === "CONC_INTERLOCK") {
       const err = validateConcInterlockReceptionQuantity(t.quantity, "en");
-      if (err) {
-        throw new TRPCError({ code: "BAD_REQUEST", message: err });
-      }
+      if (err) throw new TRPCError({ code: "BAD_REQUEST", message: err });
+    }
+    if (t.testTypeCode === "CONC_FOAM_DENSITY") {
+      const err = validateFoamDensityReceptionQuantity(t.quantity, "en");
+      if (err) throw new TRPCError({ code: "BAD_REQUEST", message: err });
     }
   }
 
@@ -136,7 +139,9 @@ export async function runLabOrderReceptionCreate(ctx: ReceptionCtx, input: LabOr
   const items = await createLabOrderItems(
     input.tests.map((t) => {
       const foamAge =
-        t.testTypeCode === "CONC_FOAM" && t.metadata?.concreteAge != null && String(t.metadata.concreteAge).trim() !== ""
+        isFoamConcreteTestCode(t.testTypeCode) &&
+        t.metadata?.concreteAge != null &&
+        String(t.metadata.concreteAge).trim() !== ""
           ? JSON.stringify({ concreteAge: String(t.metadata.concreteAge).trim() })
           : null;
       const testSubType =

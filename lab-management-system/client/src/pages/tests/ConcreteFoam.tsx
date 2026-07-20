@@ -1,13 +1,10 @@
 /**
- * ConcreteFoam — Foamed Concrete Compressive Strength & Density Test
+ * ConcreteFoam — Foamed Concrete Compressive Strength OR Density Test
  * Standards: BS 1881-116 (Compressive Strength), BS 1881-114 (Density)
  *
- * Reception uses a single test code (CONC_FOAM). Strength vs density mode is selected on this form.
- *
- * Strength: compute N/mm² from load, display & compare in kg/cm² (× 10.197).
- * Density: oven-dry density from OD sample weights (0–1, 72 h, 96 h) and volume (mm → m³); pass when ≤ required max (kg/m³).
+ * Reception uses separate test codes (CONC_FOAM / CONC_FOAM_DENSITY). This form shows one mode per distribution.
  */
-import { useState, useCallback, useEffect, useMemo } from "react";
+import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { useParams, useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { redirectAfterTestSave } from "@/lib/batchHelpers";
@@ -19,12 +16,16 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { Plus, Trash2, Send, FlaskConical, Printer, Loader2 } from "lucide-react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { useLanguage } from "@/contexts/LanguageContext";
+import {
+  FOAM_STRENGTH_TEST_CODE,
+  MIN_CONC_FOAM_DENSITY_COUNT,
+  resolveFoamTestMode,
+} from "@shared/foamConcreteTests";
 
 /** N/mm² (MPa) → kg/cm² */
 const N_PER_MM2_TO_KG_CM2 = 10.197;
@@ -174,8 +175,8 @@ export default function ConcreteFoam() {
   const { lang } = useLanguage();
   const ar = lang === "ar";
   const distId = parseInt(distributionId || "0", 10);
+  const rowsInitialized = useRef(false);
 
-  const [testMode, setTestMode] = useState<"strength" | "density">("strength");
   const [gradeLabel, setGradeLabel] = useState("");
   const [requiredStrengthKgCm2, setRequiredStrengthKgCm2] = useState("51.0");
   const [requiredMaxDryDensity, setRequiredMaxDryDensity] = useState("1400");
@@ -189,6 +190,22 @@ export default function ConcreteFoam() {
     { id: distId },
     { enabled: !!distId },
   );
+  const { data: existing } = trpc.specializedTests.getByDistribution.useQuery(
+    { distributionId: distId },
+    { enabled: !!distId },
+  );
+
+  const testMode = useMemo(() => resolveFoamTestMode(distribution?.testType), [distribution?.testType]);
+  const isDensityMode = testMode === "density";
+  const testTypeCode = distribution?.testType ?? FOAM_STRENGTH_TEST_CODE;
+  const pageTitle = isDensityMode
+    ? ar
+      ? "فحص الخرسانة الرغوية: الكثافة"
+      : "Foamed Concrete Test: Density"
+    : ar
+      ? "فحص الخرسانة الرغوية: مقاومة الضغط"
+      : "Foamed Concrete Test: Compressive Strength";
+  const standardSubtitle = isDensityMode ? "BS 1881-114 (Density)" : "BS 1881-116 (Compressive Strength)";
 
   /** Age from reception: metadata (if ever exposed) or JSON in testSubType. */
   const registeredAge = useMemo(() => {
@@ -204,7 +221,7 @@ export default function ConcreteFoam() {
   }, [registeredAge]);
 
   useEffect(() => {
-    setTestAge(28);
+    rowsInitialized.current = false;
   }, [distId]);
 
   useEffect(() => {
@@ -214,6 +231,54 @@ export default function ConcreteFoam() {
   useEffect(() => {
     setCubeRows(prev => prev.map(r => ({ ...r, age: String(testAge) })));
   }, [testAge]);
+
+  useEffect(() => {
+    if (existing?.formData) {
+      const fd = existing.formData as Record<string, unknown>;
+      if (fd.gradeLabel != null) setGradeLabel(String(fd.gradeLabel));
+      if (fd.minStrengthKgCm2 != null) setRequiredStrengthKgCm2(String(fd.minStrengthKgCm2));
+      else if (fd.minStrength != null) setRequiredStrengthKgCm2(String(fd.minStrength));
+      if (fd.requiredMaxDryDensityKgM3 != null) setRequiredMaxDryDensity(String(fd.requiredMaxDryDensityKgM3));
+      else if (fd.maxDensity != null) setRequiredMaxDryDensity(String(fd.maxDensity));
+      if (fd.testAgeDays != null && Number.isFinite(Number(fd.testAgeDays))) {
+        setTestAge(Number(fd.testAgeDays));
+      }
+      if (fd.notes != null) setNotes(String(fd.notes));
+      if (Array.isArray(fd.cubes) && fd.cubes.length > 0) {
+        setCubeRows(
+          (fd.cubes as CubeRow[]).map((c, i) => ({
+            id: c.id || `cube_${Date.now()}_${i}`,
+            cubeNo: c.cubeNo || `FC${i + 1}`,
+            age: c.age != null ? String(c.age) : String(testAge),
+            sideA: c.sideA != null ? String(c.sideA) : "100",
+            sideB: c.sideB != null ? String(c.sideB) : "100",
+            height: c.height != null ? String(c.height) : "100",
+            mass: c.mass != null ? String(c.mass) : "",
+            maxLoad: c.maxLoad != null ? String(c.maxLoad) : "",
+          })),
+        );
+      }
+      if (Array.isArray(fd.densitySpecimens) && fd.densitySpecimens.length > 0) {
+        setDensityRows(fd.densitySpecimens as DensityRow[]);
+      }
+      if (existing.status === "submitted") setSubmitted(true);
+      rowsInitialized.current = true;
+      return;
+    }
+
+    if (!distribution || rowsInitialized.current) return;
+
+    const qty = distribution.quantity ?? (isDensityMode ? MIN_CONC_FOAM_DENSITY_COUNT : 3);
+    const count = isDensityMode ? Math.max(MIN_CONC_FOAM_DENSITY_COUNT, qty) : Math.max(1, qty);
+    const ageStr = String(testAge);
+
+    if (isDensityMode) {
+      setDensityRows(Array.from({ length: count }, (_, i) => newDensityRow(i)));
+    } else {
+      setCubeRows(Array.from({ length: count }, (_, i) => newCubeRow(i, ageStr)));
+    }
+    rowsInitialized.current = true;
+  }, [existing, distribution, isDensityMode, testAge]);
 
   const ageLockedFromRegistration = registeredAgeNum != null;
 
@@ -308,9 +373,22 @@ export default function ConcreteFoam() {
     );
   }, [requiredMaxDryDensity]);
 
-  const removeDensityRow = useCallback((id: string) => {
-    setDensityRows(prev => prev.filter(r => r.id !== id));
-  }, []);
+  const removeDensityRow = useCallback(
+    (id: string) => {
+      setDensityRows(prev => {
+        if (prev.length <= MIN_CONC_FOAM_DENSITY_COUNT) {
+          toast.error(
+            ar
+              ? `الحد الأدنى ${MIN_CONC_FOAM_DENSITY_COUNT} عينات لاختبار الكثافة`
+              : `Minimum ${MIN_CONC_FOAM_DENSITY_COUNT} specimens required for density test`,
+          );
+          return prev;
+        }
+        return prev.filter(r => r.id !== id);
+      });
+    },
+    [ar],
+  );
 
   const handleSubmit = () => {
     if (!distribution?.sampleId) {
@@ -319,13 +397,10 @@ export default function ConcreteFoam() {
     }
     if (!distributionId) return;
 
-    const overallResult: "pass" | "fail" | "pending" =
-      testMode === "strength"
-        ? overallStrengthBadge
-        : overallDensityBadge;
+    const overallResult: "pass" | "fail" | "pending" = isDensityMode ? overallDensityBadge : overallStrengthBadge;
 
     const resultData = {
-      testType: "CONC_FOAM",
+      testType: testTypeCode,
       testMode,
       strengthUnit: "kg/cm2" as const,
       gradeLabel,
@@ -350,7 +425,7 @@ export default function ConcreteFoam() {
     saveMut.mutate({
       distributionId: distId,
       sampleId: distribution.sampleId,
-      testTypeCode: distribution.testType ?? "CONC_FOAM",
+      testTypeCode: testTypeCode,
       formTemplate: "concrete_foam",
       formData: resultData,
       overallResult,
@@ -379,9 +454,9 @@ export default function ConcreteFoam() {
           <div>
             <h1 className="text-2xl font-bold flex items-center gap-2">
               <FlaskConical className="h-6 w-6 text-blue-500" />
-              {ar ? "فحص الخرسانة الرغوية" : "Foamed Concrete Test"}
+              {pageTitle}
             </h1>
-            <p className="text-muted-foreground text-sm mt-1">BS 1881-116 (Strength) | BS 1881-114 (Density)</p>
+            <p className="text-muted-foreground text-sm mt-1">{standardSubtitle}</p>
           </div>
           {distribution && (
             <Badge variant="outline" className="text-sm">
@@ -396,18 +471,6 @@ export default function ConcreteFoam() {
           </CardHeader>
           <CardContent className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             <div>
-              <Label>{ar ? "نوع الفحص" : "Test Type"}</Label>
-              <Select value={testMode} onValueChange={v => setTestMode(v as "strength" | "density")}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="strength">{ar ? "مقاومة الضغط" : "Strength"}</SelectItem>
-                  <SelectItem value="density">{ar ? "الكثافة" : "Density"}</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
               <Label>{ar ? "التدرج / الدرجة (نص)" : "Grade (text)"}</Label>
               <Input
                 value={gradeLabel}
@@ -415,29 +478,33 @@ export default function ConcreteFoam() {
                 placeholder={ar ? "مثال: FC مخصص، مواصفات المشروع…" : "e.g. Project spec, mix ID…"}
               />
             </div>
-            <div>
-              <Label>{ar ? "المقاومة المطلوبة (كجم/سم²)" : "Required Strength (kg/cm²)"}</Label>
-              <Input
-                value={requiredStrengthKgCm2}
-                onChange={e => setRequiredStrengthKgCm2(e.target.value)}
-                type="number"
-                step="0.1"
-                min="0"
-              />
-            </div>
-            <div>
-              <Label>{ar ? "أقصى كثافة جافة مسموحة (كجم/م³)" : "Required max dry density (kg/m³)"}</Label>
-              <Input
-                value={requiredMaxDryDensity}
-                onChange={e => setRequiredMaxDryDensity(e.target.value)}
-                type="number"
-                step="10"
-                min="0"
-              />
-              <p className="text-xs text-muted-foreground mt-1">
-                {ar ? "العينة تكون مطابقة إذا كانت الكثافة الجافة ≤ هذا الحد" : "Pass when dry density ≤ this limit"}
-              </p>
-            </div>
+            {!isDensityMode && (
+              <div>
+                <Label>{ar ? "المقاومة المطلوبة (كجم/سم²)" : "Required Strength (kg/cm²)"}</Label>
+                <Input
+                  value={requiredStrengthKgCm2}
+                  onChange={e => setRequiredStrengthKgCm2(e.target.value)}
+                  type="number"
+                  step="0.1"
+                  min="0"
+                />
+              </div>
+            )}
+            {isDensityMode && (
+              <div>
+                <Label>{ar ? "أقصى كثافة جافة مسموحة (كجم/م³)" : "Required max dry density (kg/m³)"}</Label>
+                <Input
+                  value={requiredMaxDryDensity}
+                  onChange={e => setRequiredMaxDryDensity(e.target.value)}
+                  type="number"
+                  step="10"
+                  min="0"
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  {ar ? "العينة تكون مطابقة إذا كانت الكثافة الجافة ≤ هذا الحد" : "Pass when dry density ≤ this limit"}
+                </p>
+              </div>
+            )}
           </CardContent>
         </Card>
 
@@ -491,7 +558,7 @@ export default function ConcreteFoam() {
           </CardContent>
         </Card>
 
-        {testMode === "strength" && (
+        {!isDensityMode && (
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0">
               <CardTitle className="text-base">{ar ? "اختبار مقاومة الضغط" : "Compressive Strength Test"}</CardTitle>
@@ -582,7 +649,7 @@ export default function ConcreteFoam() {
           </Card>
         )}
 
-        {testMode === "density" && (
+        {isDensityMode && (
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0">
               <CardTitle className="text-base">{ar ? "اختبار الكثافة" : "Density Test"}</CardTitle>

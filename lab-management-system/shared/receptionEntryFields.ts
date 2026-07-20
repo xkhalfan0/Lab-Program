@@ -63,6 +63,7 @@ export const RECEPTION_FIELDS_BY_TEST: Record<string, readonly string[]> = {
   CONC_CORE: CONC_COMPRESSIVE_FIELDS,
   CONC_BEAM: CONC_COMPRESSIVE_FIELDS,
   CONC_FOAM: CONC_COMPRESSIVE_FIELDS,
+  CONC_FOAM_DENSITY: CONC_COMPRESSIVE_FIELDS,
   CONC_INTERLOCK: ["fLevel", "facility", "sampleDescription"],
   CONC_BLOCK: ["facility", "fLevel", "descriptionOfWork"],
   SOIL_SIEVE: ["facility", "fLevel", "fullDescription", "materialFor"],
@@ -166,7 +167,7 @@ export type ReceptionEntryDisplayGroup = {
   rows: Array<{ label: string; value: string }>;
 };
 
-const COMPRESSIVE_CONC_CODES = new Set(["CONC_CUBE", "CONC_CORE", "CONC_BEAM", "CONC_FOAM"]);
+const COMPRESSIVE_CONC_CODES = new Set(["CONC_CUBE", "CONC_CORE", "CONC_BEAM", "CONC_FOAM", "CONC_FOAM_DENSITY"]);
 
 /** Group reception entry fields by test — for receipt / report sections with per-test headers. */
 export function getReceptionEntryDisplayGroups(options: {

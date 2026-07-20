@@ -77,6 +77,14 @@ import {
   MIN_CONC_INTERLOCK_COUNT,
   validateConcInterlockReceptionQuantity,
 } from "@shared/receptionTestQuantityLimits";
+import {
+  FOAM_CONCRETE_TEST_CODES,
+  FOAM_DENSITY_TEST_CODE,
+  FOAM_STRENGTH_TEST_CODE,
+  MIN_CONC_FOAM_DENSITY_COUNT,
+  isFoamConcreteTestCode,
+  validateFoamDensityReceptionQuantity,
+} from "@shared/foamConcreteTests";
 import { serializeEntryData } from "@shared/receptionEntryFields";
 import { openTestCatalogPrint } from "@/lib/testCatalogCategories";
 import {
@@ -92,11 +100,6 @@ import { calcActualAgeDays } from "@shared/concreteCubeBs1881";
 
 // ─── Sub-type options per test CODE ─────────────────────────────────────────
 const SUBTYPES_BY_CODE: Record<string, { value: string; labelAr: string; labelEn: string }[]> = {
-  CONC_FOAM: [
-    { value: "7_days", labelAr: "7 أيام", labelEn: "7 Days" },
-    { value: "14_days", labelAr: "14 يوم", labelEn: "14 Days" },
-    { value: "28_days", labelAr: "28 يوم", labelEn: "28 Days" },
-  ],
   CONC_BLOCK: [
     { value: "solid_block", labelAr: "بلوك صلب", labelEn: "Solid Block" },
     { value: "hollow_block", labelAr: "بلوك مجوف", labelEn: "Hollow Block" },
@@ -176,7 +179,7 @@ const CATEGORIES = [
 ];
 
 // Tests that use casting date
-const CASTING_DATE_TESTS = ["CONC_CUBE", "CONC_FOAM", "CONC_BEAM"];
+const CASTING_DATE_TESTS = ["CONC_CUBE", "CONC_FOAM", "CONC_FOAM_DENSITY", "CONC_BEAM"];
 
 // ─── Selected test item ───────────────────────────────────────────────────────
 interface SelectedTest {
@@ -361,7 +364,7 @@ export default function Reception() {
   const [asphaltMixCourse, setAsphaltMixCourse] = useState<string>("");
   /** Asphalt mix: standard 4-test batch vs pick tests individually */
   const [asphaltMixSelectionMode, setAsphaltMixSelectionMode] = useState<"batch" | "individual">("batch");
-  /** Foamed concrete (CONC_FOAM): age derived from casting date → reception (today). */
+  /** Foamed concrete (CONC_FOAM / CONC_FOAM_DENSITY): age derived from casting date → reception (today). */
   /** Reception: CONC_CUBE nominal face size (stored on sample) — required when cube test selected */
   const [nominalCubeSize, setNominalCubeSize] = useState("");
   const [supplier, setSupplier] = useState("");
@@ -377,6 +380,7 @@ export default function Reception() {
   const minQtyForTest = (code: string) => {
     if (code === "CONC_CUBE") return MIN_CONC_CUBE_COUNT;
     if (code === "CONC_INTERLOCK") return MIN_CONC_INTERLOCK_COUNT;
+    if (code === FOAM_DENSITY_TEST_CODE) return MIN_CONC_FOAM_DENSITY_COUNT;
     return 1;
   };
   const maxQtyForTest = (code: string) => (code === "CONC_CUBE" ? MAX_CONC_CUBE_COUNT : 999);
@@ -416,8 +420,8 @@ export default function Reception() {
    * Sub-types (diameter, course, sand type, …) are not in the DB; they come from SUBTYPES_BY_CODE[code].
    * Technician routing uses `distribution.testType` (code) + TestRouter; reports use `formTemplate`.
    */
-  /** Foamed concrete: one reception line (CONC_FOAM); strength vs density is chosen on the technical form. */
-  const RECEPTION_HIDDEN_TEST_CODES = ["CONC_FOAM_DENSITY", "CONC_FOAM_CUBE"];
+  /** Legacy combined foam codes hidden; use CONC_FOAM + CONC_FOAM_DENSITY separately. */
+  const RECEPTION_HIDDEN_TEST_CODES = ["CONC_FOAM_CUBE"];
 
   const filteredTests = useMemo(() => {
     const active = allTests.filter(tt => tt.isActive);
@@ -733,6 +737,9 @@ export default function Reception() {
     if (newTest.testTypeCode === "CONC_INTERLOCK") {
       newTest.quantity = MIN_CONC_INTERLOCK_COUNT;
     }
+    if (newTest.testTypeCode === FOAM_DENSITY_TEST_CODE) {
+      newTest.quantity = MIN_CONC_FOAM_DENSITY_COUNT;
+    }
 
     const ids = new Set(selectedTests.map(s => s.testTypeId));
     const additions = [...deps, newTest].filter(t => !ids.has(t.testTypeId));
@@ -1029,7 +1036,7 @@ export default function Reception() {
 
   const isCastingRequired = selectedTests.some(t => CASTING_DATE_TESTS.includes(t.testTypeCode));
   const isConcCore = selectedTests.some(t => t.testTypeCode === "CONC_CORE");
-  const hasFoamOrder = selectedTests.some(t => t.testTypeCode === "CONC_FOAM");
+  const hasFoamOrder = selectedTests.some(t => isFoamConcreteTestCode(t.testTypeCode));
   /** Days from casting date to today — saved as CONC_FOAM metadata.concreteAge */
   const foamConcreteAgeDays = useMemo(() => {
     if (!hasFoamOrder || !form.castingDate) return null;
@@ -1134,8 +1141,8 @@ export default function Reception() {
     if (hasInvalidQtyTests) {
       toast.error(
         lang === "ar"
-          ? `يجب أن تكون كمية كل اختبار صالحة (بلوكات: ${MIN_CONC_BLOCK_COUNT} على الأقل، مكعبات: ${MIN_CONC_CUBE_COUNT} على الأقل، إنترلوك: ${MIN_CONC_INTERLOCK_COUNT} على الأقل، غير ذلك: 1 على الأقل)`
-          : `Each selected test needs a valid quantity (blocks: min ${MIN_CONC_BLOCK_COUNT}, cubes: min ${MIN_CONC_CUBE_COUNT}, interlock: min ${MIN_CONC_INTERLOCK_COUNT}, others: min 1)`,
+          ? `يجب أن تكون كمية كل اختبار صالحة (بلوكات: ${MIN_CONC_BLOCK_COUNT} على الأقل، مكعبات: ${MIN_CONC_CUBE_COUNT} على الأقل، إنترلوك: ${MIN_CONC_INTERLOCK_COUNT} على الأقل، كثافة الرغوة: ${MIN_CONC_FOAM_DENSITY_COUNT} على الأقل، غير ذلك: 1 على الأقل)`
+          : `Each selected test needs a valid quantity (blocks: min ${MIN_CONC_BLOCK_COUNT}, cubes: min ${MIN_CONC_CUBE_COUNT}, interlock: min ${MIN_CONC_INTERLOCK_COUNT}, foam density: min ${MIN_CONC_FOAM_DENSITY_COUNT}, others: min 1)`,
       );
       return;
     }
@@ -1163,7 +1170,7 @@ export default function Reception() {
       toast.error(lang === "ar" ? "يرجى إدخال تاريخ الصب" : "Please enter casting date");
       return;
     }
-    const hasFoamOrderSubmit = selectedTests.some(t => t.testTypeCode === "CONC_FOAM");
+    const hasFoamOrderSubmit = selectedTests.some(t => isFoamConcreteTestCode(t.testTypeCode));
     if (hasFoamOrderSubmit) {
       if (!form.castingDate || foamConcreteAgeDays == null) {
         toast.error(
@@ -1238,6 +1245,11 @@ export default function Reception() {
           toast.error(interlockErr);
           return;
         }
+        const densityErr = validateFoamDensityReceptionQuantity(t.quantity ?? 0, lang);
+        if (t.testTypeCode === FOAM_DENSITY_TEST_CODE && densityErr) {
+          toast.error(densityErr);
+          return;
+        }
         finalTests.push(t);
       }
     }
@@ -1284,7 +1296,7 @@ export default function Reception() {
           testSubType: t.testSubType,
           quantity: t.quantity,
           unitPrice: t.unitPrice,
-          ...(t.testTypeCode === "CONC_FOAM" && foamConcreteAgeDays != null
+          ...(isFoamConcreteTestCode(t.testTypeCode) && foamConcreteAgeDays != null
             ? { metadata: { concreteAge: String(foamConcreteAgeDays) } }
             : {}),
         };

@@ -34,6 +34,7 @@ import {
   samplesHasRetestColumns,
 } from "./db";
 import { normalizeTestCode } from "./data/official-test-catalog";
+import { isFoamConcreteTestCode } from "@shared/foamConcreteTests";
 import {
   getMaxRetestsForTestCode,
   isTestRetestAllowed,
@@ -756,7 +757,7 @@ export async function runRetestCreate(
     input.tests.map((t) => {
       const tt = allTestTypes.find((x) => x.id === t.testTypeId);
       const foamAge =
-        t.testTypeCode === "CONC_FOAM" && t.metadata?.concreteAge != null
+        isFoamConcreteTestCode(t.testTypeCode) && t.metadata?.concreteAge != null
           ? JSON.stringify({ concreteAge: String(t.metadata.concreteAge).trim() })
           : null;
       const testSubType =
