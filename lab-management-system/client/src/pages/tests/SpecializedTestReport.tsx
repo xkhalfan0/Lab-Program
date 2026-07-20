@@ -39,6 +39,7 @@ import {
 } from "@/lib/reportFormatting";
 import { calculateFinalBlend, formatDisplaySieveMm } from "@/pages/tests/SieveAnalysis";
 import { FOAM_DENSITY_TEST_CODE } from "@shared/foamConcreteTests";
+import { buildConcreteSpecimenPrepPairs } from "@shared/concreteSpecimenPrepFields";
 import { buildConcreteCubeTestConditionPairs } from "@/lib/concreteCubeTestConditions";
 import {
   ReportDetailGrid,
@@ -2713,8 +2714,16 @@ function renderConcreteFoam(fd: any, isAr: boolean, extras?: FormReportExtras) {
   const ageAtTest =
     ageAtTestRaw != null && ageAtTestRaw !== "" && Number.isFinite(Number(ageAtTestRaw)) ? Number(ageAtTestRaw) : null;
 
+  const foamPrepPairs = buildConcreteSpecimenPrepPairs(fd, "foam", isAr);
+
   return (
     <div className="space-y-4">
+      {foamPrepPairs.length > 0 && (
+        <div className="mb-4">
+          <ReportInfoHeading>{isAr ? "تفاصيل العينة والتحضير" : "Sample Preparation Details"}</ReportInfoHeading>
+          <ReportInfoPairsTable pairs={foamPrepPairs} />
+        </div>
+      )}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
         <div className="bg-slate-50 border rounded p-2 text-center">
           <p className="text-slate-500 font-semibold">{isAr ? "تاريخ استلام العينة" : "Sample received"}</p>
@@ -3437,6 +3446,9 @@ function renderConcreteBeam(fd: any, isAr: boolean, castingDateMs?: number | nul
     : ["Beam No.", "Width (mm)", "Depth (mm)", "Max Load (N)", "MOR (MPa)", ...(showAgeColumn ? ["Age (days)"] : []), "Result"];
 
   const beamRows = allRows.map((r: any, i: number) => ({ ...r, _i: i }));
+  const beamPrepPairs = buildConcreteSpecimenPrepPairs(fd, "beam", isAr, {
+    specifiedFlexuralStrength: specifiedStrength,
+  });
   const beamCols: Column[] = [
     { header: headers[0], field: "beamNo", align: "center", render: (_, row) => String((row as any).beamNo ?? ((row as any)._i + 1)) },
     { header: headers[1], field: "width", align: "center", render: (v) => String(v ?? "—") },
@@ -3492,6 +3504,12 @@ function renderConcreteBeam(fd: any, isAr: boolean, castingDateMs?: number | nul
 
   return (
     <>
+      {beamPrepPairs.length > 0 && (
+        <div className="mb-4">
+          <ReportInfoHeading>{isAr ? "تفاصيل العينة والتحضير" : "Sample Preparation Details"}</ReportInfoHeading>
+          <ReportInfoPairsTable pairs={beamPrepPairs} />
+        </div>
+      )}
       <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-3 mb-4 text-xs">
         {(castingDateMs || fdCastDate) && (
           <div className="bg-blue-50 border border-blue-200 rounded p-2 text-center">
@@ -3814,6 +3832,10 @@ function renderConcreteCubes(fd: any, isAr: boolean) {
     },
     isAr,
   );
+  const prepPairs = buildConcreteSpecimenPrepPairs(fd, "cube", isAr, {
+    curingConditionLabel: curingLabel !== "—" ? curingLabel : null,
+  });
+  const allConditionPairs = [...prepPairs, ...testConditionPairs];
   // Nominal cube size: from saved formData or inferred from first cube row
   const nominalCubeSize = fd.nominalCubeSize ?? (cubes.length > 0 ? `${cubes[0].cubeSize ?? 150}mm` : "150mm");
   const headers = isAr
@@ -3823,7 +3845,7 @@ function renderConcreteCubes(fd: any, isAr: boolean) {
     <>
       <div className="mb-4">
         <ReportInfoHeading>{isAr ? "ظروف الاختبار والتحضير" : "Test Conditions & Preparation"}</ReportInfoHeading>
-        <ReportInfoPairsTable pairs={testConditionPairs} />
+        <ReportInfoPairsTable pairs={allConditionPairs} />
       </div>
       <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3 mb-4 text-xs">
         <div className="bg-blue-50 border border-blue-200 rounded p-2 text-center">

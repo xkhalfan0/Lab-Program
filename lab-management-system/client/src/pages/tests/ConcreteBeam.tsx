@@ -36,6 +36,12 @@ import { Send, FlaskConical, Info, Printer, UserCheck } from "lucide-react";
 import { useAuth } from "@/_core/hooks/useAuth";
 
 import { useLanguage } from "@/contexts/LanguageContext";
+import {
+  ConcreteSpecimenPrepFields,
+  EMPTY_CONCRETE_SPECIMEN_PREP,
+  type ConcreteSpecimenPrepValues,
+} from "@/components/ConcreteSpecimenPrepFields";
+import { prepPayload, prepValuesFromFormData } from "@shared/concreteSpecimenPrepFields";
 // ─── Beam size presets (keys match saved formData + Select values) ───────────
 const BEAM_SIZES = {
   "100x100x500": { label: "100×100×500 mm (Span = 300 mm)", width: 100, depth: 100, length: 500, span: 300 },
@@ -147,6 +153,10 @@ export default function ConcreteBeam() {
   const distId = parseInt(distributionId ?? "0");
 
   const { data: dist } = trpc.distributions.get.useQuery({ id: distId }, { enabled: !!distId });
+  const { data: existing } = trpc.specializedTests.getByDistribution.useQuery(
+    { distributionId: distId },
+    { enabled: !!distId },
+  );
 
   // Default geometry until distribution loads; legacy CONC_BEAM_* maps to preset.
   const beamKeyFromDist = beamSizeKeyFromTestCode(dist?.testType);
@@ -165,6 +175,7 @@ export default function ConcreteBeam() {
   const [testDate, setTestDate] = useState(() => new Date().toISOString().split("T")[0]);
   const [age, setAge] = useState<number | null>(null);
   const [sampleLocation, setSampleLocation] = useState("");
+  const [prepValues, setPrepValues] = useState<ConcreteSpecimenPrepValues>(EMPTY_CONCRETE_SPECIMEN_PREP);
   const [notes, setNotes] = useState("");
   const [submitted, setSubmitted] = useState(false);
 
@@ -204,6 +215,31 @@ export default function ConcreteBeam() {
     const loc = (dist as { sampleLocation?: string | null }).sampleLocation;
     if (loc) setSampleLocation(prev => (prev ? prev : loc));
   }, [dist]);
+
+  useEffect(() => {
+    if (!existing?.formData) return;
+    const fd = existing.formData as Record<string, unknown>;
+    if (fd.specifiedStrength != null) setSpecifiedStrength(Number(fd.specifiedStrength));
+    if (fd.minMOR != null) setMinMOR(Number(fd.minMOR));
+    if (fd.requiredAge != null) setRequiredAge(Number(fd.requiredAge));
+    if (fd.fractureZone === "middle_third" || fd.fractureZone === "outside_middle_third") {
+      setFractureZone(fd.fractureZone);
+    }
+    if (fd.castDate) setCastDate(String(fd.castDate).slice(0, 10));
+    if (fd.testDate) setTestDate(String(fd.testDate).slice(0, 10));
+    if (fd.sampleLocation) setSampleLocation(String(fd.sampleLocation));
+    if (fd.notes) setNotes(String(fd.notes));
+    setPrepValues(prev => ({ ...prev, ...prepValuesFromFormData(fd) }));
+    if (existing.status === "submitted") setSubmitted(true);
+  }, [existing]);
+
+  useEffect(() => {
+    setPrepValues(prev =>
+      prev.nominalSizeOfCube.trim()
+        ? prev
+        : { ...prev, nominalSizeOfCube: BEAM_SIZES[beamSize].label },
+    );
+  }, [beamSize]);
 
   const preset = BEAM_SIZES[beamSize];
   const span = preset.span;
@@ -266,6 +302,7 @@ export default function ConcreteBeam() {
           rows: computedRows,
           avgMOR,
           standard: "ASTM C 78",
+          ...prepPayload(prepValues),
         },
         overallResult,
         summaryValues: {
@@ -470,6 +507,21 @@ export default function ConcreteBeam() {
                   : "Same for all beams. ASTM C78 requires fracture in the middle third for the standard acceptance result."}
               </p>
             </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">{ar ? "تفاصيل العينة" : "Sample Details"}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ConcreteSpecimenPrepFields
+              variant="beam"
+              lang={lang}
+              values={prepValues}
+              onChange={patch => setPrepValues(prev => ({ ...prev, ...patch }))}
+              disabled={submitted}
+            />
           </CardContent>
         </Card>
 

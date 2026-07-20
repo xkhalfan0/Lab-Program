@@ -21,7 +21,13 @@ import {
   cubeTestConditionsPayload,
   type ConcreteCubeTestConditionsValues,
 } from "@/components/ConcreteCubeTestConditionsFields";
+import {
+  ConcreteSpecimenPrepFields,
+  EMPTY_CONCRETE_SPECIMEN_PREP,
+  type ConcreteSpecimenPrepValues,
+} from "@/components/ConcreteSpecimenPrepFields";
 import { normalizeMoistureKey } from "@/lib/concreteCubeTestConditions";
+import { prepPayload, prepValuesFromFormData } from "@shared/concreteSpecimenPrepFields";
 
 // ─── Cube size factor → equivalent 150 mm cube strength (BS EN 12390-3 style) ─
 // Reference specimen is 150 mm; smaller cubes tend to read higher, larger slightly lower.
@@ -124,6 +130,7 @@ export default function ConcreteCubes() {
   const [structureType, setStructureType] = useState("");
   const [curingCondition, setCuringCondition] = useState("water_20c");
   const [testConditions, setTestConditions] = useState<ConcreteCubeTestConditionsValues>(EMPTY_CUBE_TEST_CONDITIONS);
+  const [prepValues, setPrepValues] = useState<ConcreteSpecimenPrepValues>(EMPTY_CONCRETE_SPECIMEN_PREP);
   const [batchReference, setBatchReference] = useState("");
   const [notes, setNotes] = useState("");
   const [rows, setRows] = useState<CubeRow[]>([newRow(0), newRow(1), newRow(2)]);
@@ -201,8 +208,18 @@ export default function ConcreteCubes() {
         maxLoad: c.maxLoad || "",
       })));
     }
+    setPrepValues(prepValuesFromFormData(fd));
     if (existing.status === "submitted") setSubmitted(true);
   }, [existing]);
+
+  useEffect(() => {
+    const size = rows[0]?.cubeSize ?? "150";
+    setPrepValues(prev =>
+      prev.nominalSizeOfCube.trim()
+        ? prev
+        : { ...prev, nominalSizeOfCube: `${size} mm` },
+    );
+  }, [rows]);
 
   const computedRows = rows.map(r => computeRow(r, requiredAtAge));
   const validRows = computedRows.filter(r => r.correctedStrength && r.correctedStrength > 0);
@@ -267,6 +284,7 @@ export default function ConcreteCubes() {
           structureType,
           curingCondition,
           ...cubeTestConditionsPayload(testConditions),
+          ...prepPayload(prepValues),
           batchReference: batchReference.trim() || undefined,
           castingDate: castingDate?.toISOString(),
           sampleAgeDays,
@@ -279,7 +297,9 @@ export default function ConcreteCubes() {
           sampleCount: n,
           ageGroup: sampleAgeDays !== null ? getAgeGroupLabel(sampleAgeDays) : "unknown",
           // Nominal cube size: determined from the first cube row (all cubes in one test are same size)
-          nominalCubeSize: computedRows.length > 0 ? `${computedRows[0].cubeSize ?? 150}mm` : "150mm",
+          nominalCubeSize:
+            prepValues.nominalSizeOfCube.trim() ||
+            (computedRows.length > 0 ? `${computedRows[0].cubeSize ?? 150}mm` : "150mm"),
         },
         overallResult,
         summaryValues: {
@@ -586,6 +606,15 @@ export default function ConcreteCubes() {
               onChange={patch => setTestConditions(prev => ({ ...prev, ...patch }))}
               disabled={submitted}
               compact
+              className="mt-4"
+            />
+
+            <ConcreteSpecimenPrepFields
+              variant="cube"
+              lang={lang}
+              values={prepValues}
+              onChange={patch => setPrepValues(prev => ({ ...prev, ...patch }))}
+              disabled={submitted}
               className="mt-4"
             />
 

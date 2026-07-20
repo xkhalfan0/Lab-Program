@@ -26,6 +26,12 @@ import {
   MIN_CONC_FOAM_DENSITY_COUNT,
   resolveFoamTestMode,
 } from "@shared/foamConcreteTests";
+import { prepPayload, prepValuesFromFormData } from "@shared/concreteSpecimenPrepFields";
+import {
+  ConcreteSpecimenPrepFields,
+  EMPTY_CONCRETE_SPECIMEN_PREP,
+  type ConcreteSpecimenPrepValues,
+} from "@/components/ConcreteSpecimenPrepFields";
 
 /** N/mm² (MPa) → kg/cm² */
 const N_PER_MM2_TO_KG_CM2 = 10.197;
@@ -183,6 +189,10 @@ export default function ConcreteFoam() {
   const [testAge, setTestAge] = useState(28);
   const [cubeRows, setCubeRows] = useState<CubeRow[]>([newCubeRow(0, "28"), newCubeRow(1, "28"), newCubeRow(2, "28")]);
   const [densityRows, setDensityRows] = useState<DensityRow[]>([newDensityRow(0), newDensityRow(1)]);
+  const [prepValues, setPrepValues] = useState<ConcreteSpecimenPrepValues>({
+    ...EMPTY_CONCRETE_SPECIMEN_PREP,
+    nominalSizeOfCube: "100 mm",
+  });
   const [notes, setNotes] = useState("");
   const [submitted, setSubmitted] = useState(false);
 
@@ -244,6 +254,7 @@ export default function ConcreteFoam() {
         setTestAge(Number(fd.testAgeDays));
       }
       if (fd.notes != null) setNotes(String(fd.notes));
+      setPrepValues(prev => ({ ...prev, ...prepValuesFromFormData(fd) }));
       if (Array.isArray(fd.cubes) && fd.cubes.length > 0) {
         setCubeRows(
           (fd.cubes as CubeRow[]).map((c, i) => ({
@@ -420,6 +431,7 @@ export default function ConcreteFoam() {
       notes,
       submittedBy: user?.name,
       submittedAt: new Date().toISOString(),
+      ...prepPayload(prepValues),
     };
 
     saveMut.mutate({
@@ -555,6 +567,21 @@ export default function ConcreteFoam() {
               <Label>{ar ? "الفاحص" : "Tested By"}</Label>
               <Input value={user?.name || "N/A"} disabled />
             </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">{ar ? "تفاصيل العينة" : "Sample Details"}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ConcreteSpecimenPrepFields
+              variant="foam"
+              lang={lang}
+              values={prepValues}
+              onChange={patch => setPrepValues(prev => ({ ...prev, ...patch }))}
+              disabled={submitted}
+            />
           </CardContent>
         </Card>
 
