@@ -19,7 +19,7 @@ import {
   MIN_CONC_INTERLOCK_COUNT,
   validateConcInterlockReceptionQuantity,
 } from "@shared/receptionTestQuantityLimits";
-import { isFoamConcreteTestCode, validateFoamDensityReceptionQuantity } from "@shared/foamConcreteTests";
+import { isFoamConcreteTestCode, validateFoamReceptionQuantity } from "@shared/foamConcreteTests";
 
 export const labOrderReceptionCreateInputSchema = z.object({
   contractId: z.number().optional(),
@@ -69,8 +69,8 @@ export async function runLabOrderReceptionCreate(ctx: ReceptionCtx, input: LabOr
       const err = validateConcInterlockReceptionQuantity(t.quantity, "en");
       if (err) throw new TRPCError({ code: "BAD_REQUEST", message: err });
     }
-    if (t.testTypeCode === "CONC_FOAM_DENSITY") {
-      const err = validateFoamDensityReceptionQuantity(t.quantity, "en");
+    if (isFoamConcreteTestCode(t.testTypeCode)) {
+      const err = validateFoamReceptionQuantity(t.testTypeCode, t.quantity, "en");
       if (err) throw new TRPCError({ code: "BAD_REQUEST", message: err });
     }
   }

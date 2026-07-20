@@ -78,12 +78,9 @@ import {
   validateConcInterlockReceptionQuantity,
 } from "@shared/receptionTestQuantityLimits";
 import {
-  FOAM_CONCRETE_TEST_CODES,
-  FOAM_DENSITY_TEST_CODE,
-  FOAM_STRENGTH_TEST_CODE,
-  MIN_CONC_FOAM_DENSITY_COUNT,
+  MIN_CONC_FOAM_CUBE_COUNT,
   isFoamConcreteTestCode,
-  validateFoamDensityReceptionQuantity,
+  validateFoamReceptionQuantity,
 } from "@shared/foamConcreteTests";
 import { serializeEntryData } from "@shared/receptionEntryFields";
 import { openTestCatalogPrint } from "@/lib/testCatalogCategories";
@@ -380,7 +377,7 @@ export default function Reception() {
   const minQtyForTest = (code: string) => {
     if (code === "CONC_CUBE") return MIN_CONC_CUBE_COUNT;
     if (code === "CONC_INTERLOCK") return MIN_CONC_INTERLOCK_COUNT;
-    if (code === FOAM_DENSITY_TEST_CODE) return MIN_CONC_FOAM_DENSITY_COUNT;
+    if (isFoamConcreteTestCode(code)) return MIN_CONC_FOAM_CUBE_COUNT;
     return 1;
   };
   const maxQtyForTest = (code: string) => (code === "CONC_CUBE" ? MAX_CONC_CUBE_COUNT : 999);
@@ -737,8 +734,8 @@ export default function Reception() {
     if (newTest.testTypeCode === "CONC_INTERLOCK") {
       newTest.quantity = MIN_CONC_INTERLOCK_COUNT;
     }
-    if (newTest.testTypeCode === FOAM_DENSITY_TEST_CODE) {
-      newTest.quantity = MIN_CONC_FOAM_DENSITY_COUNT;
+    if (isFoamConcreteTestCode(newTest.testTypeCode)) {
+      newTest.quantity = MIN_CONC_FOAM_CUBE_COUNT;
     }
 
     const ids = new Set(selectedTests.map(s => s.testTypeId));
@@ -1141,8 +1138,8 @@ export default function Reception() {
     if (hasInvalidQtyTests) {
       toast.error(
         lang === "ar"
-          ? `يجب أن تكون كمية كل اختبار صالحة (بلوكات: ${MIN_CONC_BLOCK_COUNT} على الأقل، مكعبات: ${MIN_CONC_CUBE_COUNT} على الأقل، إنترلوك: ${MIN_CONC_INTERLOCK_COUNT} على الأقل، كثافة الرغوة: ${MIN_CONC_FOAM_DENSITY_COUNT} على الأقل، غير ذلك: 1 على الأقل)`
-          : `Each selected test needs a valid quantity (blocks: min ${MIN_CONC_BLOCK_COUNT}, cubes: min ${MIN_CONC_CUBE_COUNT}, interlock: min ${MIN_CONC_INTERLOCK_COUNT}, foam density: min ${MIN_CONC_FOAM_DENSITY_COUNT}, others: min 1)`,
+          ? `يجب أن تكون كمية كل اختبار صالحة (بلوكات: ${MIN_CONC_BLOCK_COUNT} على الأقل، مكعبات: ${MIN_CONC_CUBE_COUNT} على الأقل، إنترلوك: ${MIN_CONC_INTERLOCK_COUNT} على الأقل، خرسانة رغوية: ${MIN_CONC_FOAM_CUBE_COUNT} على الأقل، غير ذلك: 1 على الأقل)`
+          : `Each selected test needs a valid quantity (blocks: min ${MIN_CONC_BLOCK_COUNT}, cubes: min ${MIN_CONC_CUBE_COUNT}, interlock: min ${MIN_CONC_INTERLOCK_COUNT}, foamed concrete: min ${MIN_CONC_FOAM_CUBE_COUNT}, others: min 1)`,
       );
       return;
     }
@@ -1245,9 +1242,9 @@ export default function Reception() {
           toast.error(interlockErr);
           return;
         }
-        const densityErr = validateFoamDensityReceptionQuantity(t.quantity ?? 0, lang);
-        if (t.testTypeCode === FOAM_DENSITY_TEST_CODE && densityErr) {
-          toast.error(densityErr);
+        const foamErr = validateFoamReceptionQuantity(t.testTypeCode, t.quantity ?? 0, lang);
+        if (foamErr) {
+          toast.error(foamErr);
           return;
         }
         finalTests.push(t);

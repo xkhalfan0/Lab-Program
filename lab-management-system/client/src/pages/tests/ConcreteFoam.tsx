@@ -23,6 +23,7 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import { useLanguage } from "@/contexts/LanguageContext";
 import {
   FOAM_STRENGTH_TEST_CODE,
+  MIN_CONC_FOAM_CUBE_COUNT,
   MIN_CONC_FOAM_DENSITY_COUNT,
   resolveFoamTestMode,
 } from "@shared/foamConcreteTests";
@@ -279,8 +280,8 @@ export default function ConcreteFoam() {
 
     if (!distribution || rowsInitialized.current) return;
 
-    const qty = distribution.quantity ?? (isDensityMode ? MIN_CONC_FOAM_DENSITY_COUNT : 3);
-    const count = isDensityMode ? Math.max(MIN_CONC_FOAM_DENSITY_COUNT, qty) : Math.max(1, qty);
+    const qty = distribution.quantity ?? MIN_CONC_FOAM_CUBE_COUNT;
+    const count = Math.max(MIN_CONC_FOAM_CUBE_COUNT, qty);
     const ageStr = String(testAge);
 
     if (isDensityMode) {
