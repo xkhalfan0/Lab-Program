@@ -88,6 +88,7 @@ import {
   syncCbrFromProctor,
   validateSoilTestOrder,
 } from "@/lib/soilTestReception";
+import { calcActualAgeDays } from "@shared/concreteCubeBs1881";
 
 // ─── Sub-type options per test CODE ─────────────────────────────────────────
 const SUBTYPES_BY_CODE: Record<string, { value: string; labelAr: string; labelEn: string }[]> = {
@@ -360,8 +361,7 @@ export default function Reception() {
   const [asphaltMixCourse, setAsphaltMixCourse] = useState<string>("");
   /** Asphalt mix: standard 4-test batch vs pick tests individually */
   const [asphaltMixSelectionMode, setAsphaltMixSelectionMode] = useState<"batch" | "individual">("batch");
-  /** Foamed concrete (CONC_FOAM): age in days from casting to testing, saved on order item metadata → DB as JSON in testSubType */
-  const [foamConcreteAge, setFoamConcreteAge] = useState("");
+  /** Foamed concrete (CONC_FOAM): age derived from casting date → reception (today). */
   /** Reception: CONC_CUBE nominal face size (stored on sample) — required when cube test selected */
   const [nominalCubeSize, setNominalCubeSize] = useState("");
   const [supplier, setSupplier] = useState("");
@@ -460,7 +460,6 @@ export default function Reception() {
     setCuringDate(undefined);
     setAggregateType("");
     setEntryData({});
-    setFoamConcreteAge("");
     setContractorFormFile(null);
     setFocusedStep(1);
     setStep2Done(false);
@@ -1030,6 +1029,14 @@ export default function Reception() {
 
   const isCastingRequired = selectedTests.some(t => CASTING_DATE_TESTS.includes(t.testTypeCode));
   const isConcCore = selectedTests.some(t => t.testTypeCode === "CONC_CORE");
+  const hasFoamOrder = selectedTests.some(t => t.testTypeCode === "CONC_FOAM");
+  /** Days from casting date to today — saved as CONC_FOAM metadata.concreteAge */
+  const foamConcreteAgeDays = useMemo(() => {
+    if (!hasFoamOrder || !form.castingDate) return null;
+    const age = calcActualAgeDays(form.castingDate, new Date());
+    if (age == null) return null;
+    return Math.max(1, age);
+  }, [hasFoamOrder, form.castingDate]);
   const contractSelected = !!form.contractId;
   const hasSelectedTests = selectedTests.length > 0;
   const step1Complete = contractSelected && !!form.sectorKey;
@@ -1156,12 +1163,11 @@ export default function Reception() {
       toast.error(lang === "ar" ? "يرجى إدخال تاريخ الصب" : "Please enter casting date");
       return;
     }
-    const hasFoamOrder = selectedTests.some(t => t.testTypeCode === "CONC_FOAM");
-    if (hasFoamOrder) {
-      const ageN = parseInt(foamConcreteAge, 10);
-      if (!foamConcreteAge.trim() || !Number.isFinite(ageN) || ageN < 1 || ageN > 999) {
+    const hasFoamOrderSubmit = selectedTests.some(t => t.testTypeCode === "CONC_FOAM");
+    if (hasFoamOrderSubmit) {
+      if (!form.castingDate || foamConcreteAgeDays == null) {
         toast.error(
-          lang === "ar" ? "أدخل عمر الخرسانة بالأيام (1–999) لاختبار الرغوة" : "Enter concrete age in days (1–999) for foamed concrete",
+          lang === "ar" ? "أدخل تاريخ الصب لحساب عمر الخرسانة" : "Enter casting date to calculate concrete age",
         );
         return;
       }
@@ -1278,7 +1284,9 @@ export default function Reception() {
           testSubType: t.testSubType,
           quantity: t.quantity,
           unitPrice: t.unitPrice,
-          ...(t.testTypeCode === "CONC_FOAM" ? { metadata: { concreteAge: foamConcreteAge.trim() } } : {}),
+          ...(t.testTypeCode === "CONC_FOAM" && foamConcreteAgeDays != null
+            ? { metadata: { concreteAge: String(foamConcreteAgeDays) } }
+            : {}),
         };
       }),
     });
@@ -1920,7 +1928,7 @@ export default function Reception() {
                             </div>
                           </>
                         )}
-                        {selectedTests.some(t => t.testTypeCode === "CONC_FOAM") && (
+                        {hasFoamOrder && (
                           <div className="space-y-2 sm:col-span-2">
                             <Label className="flex items-center gap-1 text-[15px]">
                               {lang === "ar" ? "عمر الخرسانة (أيام)" : "Age of Concrete (days)"}
@@ -1928,17 +1936,25 @@ export default function Reception() {
                             </Label>
                             <Input
                               type="number"
-                              min={1}
-                              max={999}
-                              inputMode="numeric"
-                              className="h-10 text-base"
-                              value={foamConcreteAge}
-                              onChange={(e) => setFoamConcreteAge(e.target.value)}
-                              placeholder={lang === "ar" ? "مثال: 28" : "e.g., 28"}
-                              required
+                              readOnly
+                              className="h-10 text-base bg-slate-50"
+                              value={foamConcreteAgeDays ?? ""}
+                              placeholder={
+                                form.castingDate
+                                  ? "—"
+                                  : lang === "ar"
+                                    ? "اختر تاريخ الصب أولاً"
+                                    : "Select casting date first"
+                              }
                             />
                             <p className="text-xs text-muted-foreground">
-                              {lang === "ar" ? "المدة من الصب حتى الاختبار" : "Time from casting to testing"}
+                              {form.castingDate
+                                ? lang === "ar"
+                                  ? `يُحسب تلقائياً من تاريخ الصب (${format(form.castingDate, "dd MMM yyyy")}) حتى اليوم`
+                                  : `Calculated from casting date (${format(form.castingDate, "dd MMM yyyy")}) to today`
+                                : lang === "ar"
+                                  ? "المدة من الصب حتى الاختبار — تُحسب بعد اختيار تاريخ الصب"
+                                  : "Time from casting to testing — calculated after you pick casting date"}
                             </p>
                           </div>
                         )}
