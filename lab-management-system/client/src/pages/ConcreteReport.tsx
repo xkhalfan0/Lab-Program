@@ -14,6 +14,7 @@ import {
   evaluateCubePass,
   evaluateGroupPass,
 } from "@shared/concreteCubeBs1881";
+import { CONCRETE_CURING_DISCLAIMER_NOTE } from "@shared/concreteReportNotes";
 import { ReportSignatures } from "@/components/reports/ReportSignatures";
 import { LabReportHeader } from "@/components/reports/LabReportHeader";
 import {
@@ -166,7 +167,13 @@ export function ConcreteCubeReportPage({
   const signaturesVisible = showSignatures ?? !embedInBatch;
   const ar = lang === "ar";
   const userRemarks = getUserRemarksForReport(group.comments);
-  const remarksDisplay = userRemarks || (ar ? "لا توجد ملاحظات إضافية" : "No additional remarks");
+  const remarkParts = [userRemarks, CONCRETE_CURING_DISCLAIMER_NOTE].filter(Boolean);
+  const remarksDisplay =
+    remarkParts.length > 0
+      ? remarkParts.join("\n\n")
+      : ar
+        ? "لا توجد ملاحظات إضافية"
+        : "No additional remarks";
   const cubes: any[] = group.cubes ?? [];
   const avg = group.avgCompressiveStrength ? parseFloat(group.avgCompressiveStrength) : null;
   // Use minAcceptable from DB; fallback to extracting from classOfConcrete

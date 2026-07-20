@@ -40,6 +40,7 @@ import {
 import { calculateFinalBlend, formatDisplaySieveMm } from "@/pages/tests/SieveAnalysis";
 import { FOAM_DENSITY_TEST_CODE } from "@shared/foamConcreteTests";
 import { buildConcreteSpecimenPrepPairs } from "@shared/concreteSpecimenPrepFields";
+import { collectStandardReportNoteLines } from "@shared/concreteReportNotes";
 import { buildConcreteCubeTestConditionPairs } from "@/lib/concreteCubeTestConditions";
 import {
   ReportDetailGrid,
@@ -4759,25 +4760,27 @@ export function SpecializedTestReportBody({
         <p className="text-xs text-gray-700 bg-gray-50 border rounded p-3">
           {(() => {
             const userNotes = result.notes?.trim();
-            const complianceNote =
-              result.formTemplate === "concrete_blocks" && isPassed
-                ? MASONRY_BLOCKS_COMPLIANCE_NOTE
-                : result.formTemplate === "concrete_beam" && isPassed
-                  ? CONCRETE_BEAM_COMPLIANCE_NOTE
-                  : null;
-            if (userNotes && complianceNote) {
-              return (
-                <>
-                  {userNotes}
-                  <br />
-                  <br />
-                  {complianceNote}
-                </>
-              );
+            const standardNotes = collectStandardReportNoteLines({
+              formTemplate: result.formTemplate,
+              isPassed,
+              masonryBlocksComplianceNote: MASONRY_BLOCKS_COMPLIANCE_NOTE,
+              concreteBeamComplianceNote: CONCRETE_BEAM_COMPLIANCE_NOTE,
+            });
+            const parts = [userNotes, ...standardNotes].filter(Boolean);
+            if (parts.length === 0) {
+              return isAr ? "لا توجد ملاحظات إضافية" : "No additional remarks";
             }
-            if (userNotes) return userNotes;
-            if (complianceNote) return complianceNote;
-            return isAr ? "لا توجد ملاحظات إضافية" : "No additional remarks";
+            return parts.map((part, index) => (
+              <span key={index}>
+                {index > 0 ? (
+                  <>
+                    <br />
+                    <br />
+                  </>
+                ) : null}
+                {part}
+              </span>
+            ));
           })()}
         </p>
       </div>
