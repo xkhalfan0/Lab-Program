@@ -73,6 +73,10 @@ import {
   MIN_CONC_CUBE_COUNT,
   MAX_CONC_CUBE_COUNT,
 } from "@shared/concreteCubeReception";
+import {
+  MIN_CONC_INTERLOCK_COUNT,
+  validateConcInterlockReceptionQuantity,
+} from "@shared/receptionTestQuantityLimits";
 import { serializeEntryData } from "@shared/receptionEntryFields";
 import { openTestCatalogPrint } from "@/lib/testCatalogCategories";
 import {
@@ -370,7 +374,11 @@ export default function Reception() {
   const [sampleSearchOpen, setSampleSearchOpen] = useState(false);
   const concCubePanelRef = useRef<HTMLDivElement>(null);
 
-  const minQtyForTest = (code: string) => (code === "CONC_CUBE" ? MIN_CONC_CUBE_COUNT : 1);
+  const minQtyForTest = (code: string) => {
+    if (code === "CONC_CUBE") return MIN_CONC_CUBE_COUNT;
+    if (code === "CONC_INTERLOCK") return MIN_CONC_INTERLOCK_COUNT;
+    return 1;
+  };
   const maxQtyForTest = (code: string) => (code === "CONC_CUBE" ? MAX_CONC_CUBE_COUNT : 999);
   // Edit order state
   const [editOpen, setEditOpen] = useState(false);
@@ -723,6 +731,9 @@ export default function Reception() {
     if (newTest.testTypeCode === "CONC_CUBE") {
       newTest.quantity = MIN_CONC_CUBE_COUNT;
     }
+    if (newTest.testTypeCode === "CONC_INTERLOCK") {
+      newTest.quantity = MIN_CONC_INTERLOCK_COUNT;
+    }
 
     const ids = new Set(selectedTests.map(s => s.testTypeId));
     const additions = [...deps, newTest].filter(t => !ids.has(t.testTypeId));
@@ -1067,7 +1078,7 @@ export default function Reception() {
   const hasMultipleGroups = selectedGroups.size > 1;
   const hasMixTests = selectedTests.some(t => ASPHALT_MIX_TEST_CODES.includes(t.testTypeCode));
 
-  /** Multi-subtype: at least one subtype qty > 0 (blocks: min 10 each); others: qty >= min (3 for cubes, 1 otherwise). */
+  /** Multi-subtype: at least one subtype qty > 0 (blocks: min 10 each); others: qty >= min (3 cubes, 10 interlock, 1 otherwise). */
   const hasInvalidQtyTests = selectedTests.some(t => {
     if (MULTI_SUBTYPE_TESTS.includes(t.testTypeCode) && t.testSubType === "__multi__") {
       const map = multiSubtypes[t.testTypeId] ?? {};
@@ -1116,8 +1127,8 @@ export default function Reception() {
     if (hasInvalidQtyTests) {
       toast.error(
         lang === "ar"
-          ? `يجب أن تكون كمية كل اختبار صالحة (بلوكات: ${MIN_CONC_BLOCK_COUNT} على الأقل، مكعبات: ${MIN_CONC_CUBE_COUNT} على الأقل، غير ذلك: 1 على الأقل)`
-          : `Each selected test needs a valid quantity (blocks: min ${MIN_CONC_BLOCK_COUNT}, cubes: min ${MIN_CONC_CUBE_COUNT}, others: min 1)`,
+          ? `يجب أن تكون كمية كل اختبار صالحة (بلوكات: ${MIN_CONC_BLOCK_COUNT} على الأقل، مكعبات: ${MIN_CONC_CUBE_COUNT} على الأقل، إنترلوك: ${MIN_CONC_INTERLOCK_COUNT} على الأقل، غير ذلك: 1 على الأقل)`
+          : `Each selected test needs a valid quantity (blocks: min ${MIN_CONC_BLOCK_COUNT}, cubes: min ${MIN_CONC_CUBE_COUNT}, interlock: min ${MIN_CONC_INTERLOCK_COUNT}, others: min 1)`,
       );
       return;
     }
@@ -1216,6 +1227,11 @@ export default function Reception() {
           });
         }
       } else {
+        const interlockErr = validateConcInterlockReceptionQuantity(t.quantity ?? 0, lang);
+        if (t.testTypeCode === "CONC_INTERLOCK" && interlockErr) {
+          toast.error(interlockErr);
+          return;
+        }
         finalTests.push(t);
       }
     }

@@ -15,6 +15,10 @@ import {
   notifyUsersByRole,
 } from "../db";
 import { generateSampleCode } from "../utils/codeGenerator";
+import {
+  MIN_CONC_INTERLOCK_COUNT,
+  validateConcInterlockReceptionQuantity,
+} from "@shared/receptionTestQuantityLimits";
 
 export const labOrderReceptionCreateInputSchema = z.object({
   contractId: z.number().optional(),
@@ -58,6 +62,16 @@ type ReceptionCtx = {
 
 export async function runLabOrderReceptionCreate(ctx: ReceptionCtx, input: LabOrderReceptionCreateInput) {
   requireRole(ctx.user.role, ["admin", "reception", "lab_manager"]);
+
+  for (const t of input.tests) {
+    if (t.testTypeCode === "CONC_INTERLOCK") {
+      const err = validateConcInterlockReceptionQuantity(t.quantity, "en");
+      if (err) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: err });
+      }
+    }
+  }
+
   const sampleCode = await generateSampleCode();
   const sample = await createSample({
     sampleCode,

@@ -16,6 +16,7 @@ import { Plus, Trash2, Send, FlaskConical, Info, UserCheck, Printer } from "luci
 import { useAuth } from "@/_core/hooks/useAuth";
 
 import { useLanguage } from "@/contexts/LanguageContext";
+import { MIN_CONC_INTERLOCK_COUNT } from "@shared/receptionTestQuantityLimits";
 
 type InterlockBlockType = "6cm" | "8cm" | "10cm";
 
@@ -209,7 +210,7 @@ export default function Interlock() {
     const fd = existing?.formData as any;
     if (Array.isArray(fd?.blocks) && fd.blocks.length > 0) return;
     if (initFromDistRef.current) return;
-    const n = Math.max(1, Math.min(999, Number(dist.quantity) || 1));
+    const n = Math.max(MIN_CONC_INTERLOCK_COUNT, Math.min(999, Number(dist.quantity) || MIN_CONC_INTERLOCK_COUNT));
     setRows(Array.from({ length: n }, (_, i) => newRow(i)));
     initFromDistRef.current = true;
   }, [dist, existingFetched, existing?.formData]);
