@@ -32,7 +32,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { Plus, Trash2, Send, FlaskConical, Info, Printer, UserCheck } from "lucide-react";
+import { Send, FlaskConical, Info, Printer, UserCheck } from "lucide-react";
 import { useAuth } from "@/_core/hooks/useAuth";
 
 import { useLanguage } from "@/contexts/LanguageContext";
@@ -285,8 +285,6 @@ export default function ConcreteBeam() {
     setRows(prev => prev.map(r => r.id === id ? { ...r, [field]: value } : r));
   };
 
-  const addRow = () => setRows(prev => [...prev, newRow(prev.length, beamSize, fractureZone)]);
-  const removeRow = (id: string) => setRows(prev => prev.filter(r => r.id !== id));
   const beamLabel = (k: BeamSizeKey) => {
     const v = BEAM_SIZES[k];
     if (!ar) return v.label;
@@ -477,11 +475,8 @@ export default function ConcreteBeam() {
 
         {/* Results Table */}
         <Card>
-          <CardHeader className="pb-3 flex flex-row items-center justify-between">
+          <CardHeader className="pb-3">
             <CardTitle className="text-base">{ar ? "نتائج الكمرات" : "Beam Results"}</CardTitle>
-            <Button size="sm" variant="outline" onClick={addRow}>
-              <Plus size={14} className="mr-1" /> {ar ? "إضافة كمرة" : "Add Beam"}
-            </Button>
           </CardHeader>
           <CardContent>
             <div className="overflow-x-auto">
@@ -494,7 +489,6 @@ export default function ConcreteBeam() {
                     <th className="border border-slate-300 px-2 py-1.5 text-left font-medium text-slate-700">{ar ? "الحمل الأقصى (ن)" : "Max Load (N)"}</th>
                     <th className="border border-slate-300 px-2 py-1.5 text-left font-medium text-slate-700">MOR (MPa)</th>
                     <th className="border border-slate-300 px-2 py-1.5 text-center font-medium text-slate-700">{ar ? "النتيجة" : "Result"}</th>
-                    <th className="border border-slate-300 px-1 py-1.5 w-10" aria-label={ar ? "حذف" : "Delete"} />
                   </tr>
                 </thead>
                 <tbody>
@@ -531,14 +525,6 @@ export default function ConcreteBeam() {
                         ) : (
                           <span className="text-slate-400 text-xs">—</span>
                         )}
-                      </td>
-                      <td className="border border-slate-300 px-1 py-1 text-center align-middle">
-                        {rows.length > 1 ? (
-                          <Button type="button" variant="ghost" size="icon" className="h-8 w-8 text-red-500 hover:text-red-700"
-                            onClick={() => removeRow(row.id)} aria-label={ar ? "حذف الكمرة" : "Remove beam"}>
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        ) : null}
                       </td>
                     </tr>
                   ))}
@@ -580,48 +566,6 @@ export default function ConcreteBeam() {
                 </div>
               </div>
             )}
-          </CardContent>
-        </Card>
-
-        {/* Acceptance Criteria */}
-        <Card className="border-slate-200">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm text-slate-600">{ar ? "معايير القبول — ASTM C78" : "Acceptance Criteria — ASTM C78"}</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="overflow-x-auto">
-<table className="w-full text-xs">
-              <thead>
-                <tr className="border-b text-slate-500">
-                  <th className="text-left py-1.5 pr-4">{ar ? "رتبة الخرسانة" : "Concrete Grade"}</th>
-                  <th className="text-left py-1.5 pr-4">f'c (MPa)</th>
-                  <th className="text-left py-1.5 pr-4">{ar ? "MOR النموذجي (MPa)" : "Typical MOR (MPa)"}</th>
-                  <th className="text-left py-1.5">{ar ? "تقريبًا MOR = 0.62√f'c" : "Approx. MOR = 0.62√f'c"}</th>
-                </tr>
-              </thead>
-              <tbody className="text-slate-700">
-                {[
-                  { grade: "C20", fc: 20, mor: 2.77 },
-                  { grade: "C25", fc: 25, mor: 3.10 },
-                  { grade: "C30", fc: 30, mor: 3.40 },
-                  { grade: "C35", fc: 35, mor: 3.67 },
-                  { grade: "C40", fc: 40, mor: 3.92 },
-                ].map(row => (
-                  <tr key={row.grade} className="border-b border-slate-100">
-                    <td className="py-1.5 pr-4 font-semibold">{row.grade}</td>
-                    <td className="py-1.5 pr-4">{row.fc}</td>
-                    <td className="py-1.5 pr-4">{row.mor.toFixed(2)}</td>
-                    <td className="py-1.5">0.62 × √{row.fc} = {(0.62 * Math.sqrt(row.fc)).toFixed(2)} MPa</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-</div>
-            <p className="text-xs text-slate-500 mt-2">
-              {ar
-                ? "* MOR (معامل الانعطاف) = مقاومة الانعطاف. يجب أن تفي كل كمرة على حدة بالحد الأدنى المطلوب لـ MOR. يتم استبعاد الكمرات التي يحدث فيها الكسر خارج حدود 5% من البحر."
-                : "* MOR (Modulus of Rupture) = Flexural Strength. Individual beam result must meet the specified minimum MOR. Discarded beams (fracture outside 5% of span) are excluded from evaluation."}
-            </p>
           </CardContent>
         </Card>
 

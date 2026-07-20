@@ -313,6 +313,9 @@ function renderConcreteCore(fd: any, isAr: boolean, castingDateMs?: number | nul
 const MASONRY_BLOCKS_COMPLIANCE_NOTE =
   "Samples meet the required compressive strength per DOI Gen.spec.section 04 22 00 part 2.2.B (Load Bearing concrete masonry units.)";
 
+const CONCRETE_BEAM_COMPLIANCE_NOTE =
+  "The flexural strength meets the DOI specification requirements as per Section:32 13 11 (concrete Pavements) Section 2.10";
+
 function renderConcreteBlocks(fd: any, isAr: boolean, embedInBatch = false) {
   if (typeof fd.blocks === "string") {
     try {
@@ -3418,7 +3421,7 @@ function renderConcreteBeam(fd: any, isAr: boolean, castingDateMs?: number | nul
     reportAge = d >= 0 ? d : null;
   }
 
-  const showAgeColumn = !!fdTestDate && (!!fdCastDate || !!castingDateMs);
+  const showAgeColumn = false;
 
   const reportFractureZone = String(fd.fractureZone ?? allRows[0]?.fractureZone ?? "middle_third");
 
@@ -3488,71 +3491,74 @@ function renderConcreteBeam(fd: any, isAr: boolean, castingDateMs?: number | nul
   ];
 
   return (
-    <div className="space-y-4">
-      {/* Test Info */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
-        <div className="bg-blue-50 border border-blue-200 rounded p-2 text-center">
-          <p className="text-blue-600 font-semibold">{isAr ? "حجم الكمرة" : "Beam Size"}</p>
-          <p className="font-bold text-blue-800 text-[11px]">{BEAM_SIZE_LABELS[beamSize] ?? beamSize}</p>
-        </div>
-        <div className="bg-gray-50 border border-gray-200 rounded p-2 text-center">
-          <p className="text-gray-500 font-semibold">{isAr ? "طول الامتداد (مم)" : "Span (mm)"}</p>
-          <p className="font-bold text-gray-800">{span}</p>
-        </div>
-        {specifiedStrength !== undefined && (
-          <div className="bg-gray-50 border border-gray-200 rounded p-2 text-center">
-            <p className="text-gray-500 font-semibold">{isAr ? "المقاومة المحددة (MPa)" : "Specified Strength (MPa)"}</p>
-            <p className="font-bold text-gray-800">{specifiedStrength}</p>
-          </div>
-        )}
-        {minMOR !== undefined && (
-        <div className="bg-amber-50 border border-amber-200 rounded p-2 text-center">
-          <p className="text-amber-600 font-semibold">{isAr ? "الحد الأدنى MOR (MPa)" : "Min. MOR (MPa)"}</p>
-          <p className="font-bold text-amber-800">{minMOR}</p>
-          <p className="text-xs text-amber-600">{isAr ? "وفق ASTM C 78" : "per ASTM C 78"}</p>
-        </div>
-        )}
-        {requiredAge !== null && (
-          <div className="bg-blue-50 border border-blue-200 rounded p-2 text-center">
-            <p className="text-blue-600 font-semibold">{isAr ? "العمر المطلوب" : "Required Age"}</p>
-            <p className="font-bold text-blue-800">{requiredAge} {isAr ? "يوم" : "days"}</p>
-          </div>
-        )}
-        {fd.sampleLocation && (
-          <div className="bg-gray-50 border border-gray-200 rounded p-2 text-center">
-            <p className="text-gray-500 font-semibold">{isAr ? "موقع العينة" : "Sample Location"}</p>
-            <p className="font-bold text-gray-800 text-[11px]">{fd.sampleLocation}</p>
-          </div>
-        )}
-        <div className="bg-blue-50 border border-blue-200 rounded p-2 text-center">
-          <p className="text-blue-600 font-semibold">{isAr ? "منطقة الكسر (جميع الكمرات)" : "Fracture Zone (all beams)"}</p>
-          <p className="font-bold text-blue-800 text-[11px]">{fractureZoneSummaryLabel(reportFractureZone, isAr)}</p>
-        </div>
+    <>
+      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-3 mb-4 text-xs">
         {(castingDateMs || fdCastDate) && (
-          <div className="bg-gray-50 border border-gray-200 rounded p-2 text-center">
-            <p className="text-gray-500 font-semibold">{isAr ? "تاريخ الصب" : "Cast Date"}</p>
-            <p className="font-bold text-gray-800">
+          <div className="bg-blue-50 border border-blue-200 rounded p-2 text-center">
+            <p className="text-blue-600 font-semibold">{isAr ? "تاريخ الصب" : "Casting Date"}</p>
+            <p className="font-bold text-blue-800">
               {fdCastDate
                 ? formatCalendarDate(fdCastDate)
-                : castingDateMs ? formatCalendarDate(castingDateMs) : "—"}
+                : castingDateMs
+                  ? formatCalendarDate(castingDateMs)
+                  : "—"}
             </p>
           </div>
         )}
         {fdTestDate && (
-          <div className="bg-gray-50 border border-gray-200 rounded p-2 text-center">
-            <p className="text-gray-500 font-semibold">{isAr ? "تاريخ الفحص" : "Date Tested"}</p>
-            <p className="font-bold text-gray-800">{formatCalendarDate(fdTestDate)}</p>
+          <div className="bg-blue-50 border border-blue-200 rounded p-2 text-center">
+            <p className="text-blue-600 font-semibold">{isAr ? "تاريخ الفحص" : "Test Date"}</p>
+            <p className="font-bold text-blue-800">{formatCalendarDate(fdTestDate)}</p>
           </div>
         )}
-        {((fdCastDate || castingDateMs) && fdTestDate) || reportAge !== null ? (
+        {reportAge !== null && (
           <div className="bg-blue-50 border border-blue-200 rounded p-2 text-center">
-            <p className="text-blue-600 font-semibold">{isAr ? "العمر (يوم)" : "Age (days)"}</p>
-            <p className="font-bold text-blue-800">{reportAge !== null ? reportAge : "—"}</p>
+            <p className="text-blue-600 font-semibold">{isAr ? "عمر العينة" : "Sample Age"}</p>
+            <p className="font-bold text-blue-800">
+              {reportAge} {isAr ? "يوم" : "days"}
+            </p>
           </div>
-        ) : null}
+        )}
+        <div className="bg-slate-50 border border-slate-200 rounded p-2 text-center">
+          <p className="text-slate-600 font-semibold">{isAr ? "حجم الكمرة" : "Beam Size"}</p>
+          <p className="font-bold text-slate-800 text-[11px]">{BEAM_SIZE_LABELS[beamSize] ?? beamSize}</p>
+        </div>
+        <div className="bg-slate-50 border border-slate-200 rounded p-2 text-center">
+          <p className="text-slate-600 font-semibold">{isAr ? "البحر (مم)" : "Span (mm)"}</p>
+          <p className="font-bold text-slate-800">{span}</p>
+        </div>
+        {specifiedStrength !== undefined && (
+          <div className="bg-amber-50 border border-amber-200 rounded p-2 text-center">
+            <p className="text-amber-600 font-semibold">{isAr ? "مقاومة الانعطاف المحددة" : "Specified Flexural Strength"}</p>
+            <p className="font-bold text-amber-800">{specifiedStrength} MPa</p>
+          </div>
+        )}
+        {minMOR !== undefined && (
+          <div className="bg-amber-50 border border-amber-200 rounded p-2 text-center">
+            <p className="text-amber-600 font-semibold">{isAr ? "الحد الأدنى المطلوب" : "Required MOR"}</p>
+            <p className="font-bold text-amber-800">{minMOR} MPa</p>
+          </div>
+        )}
+        {requiredAge !== null && (
+          <div className="bg-gray-50 border border-gray-200 rounded p-2 text-center">
+            <p className="text-gray-600 font-semibold">{isAr ? "العمر المطلوب" : "Required Age"}</p>
+            <p className="font-bold text-gray-800">
+              {requiredAge} {isAr ? "يوم" : "days"}
+            </p>
+          </div>
+        )}
+        {fd.sampleLocation && (
+          <div className="bg-gray-50 border border-gray-200 rounded p-2 text-center">
+            <p className="text-gray-600 font-semibold">{isAr ? "موقع العينة" : "Sample Location"}</p>
+            <p className="font-bold text-gray-800 text-[11px]">{fd.sampleLocation}</p>
+          </div>
+        )}
+        <div className="bg-gray-50 border border-gray-200 rounded p-2 text-center">
+          <p className="text-gray-600 font-semibold">{isAr ? "منطقة الكسر" : "Fracture Zone"}</p>
+          <p className="font-bold text-gray-800 text-[11px]">{fractureZoneSummaryLabel(reportFractureZone, isAr)}</p>
+        </div>
       </div>
 
-      {/* Results Table */}
       {allRows.length > 0 && (
         <FlexibleResultsTable
           columns={beamCols}
@@ -3561,16 +3567,15 @@ function renderConcreteBeam(fd: any, isAr: boolean, castingDateMs?: number | nul
         />
       )}
 
-      {/* Summary */}
       {avgMOR !== null && avgMOR !== undefined && (
         <div className="grid grid-cols-3 gap-3 text-xs">
           <div className="bg-green-50 border border-green-200 rounded p-2 text-center">
-            <p className="text-green-600 font-semibold">{isAr ? "متوسط MOR" : "Average MOR"}</p>
-            <p className="font-bold text-green-800 text-lg">{Number(avgMOR).toFixed(3)} {isAr ? "ميجا باسكال" : "MPa"}</p>
+            <p className="text-green-600 font-semibold">{isAr ? "متوسط MOR" : "Avg. MOR"}</p>
+            <p className="font-bold text-green-800 text-lg">{Number(avgMOR).toFixed(3)} MPa</p>
           </div>
           <div className="bg-amber-50 border border-amber-200 rounded p-2 text-center">
-            <p className="text-amber-600 font-semibold">{isAr ? "الحد الأدنى المطلوب" : "Min. Required"}</p>
-            <p className="font-bold text-amber-800 text-lg">{minMOR ?? "—"} {isAr ? "ميجا باسكال" : "MPa"}</p>
+            <p className="text-amber-600 font-semibold">{isAr ? "MOR المطلوب" : "Required MOR"}</p>
+            <p className="font-bold text-amber-800 text-lg">{minMOR ?? "—"} MPa</p>
           </div>
           <div className="bg-gray-50 border border-gray-200 rounded p-2 text-center">
             <p className="text-gray-600 font-semibold">{isAr ? "عدد الكمرات الصالحة" : "Valid Beams"}</p>
@@ -3578,7 +3583,7 @@ function renderConcreteBeam(fd: any, isAr: boolean, castingDateMs?: number | nul
           </div>
         </div>
       )}
-    </div>
+    </>
   );
 }
 
@@ -4732,20 +4737,24 @@ export function SpecializedTestReportBody({
         <p className="text-xs text-gray-700 bg-gray-50 border rounded p-3">
           {(() => {
             const userNotes = result.notes?.trim();
-            const showMasonryCompliance =
-              result.formTemplate === "concrete_blocks" && isPassed;
-            if (userNotes && showMasonryCompliance) {
+            const complianceNote =
+              result.formTemplate === "concrete_blocks" && isPassed
+                ? MASONRY_BLOCKS_COMPLIANCE_NOTE
+                : result.formTemplate === "concrete_beam" && isPassed
+                  ? CONCRETE_BEAM_COMPLIANCE_NOTE
+                  : null;
+            if (userNotes && complianceNote) {
               return (
                 <>
                   {userNotes}
                   <br />
                   <br />
-                  {MASONRY_BLOCKS_COMPLIANCE_NOTE}
+                  {complianceNote}
                 </>
               );
             }
             if (userNotes) return userNotes;
-            if (showMasonryCompliance) return MASONRY_BLOCKS_COMPLIANCE_NOTE;
+            if (complianceNote) return complianceNote;
             return isAr ? "لا توجد ملاحظات إضافية" : "No additional remarks";
           })()}
         </p>
