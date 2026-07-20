@@ -64,7 +64,7 @@ export const RECEPTION_FIELDS_BY_TEST: Record<string, readonly string[]> = {
   CONC_BEAM: CONC_COMPRESSIVE_FIELDS,
   CONC_FOAM: CONC_COMPRESSIVE_FIELDS,
   CONC_FOAM_DENSITY: CONC_COMPRESSIVE_FIELDS,
-  CONC_INTERLOCK: ["fLevel", "facility", "sampleDescription"],
+  CONC_INTERLOCK: ["sampleDescription"],
   CONC_BLOCK: ["facility", "fLevel", "descriptionOfWork"],
   SOIL_SIEVE: ["facility", "fLevel", "fullDescription", "materialFor"],
   SOIL_ATTERBERG: ["materialDescription", "sourceOfMaterial", "materialFor"],
