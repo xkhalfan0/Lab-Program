@@ -310,6 +310,9 @@ function renderConcreteCore(fd: any, isAr: boolean, castingDateMs?: number | nul
   );
 }
 
+const MASONRY_BLOCKS_COMPLIANCE_NOTE =
+  "Samples meet the required compressive strength per DOI Gen.spec.section 04 22 00 part 2.2.B (Load Bearing concrete masonry units.)";
+
 function renderConcreteBlocks(fd: any, isAr: boolean, embedInBatch = false) {
   if (typeof fd.blocks === "string") {
     try {
@@ -4727,7 +4730,24 @@ export function SpecializedTestReportBody({
       <div className="mb-3">
         <ReportInfoHeading>{isAr ? "ملاحظات" : "Notes"}</ReportInfoHeading>
         <p className="text-xs text-gray-700 bg-gray-50 border rounded p-3">
-          {result.notes || (isAr ? "لا توجد ملاحظات إضافية" : "No additional remarks")}
+          {(() => {
+            const userNotes = result.notes?.trim();
+            const showMasonryCompliance =
+              result.formTemplate === "concrete_blocks" && isPassed;
+            if (userNotes && showMasonryCompliance) {
+              return (
+                <>
+                  {userNotes}
+                  <br />
+                  <br />
+                  {MASONRY_BLOCKS_COMPLIANCE_NOTE}
+                </>
+              );
+            }
+            if (userNotes) return userNotes;
+            if (showMasonryCompliance) return MASONRY_BLOCKS_COMPLIANCE_NOTE;
+            return isAr ? "لا توجد ملاحظات إضافية" : "No additional remarks";
+          })()}
         </p>
       </div>
     </div>
