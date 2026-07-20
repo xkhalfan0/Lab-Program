@@ -25,6 +25,7 @@ import {
   printLabReport,
 } from "@/lib/labPrintLayout";
 import { buildConcreteCubeTestConditionPairs } from "@/lib/concreteCubeTestConditions";
+import { buildConcreteSpecimenPrepPairs } from "@shared/concreteSpecimenPrepFields";
 import {
   ReportDetailGrid,
   ReportInfoHeading,
@@ -303,7 +304,10 @@ export function ConcreteCubeReportPage({
     [ar ? "تاريخ الفحص" : "Test date", fmtDate(testDate) || "—"],
     [ar ? "تاريخ التقرير" : "Report Date", reportDateStr],
   ];
-  const testConditionPairs = buildConcreteCubeTestConditionPairs(group, ar);
+  const testConditionPairs = [
+    ...buildConcreteSpecimenPrepPairs(group, "cube", ar),
+    ...buildConcreteCubeTestConditionPairs(group, ar),
+  ];
 
   return (
     <div

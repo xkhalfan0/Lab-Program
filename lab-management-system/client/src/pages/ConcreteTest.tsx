@@ -32,6 +32,12 @@ import {
   type ConcreteCubeTestConditionsValues,
 } from "@/components/ConcreteCubeTestConditionsFields";
 import {
+  ConcreteSpecimenPrepFields,
+  EMPTY_CONCRETE_SPECIMEN_PREP,
+  type ConcreteSpecimenPrepValues,
+} from "@/components/ConcreteSpecimenPrepFields";
+import { prepGroupUpdatePayload, prepValuesFromGroup } from "@shared/concreteSpecimenPrepFields";
+import {
   parseConcCubePlan,
   MIN_CONC_CUBE_COUNT,
   type ConcCubeReceptionPlan,
@@ -284,6 +290,7 @@ function GroupPanel({ group, distributionId, onRefresh, castingDate: distCasting
   const [testConditions, setTestConditions] = useState<ConcreteCubeTestConditionsValues>(() =>
     cubeTestConditionsFromGroup({ ...groupAny, appearance: group.appearance }),
   );
+  const [prepValues, setPrepValues] = useState<ConcreteSpecimenPrepValues>(() => prepValuesFromGroup(group));
 
   const saveCube = trpc.concrete.saveCube.useMutation();
   const deleteCubeMut = trpc.concrete.deleteCube.useMutation();
@@ -301,7 +308,20 @@ function GroupPanel({ group, distributionId, onRefresh, castingDate: distCasting
     setTestAge(initialSelectedTestAge(group));
     setDesignStrength(group.minAcceptable ?? "");
     setTestConditions(cubeTestConditionsFromGroup({ ...groupAny, appearance: group.appearance }));
+    setPrepValues(prepValuesFromGroup(group));
   }, [group.id]);
+
+  useEffect(() => {
+    const size =
+      receptionPlan?.cubeSizeMm ??
+      cubeEdgeMmFromNominal(group.nominalCubeSize ?? distributionNominalCube);
+    if (!size) return;
+    setPrepValues(prev =>
+      prev.nominalSizeOfCube.trim()
+        ? prev
+        : { ...prev, nominalSizeOfCube: `${size} mm` },
+    );
+  }, [receptionPlan, group.nominalCubeSize, distributionNominalCube]);
 
   const castingIso = distCastingDate
     ? (distCastingDate instanceof Date ? distCastingDate.toISOString().split("T")[0] : String(distCastingDate).split("T")[0])
@@ -457,6 +477,7 @@ function GroupPanel({ group, distributionId, onRefresh, castingDate: distCasting
     await updateGroup.mutateAsync({
       groupId: group.id,
       ...cubeTestConditionsPayload(testConditions),
+      ...prepGroupUpdatePayload(prepValues),
     });
   };
 
@@ -544,6 +565,7 @@ function GroupPanel({ group, distributionId, onRefresh, castingDate: distCasting
         placeOfSampling: placeOfSampling || undefined,
         location: location || undefined,
         ...cubeTestConditionsPayload(testConditions),
+        ...prepGroupUpdatePayload(prepValues),
       });
       toast.success("Header info saved");
       onRefresh();
@@ -821,6 +843,16 @@ function GroupPanel({ group, distributionId, onRefresh, castingDate: distCasting
             onChange={patch => setTestConditions(prev => ({ ...prev, ...patch }))}
             disabled={inputsDisabled}
             onBlur={() => { if (!isSubmitted) void saveTestConditions(); }}
+          />
+
+          <ConcreteSpecimenPrepFields
+            variant="cube"
+            lang={lang}
+            values={prepValues}
+            onChange={patch => setPrepValues(prev => ({ ...prev, ...patch }))}
+            disabled={inputsDisabled}
+            onBlur={() => { if (!isSubmitted) void saveTestConditions(); }}
+            className="mt-4"
           />
 
           {/* Expandable header info — legacy orders only */}

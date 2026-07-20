@@ -1765,6 +1765,11 @@ export async function updateConcreteGroupSummary(groupId: number, data: {
   surfaceConditionAtTest?: string;
   cappingMethod?: string;
   curingMethod?: string;
+  nominalCubeSize?: string;
+  removalOfFins?: string;
+  volumeDetermination?: string;
+  methodOfCompaction?: string;
+  sampledBy?: string;
 }) {
   const db = await getDb();
   if (!db) return;

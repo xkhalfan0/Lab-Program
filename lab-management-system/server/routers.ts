@@ -1969,6 +1969,11 @@ ${testSummaries.length > 0 ? testSummaries.join("\n\n") : "لم تُجرَ اخ�
         surfaceConditionAtTest: z.string().optional(),
         cappingMethod: z.string().optional(),
         curingMethod: z.string().optional(),
+        nominalCubeSize: z.string().optional(),
+        removalOfFins: z.string().optional(),
+        volumeDetermination: z.string().optional(),
+        methodOfCompaction: z.string().optional(),
+        sampledBy: z.string().optional(),
       }))
       .mutation(async ({ ctx, input }) => {
         requireRole(ctx.user.role, ["admin", "technician", "lab_manager"]);

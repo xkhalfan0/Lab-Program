@@ -120,6 +120,66 @@ export function prepPayload(values: ConcreteSpecimenPrepValues): Record<string, 
   return out;
 }
 
+/** Map legacy `concrete_test_groups` row → prep form values. */
+export function prepValuesFromGroup(group: {
+  nominalCubeSize?: string | null;
+  appearance?: string | null;
+  removalOfFins?: string | null;
+  volumeDetermination?: string | null;
+  methodOfCompaction?: string | null;
+  sampledBy?: string | null;
+  curingMethod?: string | null;
+  dateSampled?: Date | string | null;
+  moistureCondition?: string | null;
+}): ConcreteSpecimenPrepValues {
+  const dateSampled = group.dateSampled;
+  const dateTimeSampled =
+    dateSampled != null && String(dateSampled).trim() !== ""
+      ? new Date(dateSampled).toISOString().slice(0, 16)
+      : "";
+  return prepValuesFromFormData({
+    nominalCubeSize: group.nominalCubeSize,
+    appearance: group.appearance,
+    removalOfFins: group.removalOfFins,
+    volumeDetermination: group.volumeDetermination,
+    methodOfCompaction: group.methodOfCompaction,
+    sampledBy: group.sampledBy,
+    curingMethod: group.curingMethod,
+    moistureCondition: group.moistureCondition,
+    dateTimeSampled,
+  });
+}
+
+/** Persist prep fields on legacy concrete cube groups (`concrete_test_groups`). */
+export function prepGroupUpdatePayload(values: ConcreteSpecimenPrepValues): {
+  nominalCubeSize?: string;
+  removalOfFins?: string;
+  volumeDetermination?: string;
+  methodOfCompaction?: string;
+  sampledBy?: string;
+  curingMethod?: string;
+  dateSampled?: string;
+} {
+  const p = prepPayload(values);
+  const out: {
+    nominalCubeSize?: string;
+    removalOfFins?: string;
+    volumeDetermination?: string;
+    methodOfCompaction?: string;
+    sampledBy?: string;
+    curingMethod?: string;
+    dateSampled?: string;
+  } = {};
+  if (p.nominalSizeOfCube) out.nominalCubeSize = p.nominalSizeOfCube;
+  if (p.removalOfFins) out.removalOfFins = p.removalOfFins;
+  if (p.volumeDetermination) out.volumeDetermination = p.volumeDetermination;
+  if (p.methodOfCompaction) out.methodOfCompaction = p.methodOfCompaction;
+  if (p.sampledBy) out.sampledBy = p.sampledBy;
+  if (p.curingMethod) out.curingMethod = p.curingMethod;
+  if (p.dateTimeSampled) out.dateSampled = p.dateTimeSampled;
+  return out;
+}
+
 function formatMoisture(value: string, isAr: boolean): string {
   if (!value) return "";
   const key = value.toLowerCase().replace(/\s+/g, "_");

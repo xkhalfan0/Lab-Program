@@ -21,6 +21,7 @@ type Props = {
   onChange: (patch: Partial<ConcreteSpecimenPrepValues>) => void;
   disabled?: boolean;
   className?: string;
+  onBlur?: () => void;
 };
 
 export function ConcreteSpecimenPrepFields({
@@ -30,6 +31,7 @@ export function ConcreteSpecimenPrepFields({
   onChange,
   disabled,
   className,
+  onBlur,
 }: Props) {
   const ar = lang === "ar";
   const opt = ar ? "(اختياري)" : "(optional)";
@@ -58,6 +60,7 @@ export function ConcreteSpecimenPrepFields({
             <Input
               value={values.nominalSizeOfCube}
               onChange={e => onChange({ nominalSizeOfCube: e.target.value })}
+              onBlur={onBlur}
               className="h-9 text-sm mt-0.5"
               placeholder={ar ? "مثال: 150 mm" : "e.g. 150 mm"}
               disabled={disabled}
@@ -73,6 +76,7 @@ export function ConcreteSpecimenPrepFields({
             <Input
               value={values.appearanceWhenReceived}
               onChange={e => onChange({ appearanceWhenReceived: e.target.value })}
+              onBlur={onBlur}
               className="h-9 text-sm mt-0.5"
               disabled={disabled}
             />
@@ -89,6 +93,7 @@ export function ConcreteSpecimenPrepFields({
               value={values.moistureConditionAtTesting}
               disabled={disabled}
               onChange={e => onChange({ moistureConditionAtTesting: e.target.value })}
+              onBlur={onBlur}
             >
               <option value="">{ar ? "— اختر —" : "— select —"}</option>
               <option value="saturated_surface_dry">
@@ -109,6 +114,7 @@ export function ConcreteSpecimenPrepFields({
             <Input
               value={values.removalOfFins}
               onChange={e => onChange({ removalOfFins: e.target.value })}
+              onBlur={onBlur}
               className="h-9 text-sm mt-0.5"
               disabled={disabled}
             />
@@ -123,6 +129,7 @@ export function ConcreteSpecimenPrepFields({
             <Input
               value={values.volumeDetermination}
               onChange={e => onChange({ volumeDetermination: e.target.value })}
+              onBlur={onBlur}
               className="h-9 text-sm mt-0.5"
               disabled={disabled}
             />
@@ -137,6 +144,7 @@ export function ConcreteSpecimenPrepFields({
             <Input
               value={values.methodOfCompaction}
               onChange={e => onChange({ methodOfCompaction: e.target.value })}
+              onBlur={onBlur}
               className="h-9 text-sm mt-0.5"
               disabled={disabled}
             />
@@ -151,6 +159,7 @@ export function ConcreteSpecimenPrepFields({
             <Input
               value={values.sampledBy}
               onChange={e => onChange({ sampledBy: e.target.value })}
+              onBlur={onBlur}
               className="h-9 text-sm mt-0.5"
               disabled={disabled}
             />
@@ -165,6 +174,7 @@ export function ConcreteSpecimenPrepFields({
             <Input
               value={values.curingMethod}
               onChange={e => onChange({ curingMethod: e.target.value })}
+              onBlur={onBlur}
               className="h-9 text-sm mt-0.5"
               disabled={disabled}
             />
@@ -180,6 +190,7 @@ export function ConcreteSpecimenPrepFields({
               type="datetime-local"
               value={values.dateTimeSampled}
               onChange={e => onChange({ dateTimeSampled: e.target.value })}
+              onBlur={onBlur}
               className="h-9 text-sm mt-0.5"
               disabled={disabled}
             />
