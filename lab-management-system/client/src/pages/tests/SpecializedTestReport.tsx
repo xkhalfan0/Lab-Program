@@ -443,6 +443,12 @@ function renderConcreteBlocks(fd: any, isAr: boolean, embedInBatch = false) {
             <p className={REPORT_INFO_VALUE_CLASS}>{fd.loadingRate} N/mm²/s</p>
           </div>
         )}
+        {fd.testDate && (
+          <div className="bg-gray-50 border rounded p-2">
+            <p className={REPORT_INFO_LABEL_CLASS}>{isAr ? "تاريخ الاختبار" : "Test Date"}</p>
+            <p className={REPORT_INFO_VALUE_CLASS}>{fd.testDate}</p>
+          </div>
+        )}
       </div>
       {blocks.length > 0 && <FlexibleResultsTable columns={blockColumns} rows={blocks.map((b: any, i: number) => ({ ...b, _bi: i }))} />}
       <div className="flex flex-wrap gap-3 justify-end text-xs">
@@ -464,25 +470,21 @@ function renderSteelRebar(fd: any, isAr: boolean) {
   // Support both 'specimens' (new form key) and 'rows' (legacy)
   const rows = fd.specimens ?? fd.rows ?? [];
   const L = (en: string, ars: string) => isAr ? ars : en;
-  const bendResultRender = (_: unknown, row: Record<string, unknown>) => {
-    const r = row as any;
-    if (r.bendResult === "pass") return <span className="text-emerald-800 font-bold">{isAr ? "مطابق" : "PASS"}</span>;
-    if (r.bendResult === "fail") return <span className="text-red-800 font-bold">{isAr ? "غير مطابق" : "FAIL"}</span>;
-    return "—";
-  };
-  const overallResultRender = (_: unknown, row: Record<string, unknown>) => {
-    const r = row as any;
-    if (r.overallResult === "pass") return <span className="text-emerald-800 font-bold">{isAr ? "مطابق" : "PASS"}</span>;
-    if (r.overallResult === "fail") return <span className="text-red-800 font-bold">{isAr ? "غير مطابق" : "FAIL"}</span>;
-    return "—";
-  };
+  const bendResultRender = (_: unknown, row: Record<string, unknown>) =>
+    steelResultBadge(row.bendResult, isAr);
+  const overallResultRender = (_: unknown, row: Record<string, unknown>) =>
+    steelResultBadge(row.overallResult, isAr);
   const steelCols: Column[] = [
     { header: L("Bar No.", "رقم القضيب"), field: "_i", align: "center", render: (_v, row) => String((row as any)._i + 1) },
-    { header: L("Dia (mm)", "القطر (مم)"), field: "diameter", type: "number", decimals: 0, align: "right" },
-    { header: L("Wt/m (kg)", "الوزن/م (كغ)"), field: "weightPerMeter", type: "number", decimals: 2, align: "right" },
+    { header: L("Dia (mm)", "القطر (مم)"), field: "diameter", align: "right", render: (_v, row) => rebarBarDiaMm(row as Record<string, unknown>) },
+    { header: L("Wt/m (kg)", "الوزن/م (كغ)"), field: "weightPerMeter", align: "right", render: (_v, row) => {
+      const r = row as any;
+      const v = r.weightPerMeter ?? r.massPerMeterRun;
+      return v != null && v !== "" ? fmt(v, 2) : "—";
+    }},
     { header: L("Area (mm²)", "المساحة (مم²)"), field: "area", align: "right", render: (_v, row) => {
       const r = row as any;
-      const area = r.area ?? r.actualArea;
+      const area = r.area ?? r.calculatedArea ?? r.effectiveArea ?? r.actualArea;
       return area != null ? String(Number(area).toFixed(2)) : "—";
     }},
     { header: L("GL₀ (mm)", "طول القياس (مم)"), field: "gaugeLength", align: "right", render: (_v, row) => {
@@ -492,8 +494,16 @@ function renderSteelRebar(fd: any, isAr: boolean) {
     }},
     { header: L("Yield (kN)", "حمل الخضوع (كن)"), field: "yieldLoadKN", type: "number", decimals: 2, align: "right" },
     { header: L("Re (MPa)", "مقاومة الخضوع"), field: "yieldStrength", type: "number", decimals: 1, align: "right" },
-    { header: L("UTS (kN)", "حمل UTS (كن)"), field: "utsLoadKN", type: "number", decimals: 2, align: "right" },
-    { header: L("Rm (MPa)", "UTS"), field: "uts", type: "number", decimals: 1, align: "right" },
+    { header: L("UTS (kN)", "حمل UTS (كن)"), field: "utsLoadKN", align: "right", render: (_v, row) => {
+      const r = row as any;
+      const v = r.utsLoadKN ?? r.maxLoadKN;
+      return v != null && v !== "" ? fmt(v, 2) : "—";
+    }},
+    { header: L("Rm (MPa)", "UTS"), field: "uts", align: "right", render: (_v, row) => {
+      const r = row as any;
+      const v = r.uts ?? r.tensileStrength;
+      return v != null && v !== "" ? fmt(v, 1) : "—";
+    }},
     { header: L("Rm/Re", "نسبة Rm/Re"), field: "_rmre", align: "center", render: (_v, row) => {
       const r = row as any;
       const re = Number(r.yieldStrength);
@@ -553,9 +563,18 @@ function steelSectionLabel(row: any, isAr: boolean): string {
 }
 
 function steelResultBadge(value: unknown, isAr: boolean) {
-  if (value === "pass") return <span className="text-emerald-800 font-bold">{isAr ? "مطابق" : "PASS"}</span>;
-  if (value === "fail") return <span className="text-red-800 font-bold">{isAr ? "غير مطابق" : "FAIL"}</span>;
+  const normalized = String(value ?? "").trim().toLowerCase();
+  if (normalized === "pass") return <span className="text-emerald-800 font-bold">{isAr ? "مطابق" : "PASS"}</span>;
+  if (normalized === "fail") return <span className="text-red-800 font-bold">{isAr ? "غير مطابق" : "FAIL"}</span>;
   return "—";
+}
+
+function rebarBarDiaMm(row: Record<string, unknown>): string {
+  if (row.diameter != null && String(row.diameter).trim() !== "") return String(row.diameter);
+  const barSize = String(row.barSize ?? "").trim();
+  if (!barSize) return "—";
+  const match = barSize.match(/T?(\d+(?:\.\d+)?)/i);
+  return match ? match[1] : barSize;
 }
 
 /** Compact colored info band shown above a steel specimen table. */
@@ -1530,6 +1549,18 @@ function renderSoilProctor(fd: any, isAr: boolean) {
             <p className={REPORT_INFO_VALUE_CLASS}>{prepMethodLabel(fd.samplePreparation)}</p>
           </div>
         )}
+        {fd.soilDescription && (
+          <div className="bg-slate-50 border rounded p-2 text-center md:col-span-3">
+            <p className={REPORT_INFO_LABEL_CLASS}>{isAr ? "وصف التربة" : "Soil Description"}</p>
+            <p className={REPORT_INFO_VALUE_CLASS}>{fd.soilDescription}</p>
+          </div>
+        )}
+        {fd.testMethod && (
+          <div className="bg-slate-50 border rounded p-2 text-center md:col-span-2">
+            <p className={REPORT_INFO_LABEL_CLASS}>{isAr ? "طريقة الاختبار" : "Test Method"}</p>
+            <p className={REPORT_INFO_VALUE_CLASS}>{String(fd.testMethod).replace(/_/g, " ")}</p>
+          </div>
+        )}
       </div>
       <FlexibleResultsTable columns={proctorCols} rows={points.map((p: any, i: number) => ({ ...p, _pt: i + 1 }))} />
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">
@@ -1632,6 +1663,30 @@ function renderSoilFieldDensity(fd: any, isAr: boolean) {
           <div className="bg-slate-50 border rounded p-2 text-center md:col-span-2">
             <p className={REPORT_INFO_LABEL_CLASS}>{L("MDD Source — Lab Test Ref.", "مرجع اختبار MDD")}</p>
             <p className={REPORT_INFO_VALUE_CLASS}>{fd.mddReference}</p>
+          </div>
+        )}
+        {fd.location && (
+          <div className="bg-slate-50 border rounded p-2 text-center md:col-span-2">
+            <p className={REPORT_INFO_LABEL_CLASS}>{L("Test Location", "موقع الاختبار")}</p>
+            <p className={REPORT_INFO_VALUE_CLASS}>{fd.location}</p>
+          </div>
+        )}
+        {fd.coneNo && (
+          <div className="bg-slate-50 border rounded p-2 text-center">
+            <p className={REPORT_INFO_LABEL_CLASS}>{L("Cone No.", "رقم المخروط")}</p>
+            <p className={REPORT_INFO_VALUE_CLASS}>{fd.coneNo}</p>
+          </div>
+        )}
+        {fd.wtSandInCone != null && fd.wtSandInCone !== "" && (
+          <div className="bg-slate-50 border rounded p-2 text-center">
+            <p className={REPORT_INFO_LABEL_CLASS}>{L("Wt. Sand in Cone (g)", "وزن الرمل في المخروط (جم)")}</p>
+            <p className={REPORT_INFO_VALUE_CLASS}>{fmt(fd.wtSandInCone, 1)}</p>
+          </div>
+        )}
+        {fd.bulkDensityOfSand != null && fd.bulkDensityOfSand !== "" && (
+          <div className="bg-slate-50 border rounded p-2 text-center">
+            <p className={REPORT_INFO_LABEL_CLASS}>{L("Bulk Density of Sand (g/cm³)", "الكثافة الظاهرية للرمل (جم/سم³)")}</p>
+            <p className={REPORT_INFO_VALUE_CLASS}>{fmt(fd.bulkDensityOfSand, 3)}</p>
           </div>
         )}
         <div className="bg-emerald-50 border border-emerald-200 rounded p-2 text-center">
@@ -1886,6 +1941,22 @@ function renderSoilCBR(fd: any, isAr: boolean) {
 
     return (
       <div className="space-y-4">
+        {(fd.soilDescription || fd.linkedProctorMethod) && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+            {fd.soilDescription && (
+              <div className="border rounded p-2 bg-slate-50">
+                <div className="text-slate-500">{L("Soil Description", "وصف التربة")}</div>
+                <div className="font-semibold">{fd.soilDescription}</div>
+              </div>
+            )}
+            {fd.linkedProctorMethod && (
+              <div className="border rounded p-2 bg-slate-50">
+                <div className="text-slate-500">{L("Linked Proctor Method", "طريقة بروكتور المرتبطة")}</div>
+                <div className="font-semibold">{String(fd.linkedProctorMethod).replace(/_/g, " ")}</div>
+              </div>
+            )}
+          </div>
+        )}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
           <div className="border rounded p-2"><div className="text-slate-500">{L("MDD", "MDD")}</div><div className="font-bold">{fmt(fd.mdd, 3)} Mg/m³{designCbr ? ` (${fmt(designCbr.mddPcf, 0)} pcf)` : fd.mddPcf != null ? ` (${fmt(fd.mddPcf, 0)} pcf)` : ""}</div></div>
           <div className="border rounded p-2"><div className="text-slate-500">OMC</div><div className="font-bold">{fmt(fd.omc, 1)}%</div></div>
@@ -1984,6 +2055,22 @@ function renderSoilCBR(fd: any, isAr: boolean) {
 
   return (
     <div className="space-y-4">
+      {(fd.soilDescription || fd.linkedProctorMethod) && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+          {fd.soilDescription && (
+            <div className="border rounded p-2 bg-slate-50">
+              <div className="text-slate-500">{L("Soil Description", "وصف التربة")}</div>
+              <div className="font-semibold">{fd.soilDescription}</div>
+            </div>
+          )}
+          {fd.linkedProctorMethod && (
+            <div className="border rounded p-2 bg-slate-50">
+              <div className="text-slate-500">{L("Linked Proctor Method", "طريقة بروكتور المرتبطة")}</div>
+              <div className="font-semibold">{String(fd.linkedProctorMethod).replace(/_/g, " ")}</div>
+            </div>
+          )}
+        </div>
+      )}
       {/* Main results */}
       <div className="grid grid-cols-3 gap-3 text-xs">
         {topFace?.cbrValue != null && (
@@ -2219,6 +2306,12 @@ function renderSoilAtterberg(fd: any, isAr: boolean) {
           <p className="text-purple-600">{L("Plasticity Index (PI)", "مؤشر اللدونة")}</p>
           <p className="font-bold text-purple-800 text-base">{pi != null ? `${pi}` : "—"}</p>
         </div>
+        {fd.flowIndex != null && fd.flowIndex !== "" && (
+          <div className="bg-blue-50 border border-blue-200 rounded p-2 text-center">
+            <p className="text-blue-600">{L("Flow Index", "معامل السيولة")}</p>
+            <p className="font-bold text-blue-800 text-base">{fmt(fd.flowIndex, 2)}</p>
+          </div>
+        )}
       </div>
       {fd.preparationMethod && (
         <div className="text-xs bg-slate-50 border rounded p-2">

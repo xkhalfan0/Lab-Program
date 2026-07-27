@@ -29,10 +29,10 @@ import { useDeletionStatus } from "@/hooks/useDeletionStatus";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { ListFilterBar } from "@/components/ListFilterBar";
 import { applyClearanceFilters, applySampleFilters, hasActiveListFilters } from "@/lib/listFilters";
-import { ReviewSampleListBody } from "@/components/TestDisplay";
+import { ReviewSampleListBody, formatTestPrice } from "@/components/TestDisplay";
 import {
   ShieldCheck, CheckCircle, XCircle, ClipboardCheck,
-  BadgeCheck, FlaskConical, DollarSign, CheckCircle2, Clock,
+  BadgeCheck, FlaskConical, CheckCircle2, Clock,
   ChevronRight,
 } from "lucide-react";
 import { useState, useEffect, useMemo, type ReactElement } from "react";
@@ -429,15 +429,12 @@ function ClearanceQCSection() {
                           <CheckCircle className="w-3 h-3" />
                           {req.passedTests} {lang === "ar" ? "مطابق" : "pass"}
                         </span>
-                        {req.failedTests > 0 && (
-                          <span className="flex items-center gap-1 text-red-700 font-semibold">
-                            <XCircle className="w-3 h-3" />
-                            {req.failedTests} {lang === "ar" ? "غير مطابق" : "fail"}
-                          </span>
-                        )}
-                        <span className="flex items-center gap-1 text-blue-700 font-semibold">
-                          <DollarSign className="w-3 h-3" />
-                          {Number(req.totalAmount).toFixed(2)} AED
+                        <span className="flex items-center gap-1 text-red-700 font-semibold">
+                          <XCircle className="w-3 h-3" />
+                          {req.failedTests} {lang === "ar" ? "غير مطابق" : "fail"}
+                        </span>
+                        <span className="flex items-center gap-1 text-blue-700 font-semibold tabular-nums">
+                          {formatTestPrice(req.totalAmount, lang, 2)}
                         </span>
                       </div>
                     </div>
@@ -515,7 +512,7 @@ function ClearanceQCSection() {
                       { label: lang === "ar" ? "الاختبارات" : "Tests", value: selectedReq.totalTests, color: "text-slate-800" },
                       { label: lang === "ar" ? "مطابق" : "Pass", value: selectedReq.passedTests, color: "text-green-700" },
                       { label: lang === "ar" ? "غير مطابق" : "Fail", value: selectedReq.failedTests, color: "text-red-700" },
-                      { label: lang === "ar" ? "AED" : "AED", value: Number(selectedReq.totalAmount).toFixed(0), color: "text-blue-700" },
+                      { label: lang === "ar" ? "المبلغ (درهم)" : "Amount (AED)", value: Number(selectedReq.totalAmount).toFixed(0), color: "text-blue-700" },
                     ].map((s) => (
                       <div key={s.label} className="rounded-xl border bg-slate-50/80 px-4 py-3 text-center">
                         <div className={`text-2xl font-bold tabular-nums ${s.color}`}>{s.value}</div>

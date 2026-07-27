@@ -189,23 +189,23 @@ const DOCS: Array<{ key: string; labelAr: string; labelEn: string; urlField: str
 function WorkflowStepper({ status, lang }: { status: string; lang: Lang }) {
   const currentStep = STATUS_CONFIG[status]?.step ?? 1;
   return (
-    <div className="flex items-center gap-0 overflow-x-auto pb-1 mb-2">
+    <div className="flex items-center gap-0 overflow-x-auto pb-1">
       {WORKFLOW_STEPS.map((s, i) => {
         const done = currentStep > s.step;
         const active = currentStep === s.step;
         return (
-          <div key={s.step} className="flex items-center">
-            <div className={`flex flex-col items-center min-w-[70px] ${active ? "opacity-100" : done ? "opacity-80" : "opacity-35"}`}>
-              <div className={`w-7 h-7 rounded-full flex items-center justify-center border-2 text-xs font-bold
+          <div key={s.step} className="flex items-center shrink-0">
+            <div className={`flex flex-col items-center min-w-[88px] ${active ? "opacity-100" : done ? "opacity-80" : "opacity-35"}`}>
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center border-2 text-xs font-bold
                 ${done ? "bg-green-500 border-green-500 text-white" : active ? "bg-blue-600 border-blue-600 text-white" : "bg-white border-gray-300 text-gray-400"}`}>
-                {done ? <CheckCircle className="w-3.5 h-3.5" /> : <span>{s.step}</span>}
+                {done ? <CheckCircle className="w-4 h-4" /> : <span>{s.step}</span>}
               </div>
-              <span className={`text-[10px] mt-1 text-center leading-tight max-w-[65px] ${active ? "text-blue-700 font-semibold" : done ? "text-green-700" : "text-gray-400"}`}>
+              <span className={`text-[11px] mt-1.5 text-center leading-tight max-w-[84px] ${active ? "text-blue-700 font-semibold" : done ? "text-green-700" : "text-gray-400"}`}>
                 {t(s.labelKey, lang)}
               </span>
             </div>
             {i < WORKFLOW_STEPS.length - 1 && (
-              <div className={`w-6 h-0.5 mb-4 shrink-0 ${done ? "bg-green-400" : "bg-gray-200"}`} />
+              <div className={`w-8 h-0.5 mb-5 shrink-0 ${done ? "bg-green-400" : "bg-gray-200"}`} />
             )}
           </div>
         );
@@ -289,142 +289,417 @@ function buildInventoryHtml(req: any, inventory: any[], printLang: Lang): string
 function buildPaymentOrderHtml(req: any, inventory: any[], printLang: Lang): string {
   const isAr = printLang === "ar";
   const dir = isAr ? "rtl" : "ltr";
+  const align = isAr ? "right" : "left";
+  const alignOpp = isAr ? "left" : "right";
   const poDate = req.paymentOrderDate
     ? new Date(req.paymentOrderDate).toLocaleDateString(isAr ? "ar-AE" : "en-AE", { year: "numeric", month: "long", day: "numeric" })
     : new Date().toLocaleDateString(isAr ? "ar-AE" : "en-AE", { year: "numeric", month: "long", day: "numeric" });
+  const printedAt = new Date().toLocaleString(isAr ? "ar-AE" : "en-AE", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+
+  const passedCount = Number(req.passedTests ?? inventory.filter((i) => i.result === "pass").length);
+  const failedCount = Number(req.failedTests ?? inventory.filter((i) => i.result === "fail").length);
+  const testCount = Number(req.totalTests ?? inventory.length);
+  const totalAmount = Number(req.totalAmount ?? inventory.reduce((s, i) => s + Number(i.price ?? 0), 0));
+  const amountFormatted = `${totalAmount.toFixed(2)} ${isAr ? "درهم إ.م" : "AED"}`;
+
   const L = {
-    docTitle:    isAr ? "أمر الدفع" : "Payment Order",
-    labName:     isAr ? "مختبر الإنشاءات والمواد الهندسية" : "Construction Materials & Engineering Laboratory",
-    labNameSub:  isAr ? "Construction Materials & Engineering Laboratory" : "مختبر الإنشاءات والمواد الهندسية",
-    docNo:       isAr ? "رقم الوثيقة:" : "Document No.:",
-    issueDate:   isAr ? "تاريخ الإصدار:" : "Issue Date:",
-    reqNo:       isAr ? "رقم الطلب:" : "Request No.:",
-    contractor:  isAr ? "المقاول" : "Contractor",
-    contractNo:  isAr ? "رقم العقد" : "Contract No.",
-    project:     isAr ? "اسم المشروع" : "Project Name",
-    testCount:   isAr ? "عدد الاختبارات" : "Test Count",
-    tests:       isAr ? "اختبار" : "tests",
-    colNo:       isAr ? "#" : "#",
-    colSample:   isAr ? "كود العينة" : "Sample Code",
-    colTest:     isAr ? "نوع الاختبار" : "Test Type",
-    colStd:      isAr ? "المعيار" : "Standard",
-    colResult:   isAr ? "النتيجة" : "Result",
-    colPrice:    isAr ? "السعر (درهم)" : "Price (AED)",
-    pass:        isAr ? "✓ مطابق" : "✓ Pass",
-    fail:        isAr ? "✗ غير مطابق" : "✗ Fail",
-    pending:     isAr ? "قيد الفحص" : "Pending",
-    totalLabel:  isAr ? "المبلغ الإجمالي" : "Total Amount",
-    totalUnit:   isAr ? "درهم" : "AED",
-    instrTitle:  isAr ? "تعليمات الدفع" : "Payment Instructions",
-    instrText:   isAr
-      ? `يرجى من السيد / الشركة المذكورة أعلاه سداد مبلغ <strong>${Number(req.totalAmount).toFixed(2)} درهم إماراتي</strong> فقط لا غير في خزينة المختبر، وذلك مقابل خدمات الفحص والاختبار المذكورة في هذا الأمر. يُرجى الاحتفاظ بهذا الأمر وتقديمه عند سداد المبلغ للحصول على وصل رسمي.`
-      : `Please pay the amount of <strong>${Number(req.totalAmount).toFixed(2)} AED</strong> only at the laboratory cashier for the testing services listed in this order. Please retain this order and present it upon payment to receive an official receipt.`,
-    sigContractor: isAr ? "توقيع المقاول" : "Contractor Signature",
-    sigAccountant: isAr ? "المحاسب" : "Accountant",
+    docTitle: isAr ? "أمر الدفع" : "Payment Order",
+    docTitleSub: isAr ? "Payment Order" : "أمر الدفع",
+    labName: isAr ? "مختبر الإنشاءات والمواد الهندسية" : "Construction Materials & Engineering Laboratory",
+    labNameSub: isAr ? "Construction Materials & Engineering Laboratory" : "مختبر الإنشاءات والمواد الهندسية",
+    docNo: isAr ? "رقم أمر الدفع" : "Payment Order No.",
+    issueDate: isAr ? "تاريخ الإصدار" : "Issue Date",
+    reqNo: isAr ? "رقم طلب البراءة" : "Clearance Request No.",
+    contractor: isAr ? "المقاول" : "Contractor",
+    contractNo: isAr ? "رقم العقد" : "Contract No.",
+    project: isAr ? "اسم المشروع" : "Project Name",
+    summaryTests: isAr ? "الاختبارات" : "Tests",
+    summaryPass: isAr ? "مطابق" : "Pass",
+    summaryFail: isAr ? "غير مطابق" : "Fail",
+    summaryTotal: isAr ? "المبلغ المستحق" : "Amount Due",
+    servicesTitle: isAr ? "تفاصيل خدمات الفحص" : "Testing Services",
+    colNo: "#",
+    colSample: isAr ? "كود العينة" : "Sample Code",
+    colTest: isAr ? "نوع الاختبار" : "Test Type",
+    colStd: isAr ? "المعيار" : "Standard",
+    colResult: isAr ? "النتيجة" : "Result",
+    colPrice: isAr ? "المبلغ (درهم)" : "Amount (AED)",
+    pass: isAr ? "مطابق" : "Pass",
+    fail: isAr ? "غير مطابق" : "Fail",
+    pending: isAr ? "قيد الفحص" : "Pending",
+    totalLabel: isAr ? "الإجمالي المستحق" : "Total Amount Due",
+    instrTitle: isAr ? "تعليمات الدفع للمقاول" : "Payment Instructions for Contractor",
+    instrSteps: isAr
+      ? [
+          `يُرجى سداد مبلغ <strong>${amountFormatted}</strong> فقط لا غير في خزينة المختبر.`,
+          "يُقدَّم هذا الأمر مع المبلغ عند الدفع للحصول على وصل رسمي.",
+          "يُحتفظ بنسخة من أمر الدفع والوصل لاستكمال إجراءات شهادة براءة الذمة.",
+        ]
+      : [
+          `Pay exactly <strong>${amountFormatted}</strong> at the laboratory cashier only.`,
+          "Present this payment order when paying to receive an official receipt.",
+          "Retain copies of this order and the receipt for clearance certificate processing.",
+        ],
+    sigContractor: isAr ? "توقيع المقاول / الختم" : "Contractor Signature / Stamp",
+    sigAccountant: isAr ? "توقيع المحاسب" : "Accountant Signature",
+    sigDate: isAr ? "التاريخ" : "Date",
+    footerPrinted: isAr ? "طُبع في" : "Printed",
   };
+
+  const resultBadge = (result: string) => {
+    if (result === "pass") {
+      return `<span class="badge badge-pass">${L.pass}</span>`;
+    }
+    if (result === "fail") {
+      return `<span class="badge badge-fail">${L.fail}</span>`;
+    }
+    return `<span class="badge badge-pending">${L.pending}</span>`;
+  };
+
   const rows = inventory.map((item: any, i: number) => {
-    const resultClass = item.result === "pass" ? "pass" : item.result === "fail" ? "fail" : "";
-    const resultText = item.result === "pass" ? L.pass : item.result === "fail" ? L.fail : L.pending;
+    const testName = isAr ? (item.testNameAr || item.testName) : (item.testName || item.testNameAr);
     return `<tr>
-      <td>${i + 1}</td>
-      <td style="font-family:monospace;font-weight:600">${item.sampleCode}</td>
-      <td>${isAr ? (item.testNameAr || item.testName) : (item.testName || item.testNameAr)}</td>
-      <td style="font-size:11px;color:#666">${item.standard ?? "—"}</td>
-      <td class="${resultClass}">${resultText}</td>
-      <td style="text-align:${isAr ? "left" : "right"};font-weight:600">${Number(item.price).toFixed(2)}</td>
+      <td class="col-no">${i + 1}</td>
+      <td class="mono">${item.sampleCode ?? "—"}</td>
+      <td>${testName ?? "—"}</td>
+      <td class="col-std">${item.standard ?? "—"}</td>
+      <td class="col-result">${resultBadge(item.result ?? "pending")}</td>
+      <td class="col-amount">${Number(item.price ?? 0).toFixed(2)}</td>
     </tr>`;
   }).join("");
 
-  return `<html dir="${dir}"><head><meta charset="UTF-8"><title>${L.docTitle} - ${req.paymentOrderNumber ?? req.requestCode}</title>
+  return `<!DOCTYPE html>
+<html lang="${isAr ? "ar" : "en"}" dir="${dir}">
+<head>
+  <meta charset="UTF-8">
+  <title>${L.docTitle} — ${req.paymentOrderNumber ?? req.requestCode}</title>
   <style>
+    @page { size: A4; margin: 14mm 16mm; }
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: 'Arial', sans-serif; padding: 30px; color: #1a1a1a; direction: ${dir}; font-size: 13px; }
-    .lab-header { border-top: 4px solid #1a1a1a; padding-top: 12px; display: flex; justify-content: space-between; align-items: flex-start; }
-    .lab-name { font-size: 17px; font-weight: 900; }
-    .lab-name-sub { font-size: 11px; color: #666; margin-top: 3px; }
-    .lab-logo { width: 52px; height: 52px; border-radius: 50%; border: 2px solid #1a1a1a; display: flex; align-items: center; justify-content: center; font-size: 22px; font-weight: 900; flex-shrink: 0; }
-    .doc-ref { font-size: 11px; color: #555; text-align: ${isAr ? "left" : "right"}; line-height: 2; }
-    .doc-ref strong { color: #1a1a1a; }
-    .doc-title-bar { background: #1e3a5f; color: white; text-align: center; padding: 10px 0; margin: 12px 0 16px; }
-    .doc-title { font-size: 16px; font-weight: bold; letter-spacing: 1px; }
-    .doc-title-sub { font-size: 10px; color: #aac4e8; margin-top: 3px; letter-spacing: 2px; text-transform: uppercase; }
-    .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0; border: 1px solid #ccc; margin-bottom: 16px; }
-    .info-cell { padding: 8px 12px; border-bottom: 1px solid #e0e0e0; }
-    .info-cell:nth-child(odd) { border-${isAr ? "left" : "right"}: 1px solid #e0e0e0; }
-    .info-label { font-size: 10px; color: #888; margin-bottom: 2px; }
-    .info-value { font-size: 13px; font-weight: 600; color: #1a1a1a; }
-    table { width: 100%; border-collapse: collapse; font-size: 12px; }
-    thead tr { background: #1e3a5f; color: white; }
-    th { padding: 9px 10px; text-align: ${isAr ? "right" : "left"}; font-weight: 600; }
-    td { padding: 7px 10px; border-bottom: 1px solid #e8e8e8; color: #333; text-align: ${isAr ? "right" : "left"}; }
-    tr:nth-child(even) td { background: #f9f9f9; }
-    .pass { color: #16a34a; font-weight: 600; }
-    .fail { color: #dc2626; font-weight: 600; }
-    .total-row { background: #1e3a5f !important; }
-    .total-row td { color: white; font-weight: bold; font-size: 14px; border: none; }
-    .instructions { margin-top: 16px; padding: 12px 15px; background: #fffbeb; border: 1px solid #fcd34d; border-radius: 4px; }
-    .instructions-title { font-size: 12px; font-weight: bold; color: #92400e; margin-bottom: 6px; }
-    .instructions-text { font-size: 12px; color: #78350f; line-height: 1.7; }
-    .footer { margin-top: 40px; display: grid; grid-template-columns: 1fr 1fr; gap: 40px; }
-    .sig-box { text-align: center; padding-top: 40px; border-top: 1px solid #555; font-size: 11px; color: #444; }
-    .sig-title { font-weight: bold; margin-bottom: 3px; }
-    .sig-name { color: #888; font-size: 10px; }
-    @media print { body { padding: 20px; } }
-  </style></head><body>
-  <div class="lab-header">
-    <div>
-      <div class="lab-name">${L.labName}</div>
-      <div class="lab-name-sub">${L.labNameSub}</div>
+    body {
+      font-family: ${isAr ? "'Segoe UI', 'IBM Plex Sans Arabic', Arial, sans-serif" : "'Segoe UI', Arial, sans-serif"};
+      direction: ${dir};
+      color: #0f172a;
+      font-size: 12px;
+      line-height: 1.45;
+      background: #fff;
+      padding: 0;
+    }
+    .page { max-width: 210mm; margin: 0 auto; }
+
+    .top-rule { border-top: 4px solid #0f172a; padding-top: 14px; margin-bottom: 12px; }
+    .header {
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      gap: 16px;
+      align-items: start;
+    }
+    .logo {
+      width: 56px; height: 56px;
+      border: 2px solid #0f172a;
+      border-radius: 50%;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      font-weight: 900; font-size: 22px;
+      line-height: 1;
+    }
+    .logo-sub { font-size: 8px; letter-spacing: 0.18em; margin-top: 2px; color: #64748b; }
+    .lab-name { font-size: 17px; font-weight: 800; color: #0f172a; line-height: 1.25; }
+    .lab-sub { font-size: 11px; color: #64748b; margin-top: 4px; }
+    .doc-meta { text-align: ${alignOpp}; font-size: 11px; color: #475569; line-height: 1.7; }
+    .doc-meta strong { color: #0f172a; font-weight: 700; }
+    .doc-meta .mono { font-family: ui-monospace, monospace; font-weight: 700; color: #1d4ed8; }
+
+    .title-bar {
+      background: linear-gradient(135deg, #0f172a 0%, #1e3a5f 100%);
+      color: #fff;
+      text-align: center;
+      padding: 12px 16px;
+      margin: 14px 0 16px;
+      border-radius: 4px;
+    }
+    .title-bar h1 { font-size: 18px; font-weight: 800; letter-spacing: 0.04em; }
+    .title-bar p { font-size: 10px; color: #cbd5e1; margin-top: 4px; letter-spacing: 0.12em; text-transform: uppercase; }
+
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+    .stat {
+      border: 1px solid #e2e8f0;
+      border-radius: 6px;
+      padding: 10px 12px;
+      text-align: center;
+      background: #f8fafc;
+    }
+    .stat-value { font-size: 20px; font-weight: 800; line-height: 1.1; }
+    .stat-label { font-size: 10px; color: #64748b; margin-top: 4px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
+    .stat-pass .stat-value { color: #15803d; }
+    .stat-fail .stat-value { color: #b91c1c; }
+    .stat-total { background: #eff6ff; border-color: #bfdbfe; }
+    .stat-total .stat-value { color: #1d4ed8; font-size: 16px; }
+
+    .info-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 16px;
+      border: 1px solid #dbe3ee;
+      border-radius: 6px;
+      overflow: hidden;
+    }
+    .info-table td {
+      padding: 9px 12px;
+      border-bottom: 1px solid #e8edf3;
+      vertical-align: top;
+    }
+    .info-table tr:last-child td { border-bottom: none; }
+    .info-table .label {
+      width: 28%;
+      background: #eef2f7;
+      font-weight: 700;
+      color: #334155;
+      font-size: 11px;
+    }
+    .info-table .value { font-weight: 600; color: #0f172a; }
+
+    .section-title {
+      font-size: 11px;
+      font-weight: 800;
+      color: #334155;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-bottom: 8px;
+      padding-bottom: 4px;
+      border-bottom: 2px solid #0f172a;
+    }
+
+    .services-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 11px;
+      margin-bottom: 14px;
+    }
+    .services-table thead tr { background: #1e293b; color: #fff; }
+    .services-table th {
+      padding: 9px 10px;
+      text-align: ${align};
+      font-weight: 700;
+      font-size: 10px;
+      letter-spacing: 0.03em;
+    }
+    .services-table td {
+      padding: 8px 10px;
+      border-bottom: 1px solid #e8edf3;
+      text-align: ${align};
+      vertical-align: middle;
+    }
+    .services-table tbody tr:nth-child(even) td { background: #f8fafc; }
+    .col-no { width: 32px; text-align: center !important; color: #64748b; font-weight: 700; }
+    .col-std { font-size: 10px; color: #64748b; max-width: 120px; }
+    .col-result { text-align: center !important; }
+    .col-amount { text-align: ${alignOpp} !important; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .mono { font-family: ui-monospace, monospace; font-weight: 700; color: #1d4ed8; }
+
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+    }
+    .badge-pass { background: #dcfce7; color: #15803d; border: 1px solid #86efac; }
+    .badge-fail { background: #fee2e2; color: #b91c1c; border: 1px solid #fca5a5; }
+    .badge-pending { background: #f1f5f9; color: #64748b; border: 1px solid #cbd5e1; }
+
+    .total-box {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: #0f172a;
+      color: #fff;
+      padding: 14px 18px;
+      border-radius: 6px;
+      margin-bottom: 16px;
+    }
+    .total-box .label { font-size: 13px; font-weight: 700; }
+    .total-box .amount { font-size: 22px; font-weight: 900; letter-spacing: 0.02em; }
+
+    .instructions {
+      border: 1px solid #fcd34d;
+      background: linear-gradient(180deg, #fffbeb 0%, #fef3c7 100%);
+      border-radius: 6px;
+      padding: 14px 16px;
+      margin-bottom: 28px;
+    }
+    .instructions h3 {
+      font-size: 12px;
+      font-weight: 800;
+      color: #92400e;
+      margin-bottom: 8px;
+    }
+    .instructions ol {
+      margin-${align}: 18px;
+      color: #78350f;
+      font-size: 11.5px;
+      line-height: 1.65;
+    }
+    .instructions li { margin-bottom: 4px; }
+    .instructions strong { color: #92400e; }
+
+    .signatures {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 32px;
+      margin-top: 8px;
+    }
+    .sig-block { text-align: center; }
+    .sig-line {
+      border-top: 1.5px solid #334155;
+      margin-top: 48px;
+      padding-top: 8px;
+    }
+    .sig-title { font-size: 11px; font-weight: 800; color: #334155; }
+    .sig-name { font-size: 10px; color: #64748b; margin-top: 4px; min-height: 14px; }
+    .sig-date { font-size: 10px; color: #94a3b8; margin-top: 10px; }
+
+    .footer {
+      margin-top: 20px;
+      padding-top: 10px;
+      border-top: 1px solid #e2e8f0;
+      display: flex;
+      justify-content: space-between;
+      font-size: 9px;
+      color: #94a3b8;
+    }
+
+    @media print {
+      body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <div class="top-rule">
+      <div class="header">
+        <div class="logo">م<span class="logo-sub">LAB</span></div>
+        <div>
+          <div class="lab-name">${L.labName}</div>
+          <div class="lab-sub">${L.labNameSub}</div>
+        </div>
+        <div class="doc-meta">
+          <div><strong>${L.docNo}:</strong> <span class="mono">${req.paymentOrderNumber ?? req.requestCode}</span></div>
+          <div><strong>${L.issueDate}:</strong> ${poDate}</div>
+          <div><strong>${L.reqNo}:</strong> <span class="mono">${req.requestCode}</span></div>
+        </div>
+      </div>
     </div>
-    <div class="lab-logo">م</div>
-    <div class="doc-ref">
-      <div><strong>${L.docNo}</strong> ${req.paymentOrderNumber ?? req.requestCode}</div>
-      <div><strong>${L.issueDate}</strong> ${poDate}</div>
-      <div><strong>${L.reqNo}</strong> ${req.requestCode}</div>
+
+    <div class="title-bar">
+      <h1>${L.docTitle}</h1>
+      <p>${L.docTitleSub}</p>
     </div>
-  </div>
-  <div class="doc-title-bar">
-    <div class="doc-title">${L.docTitle}</div>
-    <div class="doc-title-sub">${isAr ? "Payment Order" : "أمر الدفع"}</div>
-  </div>
-  <div class="info-grid">
-    <div class="info-cell"><div class="info-label">${L.contractor}</div><div class="info-value">${req.contractorName ?? "—"}</div></div>
-    <div class="info-cell"><div class="info-label">${L.contractNo}</div><div class="info-value">${req.contractNumber ?? "—"}</div></div>
-    <div class="info-cell"><div class="info-label">${L.project}</div><div class="info-value">${req.contractName ?? "—"}</div></div>
-    <div class="info-cell"><div class="info-label">${L.testCount}</div><div class="info-value">${inventory.length} ${L.tests}</div></div>
-  </div>
-  <table>
-    <thead><tr>
-      <th style="width:30px">${L.colNo}</th>
-      <th>${L.colSample}</th>
-      <th>${L.colTest}</th>
-      <th>${L.colStd}</th>
-      <th>${L.colResult}</th>
-      <th style="width:100px">${L.colPrice}</th>
-    </tr></thead>
-    <tbody>
-      ${rows}
-      <tr class="total-row">
-        <td colspan="5" style="text-align:${isAr ? "right" : "left"}">${L.totalLabel}</td>
-        <td style="text-align:${isAr ? "left" : "right"}">${Number(req.totalAmount).toFixed(2)} ${L.totalUnit}</td>
+
+    <div class="stats">
+      <div class="stat">
+        <div class="stat-value">${testCount}</div>
+        <div class="stat-label">${L.summaryTests}</div>
+      </div>
+      <div class="stat stat-pass">
+        <div class="stat-value">${passedCount}</div>
+        <div class="stat-label">${L.summaryPass}</div>
+      </div>
+      <div class="stat stat-fail">
+        <div class="stat-value">${failedCount}</div>
+        <div class="stat-label">${L.summaryFail}</div>
+      </div>
+      <div class="stat stat-total">
+        <div class="stat-value">${amountFormatted}</div>
+        <div class="stat-label">${L.summaryTotal}</div>
+      </div>
+    </div>
+
+    <table class="info-table">
+      <tr>
+        <td class="label">${L.contractor}</td>
+        <td class="value">${req.contractorName ?? "—"}</td>
+        <td class="label">${L.contractNo}</td>
+        <td class="value">${req.contractNumber ?? "—"}</td>
       </tr>
-    </tbody>
-  </table>
-  <div class="instructions">
-    <div class="instructions-title">${L.instrTitle}</div>
-    <div class="instructions-text">${L.instrText}</div>
+      <tr>
+        <td class="label">${L.project}</td>
+        <td class="value" colspan="3">${req.contractName ?? "—"}</td>
+      </tr>
+    </table>
+
+    <div class="section-title">${L.servicesTitle}</div>
+    <table class="services-table">
+      <thead>
+        <tr>
+          <th class="col-no">${L.colNo}</th>
+          <th>${L.colSample}</th>
+          <th>${L.colTest}</th>
+          <th>${L.colStd}</th>
+          <th class="col-result">${L.colResult}</th>
+          <th style="text-align:${alignOpp}">${L.colPrice}</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rows}
+      </tbody>
+    </table>
+
+    <div class="total-box">
+      <span class="label">${L.totalLabel}</span>
+      <span class="amount">${amountFormatted}</span>
+    </div>
+
+    <div class="instructions">
+      <h3>${L.instrTitle}</h3>
+      <ol>
+        ${L.instrSteps.map((step) => `<li>${step}</li>`).join("")}
+      </ol>
+    </div>
+
+    <div class="signatures">
+      <div class="sig-block">
+        <div class="sig-line">
+          <div class="sig-title">${L.sigContractor}</div>
+          <div class="sig-name">${req.contractorName ?? ""}</div>
+          <div class="sig-date">${L.sigDate}: _______________</div>
+        </div>
+      </div>
+      <div class="sig-block">
+        <div class="sig-line">
+          <div class="sig-title">${L.sigAccountant}</div>
+          <div class="sig-name">&nbsp;</div>
+          <div class="sig-date">${L.sigDate}: _______________</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="footer">
+      <span>${L.labName}</span>
+      <span>${L.footerPrinted}: ${printedAt}</span>
+    </div>
   </div>
-  <div class="footer">
-    <div class="sig-box"><div class="sig-title">${L.sigContractor}</div><div class="sig-name">${req.contractorName ?? ""}</div></div>
-    <div class="sig-box"><div class="sig-title">${L.sigAccountant}</div><div class="sig-name">&nbsp;</div></div>
-  </div>
-  </body></html>`;
+</body>
+</html>`;
 }
 
 // ─── Clearance Detail ──────────────────────────────────────────────────────────
 function ClearanceDetail({ req, onClose, refetch }: { req: any; onClose: () => void; refetch: () => void }) {
   const { lang } = useLanguage();
   const l = lang as Lang;
+  const utils = trpc.useUtils();
   const [notes, setNotes] = useState(req.notes ?? "");
   const [uploading, setUploading] = useState<string | null>(null);
   const [qcNotes, setQcNotes] = useState("");
@@ -432,24 +707,29 @@ function ClearanceDetail({ req, onClose, refetch }: { req: any; onClose: () => v
   const [receiptNumber, setReceiptNumber] = useState(req.paymentReceiptNumber ?? "");
   const [savingReceipt, setSavingReceipt] = useState(false);
 
+  const refreshClearance = () => {
+    void refetch();
+    void utils.clearance.getById.invalidate({ id: req.id });
+  };
+
   const qcReview = trpc.clearance.qcReview.useMutation({
-    onSuccess: () => { toast.success(t("toastQcApproved", l)); refetch(); },
+    onSuccess: () => { toast.success(t("toastQcApproved", l)); refreshClearance(); },
     onError: (e) => toast.error(e.message),
   });
   const issuePayment = trpc.clearance.issuePaymentOrder.useMutation({
-    onSuccess: (data) => { toast.success(`${t("toastPayIssued", l)} ${data.paymentOrderNumber}`); refetch(); },
+    onSuccess: (data) => { toast.success(`${t("toastPayIssued", l)} ${data.paymentOrderNumber}`); refreshClearance(); },
     onError: (e) => toast.error(e.message),
   });
   const uploadDoc = trpc.clearance.uploadDocument.useMutation({
-    onSuccess: () => { toast.success(t("toastDocUploaded", l)); refetch(); },
+    onSuccess: () => { toast.success(t("toastDocUploaded", l)); refreshClearance(); },
     onError: (e) => toast.error(e.message),
   });
   const issueCert = trpc.clearance.issueCertificate.useMutation({
-    onSuccess: () => { toast.success(t("toastCertIssued", l)); refetch(); onClose(); },
+    onSuccess: () => { toast.success(t("toastCertIssued", l)); refreshClearance(); onClose(); },
     onError: (e) => toast.error(e.message),
   });
   const saveReceiptNo = trpc.clearance.saveReceiptNumber.useMutation({
-    onSuccess: () => { toast.success(t("receiptNoSaved", l)); refetch(); setSavingReceipt(false); },
+    onSuccess: () => { toast.success(t("receiptNoSaved", l)); refreshClearance(); setSavingReceipt(false); },
     onError: (e) => { toast.error(e.message); setSavingReceipt(false); },
   });
   const inventory = (req.inventoryData ?? []) as any[];
@@ -557,16 +837,52 @@ function ClearanceDetail({ req, onClose, refetch }: { req: any; onClose: () => v
   const canIssueCert = allDocsUploaded && req.status !== "issued" && req.status !== "rejected";
 
   return (
-    <div className="space-y-4 max-h-[70vh] overflow-y-auto pr-1">
+    <div className="space-y-5">
+      {/* Request summary */}
+      <div className="rounded-xl border border-border/80 bg-muted/30 overflow-hidden">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-px bg-border/60">
+          <div className="bg-background px-4 py-3 text-start">
+            <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">{t("colRequest", l)}</p>
+            <p className="mt-1 text-sm font-mono font-semibold text-primary">{req.requestCode}</p>
+          </div>
+          <div className="bg-background px-4 py-3 text-start">
+            <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">{t("colContractor", l)}</p>
+            <p className="mt-1 text-sm font-semibold leading-snug">{req.contractorName ?? "—"}</p>
+          </div>
+          <div className="bg-background px-4 py-3 text-start">
+            <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">{t("colContract", l)}</p>
+            <p className="mt-1 text-sm font-mono font-semibold">{req.contractNumber ?? "—"}</p>
+          </div>
+          <div className="bg-background px-4 py-3 text-start">
+            <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">{t("colStatus", l)}</p>
+            <div className="mt-1"><StatusBadge status={req.status} lang={l} /></div>
+          </div>
+        </div>
+        <div className="border-t border-border/80 bg-background px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center gap-x-6 gap-y-1 text-sm">
+            <span className="text-muted-foreground">{t("newProject", l)}</span>
+            <span className="font-medium">{req.contractName ?? "—"}</span>
+            <span className="hidden sm:inline text-muted-foreground">·</span>
+            <span className="text-muted-foreground">{t("colTests", l)}:</span>
+            <span className="font-semibold">{req.totalTests ?? inventory.length}</span>
+            <span className="text-green-600 font-semibold">({req.passedTests ?? 0}✓)</span>
+            {(req.failedTests ?? 0) > 0 && <span className="text-red-600 font-semibold">({req.failedTests}✗)</span>}
+          </div>
+          <div className="text-sm font-bold text-blue-700 whitespace-nowrap">
+            {Number(req.totalAmount).toFixed(2)} AED
+          </div>
+        </div>
+      </div>
+
       {/* Print language selector */}
-      <div className="flex items-center gap-2 p-2.5 bg-muted/30 rounded-lg border">
-        <Globe size={14} className="text-muted-foreground" />
+      <div className="flex flex-wrap items-center gap-2 p-3 bg-muted/30 rounded-lg border">
+        <Globe size={14} className="text-muted-foreground shrink-0" />
         <span className="text-xs text-muted-foreground">{t("printLang", l)}:</span>
         <div className="flex gap-1">
-          <Button size="sm" variant={printLang === "ar" ? "default" : "outline"} className="h-6 px-2 text-xs" onClick={() => setPrintLang("ar")}>
+          <Button size="sm" variant={printLang === "ar" ? "default" : "outline"} className="h-7 px-3 text-xs" onClick={() => setPrintLang("ar")}>
             {t("printAr", l)}
           </Button>
-          <Button size="sm" variant={printLang === "en" ? "default" : "outline"} className="h-6 px-2 text-xs" onClick={() => setPrintLang("en")}>
+          <Button size="sm" variant={printLang === "en" ? "default" : "outline"} className="h-7 px-3 text-xs" onClick={() => setPrintLang("en")}>
             {t("printEn", l)}
           </Button>
         </div>
@@ -578,16 +894,16 @@ function ClearanceDetail({ req, onClose, refetch }: { req: any; onClose: () => v
       {/* Test inventory */}
       {inventory.length > 0 && (
         <Card>
-          <CardHeader className="pb-2">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-sm flex items-center gap-2">
-                <FlaskConical size={16} className="text-blue-600" />
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between gap-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <FlaskConical size={18} className="text-blue-600 shrink-0" />
                 {t("invTitle", l)} ({inventory.length})
               </CardTitle>
               <Button
                 size="sm"
                 variant="outline"
-                className="h-7 px-2 text-xs gap-1 text-blue-700 border-blue-300 hover:bg-blue-50"
+                className="h-8 px-3 text-xs gap-1.5 text-blue-700 border-blue-300 hover:bg-blue-50 shrink-0"
                 onClick={() => {
                   const w = window.open("", "_blank");
                   if (!w) return;
@@ -642,11 +958,11 @@ function ClearanceDetail({ req, onClose, refetch }: { req: any; onClose: () => v
 
       {/* Step 1: QC Review */}
       <Card className={req.status === "pending" ? "border-yellow-300 bg-yellow-50/30" : ""}>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm flex items-center gap-2">
-            <CheckCircle size={16} className="text-blue-600" />
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2 flex-wrap">
+            <CheckCircle size={18} className="text-blue-600 shrink-0" />
             {t("qcStep", l)}
-            {req.status !== "pending" && <CheckCircle size={14} className="text-green-600" />}
+            {req.status !== "pending" && <CheckCircle size={16} className="text-green-600 shrink-0" />}
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -681,11 +997,11 @@ function ClearanceDetail({ req, onClose, refetch }: { req: any; onClose: () => v
 
       {/* Step 2: Payment Order */}
       <Card className={req.status === "inventory_ready" ? "border-amber-300 bg-amber-50/30" : ""}>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm flex items-center gap-2">
-            <Receipt size={16} className="text-amber-600" />
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2 flex-wrap">
+            <Receipt size={18} className="text-amber-600 shrink-0" />
             {t("payStep", l)}
-            {req.paymentOrderNumber && <CheckCircle size={14} className="text-green-600" />}
+            {req.paymentOrderNumber && <CheckCircle size={16} className="text-green-600 shrink-0" />}
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -697,18 +1013,18 @@ function ClearanceDetail({ req, onClose, refetch }: { req: any; onClose: () => v
           )}
           {req.paymentOrderNumber ? (
             <div className="space-y-3">
-              <div className="flex items-center justify-between p-3 bg-green-50 border border-green-200 rounded-md">
-                <div className="text-sm">
-                  <span className="text-muted-foreground">{t("payOrderNo", l)} </span>
-                  <span className="font-semibold font-mono">{req.paymentOrderNumber}</span>
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-4 bg-green-50 border border-green-200 rounded-lg">
+                <div className="min-w-0">
+                  <p className="text-xs text-green-800 font-medium mb-1">{t("payOrderNo", l)}</p>
+                  <p className="text-base font-semibold font-mono text-green-900 break-all">{req.paymentOrderNumber}</p>
                 </div>
-                <Button size="sm" variant="outline" onClick={printPaymentOrder} className="gap-1.5">
+                <Button size="sm" variant="outline" onClick={printPaymentOrder} className="gap-1.5 shrink-0 self-start sm:self-auto">
                   <Printer size={14} /> {t("payPrint", l)}
                 </Button>
               </div>
-              <div className="p-3 bg-blue-50 border border-blue-200 rounded-md">
-                <p className="text-xs text-blue-800 font-medium">{t("payInstructions", l)}</p>
-                <p className="text-xs text-blue-700 mt-1">{t("payInstructionsTxt", l)} <strong>{Number(req.totalAmount).toFixed(2)} AED</strong></p>
+              <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg space-y-1">
+                <p className="text-sm text-blue-900 font-medium">{t("payInstructions", l)}</p>
+                <p className="text-sm text-blue-800 leading-relaxed">{t("payInstructionsTxt", l)} <strong>{Number(req.totalAmount).toFixed(2)} AED</strong></p>
               </div>
             </div>
           ) : (
@@ -730,30 +1046,39 @@ function ClearanceDetail({ req, onClose, refetch }: { req: any; onClose: () => v
 
       {/* Step 3: Upload Documents */}
       <Card className={req.status === "payment_ordered" ? "border-purple-300 bg-purple-50/30" : ""}>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm flex items-center gap-2">
-            <FileCheck size={16} className="text-purple-600" />
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2 flex-wrap">
+            <FileCheck size={18} className="text-purple-600 shrink-0" />
             {t("docsStep", l)}
-            {allDocsUploaded && <CheckCircle size={14} className="text-green-600" />}
+            {allDocsUploaded && <CheckCircle size={16} className="text-green-600 shrink-0" />}
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
-
-          <div className="grid grid-cols-2 gap-3">
-            {DOCS.map(doc => (
-              <div key={doc.key} className="flex items-center justify-between p-2.5 bg-muted/30 rounded-lg border">
-                <div className="flex items-center gap-2">
-                  {req[doc.urlField] ? (
-                    <CheckCircle size={14} className="text-green-600" />
+          <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
+            {DOCS.map(doc => {
+              const fileUrl = req[doc.urlField] as string | null | undefined;
+              const fileName = fileUrl ? decodeURIComponent(fileUrl.split("/").pop()?.split("?")[0] ?? "") : null;
+              return (
+              <div key={doc.key} className={`flex flex-col gap-3 rounded-lg border p-4 min-w-0 ${fileUrl ? "bg-green-50/60 border-green-200" : "bg-muted/30"}`}>
+                <div className="flex items-start gap-2 min-w-0">
+                  {fileUrl ? (
+                    <CheckCircle size={16} className="text-green-600 shrink-0 mt-0.5" />
                   ) : (
-                    <AlertTriangle size={14} className="text-amber-500" />
+                    <AlertTriangle size={16} className="text-amber-500 shrink-0 mt-0.5" />
                   )}
-                  <span className="text-xs font-medium">{l === "ar" ? doc.labelAr : doc.labelEn}</span>
+                  <div className="min-w-0">
+                    <span className="text-sm font-medium leading-snug block">{l === "ar" ? doc.labelAr : doc.labelEn}</span>
+                    {fileUrl && (
+                      <span className="text-xs text-green-700 mt-1 block truncate" title={fileName ?? undefined}>
+                        {l === "ar" ? "تم الرفع" : "Uploaded"}{fileName ? `: ${fileName}` : ""}
+                      </span>
+                    )}
+                  </div>
                 </div>
-                <div className="flex items-center gap-1">
-                  {req[doc.urlField] && (
-                    <Button size="sm" variant="ghost" className="h-6 px-1.5 text-xs" asChild>
-                      <a href={req[doc.urlField]} target="_blank" rel="noreferrer">{t("docView", l)}</a>
+                <div className="flex flex-wrap items-center gap-2">
+                  {fileUrl && (
+                    <Button size="sm" variant="ghost" className="h-8 px-2.5 text-xs" asChild>
+                      <a href={fileUrl} target="_blank" rel="noreferrer">{t("docView", l)}</a>
                     </Button>
                   )}
                   <label className="cursor-pointer">
@@ -765,39 +1090,40 @@ function ClearanceDetail({ req, onClose, refetch }: { req: any; onClose: () => v
                       onChange={e => {
                         const file = e.target.files?.[0];
                         if (file) handleFileUpload(doc.key, file);
+                        e.target.value = "";
                       }}
                     />
-                    <Button size="sm" variant="outline" className="h-6 px-1.5 text-xs gap-1" asChild>
+                    <Button size="sm" variant="outline" className="h-8 px-2.5 text-xs gap-1.5" asChild>
                       <span>
-                        <Upload size={10} />
-                        {uploading === doc.key ? "..." : req[doc.urlField] ? t("docUpdate", l) : t("docUpload", l)}
+                        <Upload size={12} />
+                        {uploading === doc.key ? "..." : fileUrl ? t("docUpdate", l) : t("docUpload", l)}
                       </span>
                     </Button>
                   </label>
                 </div>
               </div>
-            ))}
+            );})}
           </div>
         </CardContent>
       </Card>
 
       {/* Step 4: Issue Certificate */}
       <Card className={canIssueCert && req.status !== "issued" ? "border-green-300 bg-green-50/30" : ""}>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm flex items-center gap-2">
-            <BadgeCheck size={16} className="text-green-600" />
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2 flex-wrap">
+            <BadgeCheck size={18} className="text-green-600 shrink-0" />
             {t("certStep", l)}
-            {req.status === "issued" && <CheckCircle size={14} className="text-green-600" />}
+            {req.status === "issued" && <CheckCircle size={16} className="text-green-600 shrink-0" />}
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
           {req.status === "issued" ? (
-            <div className="flex items-center justify-between">
-              <div className="text-sm">
-                <span className="text-muted-foreground">{t("certNo", l)} </span>
-                <span className="font-semibold text-green-700">{req.certificateCode}</span>
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-4 bg-green-50 border border-green-200 rounded-lg">
+              <div className="min-w-0">
+                <p className="text-xs text-green-800 font-medium mb-1">{t("certNo", l)}</p>
+                <p className="text-base font-semibold text-green-900 break-all">{req.certificateCode}</p>
               </div>
-              <Button size="sm" variant="outline" onClick={printCertificate} className="gap-1.5 border-green-400 text-green-700">
+              <Button size="sm" variant="outline" onClick={printCertificate} className="gap-1.5 border-green-400 text-green-700 shrink-0 self-start sm:self-auto">
                 <Printer size={14} /> {t("certPrint", l)}
               </Button>
             </div>
@@ -1196,20 +1522,25 @@ export default function ClearancePage() {
 
       {/* Detail Dialog */}
       <Dialog open={detailOpen} onOpenChange={setDetailOpen}>
-        <DialogContent className="max-w-3xl">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <BadgeCheck size={18} className="text-green-600" />
+        <DialogContent
+          className="flex max-h-[92vh] w-[min(96vw,56rem)] max-w-[min(96vw,56rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-[min(96vw,56rem)]"
+          aria-describedby={undefined}
+        >
+          <DialogHeader className="shrink-0 border-b px-6 py-5 text-start">
+            <DialogTitle className="flex items-center gap-2 text-lg">
+              <BadgeCheck size={20} className="text-green-600 shrink-0" />
               {t("detailsTitle", l)}
             </DialogTitle>
           </DialogHeader>
-          {selectedReq && (
-            <ClearanceDetail
-              req={selectedReq}
-              onClose={() => setDetailOpen(false)}
-              refetch={refetch}
-            />
-          )}
+          <div className="flex-1 overflow-y-auto px-6 py-5">
+            {selectedReq && (
+              <ClearanceDetail
+                req={selectedReq}
+                onClose={() => setDetailOpen(false)}
+                refetch={refetch}
+              />
+            )}
+          </div>
         </DialogContent>
       </Dialog>
     </DashboardLayout>
