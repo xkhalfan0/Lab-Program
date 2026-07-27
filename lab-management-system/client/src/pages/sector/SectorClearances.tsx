@@ -1,8 +1,9 @@
 import { useState, useRef } from "react";
 import { trpc } from "@/lib/trpc";
 import { SectorLayout, useSectorLang } from "./SectorLayout";
-import { FileCheck2, CheckCircle2, Clock, Circle, ChevronLeft, ChevronRight, Eye, ExternalLink, Search, X, Plus, Upload, FileText, AlertCircle, Calendar } from "lucide-react";
+import { FileCheck2, CheckCircle2, Clock, ChevronLeft, ChevronRight, Eye, ExternalLink, Search, X, Plus, Upload, FileText, AlertCircle, Calendar, Printer } from "lucide-react";
 import { Loader2 } from "lucide-react";
+import { openClearanceCertificatePrint } from "@/lib/clearanceCertificatePrint";
 
 const CLEARANCE_LETTER_MAX_BYTES = 10 * 1024 * 1024;
 const CLEARANCE_LETTER_ACCEPT = "application/pdf,image/jpeg,image/png,.pdf,.jpg,.jpeg,.png";
@@ -91,6 +92,9 @@ const t = {
     unreadCount: "براءات جديدة",
     allRead: "لا توجد براءات جديدة",
     download: "تحميل",
+    printCertificate: "طباعة براءة الذمة",
+    printCertificateHint: "طباعة الشهادة الرسمية (PDF)",
+    certificateNo: "رقم الشهادة",
     search: "بحث برمز الطلب أو رقم العقد أو اسم العقد...",
     filters: "فلترة",
     clearFilters: "مسح الفلاتر",
@@ -156,6 +160,9 @@ const t = {
     unreadCount: "New clearances",
     allRead: "No new clearances",
     download: "Download",
+    printCertificate: "Print Certificate",
+    printCertificateHint: "Print official clearance certificate (PDF)",
+    certificateNo: "Certificate No.",
     search: "Search by request code, contract no., or contract name...",
     filters: "Filters",
     clearFilters: "Clear Filters",
@@ -545,7 +552,27 @@ export default function SectorClearances() {
                           : "—"}
                       </td>
                       <td className="px-5 py-4">
-                        {c.certificatePdfUrl ? (
+                        {c.status === "issued" && c.certificateCode ? (
+                          <div className="flex flex-col gap-2 min-w-[140px]">
+                            <span className="font-mono text-xs font-semibold" style={{ color: "#047857" }}>
+                              {c.certificateCode}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => openClearanceCertificatePrint(c as any, lang)}
+                              title={T.printCertificateHint}
+                              className="flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm font-semibold transition-all"
+                              style={{
+                                background: "#059669",
+                                border: "none",
+                                color: "#fff",
+                                cursor: "pointer",
+                              }}>
+                              <Printer className="w-4 h-4" />
+                              {T.printCertificate}
+                            </button>
+                          </div>
+                        ) : c.certificatePdfUrl ? (
                           <a
                             href={c.certificatePdfUrl}
                             target="_blank"
@@ -559,7 +586,9 @@ export default function SectorClearances() {
                             <ExternalLink className="w-4 h-4" />
                             {T.download}
                           </a>
-                        ) : "—"}
+                        ) : (
+                          <span style={{ color: "#94a3b8" }}>—</span>
+                        )}
                       </td>
                       <td className="px-5 py-4">
                         {!c.isRead && (

@@ -7,7 +7,9 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { Search, Archive, CheckCircle2, XCircle, FileText, Calendar, User, Hash, Building2, X } from "lucide-react";
+import { Search, Archive, CheckCircle2, XCircle, FileText, Calendar, User, Hash, Building2, X, Printer } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { openClearanceCertificatePrint } from "@/lib/clearanceCertificatePrint";
 
 type Lang = "ar" | "en";
 
@@ -33,6 +35,9 @@ const T = {
   colIssued:    { ar: "تاريخ الإصدار",              en: "Issued Date" },
   statusIssued: { ar: "صادرة",                      en: "Issued" },
   statusRejected:{ ar: "مرفوضة",                   en: "Rejected" },
+  colPrint:     { ar: "طباعة الشهادة",            en: "Print Certificate" },
+  printCert:    { ar: "طباعة براءة الذمة",        en: "Print Clearance" },
+  printCertHint:{ ar: "طباعة الشهادة الرسمية",    en: "Print official certificate" },
   totalShowing: { ar: "إجمالي النتائج:",            en: "Total Results:" },
   totalAmount:  { ar: "إجمالي المبالغ:",            en: "Total Amount:" },
 };
@@ -177,6 +182,7 @@ export default function ClearanceArchive() {
                     <th className="text-start px-4 py-3 font-semibold text-muted-foreground">{t("colStatus", l)}</th>
                     <th className="text-start px-4 py-3 font-semibold text-muted-foreground">{t("colDate", l)}</th>
                     <th className="text-start px-4 py-3 font-semibold text-muted-foreground">{t("colIssued", l)}</th>
+                    <th className="text-start px-4 py-3 font-semibold text-muted-foreground">{t("colPrint", l)}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -250,6 +256,23 @@ export default function ClearanceArchive() {
                           </div>
                         ) : (
                           <span>—</span>
+                        )}
+                      </td>
+                      {/* Print certificate */}
+                      <td className="px-4 py-3">
+                        {r.status === "issued" && r.certificateCode ? (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="gap-1.5 h-8 text-green-700 border-green-300 hover:bg-green-50"
+                            title={t("printCertHint", l)}
+                            onClick={() => openClearanceCertificatePrint(r as any, l)}
+                          >
+                            <Printer className="w-3.5 h-3.5" />
+                            {t("printCert", l)}
+                          </Button>
+                        ) : (
+                          <span className="text-muted-foreground text-xs">—</span>
                         )}
                       </td>
                     </tr>

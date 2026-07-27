@@ -17,8 +17,9 @@ import {
   Plus, CheckCircle, Clock, XCircle, Upload, Printer,
   ChevronRight, FlaskConical,
   AlertTriangle, BadgeCheck, FileCheck, Receipt, ClipboardList, Globe,
-  CheckCircle2,
+  CheckCircle2, FileText, Award,
 } from "lucide-react";
+import { openClearanceCertificatePrint } from "@/lib/clearanceCertificatePrint";
 
 // ─── Task state helpers ─────────────────────────────────────────────────────
 type TaskFilter = "all" | "new" | "incomplete" | "completed";
@@ -119,6 +120,11 @@ const T = {
   certStep:          { ar: "الخطوة 4: إصدار شهادة براءة الذمة",        en: "Step 4: Issue Clearance Certificate" },
   certNo:            { ar: "رقم الشهادة:",                       en: "Certificate No.:" },
   certPrint:         { ar: "طباعة شهادة براءة الذمة",                  en: "Print Certificate" },
+  certPrintOfficial: { ar: "طباعة الشهادة الرسمية (PDF)",            en: "Print Official Certificate (PDF)" },
+  certPrintHint:     { ar: "اطبع الشهادة الرسمية لتسليمها للمقاول أو القطاع", en: "Print the official certificate to hand over to the contractor or sector" },
+  certIssuedTitle:   { ar: "تم إصدار شهادة براءة الذمة",               en: "Clearance Certificate Issued" },
+  certIssuedAt:      { ar: "تاريخ الإصدار:",                         en: "Issued on:" },
+  certViewPrint:     { ar: "عرض وطباعة",                             en: "View & Print" },
   certNotes:         { ar: "ملاحظات إضافية (اختياري)...",        en: "Additional notes (optional)..." },
   certIssue:         { ar: "إصدار شهادة براءة الذمة الرسمية",          en: "Issue Official Certificate" },
   certIssuing:       { ar: "جاري الإصدار...",                    en: "Issuing..." },
@@ -760,76 +766,7 @@ function ClearanceDetail({ req, onClose, refetch }: { req: any; onClose: () => v
   };
 
   const printCertificate = () => {
-    const w = window.open("", "_blank");
-    if (!w) return;
-    const isAr = printLang === "ar";
-    const dir = isAr ? "rtl" : "ltr";
-    const certDate = req.issuedAt
-      ? new Date(req.issuedAt).toLocaleDateString(isAr ? "ar-AE" : "en-AE", { year: "numeric", month: "long", day: "numeric" })
-      : new Date().toLocaleDateString(isAr ? "ar-AE" : "en-AE", { year: "numeric", month: "long", day: "numeric" });
-    const L = {
-      title:       isAr ? "شهادة براءة الذمة" : "Clearance Certificate",
-      labName:     isAr ? "مختبر الإنشاءات والمواد الهندسية" : "Construction Materials & Engineering Laboratory",
-      certNo:      isAr ? "رقم الشهادة:" : "Certificate No.:",
-      issueDate:   isAr ? "تاريخ الإصدار:" : "Issue Date:",
-      contractor:  isAr ? "المقاول:" : "Contractor:",
-      contractNo:  isAr ? "رقم العقد:" : "Contract No.:",
-      project:     isAr ? "اسم المشروع:" : "Project Name:",
-      body:        isAr
-        ? `يشهد مختبر الإنشاءات والمواد الهندسية بأن المقاول <strong>${req.contractorName}</strong> قد أتم سداد جميع رسوم الفحص والاختبار المستحقة عن العقد رقم <strong>${req.contractNumber}</strong>، وبذلك تُصدر هذه الشهادة تأكيداً لبراءة ذمته من أي التزامات مالية تجاه المختبر.`
-        : `The Construction Materials & Engineering Laboratory certifies that contractor <strong>${req.contractorName}</strong> has completed all outstanding testing and inspection fees for contract no. <strong>${req.contractNumber}</strong>. This certificate is issued to confirm clearance of all financial obligations to the laboratory.`,
-      sigManager:  isAr ? "مدير المختبر" : "Laboratory Manager",
-      sigAccountant: isAr ? "المحاسب" : "Accountant",
-      sigContractor: isAr ? "المقاول" : "Contractor",
-    };
-    w.document.write(`<html dir="${dir}"><head><meta charset="UTF-8"><title>${L.title} - ${req.certificateCode}</title>
-    <style>
-      * { box-sizing: border-box; margin: 0; padding: 0; }
-      body { font-family: 'Arial', sans-serif; padding: 40px; color: #1a1a1a; direction: ${dir}; }
-      .header { border-top: 5px solid #1e3a5f; padding-top: 14px; display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; }
-      .lab-name { font-size: 18px; font-weight: 900; color: #1e3a5f; }
-      .lab-sub { font-size: 11px; color: #666; margin-top: 3px; }
-      .logo { width: 55px; height: 55px; border-radius: 50%; border: 3px solid #1e3a5f; display: flex; align-items: center; justify-content: center; font-size: 24px; font-weight: 900; color: #1e3a5f; }
-      .doc-ref { font-size: 11px; color: #555; text-align: ${isAr ? "left" : "right"}; line-height: 2; }
-      .title-bar { background: #1e3a5f; color: white; text-align: center; padding: 14px 0; margin: 0 0 20px; }
-      .title-main { font-size: 20px; font-weight: bold; letter-spacing: 2px; }
-      .title-sub { font-size: 11px; color: #aac4e8; margin-top: 4px; letter-spacing: 2px; text-transform: uppercase; }
-      .info-box { border: 1px solid #ccc; padding: 14px 18px; margin-bottom: 20px; font-size: 13px; line-height: 2.2; }
-      .info-row { display: flex; gap: 10px; }
-      .info-label { color: #666; min-width: 130px; }
-      .info-value { font-weight: 600; }
-      .body-text { font-size: 14px; line-height: 2; text-align: justify; padding: 20px; background: #f9f9f9; border: 1px solid #e0e0e0; border-radius: 4px; margin-bottom: 20px; }
-      .footer { margin-top: 50px; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; }
-      .sig-box { text-align: center; padding-top: 45px; border-top: 1px solid #555; font-size: 11px; color: #444; }
-      .sig-title { font-weight: bold; }
-      @media print { body { padding: 25px; } }
-    </style></head><body>
-    <div class="header">
-      <div><div class="lab-name">${L.labName}</div><div class="lab-sub">${isAr ? "Construction Materials & Engineering Laboratory" : "مختبر الإنشاءات والمواد الهندسية"}</div></div>
-      <div class="logo">م</div>
-      <div class="doc-ref">
-        <div><strong>${L.certNo}</strong> ${req.certificateCode ?? "—"}</div>
-        <div><strong>${L.issueDate}</strong> ${certDate}</div>
-      </div>
-    </div>
-    <div class="title-bar">
-      <div class="title-main">${L.title}</div>
-      <div class="title-sub">${isAr ? "Clearance Certificate" : "شهادة براءة الذمة"}</div>
-    </div>
-    <div class="info-box">
-      <div class="info-row"><span class="info-label">${L.contractor}</span><span class="info-value">${req.contractorName ?? "—"}</span></div>
-      <div class="info-row"><span class="info-label">${L.contractNo}</span><span class="info-value">${req.contractNumber ?? "—"}</span></div>
-      <div class="info-row"><span class="info-label">${L.project}</span><span class="info-value">${req.contractName ?? "—"}</span></div>
-    </div>
-    <div class="body-text">${L.body}</div>
-    <div class="footer">
-      <div class="sig-box"><div class="sig-title">${L.sigManager}</div></div>
-      <div class="sig-box"><div class="sig-title">${L.sigAccountant}</div></div>
-      <div class="sig-box"><div class="sig-title">${L.sigContractor}</div></div>
-    </div>
-    </body></html>`);
-    w.document.close();
-    w.print();
+    openClearanceCertificatePrint(req, printLang);
   };
 
   const allDocsUploaded = DOCS.filter(d => ["contractorLetter", "sectorLetter", "paymentReceipt"].includes(d.key))
@@ -873,6 +810,38 @@ function ClearanceDetail({ req, onClose, refetch }: { req: any; onClose: () => v
           </div>
         </div>
       </div>
+
+      {/* Issued certificate banner */}
+      {req.status === "issued" && req.certificateCode && (
+        <div className="rounded-xl border-2 border-green-300 bg-gradient-to-br from-green-50 to-emerald-50 overflow-hidden">
+          <div className="px-5 py-4 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+            <div className="flex items-start gap-4 min-w-0">
+              <div className="w-12 h-12 rounded-full bg-green-600 flex items-center justify-center shrink-0">
+                <Award className="w-6 h-6 text-white" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-sm font-bold text-green-900">{t("certIssuedTitle", l)}</p>
+                <p className="text-lg font-mono font-bold text-green-800 mt-1 break-all">{req.certificateCode}</p>
+                <p className="text-xs text-green-700 mt-1">
+                  {t("certIssuedAt", l)}{" "}
+                  {req.certificateIssuedAt
+                    ? new Date(req.certificateIssuedAt).toLocaleDateString(l === "ar" ? "ar-AE" : "en-AE", { year: "numeric", month: "long", day: "numeric" })
+                    : "—"}
+                </p>
+                <p className="text-xs text-green-600 mt-2">{t("certPrintHint", l)}</p>
+              </div>
+            </div>
+            <Button
+              size="lg"
+              onClick={printCertificate}
+              className="gap-2 bg-green-700 hover:bg-green-800 shrink-0 self-start lg:self-auto"
+            >
+              <Printer size={18} />
+              {t("certPrintOfficial", l)}
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* Print language selector */}
       <div className="flex flex-wrap items-center gap-2 p-3 bg-muted/30 rounded-lg border">
@@ -1118,14 +1087,38 @@ function ClearanceDetail({ req, onClose, refetch }: { req: any; onClose: () => v
         </CardHeader>
         <CardContent className="space-y-3">
           {req.status === "issued" ? (
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-4 bg-green-50 border border-green-200 rounded-lg">
-              <div className="min-w-0">
-                <p className="text-xs text-green-800 font-medium mb-1">{t("certNo", l)}</p>
-                <p className="text-base font-semibold text-green-900 break-all">{req.certificateCode}</p>
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-4 bg-green-50 border border-green-200 rounded-lg">
+                <div>
+                  <p className="text-xs text-green-800 font-medium mb-1">{t("certNo", l)}</p>
+                  <p className="text-base font-semibold font-mono text-green-900 break-all">{req.certificateCode}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-green-800 font-medium mb-1">{t("certIssuedAt", l)}</p>
+                  <p className="text-base font-semibold text-green-900">
+                    {req.certificateIssuedAt
+                      ? new Date(req.certificateIssuedAt).toLocaleDateString(l === "ar" ? "ar-AE" : "en-AE", { year: "numeric", month: "long", day: "numeric" })
+                      : "—"}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-green-800 font-medium mb-1">{t("colContractor", l)}</p>
+                  <p className="text-sm font-semibold text-green-900">{req.contractorName ?? "—"}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-green-800 font-medium mb-1">{t("colTotal", l)}</p>
+                  <p className="text-sm font-bold text-green-900">{Number(req.totalAmount).toFixed(2)} AED</p>
+                </div>
               </div>
-              <Button size="sm" variant="outline" onClick={printCertificate} className="gap-1.5 border-green-400 text-green-700 shrink-0 self-start sm:self-auto">
-                <Printer size={14} /> {t("certPrint", l)}
-              </Button>
+              <div className="flex flex-col sm:flex-row gap-3">
+                <Button onClick={printCertificate} className="gap-2 flex-1 bg-green-700 hover:bg-green-800 h-11">
+                  <Printer size={18} /> {t("certPrintOfficial", l)}
+                </Button>
+                <Button variant="outline" onClick={printCertificate} className="gap-2 flex-1 h-11 border-green-400 text-green-800 hover:bg-green-50">
+                  <FileText size={18} /> {t("certViewPrint", l)}
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground text-center">{t("certPrintHint", l)}</p>
             </div>
           ) : (
             <div className="space-y-2">
@@ -1503,10 +1496,23 @@ export default function ClearancePage() {
                               {new Date(req.createdAt).toLocaleDateString(l === "ar" ? "ar-AE" : "en-AE")}
                             </td>
                             <td className="px-4 py-2.5">
-                              <Button size="sm" variant="outline" className="h-7 px-2.5 text-xs gap-1" onClick={() => openDetail(req)}>
-                                <ChevronRight size={12} />
-                                {t("details", l)}
-                              </Button>
+                              <div className="flex flex-wrap gap-1.5">
+                                {req.status === "issued" && req.certificateCode && (
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="h-7 px-2.5 text-xs gap-1 text-green-700 border-green-300 hover:bg-green-50"
+                                    onClick={() => openClearanceCertificatePrint(req, l)}
+                                  >
+                                    <Printer size={12} />
+                                    {t("certPrint", l)}
+                                  </Button>
+                                )}
+                                <Button size="sm" variant="outline" className="h-7 px-2.5 text-xs gap-1" onClick={() => openDetail(req)}>
+                                  <ChevronRight size={12} />
+                                  {t("details", l)}
+                                </Button>
+                              </div>
                             </td>
                           </tr>
                         ))}
