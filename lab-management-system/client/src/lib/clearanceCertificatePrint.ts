@@ -44,9 +44,6 @@ export function buildClearanceCertificateHtml(
   const align = isAr ? "right" : "left";
   const inventory = (Array.isArray(req.inventoryData) ? req.inventoryData : []) as any[];
 
-  const testCount = Number(req.totalTests ?? inventory.length);
-  const passedCount = Number(req.passedTests ?? inventory.filter((i) => i.result === "pass").length);
-  const failedCount = Number(req.failedTests ?? inventory.filter((i) => i.result === "fail").length);
   const totalAmount = Number(req.totalAmount ?? inventory.reduce((s, i) => s + Number(i.price ?? 0), 0));
   const amountFormatted = `${totalAmount.toFixed(2)} ${isAr ? "درهم إ.م" : "AED"}`;
 
@@ -88,9 +85,6 @@ export function buildClearanceCertificateHtml(
     pass: isAr ? "مطابق" : "PASS",
     fail: isAr ? "غير مطابق" : "FAIL",
     pending: isAr ? "قيد الفحص" : "Pending",
-    tests: isAr ? "الاختبارات" : "Tests",
-    passLabel: isAr ? "مطابق" : "Pass",
-    failLabel: isAr ? "غير مطابق" : "Fail",
     body: isAr
       ? `يشهد ${LAB_PRINT_BRANDING.nameAr} بأن المقاول <strong>${req.contractorName ?? "—"}</strong> قد أتمّ جميع إجراءات الفحص والاختبار المتعلقة بالعقد رقم <strong>${req.contractNumber ?? "—"}</strong> للمشروع <strong>${req.contractName ?? "—"}</strong>، وأن جميع الاختبارات المنجزة قد اجتازت مراجعة ضبط الجودة، كما تم سداد جميع الرسوم المستحقة البالغة <strong>${amountFormatted}</strong>. وبناءً على ذلك، تُصدر هذه الشهادة تأكيداً لبراءة ذمته من أي التزامات مالية أو فنية تجاه المختبر فيما يخص هذا العقد.`
       : `The ${LAB_PRINT_BRANDING.nameEn} certifies that contractor <strong>${req.contractorName ?? "—"}</strong> has completed all testing and inspection procedures for contract no. <strong>${req.contractNumber ?? "—"}</strong> (${req.contractName ?? "—"}). All completed tests have passed quality control review, and all outstanding fees totaling <strong>${amountFormatted}</strong> have been paid. This certificate confirms clearance of all financial and technical obligations to the laboratory for this contract.`,
@@ -159,18 +153,6 @@ export function buildClearanceCertificateHtml(
     }
     .title-bar h1 { font-size: 14px; font-weight: 700; }
     .title-bar p { font-size: 12px; color: #f3f4f6; margin-top: 2px; letter-spacing: 0.06em; }
-
-    /* ── Reference bar ── */
-    .ref-bar {
-      display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px;
-      text-align: center; margin-bottom: 16px;
-    }
-    .ref-item { padding: 4px 8px; }
-    .ref-label {
-      font-size: 13px; font-weight: 800; color: #0f172a; text-transform: uppercase;
-      letter-spacing: 0.04em; display: block; margin-bottom: 4px;
-    }
-    .ref-value { font-size: 12px; font-weight: 600; color: #334155; font-family: ui-monospace, monospace; }
 
     /* ── Info sections (matches report-info-section) ── */
     .info-section { margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid #e5e7eb; }
@@ -250,25 +232,6 @@ export function buildClearanceCertificateHtml(
     <div class="title-bar">
       <h1>${L.docTitle}</h1>
       <p>${L.docTitleSub}</p>
-    </div>
-
-    <div class="ref-bar">
-      <div class="ref-item">
-        <span class="ref-label">${L.tests}</span>
-        <span class="ref-value">${testCount}</span>
-      </div>
-      <div class="ref-item">
-        <span class="ref-label">${L.passLabel}</span>
-        <span class="ref-value result-pass">${passedCount}</span>
-      </div>
-      <div class="ref-item">
-        <span class="ref-label">${L.failLabel}</span>
-        <span class="ref-value result-fail">${failedCount}</span>
-      </div>
-      <div class="ref-item">
-        <span class="ref-label">${L.amountPaid}</span>
-        <span class="ref-value">${amountFormatted}</span>
-      </div>
     </div>
 
     <div class="info-section">
