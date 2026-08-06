@@ -94,6 +94,8 @@ import {
   validateSoilTestOrder,
 } from "@/lib/soilTestReception";
 import { calcActualAgeDays } from "@shared/concreteCubeBs1881";
+import { TaxBreakdown } from "@/components/TaxBreakdown";
+import { useLabTaxSettings } from "@/hooks/useLabTaxSettings";
 
 // ─── Sub-type options per test CODE ─────────────────────────────────────────
 const SUBTYPES_BY_CODE: Record<string, { value: string; labelAr: string; labelEn: string }[]> = {
@@ -340,6 +342,7 @@ function ReceptionOrderActionsCell({
 
 export default function Reception() {
   const { t, lang, dir } = useLanguage();
+  const { vatRate } = useLabTaxSettings();
   const [receptionMode, setReceptionMode] = useState<"new" | "retest">("new");
   const { user } = useAuth();
   const canEditSample = ["admin", "lab_manager", "reception"].includes(user?.role ?? "");
@@ -2057,9 +2060,8 @@ export default function Reception() {
                         <span className="text-muted-foreground">{lang === "ar" ? "الاختبارات" : "Tests"}</span>
                         <span className="font-medium">{selectedTests.length || "—"}</span>
                       </div>
-                      <div className="flex justify-between gap-2 pt-3 border-t text-lg font-semibold">
-                        <span>{lang === "ar" ? "الإجمالي" : "Total"}</span>
-                        <span className="text-primary">{totalPrice > 0 ? `${totalPrice.toFixed(0)} AED` : "—"}</span>
+                      <div className="pt-3 border-t">
+                        <TaxBreakdown subtotal={totalPrice} vatRate={vatRate} lang={lang as "ar" | "en"} size="lg" />
                       </div>
                     </div>
                     {focusedStep < 4 && (

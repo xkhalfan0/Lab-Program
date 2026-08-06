@@ -94,6 +94,8 @@ import {
   createContractor,
   updateContractor,
   deleteContractor,
+  getLabSettings,
+  updateLabSettings,
   getAllContracts,
   getContractsWithContractor,
   getContractById,
@@ -2210,6 +2212,7 @@ ${testSummaries.length > 0 ? testSummaries.join("\n\n") : "لم تُجرَ اخ�
         email: z.string().optional(),
         address: z.string().optional(),
         contractorCode: z.string().optional(),
+        trn: z.string().max(15).optional(),
       }))
       .mutation(async ({ ctx, input }) => {
         requireRole(ctx.user.role, ["admin", "qc_inspector"]);
@@ -2226,6 +2229,7 @@ ${testSummaries.length > 0 ? testSummaries.join("\n\n") : "لم تُجرَ اخ�
         email: z.string().optional(),
         address: z.string().optional(),
         contractorCode: z.string().optional(),
+        trn: z.string().max(15).nullable().optional(),
         isActive: z.boolean().optional(),
       }))
       .mutation(async ({ ctx, input }) => {
@@ -2504,7 +2508,10 @@ ${testSummaries.length > 0 ? testSummaries.join("\n\n") : "لم تُجرَ اخ�
     getById: protectedProcedure
       .input(z.object({ id: z.number() }))
       .query(async ({ input }) => {
-        return getClearanceRequestById(input.id);
+        const req = await getClearanceRequestById(input.id);
+        if (!req) return null;
+        const contractor = await getContractorById(req.contractorId);
+        return { ...req, contractorTrn: contractor?.trn ?? null };
       }),
     getByContract: protectedProcedure
       .input(z.object({ contractId: z.number() }))
@@ -3832,6 +3839,30 @@ ${testSummaries.length > 0 ? testSummaries.join("\n\n") : "لم تُجرَ اخ�
       await markAllNotificationsRead(ctx.user.id);
       return { success: true };
     }),
+  }),
+
+  // ─── Lab Settings (VAT, TRN) ────────────────────────────────────────────────
+  labSettings: router({
+    get: protectedProcedure.query(async () => {
+      const settings = await getLabSettings();
+      return {
+        vatRate: Number(settings.vatRate ?? 0.05),
+        labTrn: settings.labTrn ?? null,
+      };
+    }),
+    update: protectedProcedure
+      .input(z.object({
+        vatRate: z.number().min(0).max(1).optional(),
+        labTrn: z.string().max(15).nullable().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        requireRole(ctx.user.role, ["admin", "lab_manager"]);
+        const payload: { vatRate?: string; labTrn?: string | null } = {};
+        if (input.vatRate !== undefined) payload.vatRate = input.vatRate.toFixed(4);
+        if (input.labTrn !== undefined) payload.labTrn = input.labTrn;
+        await updateLabSettings(payload);
+        return { success: true };
+      }),
   }),
 });
 

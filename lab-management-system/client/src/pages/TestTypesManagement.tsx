@@ -138,7 +138,7 @@ function ContractorsTab() {
   const { lang } = useLanguage();
   const [showDialog, setShowDialog] = useState(false);
   const [editItem, setEditItem] = useState<any>(null);
-  const [form, setForm] = useState({ nameEn: "", nameAr: "", contactPerson: "", phone: "", email: "", address: "", contractorCode: "" });
+  const [form, setForm] = useState({ nameEn: "", nameAr: "", contactPerson: "", phone: "", email: "", address: "", contractorCode: "", trn: "" });
 
   const { data: list = [], refetch } = trpc.contractors.list.useQuery();
   const createMut = trpc.contractors.create.useMutation({ onSuccess: () => { refetch(); setShowDialog(false); toast.success(lang === "ar" ? "تم إضافة المقاول" : "Contractor added"); } });
@@ -147,13 +147,13 @@ function ContractorsTab() {
 
   const openCreate = () => {
     setEditItem(null);
-    setForm({ nameEn: "", nameAr: "", contactPerson: "", phone: "", email: "", address: "", contractorCode: "" });
+    setForm({ nameEn: "", nameAr: "", contactPerson: "", phone: "", email: "", address: "", contractorCode: "", trn: "" });
     setShowDialog(true);
   };
 
   const openEdit = (c: any) => {
     setEditItem(c);
-    setForm({ nameEn: c.nameEn, nameAr: c.nameAr || "", contactPerson: c.contactPerson || "", phone: c.phone || "", email: c.email || "", address: c.address || "", contractorCode: c.contractorCode || "" });
+    setForm({ nameEn: c.nameEn, nameAr: c.nameAr || "", contactPerson: c.contactPerson || "", phone: c.phone || "", email: c.email || "", address: c.address || "", contractorCode: c.contractorCode || "", trn: c.trn || "" });
     setShowDialog(true);
   };
 
@@ -162,7 +162,7 @@ function ContractorsTab() {
     if (!form.nameAr.trim()) { toast.error("اسم الشركة بالعربي مطلوب"); return; }
     // Auto-generate contractorCode if empty
     const code = form.contractorCode.trim() || `CONT-${Date.now().toString().slice(-5)}`;
-    const payload = { ...form, contractorCode: code };
+    const payload = { ...form, contractorCode: code, trn: form.trn.trim() || undefined };
     if (editItem) updateMut.mutate({ id: editItem.id, ...payload });
     else createMut.mutate(payload);
   };
@@ -196,6 +196,7 @@ function ContractorsTab() {
                 {c.phone && <div className="flex items-center gap-2"><Phone className="w-3.5 h-3.5" />{c.phone}</div>}
                 {c.email && <div className="flex items-center gap-2"><Mail className="w-3.5 h-3.5" />{c.email}</div>}
                 {c.address && <div className="flex items-center gap-2"><Building2 className="w-3.5 h-3.5" />{c.address}</div>}
+                {c.trn && <div className="flex items-center gap-2 font-mono text-xs"><span className="text-foreground/70">TRN:</span>{c.trn}</div>}
               </div>
             </CardContent>
           </Card>
@@ -241,6 +242,19 @@ function ContractorsTab() {
                 <Label>{lang === "ar" ? "البريد الإلكتروني" : "Email"}</Label>
                 <Input type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} />
               </div>
+            </div>
+            <div>
+              <Label>{lang === "ar" ? "الرقم الضريبي (TRN)" : "Tax Registration No. (TRN)"}</Label>
+              <Input
+                value={form.trn}
+                onChange={e => setForm(f => ({ ...f, trn: e.target.value.replace(/\D/g, "").slice(0, 15) }))}
+                placeholder="15 digits"
+                className="font-mono"
+                maxLength={15}
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                {lang === "ar" ? "مطلوب على الشهادات ≥ 10,000 درهم" : "Required on certificates ≥ AED 10,000"}
+              </p>
             </div>
             <div>
               <Label>{lang === "ar" ? "العنوان" : "Address"}</Label>

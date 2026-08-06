@@ -398,6 +398,7 @@ export const contractors = mysqlTable("contractors", {
   email: varchar("email", { length: 320 }),
   address: text("address"),
   contractorCode: varchar("contractorCode", { length: 64 }).unique(),
+  trn: varchar("trn", { length: 15 }),
   isActive: boolean("isActive").default(true).notNull(),
   deletedAt: timestamp("deletedAt"),
   deletedBy: int("deletedBy"),
@@ -407,6 +408,16 @@ export const contractors = mysqlTable("contractors", {
 
 export type Contractor = typeof contractors.$inferSelect;
 export type InsertContractor = typeof contractors.$inferInsert;
+
+// ─── Lab Settings (VAT, TRN) ─────────────────────────────────────────────────
+export const labSettings = mysqlTable("lab_settings", {
+  id: int("id").autoincrement().primaryKey(),
+  vatRate: decimal("vatRate", { precision: 6, scale: 4 }).default("0.0500").notNull(),
+  labTrn: varchar("labTrn", { length: 15 }),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type LabSettings = typeof labSettings.$inferSelect;
 
 // ─── Contracts ────────────────────────────────────────────────────────────────
 // Each contract links a contract number and name to a contractor

@@ -1,4 +1,12 @@
 import { LAB_PRINT_BRANDING } from "@/lib/labPrintBranding";
+import {
+  calculateTax,
+  buildTaxSummaryHtml,
+  requiresContractorTrn,
+  TAX_PRINT_CSS,
+  type TaxPrintOptions,
+  DEFAULT_VAT_RATE,
+} from "@shared/tax";
 
 export type ClearancePrintLang = "ar" | "en";
 
@@ -18,6 +26,7 @@ export type ClearanceCertificateRequest = {
   paymentReceiptNumber?: string | null;
   notes?: string | null;
   inventoryData?: unknown;
+  contractorTrn?: string | null;
 };
 
 function formatDate(value: Date | string | null | undefined, isAr: boolean) {
@@ -37,15 +46,24 @@ function resultCell(result: string, L: { pass: string; fail: string; pending: st
 
 export function buildClearanceCertificateHtml(
   req: ClearanceCertificateRequest,
-  printLang: ClearancePrintLang = "ar"
+  printLang: ClearancePrintLang = "ar",
+  taxOptions: TaxPrintOptions = {}
 ): string {
   const isAr = printLang === "ar";
   const dir = isAr ? "rtl" : "ltr";
   const align = isAr ? "right" : "left";
   const inventory = (Array.isArray(req.inventoryData) ? req.inventoryData : []) as any[];
 
-  const totalAmount = Number(req.totalAmount ?? inventory.reduce((s, i) => s + Number(i.price ?? 0), 0));
-  const amountFormatted = `${totalAmount.toFixed(2)} ${isAr ? "درهم إ.م" : "AED"}`;
+  const vatRate = taxOptions.vatRate ?? DEFAULT_VAT_RATE;
+  const subtotal = Number(req.totalAmount ?? inventory.reduce((s, i) => s + Number(i.price ?? 0), 0));
+  const tax = calculateTax(subtotal, vatRate);
+  const amountFormatted = `${tax.total.toFixed(2)} ${isAr ? "درهم إ.م" : "AED"}`;
+  const taxSummaryHtml = buildTaxSummaryHtml(subtotal, {
+    ...taxOptions,
+    vatRate,
+    isAr,
+    contractorTrn: req.contractorTrn ?? taxOptions.contractorTrn,
+  });
 
   const certDate = formatDate(req.certificateIssuedAt ?? null, isAr);
   const poDate = formatDate(req.paymentOrderDate ?? null, isAr);
@@ -73,7 +91,8 @@ export function buildClearanceCertificateHtml(
     poNo: isAr ? "رقم أمر الدفع" : "Payment Order No.",
     poDate: isAr ? "تاريخ أمر الدفع" : "Payment Order Date",
     receiptNo: isAr ? "رقم وصل الدفع" : "Payment Receipt No.",
-    amountPaid: isAr ? "المبلغ المسدَّد" : "Amount Paid",
+    amountPaid: isAr ? "المبلغ المسدَّد (شامل الضريبة)" : "Amount Paid (incl. VAT)",
+    taxSummary: isAr ? "تفاصيل المبالغ والضريبة" : "Amount & VAT Summary",
     summaryTitle: isAr ? "ملخص الطلب" : "Request Summary",
     servicesTitle: isAr ? "ملخص الاختبارات المنجزة" : "Completed Tests Summary",
     statementTitle: isAr ? "نص الشهادة" : "Certificate Statement",
@@ -208,6 +227,7 @@ export function buildClearanceCertificateHtml(
     }
 
     @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
+    ${TAX_PRINT_CSS}
   </style>
 </head>
 <body>
@@ -262,6 +282,11 @@ export function buildClearanceCertificateHtml(
           </tr>
         </tbody>
       </table>
+      <h3 class="section-heading" style="margin-top:12px;font-size:13px">${L.taxSummary}</h3>
+      ${taxSummaryHtml}
+      ${requiresContractorTrn(tax.total) && !(req.contractorTrn ?? taxOptions.contractorTrn)
+        ? `<p class="notes-text" style="margin-top:8px;color:#b45309">${isAr ? "ملاحظة: المبلغ ≥ 10,000 درهم — يُفضَّل تسجيل الرقم الضريبي للمقاول." : "Note: Amount ≥ AED 10,000 — contractor TRN should be on file."}</p>`
+        : ""}
     </div>
 
     <div class="info-section">
@@ -302,11 +327,12 @@ export function buildClearanceCertificateHtml(
 
 export function openClearanceCertificatePrint(
   req: ClearanceCertificateRequest,
-  printLang: ClearancePrintLang = "ar"
+  printLang: ClearancePrintLang = "ar",
+  taxOptions: TaxPrintOptions = {}
 ) {
   const w = window.open("", "_blank");
   if (!w) return false;
-  w.document.write(buildClearanceCertificateHtml(req, printLang));
+  w.document.write(buildClearanceCertificateHtml(req, printLang, taxOptions));
   w.document.close();
   w.focus();
   w.print();

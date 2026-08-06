@@ -20,6 +20,15 @@ import {
   CheckCircle2, FileText, Award,
 } from "lucide-react";
 import { openClearanceCertificatePrint } from "@/lib/clearanceCertificatePrint";
+import { TaxBreakdown } from "@/components/TaxBreakdown";
+import { useLabTaxSettings } from "@/hooks/useLabTaxSettings";
+import {
+  calculateTax,
+  buildTaxSummaryHtml,
+  TAX_PRINT_CSS,
+  type TaxPrintOptions,
+  DEFAULT_VAT_RATE,
+} from "@shared/tax";
 
 // ─── Task state helpers ─────────────────────────────────────────────────────
 type TaskFilter = "all" | "new" | "incomplete" | "completed";
@@ -231,9 +240,12 @@ function StatusBadge({ status, lang }: { status: string; lang: Lang }) {
   );
 }
 // ─── Print helpers ──────────────────────────────────────────────────────────────────────────────────────
-function buildInventoryHtml(req: any, inventory: any[], printLang: Lang): string {
+function buildInventoryHtml(req: any, inventory: any[], printLang: Lang, taxOptions: TaxPrintOptions = {}): string {
   const isAr = printLang === "ar";
   const dir = isAr ? "rtl" : "ltr";
+  const vatRate = taxOptions.vatRate ?? DEFAULT_VAT_RATE;
+  const subtotal = Number(req.totalAmount ?? inventory.reduce((s, i) => s + Number(i.price ?? 0), 0));
+  const tax = calculateTax(subtotal, vatRate);
   const today = new Date().toLocaleDateString(isAr ? "ar-AE" : "en-AE", { year: "numeric", month: "long", day: "numeric" });
   const rows = inventory.map((item: any, i: number) => {
     const testName = isAr ? (item.testNameAr || item.testName) : (item.testName || item.testNameAr);
@@ -263,6 +275,7 @@ function buildInventoryHtml(req: any, inventory: any[], printLang: Lang): string
     .fail { color: #dc2626; font-weight: 600; }
     .total-row { background: #1e3a5f !important; }
     .total-row td { color: white; font-weight: bold; border: none; }
+    ${TAX_PRINT_CSS}
     @media print { body { padding: 20px; } }
   </style></head><body>
   <div class="header">
@@ -286,13 +299,21 @@ function buildInventoryHtml(req: any, inventory: any[], printLang: Lang): string
   </tr></thead><tbody>
     ${rows}
     <tr class="total-row">
+      <td colspan="5" style="text-align:${isAr ? "right" : "left"}">${isAr ? "المجموع الفرعي:" : "Subtotal:"}</td>
+      <td>${tax.subtotal.toFixed(2)} ${isAr ? "درهم" : "AED"}</td>
+    </tr>
+    <tr class="total-row">
+      <td colspan="5" style="text-align:${isAr ? "right" : "left"}">${isAr ? `ض.ق.م (${(vatRate * 100).toFixed(0)}%):` : `VAT (${(vatRate * 100).toFixed(0)}%):`}</td>
+      <td>${tax.vat.toFixed(2)} ${isAr ? "درهم" : "AED"}</td>
+    </tr>
+    <tr class="total-row">
       <td colspan="5" style="text-align:${isAr ? "right" : "left"}">${isAr ? "الإجمالي:" : "Total:"}</td>
-      <td>${Number(req.totalAmount).toFixed(2)} ${isAr ? "درهم" : "AED"}</td>
+      <td>${tax.total.toFixed(2)} ${isAr ? "درهم" : "AED"}</td>
     </tr>
   </tbody></table>
   </body></html>`;
 }
-function buildPaymentOrderHtml(req: any, inventory: any[], printLang: Lang): string {
+function buildPaymentOrderHtml(req: any, inventory: any[], printLang: Lang, taxOptions: TaxPrintOptions = {}): string {
   const isAr = printLang === "ar";
   const dir = isAr ? "rtl" : "ltr";
   const align = isAr ? "right" : "left";
@@ -311,8 +332,16 @@ function buildPaymentOrderHtml(req: any, inventory: any[], printLang: Lang): str
   const passedCount = Number(req.passedTests ?? inventory.filter((i) => i.result === "pass").length);
   const failedCount = Number(req.failedTests ?? inventory.filter((i) => i.result === "fail").length);
   const testCount = Number(req.totalTests ?? inventory.length);
-  const totalAmount = Number(req.totalAmount ?? inventory.reduce((s, i) => s + Number(i.price ?? 0), 0));
-  const amountFormatted = `${totalAmount.toFixed(2)} ${isAr ? "درهم إ.م" : "AED"}`;
+  const vatRate = taxOptions.vatRate ?? DEFAULT_VAT_RATE;
+  const subtotal = Number(req.totalAmount ?? inventory.reduce((s, i) => s + Number(i.price ?? 0), 0));
+  const tax = calculateTax(subtotal, vatRate);
+  const amountFormatted = `${tax.total.toFixed(2)} ${isAr ? "درهم إ.م" : "AED"}`;
+  const taxSummaryHtml = buildTaxSummaryHtml(subtotal, {
+    ...taxOptions,
+    vatRate,
+    isAr,
+    contractorTrn: req.contractorTrn ?? taxOptions.contractorTrn,
+  });
 
   const L = {
     docTitle: isAr ? "أمر الدفع" : "Payment Order",
@@ -590,6 +619,7 @@ function buildPaymentOrderHtml(req: any, inventory: any[], printLang: Lang): str
     @media print {
       body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     }
+    ${TAX_PRINT_CSS}
   </style>
 </head>
 <body>
@@ -667,6 +697,7 @@ function buildPaymentOrderHtml(req: any, inventory: any[], printLang: Lang): str
       <span class="label">${L.totalLabel}</span>
       <span class="amount">${amountFormatted}</span>
     </div>
+    ${taxSummaryHtml}
 
     <div class="instructions">
       <h3>${L.instrTitle}</h3>
@@ -705,6 +736,7 @@ function buildPaymentOrderHtml(req: any, inventory: any[], printLang: Lang): str
 function ClearanceDetail({ req, onClose, refetch }: { req: any; onClose: () => void; refetch: () => void }) {
   const { lang } = useLanguage();
   const l = lang as Lang;
+  const { vatRate, labTrn } = useLabTaxSettings();
   const utils = trpc.useUtils();
   const [notes, setNotes] = useState(req.notes ?? "");
   const [uploading, setUploading] = useState<string | null>(null);
@@ -739,6 +771,13 @@ function ClearanceDetail({ req, onClose, refetch }: { req: any; onClose: () => v
     onError: (e) => { toast.error(e.message); setSavingReceipt(false); },
   });
   const inventory = (req.inventoryData ?? []) as any[];
+  const subtotal = Number(req.totalAmount ?? inventory.reduce((s, i) => s + Number(i.price ?? 0), 0));
+  const tax = calculateTax(subtotal, vatRate);
+  const taxPrintOptions: TaxPrintOptions = {
+    vatRate,
+    labTrn,
+    contractorTrn: req.contractorTrn ?? null,
+  };
 
   const handleFileUpload = async (docType: string, file: File) => {
     setUploading(docType);
@@ -760,13 +799,13 @@ function ClearanceDetail({ req, onClose, refetch }: { req: any; onClose: () => v
   const printPaymentOrder = () => {
     const w = window.open("", "_blank");
     if (!w) return;
-    w.document.write(buildPaymentOrderHtml(req, inventory, printLang));
+    w.document.write(buildPaymentOrderHtml(req, inventory, printLang, taxPrintOptions));
     w.document.close();
     w.print();
   };
 
   const printCertificate = () => {
-    openClearanceCertificatePrint(req, printLang);
+    openClearanceCertificatePrint(req, printLang, taxPrintOptions);
   };
 
   const allDocsUploaded = DOCS.filter(d => ["contractorLetter", "sectorLetter", "paymentReceipt"].includes(d.key))
@@ -805,8 +844,8 @@ function ClearanceDetail({ req, onClose, refetch }: { req: any; onClose: () => v
             <span className="text-green-600 font-semibold">({req.passedTests ?? 0}✓)</span>
             {(req.failedTests ?? 0) > 0 && <span className="text-red-600 font-semibold">({req.failedTests}✗)</span>}
           </div>
-          <div className="text-sm font-bold text-blue-700 whitespace-nowrap">
-            {Number(req.totalAmount).toFixed(2)} AED
+          <div className="text-sm font-bold text-blue-700 whitespace-nowrap min-w-[140px]">
+            <TaxBreakdown subtotal={subtotal} vatRate={vatRate} lang={l} size="sm" />
           </div>
         </div>
       </div>
@@ -876,7 +915,7 @@ function ClearanceDetail({ req, onClose, refetch }: { req: any; onClose: () => v
                 onClick={() => {
                   const w = window.open("", "_blank");
                   if (!w) return;
-                  w.document.write(buildInventoryHtml(req, inventory, printLang));
+                  w.document.write(buildInventoryHtml(req, inventory, printLang, taxPrintOptions));
                   w.document.close();
                   w.print();
                 }}
@@ -915,8 +954,9 @@ function ClearanceDetail({ req, onClose, refetch }: { req: any; onClose: () => v
                 </tbody>
                 <tfoot>
                   <tr className="bg-muted/50">
-                    <td colSpan={5} className="px-3 py-2 font-bold text-end">{t("invTotal", l)}</td>
-                    <td className="px-3 py-2 font-bold text-blue-700">{Number(req.totalAmount).toFixed(2)}</td>
+                    <td colSpan={6} className="px-3 py-3">
+                      <TaxBreakdown subtotal={subtotal} vatRate={vatRate} lang={l} size="sm" className="max-w-xs ms-auto" />
+                    </td>
                   </tr>
                 </tfoot>
               </table>
@@ -993,7 +1033,7 @@ function ClearanceDetail({ req, onClose, refetch }: { req: any; onClose: () => v
               </div>
               <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg space-y-1">
                 <p className="text-sm text-blue-900 font-medium">{t("payInstructions", l)}</p>
-                <p className="text-sm text-blue-800 leading-relaxed">{t("payInstructionsTxt", l)} <strong>{Number(req.totalAmount).toFixed(2)} AED</strong></p>
+                <p className="text-sm text-blue-800 leading-relaxed">{t("payInstructionsTxt", l)} <strong>{tax.total.toFixed(2)} AED</strong></p>
               </div>
             </div>
           ) : (
@@ -1107,7 +1147,7 @@ function ClearanceDetail({ req, onClose, refetch }: { req: any; onClose: () => v
                 </div>
                 <div>
                   <p className="text-xs text-green-800 font-medium mb-1">{t("colTotal", l)}</p>
-                  <p className="text-sm font-bold text-green-900">{Number(req.totalAmount).toFixed(2)} AED</p>
+                  <TaxBreakdown subtotal={subtotal} vatRate={vatRate} lang={l} size="sm" />
                 </div>
               </div>
               <div className="flex flex-col sm:flex-row gap-3">
@@ -1291,6 +1331,7 @@ function NewClearanceDialog({ onCreated }: { onCreated: () => void }) {
 export default function ClearancePage() {
   const { lang } = useLanguage();
   const l = lang as Lang;
+  const { vatRate } = useLabTaxSettings();
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
   const [taskFilter, setTaskFilter] = useState<TaskFilter>("all");
@@ -1441,7 +1482,9 @@ export default function ClearancePage() {
                               {req.failedTests > 0 && <span className="text-red-600 font-semibold">({req.failedTests}✗)</span>}
                             </span>
                           </td>
-                          <td className="px-4 py-3 text-xs font-semibold text-blue-700">{Number(req.totalAmount).toFixed(2)}</td>
+                          <td className="px-4 py-3 text-xs font-semibold text-blue-700">
+                            {calculateTax(Number(req.totalAmount), vatRate).total.toFixed(2)}
+                          </td>
                           <td className="px-4 py-3"><StatusBadge status={req.status} lang={l} /></td>
                           <td className="px-4 py-3 text-xs text-muted-foreground">
                             {new Date(req.createdAt).toLocaleDateString(l === "ar" ? "ar-AE" : "en-AE")}
@@ -1490,7 +1533,9 @@ export default function ClearancePage() {
                           <tr key={req.id} className="border-b last:border-0 hover:bg-muted/20 transition-colors">
                             <td className="px-4 py-2.5 font-mono text-xs font-semibold text-primary">{req.requestCode}</td>
                             <td className="px-4 py-2.5 text-xs font-medium">{req.contractorName}</td>
-                            <td className="px-4 py-2.5 text-xs font-semibold text-blue-700">{Number(req.totalAmount).toFixed(2)}</td>
+                            <td className="px-4 py-2.5 text-xs font-semibold text-blue-700">
+                              {calculateTax(Number(req.totalAmount), vatRate).total.toFixed(2)}
+                            </td>
                             <td className="px-4 py-2.5"><StatusBadge status={req.status} lang={l} /></td>
                             <td className="px-4 py-2.5 text-xs text-muted-foreground">
                               {new Date(req.createdAt).toLocaleDateString(l === "ar" ? "ar-AE" : "en-AE")}

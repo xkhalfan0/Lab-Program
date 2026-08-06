@@ -17,6 +17,7 @@ import { sdk } from "./sdk";
 import { createAuditLog, getSampleByIdIncludingDeleted, softDeleteSample, getDb } from "../db";
 import { ensureConcreteCubeTestConditionColumns } from "../migrations/ensureConcreteCubeTestConditionColumns";
 import { ensureFoamConcreteTestTypes } from "../migrations/ensureFoamConcreteTestTypes";
+import { ensureLabTaxSettings } from "../migrations/ensureLabTaxSettings";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -43,6 +44,7 @@ async function startServer() {
     try {
       await ensureConcreteCubeTestConditionColumns(db);
       await ensureFoamConcreteTestTypes(db);
+      await ensureLabTaxSettings(db);
     } catch (err) {
       console.error("[schema] concrete_test_groups column ensure failed:", err);
     }

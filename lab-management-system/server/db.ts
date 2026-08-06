@@ -19,6 +19,7 @@ import {
   users,
   testTypes,
   contractors,
+  labSettings,
   contracts,
   specializedTestResults,
   clearanceRequests,
@@ -2029,6 +2030,25 @@ export async function deleteContractor(id: number) {
   const db = await getDb();
   if (!db) throw new Error("DB not available");
   await db.update(contractors).set({ isActive: false, updatedAt: new Date() }).where(eq(contractors.id, id));
+}
+
+// ─── Lab Settings ─────────────────────────────────────────────────────────────
+export async function getLabSettings() {
+  const db = await getDb();
+  if (!db) return { id: 1, vatRate: "0.0500", labTrn: null as string | null, updatedAt: new Date() };
+  const rows = await db.select().from(labSettings).limit(1);
+  if (rows.length === 0) {
+    await db.insert(labSettings).values({ vatRate: "0.0500" });
+    return { id: 1, vatRate: "0.0500", labTrn: null as string | null, updatedAt: new Date() };
+  }
+  return rows[0];
+}
+
+export async function updateLabSettings(data: { vatRate?: string; labTrn?: string | null }) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  const existing = await getLabSettings();
+  await db.update(labSettings).set({ ...data, updatedAt: new Date() }).where(eq(labSettings.id, existing.id));
 }
 
 // ─── Specialized Test Results ─────────────────────────────────────────────────

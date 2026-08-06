@@ -9,6 +9,7 @@ import {
   getDb,
   mysqlRawInsertRow,
   getContractById,
+  getLabSettings,
   getContractorById,
   createClearanceRequest,
   generateClearanceCode,
@@ -617,7 +618,18 @@ export const sectorRouter = router({
           .filter((id: number | null): id is number => id !== null)
       ));
 
-      if (contractIds.length === 0) return { clearances: [], total: 0, unreadCount: 0 };
+      if (contractIds.length === 0) {
+        const labSettings = await getLabSettings();
+        return {
+          clearances: [],
+          total: 0,
+          unreadCount: 0,
+          taxSettings: {
+            vatRate: Number(labSettings.vatRate ?? 0.05),
+            labTrn: labSettings.labTrn ?? null,
+          },
+        };
+      }
 
       const clearances = await db
         .select()
@@ -641,33 +653,47 @@ export const sectorRouter = router({
         ));
       const readIds = new Set(readRecords.map((r: { reportId: number }) => r.reportId));
       const unreadCount = allClearances.filter((c: { id: number }) => !readIds.has(c.id)).length;
+      const labSettings = await getLabSettings();
+      const taxSettings = {
+        vatRate: Number(labSettings.vatRate ?? 0.05),
+        labTrn: labSettings.labTrn ?? null,
+      };
+
+      const enriched = await Promise.all(
+        clearances.map(async (c: any) => {
+          const contractor = await getContractorById(c.contractorId);
+          return {
+            id: c.id,
+            requestCode: c.requestCode,
+            contractNumber: c.contractNumber,
+            contractName: c.contractName,
+            contractorName: c.contractorName,
+            contractorTrn: contractor?.trn ?? null,
+            totalTests: c.totalTests,
+            passedTests: c.passedTests,
+            failedTests: c.failedTests,
+            totalAmount: c.totalAmount,
+            status: c.status,
+            paymentOrderNumber: c.paymentOrderNumber,
+            paymentOrderDate: c.paymentOrderDate,
+            certificateCode: c.certificateCode,
+            certificatePdfUrl: c.certificatePdfUrl,
+            certificateIssuedAt: c.certificateIssuedAt,
+            paymentReceiptNumber: c.paymentReceiptNumber,
+            inventoryData: c.inventoryData,
+            notes: c.notes,
+            createdAt: c.createdAt,
+            updatedAt: c.updatedAt,
+            isRead: readIds.has(c.id),
+          };
+        })
+      );
 
       return {
-        clearances: clearances.map((c: any) => ({
-          id: c.id,
-          requestCode: c.requestCode,
-          contractNumber: c.contractNumber,
-          contractName: c.contractName,
-          contractorName: c.contractorName,
-          totalTests: c.totalTests,
-          passedTests: c.passedTests,
-          failedTests: c.failedTests,
-          totalAmount: c.totalAmount,
-          status: c.status,
-          paymentOrderNumber: c.paymentOrderNumber,
-          paymentOrderDate: c.paymentOrderDate,
-          certificateCode: c.certificateCode,
-          certificatePdfUrl: c.certificatePdfUrl,
-          certificateIssuedAt: c.certificateIssuedAt,
-          paymentReceiptNumber: c.paymentReceiptNumber,
-          inventoryData: c.inventoryData,
-          notes: c.notes,
-          createdAt: c.createdAt,
-          updatedAt: c.updatedAt,
-          isRead: readIds.has(c.id),
-        })),
+        clearances: enriched,
         total: allClearances.length,
         unreadCount,
+        taxSettings,
       };
     }),
 

@@ -559,7 +559,13 @@ export default function SectorClearances() {
                             </span>
                             <button
                               type="button"
-                              onClick={() => openClearanceCertificatePrint(c as any, lang)}
+                              onClick={() =>
+                                openClearanceCertificatePrint(c as any, lang, {
+                                  vatRate: data?.taxSettings?.vatRate,
+                                  labTrn: data?.taxSettings?.labTrn,
+                                  contractorTrn: (c as any).contractorTrn,
+                                })
+                              }
                               title={T.printCertificateHint}
                               className="flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm font-semibold transition-all"
                               style={{

@@ -23,8 +23,10 @@ import {
   FlaskConical, AlertTriangle, CheckCircle, Activity, Target,
   Calendar, FileText, Users, Award, TrendingUp, TrendingDown,
   Loader2, BarChart2, Eye, ChevronDown, ChevronUp, ShieldAlert,
-  Building2, MapPin, Zap, AlertOctagon, XCircle, ThumbsUp,
+  Building2, MapPin, Zap, AlertOctagon, XCircle, ThumbsUp, Settings2,
 } from "lucide-react";
+import { useAuth } from "@/_core/hooks/useAuth";
+import { DEFAULT_VAT_RATE, formatVatRatePercent } from "@shared/tax";
 
 const CATEGORY_LABELS: Record<string, { ar: string; en: string }> = {
   concrete:   { ar: "خرسانة",  en: "Concrete" },
@@ -247,6 +249,93 @@ function ContractorCard({
         </div>
       )}
     </div>
+  );
+}
+
+function LabTaxSettingsCard({ lang }: { lang: "ar" | "en" }) {
+  const isAr = lang === "ar";
+  const { user } = useAuth();
+  const canEdit = ["admin", "lab_manager"].includes(user?.role ?? "");
+  const { data, refetch } = trpc.labSettings.get.useQuery();
+  const updateMut = trpc.labSettings.update.useMutation({
+    onSuccess: () => {
+      toast.success(isAr ? "تم حفظ إعدادات الضريبة" : "Tax settings saved");
+      refetch();
+    },
+    onError: (e) => toast.error(e.message),
+  });
+
+  const [vatPercent, setVatPercent] = useState("");
+  const [labTrn, setLabTrn] = useState("");
+
+  const loadedRate = data?.vatRate ?? DEFAULT_VAT_RATE;
+  const displayVat = vatPercent !== "" ? vatPercent : String(formatVatRatePercent(loadedRate));
+  const displayTrn = labTrn !== "" ? labTrn : (data?.labTrn ?? "");
+
+  const handleSave = () => {
+    const pct = parseFloat(displayVat);
+    if (Number.isNaN(pct) || pct < 0 || pct > 100) {
+      toast.error(isAr ? "نسبة ضريبة غير صالحة" : "Invalid VAT percentage");
+      return;
+    }
+    updateMut.mutate({
+      vatRate: pct / 100,
+      labTrn: displayTrn.trim() || null,
+    });
+  };
+
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-sm font-semibold flex items-center gap-2">
+          <Settings2 className="w-4 h-4 text-primary" />
+          {isAr ? "إعدادات ضريبة القيمة المضافة" : "VAT & Tax Settings"}
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label className="text-xs text-muted-foreground block mb-1">
+              {isAr ? "نسبة ض.ق.م (%)" : "VAT rate (%)"}
+            </label>
+            <Input
+              type="number"
+              min={0}
+              max={100}
+              step={0.01}
+              value={displayVat}
+              onChange={(e) => setVatPercent(e.target.value)}
+              disabled={!canEdit}
+              className="h-9"
+            />
+          </div>
+          <div>
+            <label className="text-xs text-muted-foreground block mb-1">
+              {isAr ? "الرقم الضريبي للمختبر (TRN)" : "Lab TRN"}
+            </label>
+            <Input
+              value={displayTrn}
+              onChange={(e) => setLabTrn(e.target.value.replace(/\D/g, "").slice(0, 15))}
+              disabled={!canEdit}
+              placeholder="15 digits"
+              className="h-9 font-mono"
+              maxLength={15}
+            />
+          </div>
+        </div>
+        {canEdit ? (
+          <Button size="sm" onClick={handleSave} disabled={updateMut.isPending}>
+            {updateMut.isPending
+              ? (isAr ? "جاري الحفظ..." : "Saving...")
+              : (isAr ? "حفظ الإعدادات" : "Save settings")}
+          </Button>
+        ) : (
+          <p className="text-xs text-muted-foreground">
+            {isAr ? "عرض فقط — التعديل للمدير أو المسؤول" : "Read-only — edit requires admin or lab manager"}
+          </p>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -652,6 +741,9 @@ export default function ManagerDashboard() {
             </CardContent>
           </Card>
         )}
+
+        {/* VAT / TRN Settings */}
+        <LabTaxSettingsCard lang={lang as "ar" | "en"} />
 
         {/* Report Generator */}
         <Card id="report-generator">
