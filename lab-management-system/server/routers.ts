@@ -2510,8 +2510,14 @@ ${testSummaries.length > 0 ? testSummaries.join("\n\n") : "لم تُجرَ اخ�
       .query(async ({ input }) => {
         const req = await getClearanceRequestById(input.id);
         if (!req) return null;
-        const contractor = await getContractorById(req.contractorId);
-        return { ...req, contractorTrn: contractor?.trn ?? null };
+        let contractorTrn: string | null = null;
+        try {
+          const contractor = await getContractorById(req.contractorId);
+          contractorTrn = contractor?.trn ?? null;
+        } catch {
+          contractorTrn = null;
+        }
+        return { ...req, contractorTrn };
       }),
     getByContract: protectedProcedure
       .input(z.object({ contractId: z.number() }))

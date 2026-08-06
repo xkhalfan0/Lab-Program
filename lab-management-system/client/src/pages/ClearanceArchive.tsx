@@ -8,7 +8,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { Search, Archive, CheckCircle2, XCircle, FileText, Calendar, User, Hash, Building2, X, Printer } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { openClearanceCertificatePrint } from "@/lib/clearanceCertificatePrint";
 
 type Lang = "ar" | "en";

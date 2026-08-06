@@ -17,7 +17,7 @@ import {
   Plus, CheckCircle, Clock, XCircle, Upload, Printer,
   ChevronRight, FlaskConical,
   AlertTriangle, BadgeCheck, FileCheck, Receipt, ClipboardList, Globe,
-  CheckCircle2, FileText, Award,
+  CheckCircle2, FileText, Award, Loader2,
 } from "lucide-react";
 import { openClearanceCertificatePrint } from "@/lib/clearanceCertificatePrint";
 import { TaxBreakdown } from "@/components/TaxBreakdown";
@@ -29,6 +29,19 @@ import {
   type TaxPrintOptions,
   DEFAULT_VAT_RATE,
 } from "@shared/tax";
+
+function parseInventoryData(data: unknown): any[] {
+  if (Array.isArray(data)) return data;
+  if (typeof data === "string" && data.trim()) {
+    try {
+      const parsed = JSON.parse(data);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }
+  return [];
+}
 
 // ─── Task state helpers ─────────────────────────────────────────────────────
 type TaskFilter = "all" | "new" | "incomplete" | "completed";
@@ -770,7 +783,7 @@ function ClearanceDetail({ req, onClose, refetch }: { req: any; onClose: () => v
     onSuccess: () => { toast.success(t("receiptNoSaved", l)); refreshClearance(); setSavingReceipt(false); },
     onError: (e) => { toast.error(e.message); setSavingReceipt(false); },
   });
-  const inventory = (req.inventoryData ?? []) as any[];
+  const inventory = parseInventoryData(req.inventoryData);
   const subtotal = Number(req.totalAmount ?? inventory.reduce((s, i) => s + Number(i.price ?? 0), 0));
   const tax = calculateTax(subtotal, vatRate);
   const taxPrintOptions: TaxPrintOptions = {
@@ -1333,6 +1346,7 @@ export default function ClearancePage() {
   const l = lang as Lang;
   const { vatRate } = useLabTaxSettings();
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [selectedReqSnapshot, setSelectedReqSnapshot] = useState<any>(null);
   const [detailOpen, setDetailOpen] = useState(false);
   const [taskFilter, setTaskFilter] = useState<TaskFilter>("all");
   const [showHistory, setShowHistory] = useState(false);
@@ -1341,13 +1355,16 @@ export default function ClearancePage() {
   const { data: requests = [], refetch } = trpc.clearance.list.useQuery();
   const markAccountantRead = trpc.clearance.markAccountantRead.useMutation();
 
-  const { data: selectedReq } = trpc.clearance.getById.useQuery(
+  const { data: selectedReq, isLoading: isLoadingDetail, isError: isDetailError, refetch: refetchDetail } = trpc.clearance.getById.useQuery(
     { id: selectedId! },
     { enabled: selectedId !== null }
   );
 
+  const detailReq = selectedReq ?? selectedReqSnapshot;
+
   const openDetail = (req: any) => {
     setSelectedId(req.id);
+    setSelectedReqSnapshot(req);
     setDetailOpen(true);
     // Mark as seen by accountant
     if (!req.accountantReadAt && req.status !== "issued" && req.status !== "rejected") {
@@ -1572,9 +1589,18 @@ export default function ClearancePage() {
       </div>
 
       {/* Detail Dialog */}
-      <Dialog open={detailOpen} onOpenChange={setDetailOpen}>
+      <Dialog
+        open={detailOpen}
+        onOpenChange={(open) => {
+          setDetailOpen(open);
+          if (!open) {
+            setSelectedId(null);
+            setSelectedReqSnapshot(null);
+          }
+        }}
+      >
         <DialogContent
-          className="flex max-h-[92vh] w-[min(96vw,56rem)] max-w-[min(96vw,56rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-[min(96vw,56rem)]"
+          className="flex max-h-[92vh] min-h-[min(60vh,32rem)] w-[min(96vw,56rem)] max-w-[min(96vw,56rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-[min(96vw,56rem)]"
           aria-describedby={undefined}
         >
           <DialogHeader className="shrink-0 border-b px-6 py-5 text-start">
@@ -1583,13 +1609,41 @@ export default function ClearancePage() {
               {t("detailsTitle", l)}
             </DialogTitle>
           </DialogHeader>
-          <div className="flex-1 overflow-y-auto px-6 py-5">
-            {selectedReq && (
-              <ClearanceDetail
-                req={selectedReq}
-                onClose={() => setDetailOpen(false)}
-                refetch={refetch}
-              />
+          <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
+            {detailReq ? (
+              <>
+                {isLoadingDetail && !selectedReq && (
+                  <div className="mb-4 flex items-center gap-2 rounded-lg border border-dashed px-3 py-2 text-xs text-muted-foreground">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    {l === "ar" ? "جاري تحميل التفاصيل الكاملة..." : "Loading full details..."}
+                  </div>
+                )}
+                {isDetailError && !selectedReq && (
+                  <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                    {l === "ar"
+                      ? "تعذّر تحميل بعض التفاصيل — يُعرض ملخص الطلب من القائمة."
+                      : "Could not load full details — showing summary from the list."}
+                    <Button
+                      size="sm"
+                      variant="link"
+                      className="h-auto p-0 ms-2 text-xs"
+                      onClick={() => void refetchDetail()}
+                    >
+                      {l === "ar" ? "إعادة المحاولة" : "Retry"}
+                    </Button>
+                  </div>
+                )}
+                <ClearanceDetail
+                  req={detailReq}
+                  onClose={() => setDetailOpen(false)}
+                  refetch={refetch}
+                />
+              </>
+            ) : (
+              <div className="flex min-h-[200px] flex-col items-center justify-center gap-3 text-muted-foreground">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                <p className="text-sm">{l === "ar" ? "جاري تحميل التفاصيل..." : "Loading details..."}</p>
+              </div>
             )}
           </div>
         </DialogContent>
