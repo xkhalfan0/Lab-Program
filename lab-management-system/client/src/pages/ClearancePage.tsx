@@ -20,6 +20,7 @@ import {
   CheckCircle2, FileText, Award, Loader2,
 } from "lucide-react";
 import { openClearanceCertificatePrint } from "@/lib/clearanceCertificatePrint";
+import { readFileAsBase64 } from "@/lib/sampleFileUpload";
 import { TaxBreakdown } from "@/components/TaxBreakdown";
 import { useLabTaxSettings } from "@/hooks/useLabTaxSettings";
 import {
@@ -41,6 +42,16 @@ function parseInventoryData(data: unknown): any[] {
     }
   }
   return [];
+}
+
+function isViewableClearanceDocUrl(url: string | null | undefined): boolean {
+  if (!url) return false;
+  if (url.includes("storage.example.com")) return false;
+  return true;
+}
+
+function clearanceDocHref(url: string): string {
+  return url.startsWith("/") ? url : url;
 }
 
 // ─── Task state helpers ─────────────────────────────────────────────────────
@@ -137,6 +148,9 @@ const T = {
   docsStep:          { ar: "الخطوة 3: رفع المستندات المطلوبة",   en: "Step 3: Upload Required Documents" },
   docView:           { ar: "عرض",                                en: "View" },
   docUpdate:         { ar: "تحديث",                              en: "Update" },
+  docsLocked:        { ar: "المستندات مقفلة بعد إصدار الشهادة", en: "Documents are locked after certificate issuance" },
+  docUnavailable:    { ar: "الملف غير متاح — أعد الرفع",       en: "File unavailable — re-upload required" },
+  docLinkBroken:     { ar: "رابط الملف غير صالح",              en: "Stored file link is invalid" },
   docUpload:         { ar: "رفع",                                en: "Upload" },
   // Cert step
   certStep:          { ar: "الخطوة 4: إصدار شهادة براءة الذمة",        en: "Step 4: Issue Clearance Certificate" },
@@ -795,15 +809,15 @@ function ClearanceDetail({ req, onClose, refetch }: { req: any; onClose: () => v
   const handleFileUpload = async (docType: string, file: File) => {
     setUploading(docType);
     try {
-      const formData = new FormData();
-      formData.append("file", file);
-      const res = await fetch("/api/upload", { method: "POST", body: formData });
-      if (!res.ok) throw new Error("Upload failed");
-      const { url } = await res.json();
-      await uploadDoc.mutateAsync({ id: req.id, docType: docType as any, fileUrl: url });
-    } catch {
-      const fakeUrl = `https://storage.example.com/${docType}-${Date.now()}.pdf`;
-      await uploadDoc.mutateAsync({ id: req.id, docType: docType as any, fileUrl: fakeUrl });
+      const { base64 } = await readFileAsBase64(file);
+      await uploadDoc.mutateAsync({
+        id: req.id,
+        docType: docType as "contractorLetter" | "sectorLetter" | "paymentReceipt" | "testList",
+        fileName: file.name,
+        fileData: base64,
+      });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : (l === "ar" ? "فشل رفع الملف" : "Upload failed"));
     } finally {
       setUploading(null);
     }
@@ -824,6 +838,7 @@ function ClearanceDetail({ req, onClose, refetch }: { req: any; onClose: () => v
   const allDocsUploaded = DOCS.filter(d => ["contractorLetter", "sectorLetter", "paymentReceipt"].includes(d.key))
     .every(d => !!req[d.urlField]);
   const canIssueCert = allDocsUploaded && req.status !== "issued" && req.status !== "rejected";
+  const docsLocked = req.status === "issued" || req.status === "rejected";
 
   return (
     <div className="space-y-5">
@@ -1076,52 +1091,67 @@ function ClearanceDetail({ req, onClose, refetch }: { req: any; onClose: () => v
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
+          {docsLocked && (
+            <p className="text-xs text-muted-foreground rounded-lg border bg-muted/30 px-3 py-2">
+              {t("docsLocked", l)}
+            </p>
+          )}
           <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
             {DOCS.map(doc => {
               const fileUrl = req[doc.urlField] as string | null | undefined;
-              const fileName = fileUrl ? decodeURIComponent(fileUrl.split("/").pop()?.split("?")[0] ?? "") : null;
+              const viewableUrl = isViewableClearanceDocUrl(fileUrl) ? fileUrl! : null;
+              const fileName = viewableUrl ? decodeURIComponent(viewableUrl.split("/").pop()?.split("?")[0] ?? "") : null;
               return (
-              <div key={doc.key} className={`flex flex-col gap-3 rounded-lg border p-4 min-w-0 ${fileUrl ? "bg-green-50/60 border-green-200" : "bg-muted/30"}`}>
+              <div key={doc.key} className={`flex flex-col gap-3 rounded-lg border p-4 min-w-0 ${viewableUrl ? "bg-green-50/60 border-green-200" : fileUrl ? "bg-amber-50/60 border-amber-200" : "bg-muted/30"}`}>
                 <div className="flex items-start gap-2 min-w-0">
-                  {fileUrl ? (
+                  {viewableUrl ? (
                     <CheckCircle size={16} className="text-green-600 shrink-0 mt-0.5" />
+                  ) : fileUrl ? (
+                    <AlertTriangle size={16} className="text-amber-600 shrink-0 mt-0.5" />
                   ) : (
                     <AlertTriangle size={16} className="text-amber-500 shrink-0 mt-0.5" />
                   )}
                   <div className="min-w-0">
                     <span className="text-sm font-medium leading-snug block">{l === "ar" ? doc.labelAr : doc.labelEn}</span>
-                    {fileUrl && (
+                    {viewableUrl && (
                       <span className="text-xs text-green-700 mt-1 block truncate" title={fileName ?? undefined}>
                         {l === "ar" ? "تم الرفع" : "Uploaded"}{fileName ? `: ${fileName}` : ""}
+                      </span>
+                    )}
+                    {fileUrl && !viewableUrl && (
+                      <span className="text-xs text-amber-700 mt-1 block">
+                        {docsLocked ? t("docLinkBroken", l) : t("docUnavailable", l)}
                       </span>
                     )}
                   </div>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
-                  {fileUrl && (
+                  {viewableUrl && (
                     <Button size="sm" variant="ghost" className="h-8 px-2.5 text-xs" asChild>
-                      <a href={fileUrl} target="_blank" rel="noreferrer">{t("docView", l)}</a>
+                      <a href={clearanceDocHref(viewableUrl)} target="_blank" rel="noreferrer">{t("docView", l)}</a>
                     </Button>
                   )}
-                  <label className="cursor-pointer">
-                    <input
-                      type="file"
-                      accept=".pdf,.jpg,.jpeg,.png"
-                      className="hidden"
-                      disabled={uploading === doc.key}
-                      onChange={e => {
-                        const file = e.target.files?.[0];
-                        if (file) handleFileUpload(doc.key, file);
-                        e.target.value = "";
-                      }}
-                    />
-                    <Button size="sm" variant="outline" className="h-8 px-2.5 text-xs gap-1.5" asChild>
-                      <span>
-                        <Upload size={12} />
-                        {uploading === doc.key ? "..." : fileUrl ? t("docUpdate", l) : t("docUpload", l)}
-                      </span>
-                    </Button>
-                  </label>
+                  {!docsLocked && (
+                    <label className="cursor-pointer">
+                      <input
+                        type="file"
+                        accept=".pdf,.jpg,.jpeg,.png"
+                        className="hidden"
+                        disabled={uploading === doc.key}
+                        onChange={e => {
+                          const file = e.target.files?.[0];
+                          if (file) handleFileUpload(doc.key, file);
+                          e.target.value = "";
+                        }}
+                      />
+                      <Button size="sm" variant="outline" className="h-8 px-2.5 text-xs gap-1.5" asChild>
+                        <span>
+                          <Upload size={12} />
+                          {uploading === doc.key ? "..." : viewableUrl ? t("docUpdate", l) : t("docUpload", l)}
+                        </span>
+                      </Button>
+                    </label>
+                  )}
                 </div>
               </div>
             );})}

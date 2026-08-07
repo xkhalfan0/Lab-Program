@@ -9,7 +9,7 @@ import { sectorRouter } from "./routers/sector";
 import { dashboardRouter } from "./routers/dashboard";
 import { deletionRouter } from "./routers/deletion";
 import { labOrderReceptionCreateInputSchema, runLabOrderReceptionCreate } from "./routers/orders";
-import { sanitizeUploadFileName, validateClearanceLetterFile, decodeBase64Payload } from "./uploadUtils";
+import { sanitizeUploadFileName, validateClearanceLetterFile, decodeBase64Payload, mimeFromClearanceFileName } from "./uploadUtils";
 import { ensureConcreteGroupsFromReceptionPlan } from "./concreteCubeGroups";
 import { parseConcCubePlan } from "@shared/concreteCubeReception";
 import { calcActualAgeDays, resolveBs1881AgeFactor } from "@shared/concreteCubeBs1881";
@@ -2717,22 +2717,46 @@ ${testSummaries.length > 0 ? testSummaries.join("\n\n") : "لم تُجرَ اخ�
       .input(z.object({
         id: z.number(),
         docType: z.enum(["contractorLetter", "sectorLetter", "paymentReceipt", "testList"]),
-        fileUrl: z.string().url(),
+        fileName: z.string(),
+        fileData: z.string(),
       }))
-      .mutation(async ({ input }) => {
+      .mutation(async ({ ctx, input }) => {
+        requireRole(ctx.user.role, ["admin", "lab_manager", "accountant"]);
+        const req = await getClearanceRequestById(input.id);
+        if (!req) throw new TRPCError({ code: "NOT_FOUND" });
+        if (req.status === "issued" || req.status === "rejected") {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Documents cannot be changed after the request is closed",
+          });
+        }
+
+        const safeName = sanitizeUploadFileName(input.fileName);
+        const buffer = decodeBase64Payload(input.fileData);
+        validateClearanceLetterFile(safeName, buffer.length);
+        const ext = safeName.split(".").pop()?.toLowerCase() ?? "pdf";
+        const key = `clearance/${input.docType}/req-${input.id}-${Date.now()}.${ext}`;
+        const mime = mimeFromClearanceFileName(safeName);
+        const { url } = await storagePut(key, buffer, mime);
+
         const fieldMap: Record<string, string> = {
           contractorLetter: "contractorLetterUrl",
           sectorLetter: "sectorLetterUrl",
           paymentReceipt: "paymentReceiptUrl",
           testList: "testListUrl",
         };
-        await updateClearanceRequest(input.id, { [fieldMap[input.docType]]: input.fileUrl });
-        // Check if all docs uploaded → update status
-        const req = await getClearanceRequestById(input.id);
-        if (req && req.contractorLetterUrl && req.sectorLetterUrl && req.paymentReceiptUrl) {
+        await updateClearanceRequest(input.id, { [fieldMap[input.docType]]: url });
+        const updated = await getClearanceRequestById(input.id);
+        if (
+          updated &&
+          updated.contractorLetterUrl &&
+          updated.sectorLetterUrl &&
+          updated.paymentReceiptUrl &&
+          updated.status === "payment_ordered"
+        ) {
           await updateClearanceRequest(input.id, { status: "docs_uploaded" });
         }
-        return { success: true };
+        return { success: true, url };
       }),
     issueCertificate: protectedProcedure
       .input(z.object({ id: z.number(), notes: z.string().optional() }))
