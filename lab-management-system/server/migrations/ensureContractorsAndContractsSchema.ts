@@ -2,12 +2,20 @@ import { sql } from "drizzle-orm";
 
 type SchemaDb = { execute: (query: unknown) => Promise<unknown> };
 
+function rowValue(row: Record<string, unknown>, key: string): unknown {
+  const target = key.toLowerCase();
+  for (const [k, v] of Object.entries(row)) {
+    if (k.toLowerCase() === target) return v;
+  }
+  return undefined;
+}
+
 async function tableExists(db: SchemaDb, table: string): Promise<boolean> {
   const result = await db.execute(sql`
     SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES
     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ${table}
   `);
-  return (result as { TABLE_NAME: string }[]).length > 0;
+  return (result as Record<string, unknown>[]).length > 0;
 }
 
 async function columnExists(db: SchemaDb, table: string, column: string): Promise<boolean> {
@@ -16,7 +24,9 @@ async function columnExists(db: SchemaDb, table: string, column: string): Promis
     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ${table}
       AND COLUMN_NAME = ${column}
   `);
-  return (result as { COLUMN_NAME: string }[]).some((r) => r.COLUMN_NAME === column);
+  return (result as Record<string, unknown>[]).some(
+    (r) => String(rowValue(r, "COLUMN_NAME")) === column
+  );
 }
 
 async function ensureColumn(

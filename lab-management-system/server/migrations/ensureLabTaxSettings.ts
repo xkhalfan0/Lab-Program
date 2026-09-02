@@ -16,7 +16,9 @@ async function columnExists(db: SchemaDb, table: string, column: string): Promis
     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ${table}
       AND COLUMN_NAME = ${column}
   `);
-  return (result as { COLUMN_NAME: string }[]).some((r) => r.COLUMN_NAME === column);
+  return (result as Record<string, unknown>[]).some(
+    (r) => String((r.COLUMN_NAME ?? (r as { column_name?: string }).column_name) ?? "") === column
+  );
 }
 
 /** Idempotent — lab VAT/TRN settings + contractor TRN column. */

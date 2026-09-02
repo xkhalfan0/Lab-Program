@@ -42,13 +42,18 @@ async function findAvailablePort(startPort: number = 3000): Promise<number> {
 async function startServer() {
   const db = await getDb();
   if (db) {
-    try {
-      await ensureConcreteCubeTestConditionColumns(db);
-      await ensureFoamConcreteTestTypes(db);
-      await ensureLabTaxSettings(db);
-      await ensureContractorsAndContractsSchema(db);
-    } catch (err) {
-      console.error("[schema] concrete_test_groups column ensure failed:", err);
+    const migrations: Array<[string, (d: typeof db) => Promise<void>]> = [
+      ["ensureConcreteCubeTestConditionColumns", ensureConcreteCubeTestConditionColumns],
+      ["ensureFoamConcreteTestTypes", ensureFoamConcreteTestTypes],
+      ["ensureLabTaxSettings", ensureLabTaxSettings],
+      ["ensureContractorsAndContractsSchema", ensureContractorsAndContractsSchema],
+    ];
+    for (const [name, fn] of migrations) {
+      try {
+        await fn(db);
+      } catch (err) {
+        console.error(`[schema] ${name} failed:`, err);
+      }
     }
   }
 

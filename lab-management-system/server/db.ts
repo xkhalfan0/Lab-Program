@@ -2001,17 +2001,66 @@ export async function deleteContract(id: number) {
 }
 
 // ─── Contractors ────────────────────────────────────────────────────────────────
+
+type ContractorRow = typeof contractors.$inferSelect;
+
+async function ensureContractorsSchemaOnDemand(db: NonNullable<Awaited<ReturnType<typeof getDb>>>) {
+  const { ensureContractorsAndContractsSchema } = await import("./migrations/ensureContractorsAndContractsSchema");
+  await ensureContractorsAndContractsSchema(db);
+}
+
+async function listContractorsFallback(
+  db: NonNullable<Awaited<ReturnType<typeof getDb>>>
+): Promise<ContractorRow[]> {
+  const [rows] = await db.$client.promise().execute(
+    `SELECT id, nameEn, nameAr, contactPerson, phone, email, address, contractorCode, isActive, createdAt, updatedAt
+     FROM contractors WHERE isActive = 1 ORDER BY nameEn`
+  );
+  return (rows as Record<string, unknown>[]).map((r) => ({
+    id: Number(r.id),
+    nameEn: String(r.nameEn ?? ""),
+    nameAr: (r.nameAr as string | null) ?? null,
+    contactPerson: (r.contactPerson as string | null) ?? null,
+    phone: (r.phone as string | null) ?? null,
+    email: (r.email as string | null) ?? null,
+    address: (r.address as string | null) ?? null,
+    contractorCode: (r.contractorCode as string | null) ?? null,
+    trn: null,
+    isActive: Boolean(r.isActive ?? true),
+    deletedAt: null,
+    deletedBy: null,
+    createdAt: r.createdAt instanceof Date ? r.createdAt : new Date(String(r.createdAt ?? Date.now())),
+    updatedAt: r.updatedAt instanceof Date ? r.updatedAt : new Date(String(r.updatedAt ?? Date.now())),
+  }));
+}
+
 export async function getAllContractors() {
   const db = await getDb();
   if (!db) return [];
-  return db.select().from(contractors).where(eq(contractors.isActive, true)).orderBy(contractors.nameEn);
+  try {
+    return await db.select().from(contractors).where(eq(contractors.isActive, true)).orderBy(contractors.nameEn);
+  } catch (firstErr) {
+    console.warn("[contractors] Drizzle list failed, attempting schema repair:", firstErr);
+    try {
+      await ensureContractorsSchemaOnDemand(db);
+      return await db.select().from(contractors).where(eq(contractors.isActive, true)).orderBy(contractors.nameEn);
+    } catch (secondErr) {
+      console.warn("[contractors] Falling back to legacy column select:", secondErr);
+      return listContractorsFallback(db);
+    }
+  }
 }
 
 export async function getContractorById(id: number) {
   const db = await getDb();
   if (!db) return undefined;
-  const result = await db.select().from(contractors).where(eq(contractors.id, id)).limit(1);
-  return result[0];
+  try {
+    const result = await db.select().from(contractors).where(eq(contractors.id, id)).limit(1);
+    return result[0];
+  } catch {
+    const all = await getAllContractors();
+    return all.find((c) => c.id === id);
+  }
 }
 
 export async function createContractor(data: typeof contractors.$inferInsert) {
