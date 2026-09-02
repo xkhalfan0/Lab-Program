@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useMemo } from "react";
 import { useParams, useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { redirectAfterTestSave } from "@/lib/batchHelpers";
@@ -12,7 +12,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Plus, Trash2, Send, FlaskConical, Info, UserCheck , Printer } from "lucide-react";
+import { Send, FlaskConical, Info, UserCheck , Printer } from "lucide-react";
 import { useAuth } from "@/_core/hooks/useAuth";
 
 import { useLanguage } from "@/contexts/LanguageContext";
@@ -140,6 +140,40 @@ function newRow(index: number, spec: typeof STEEL_STANDARDS[StandardKey]): Rebar
   };
 }
 
+function resolveRegisteredSpecimenQuantity(
+  dist: { orderItemQuantity?: number | null; quantity?: number | null } | null | undefined,
+): number {
+  const q = Number(dist?.orderItemQuantity ?? dist?.quantity) || 1;
+  return Math.max(1, Math.min(999, q));
+}
+
+function rowsFromQuantity(quantity: number, spec: typeof STEEL_STANDARDS[StandardKey]): RebarRow[] {
+  const n = Math.max(1, Math.min(999, quantity));
+  return Array.from({ length: n }, (_, i) => newRow(i, spec));
+}
+
+function syncRowsToQuantity(rows: RebarRow[], quantity: number, spec: typeof STEEL_STANDARDS[StandardKey]): RebarRow[] {
+  const n = Math.max(1, Math.min(999, quantity));
+  if (rows.length === n) return rows;
+  if (rows.length > n) return rows.slice(0, n);
+  return [...rows, ...Array.from({ length: n - rows.length }, (_, i) => newRow(rows.length + i, spec))];
+}
+
+function mapSavedSpecimen(raw: Record<string, unknown>, index: number, spec: typeof STEEL_STANDARDS[StandardKey]): RebarRow {
+  return {
+    id: String(raw.id ?? `row_${Date.now()}_${index}`),
+    specimenNo: String(raw.specimenNo ?? `S${index + 1}`),
+    barSize: String(raw.barSize ?? "T12"),
+    specimenLength: String(raw.specimenLength ?? "500"),
+    massPerMeterRun: String(raw.massPerMeterRun ?? raw.massKg ?? ""),
+    gaugeLength: String(raw.gaugeLength ?? spec.gaugeLengthDefault),
+    yieldLoadKN: String(raw.yieldLoadKN ?? ""),
+    maxLoadKN: String(raw.maxLoadKN ?? ""),
+    finalGaugeLength: String(raw.finalGaugeLength ?? ""),
+    bendResult: String(raw.bendResult ?? ""),
+  };
+}
+
 function computeRow(row: RebarRow, spec: typeof STEEL_STANDARDS[StandardKey]): RebarRow {
   const nominalArea = BAR_AREAS[row.barSize] ?? 0;
   const massPerMeter =
@@ -205,19 +239,21 @@ export default function SteelRebar() {
   const [, setLocation] = useLocation();
   const distId = parseInt(distributionId ?? "0");
   const { data: dist } = trpc.distributions.get.useQuery({ id: distId }, { enabled: !!distId });
+  const { data: existing, isFetched: existingFetched } = trpc.specializedTests.getByDistribution.useQuery(
+    { distributionId: distId },
+    { enabled: !!distId },
+  );
 
   const [standard, setStandard] = useState<StandardKey>("BS4449_B500B");
   const [heatNo, setHeatNo] = useState("");
   const [supplier, setSupplier] = useState("");
   const [notes, setNotes] = useState("");
-  const [rows, setRows] = useState<RebarRow[]>(() => {
-    const spec = STEEL_STANDARDS["BS4449_B500B"];
-    return [newRow(0, spec), newRow(1, spec), newRow(2, spec)];
-  });
+  const [rows, setRows] = useState<RebarRow[]>([]);
   const [saving, setSaving] = useState(false);
   const [submitted, setSubmitted] = useState(false);
 
   const spec = STEEL_STANDARDS[standard];
+  const specimenCount = useMemo(() => resolveRegisteredSpecimenQuantity(dist), [dist]);
 
   const saveResult = trpc.specializedTests.save.useMutation({
     onSuccess: (_, vars) => {
@@ -249,6 +285,40 @@ export default function SteelRebar() {
     setRows(prev => prev.map(r => ({ ...r, gaugeLength: newSpec.gaugeLengthDefault })));
   };
 
+  useEffect(() => {
+    if (!existing?.formData) return;
+    const fd = existing.formData as Record<string, unknown>;
+    if (fd.standard && fd.standard in STEEL_STANDARDS) {
+      setStandard(fd.standard as StandardKey);
+    }
+    if (fd.heatNo) setHeatNo(String(fd.heatNo));
+    if (fd.supplier) setSupplier(String(fd.supplier));
+    if (fd.notes) setNotes(String(fd.notes));
+
+    const savedStandard = (fd.standard && fd.standard in STEEL_STANDARDS
+      ? STEEL_STANDARDS[fd.standard as StandardKey]
+      : spec);
+    const list = (fd.specimens ?? fd.rows) as Array<Record<string, unknown>> | undefined;
+    if (Array.isArray(list) && list.length > 0) {
+      const mapped = list.map((item, i) => mapSavedSpecimen(item, i, savedStandard));
+      setRows(existing.status === "submitted" ? mapped : syncRowsToQuantity(mapped, specimenCount, savedStandard));
+    }
+    if (existing.status === "submitted") setSubmitted(true);
+  }, [existing, specimenCount, spec]);
+
+  useEffect(() => {
+    if (!dist || !existingFetched || submitted) return;
+    const fd = existing?.formData as Record<string, unknown> | undefined;
+    const savedList = fd?.specimens ?? fd?.rows;
+    if (Array.isArray(savedList) && savedList.length > 0) {
+      if (existing?.status !== "submitted") {
+        setRows(prev => syncRowsToQuantity(prev, specimenCount, spec));
+      }
+      return;
+    }
+    setRows(rowsFromQuantity(specimenCount, spec));
+  }, [dist, dist?.orderItemQuantity, dist?.quantity, existingFetched, existing?.formData, existing?.status, specimenCount, spec, submitted]);
+
   const handleSave = async (status: "draft" | "submitted") => {
     if (!dist?.sampleId) {
       toast.error(lang === "ar" ? "معرف العينة مفقود" : "Sample ID missing");
@@ -256,6 +326,14 @@ export default function SteelRebar() {
     }
     if (status === "submitted" && validRows.length === 0) {
       toast.error("Please enter at least one specimen result");
+      return;
+    }
+    if (status === "submitted" && validRows.length < specimenCount) {
+      toast.error(
+        ar
+          ? `الرجاء إدخال نتائج لجميع العينات (${specimenCount}) حسب الكمية المسجلة في الاستلام`
+          : `Please enter results for all ${specimenCount} specimen(s) registered at reception`,
+      );
       return;
     }
     setSaving(true);
@@ -400,12 +478,12 @@ export default function SteelRebar() {
         {/* Specimens Table */}
         <Card>
           <CardHeader className="pb-3">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-base">{ar ? "العينات — بيانات الإدخال" : "Specimens — Input Data"}</CardTitle>
-              <Button size="sm" variant="outline" onClick={() => setRows(p => [...p, newRow(p.length, spec)])}>
-                <Plus size={14} className="mr-1" /> {ar ? "إضافة عينة" : "Add Specimen"}
-              </Button>
-            </div>
+            <CardTitle className="text-base">
+              {ar ? "العينات — بيانات الإدخال" : "Specimens — Input Data"}
+              <span className="ms-2 text-sm font-normal text-slate-500">
+                ({specimenCount} {ar ? "عينة" : "specimens"})
+              </span>
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="overflow-x-auto">
@@ -437,7 +515,6 @@ export default function SteelRebar() {
                   <th className="border border-slate-200 px-2 py-2 text-xs font-semibold text-slate-600">{ar ? "الاستطالة %" : "Elong. (%)"}</th>
                   <th className="border border-slate-200 px-2 py-2 text-xs font-semibold text-slate-600">{ar ? "الثني" : "Bend"}</th>
                   <th className="border border-slate-200 px-2 py-2 text-xs font-semibold text-slate-600">{ar ? "النتيجة" : "Overall"}</th>
-                  <th className="border border-slate-200 px-2 py-2"></th>
                 </tr>
               </thead>
               <tbody>
@@ -526,11 +603,6 @@ export default function SteelRebar() {
                     </td>
                     <td className="border border-slate-200 px-1 py-1 text-center">
                       {row.overallResult && row.overallResult !== "pending" ? <PassFailBadge result={row.overallResult} size="sm" /> : "—"}
-                    </td>
-                    <td className="border border-slate-200 px-1 py-1 text-center">
-                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-red-600 hover:text-red-700" onClick={() => setRows(p => p.filter(r => r.id !== row.id))} disabled={rows.length <= 1}>
-                        <Trash2 size={12} />
-                      </Button>
                     </td>
                   </tr>
                 ))}

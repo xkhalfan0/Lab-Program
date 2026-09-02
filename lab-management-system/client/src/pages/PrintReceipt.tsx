@@ -8,6 +8,8 @@ import { trpc } from "@/lib/trpc";
 import { Loader2, Printer, X, XCircle, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SAMPLE_TYPE_LABELS } from "@/lib/labTypes";
+import { useLabTaxSettings } from "@/hooks/useLabTaxSettings";
+import { calculateTax, formatVatRatePercent } from "@shared/tax";
 import {
   getReceptionEntryDisplayGroups,
   parseSupplierFromNotes,
@@ -45,6 +47,9 @@ const T = {
   quantity: { ar: "الكمية", en: "Quantity" },
   tests: { ar: "الاختبارات", en: "Test(s)" },
   receivedAt: { ar: "تاريخ الاستلام", en: "Received At" },
+  subtotal: { ar: "المجموع الفرعي (بدون ضريبة)", en: "Subtotal (excl. VAT)" },
+  vat: { ar: "ضريبة القيمة المضافة", en: "VAT" },
+  totalInclVat: { ar: "الإجمالي شامل الضريبة", en: "Total (incl. VAT)" },
   totalPrice: { ar: "إجمالي الرسوم", en: "Total Fees" },
   contractorForm: { ar: "نموذج المقاول", en: "Contractor Form" },
   viewFile: { ar: "عرض الملف", en: "View file" },
@@ -88,8 +93,8 @@ function fmtDateTime(d?: Date | string | null, lang: Lang = "ar") {
   });
 }
 
-function fmtMoney(amount: number, lang: Lang) {
-  const formatted = amount.toFixed(0);
+function fmtMoney(amount: number, lang: Lang, decimals = 0) {
+  const formatted = amount.toFixed(decimals);
   return lang === "ar" ? `${formatted} درهم` : `${formatted} AED`;
 }
 
@@ -200,6 +205,7 @@ export default function PrintReceipt({ sectorSampleId }: { sectorSampleId?: numb
   const orders = isSectorMode ? sectorBundle?.orders : labOrders;
   const attachments = isSectorMode ? (sectorBundle?.attachments ?? []) : labAttachments;
   const isLoading = isSectorMode ? sectorLoading : labLoading;
+  const { vatRate } = useLabTaxSettings();
 
   const contractorForm = attachments.find(
     (a: { attachmentType?: string }) => a.attachmentType === "contractor_form",
@@ -214,6 +220,9 @@ export default function PrintReceipt({ sectorSampleId }: { sectorSampleId?: numb
       return sum + itemsTotal;
     }, 0);
   }, [orders]);
+
+  const taxBreakdown = useMemo(() => calculateTax(totalPrice, vatRate), [totalPrice, vatRate]);
+  const vatPct = formatVatRatePercent(vatRate);
 
   const orderTests = useMemo(() => {
     const seen = new Set<string>();
@@ -551,10 +560,31 @@ export default function PrintReceipt({ sectorSampleId }: { sectorSampleId?: numb
                 </ValueTd>
               </tr>
               <tr>
-                {th("totalPrice")}
-                <ValueTd mono>{totalPrice > 0 ? fmtMoney(totalPrice, lang) : "—"}</ValueTd>
+                {th("subtotal")}
+                <ValueTd mono>{totalPrice > 0 ? fmtMoney(taxBreakdown.subtotal, lang, 2) : "—"}</ValueTd>
                 {th("receivedAt")}
                 <ValueTd>{fmtDateTime(sample.receivedAt, lang)}</ValueTd>
+              </tr>
+              <tr>
+                <BilingualTh
+                  en={`${T.vat.en} (${vatPct}%)`}
+                  ar={`${T.vat.ar} (${vatPct}%)`}
+                />
+                <ValueTd mono>{totalPrice > 0 ? fmtMoney(taxBreakdown.vat, lang, 2) : "—"}</ValueTd>
+                <td colSpan={2} style={{ borderBottom: "1px solid #e8edf3" }} />
+              </tr>
+              <tr>
+                {th("totalInclVat")}
+                <ValueTd mono>
+                  {totalPrice > 0 ? (
+                    <span style={{ fontWeight: 800, color: "#1d4ed8" }}>
+                      {fmtMoney(taxBreakdown.total, lang, 2)}
+                    </span>
+                  ) : (
+                    "—"
+                  )}
+                </ValueTd>
+                <td colSpan={2} style={{ borderBottom: "1px solid #e8edf3" }} />
               </tr>
               {contractorForm && (
                 <FullRow labelKey="contractorForm">

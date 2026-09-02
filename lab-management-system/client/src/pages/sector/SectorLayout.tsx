@@ -36,10 +36,28 @@ export function useSectorLang() {
 
 export function useSectorAuth() {
   const token = localStorage.getItem("sector_token");
-  const info = localStorage.getItem("sector_info");
+  const cachedInfo = localStorage.getItem("sector_info");
+  const cachedSector = cachedInfo ? JSON.parse(cachedInfo) : null;
+
+  const { data: liveSector } = trpc.sector.me.useQuery(undefined, {
+    enabled: !!token,
+    staleTime: 60_000,
+  });
+
+  useEffect(() => {
+    if (!token || !liveSector) return;
+    localStorage.setItem(
+      "sector_info",
+      JSON.stringify({
+        ...(cachedSector ?? {}),
+        ...liveSector,
+      }),
+    );
+  }, [liveSector, token]);
+
   return {
     token,
-    sector: info ? JSON.parse(info) : null,
+    sector: liveSector ?? cachedSector,
     isAuthenticated: !!token,
   };
 }

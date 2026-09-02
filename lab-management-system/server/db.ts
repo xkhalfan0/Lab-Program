@@ -2398,7 +2398,26 @@ export async function updateSector(id: number, data: { nameAr?: string; nameEn?:
   if (!db) return;
   const { sectors } = await import("../drizzle/schema");
   const { eq } = await import("drizzle-orm");
+
+  const existing = await db
+    .select({ sectorKey: sectors.sectorKey })
+    .from(sectors)
+    .where(eq(sectors.id, id))
+    .limit(1);
+  const sectorKey = existing[0]?.sectorKey;
+
   await db.update(sectors).set({ ...data, updatedAt: new Date() }).where(eq(sectors.id, id));
+
+  // Keep sector portal login/display names in sync with admin edits.
+  if (sectorKey && (data.nameAr !== undefined || data.nameEn !== undefined)) {
+    const accountUpdate: { nameAr?: string; nameEn?: string; updatedAt: Date } = { updatedAt: new Date() };
+    if (data.nameAr !== undefined) accountUpdate.nameAr = data.nameAr;
+    if (data.nameEn !== undefined) accountUpdate.nameEn = data.nameEn;
+    await db
+      .update(sectorAccounts)
+      .set(accountUpdate)
+      .where(eq(sectorAccounts.sectorKey, sectorKey as typeof sectorAccounts.$inferSelect.sectorKey));
+  }
 }
 export async function deleteSector(id: number) {
   const db = await getDb();

@@ -17,8 +17,10 @@ import {
   getClearanceRequesterUserId,
   getSampleById,
   getDistributionById,
+  getTestResultById,
   getTestResultByDistribution,
   getSpecializedTestResultById,
+  getSectorByKey,
   getDistributionsByBatch,
   getSpecializedTestResultsBySample,
   getAttachmentsBySample,
@@ -33,6 +35,7 @@ import {
   sectorReportReads,
   samples,
   specializedTestResults,
+  testResults,
   clearanceRequests,
   notifications,
   contracts,
@@ -80,6 +83,206 @@ function resolveTestTypeMeta(testTypeCode: string | null | undefined) {
     testTypeCode: testTypeCode ?? "",
     testTypeNameAr: meta?.nameAr ?? testTypeCode ?? "",
     testTypeNameEn: meta?.nameEn ?? testTypeCode ?? "",
+  };
+}
+
+const QC_ISSUED_SAMPLE_STATUSES = new Set(["qc_passed", "qc_failed", "clearance_issued"]);
+
+type SectorSampleRow = {
+  id: number;
+  status: string | null;
+  sampleCode: string;
+  contractNumber: string | null;
+  contractName: string | null;
+  contractorName: string | null;
+  referenceNo: string | null;
+  contractId: number | null;
+};
+
+async function loadSectorSampleContext(
+  db: NonNullable<Awaited<ReturnType<typeof getDb>>>,
+  sectorKey: string,
+) {
+  const sectorSamples = await db
+    .select({
+      id: samples.id,
+      status: samples.status,
+      sampleCode: samples.sampleCode,
+      contractNumber: samples.contractNumber,
+      contractName: samples.contractName,
+      contractorName: samples.contractorName,
+      referenceNo: samples.referenceNo,
+      contractId: samples.contractId,
+    })
+    .from(samples)
+    .where(sectorSamplesWhere(db, sectorKey));
+
+  const sampleIds = sectorSamples.map((s) => s.id);
+  const qcIssuedSampleIds = sectorSamples
+    .filter((s) => QC_ISSUED_SAMPLE_STATUSES.has(s.status ?? ""))
+    .map((s) => s.id);
+  const sampleMap: Record<number, SectorSampleRow> = Object.fromEntries(
+    sectorSamples.map((s) => [s.id, s]),
+  );
+
+  return { sectorSamples, sampleIds, qcIssuedSampleIds, sampleMap };
+}
+
+function sectorVisibleResultsCondition(sampleIds: number[], qcIssuedSampleIds: number[]) {
+  if (sampleIds.length === 0) return sql`FALSE`;
+  const scoped = inArray(specializedTestResults.sampleId, sampleIds);
+  if (qcIssuedSampleIds.length === 0) {
+    return and(scoped, eq(specializedTestResults.status, "approved"));
+  }
+  return and(
+    scoped,
+    or(
+      eq(specializedTestResults.status, "approved"),
+      inArray(specializedTestResults.sampleId, qcIssuedSampleIds),
+    ),
+  );
+}
+
+function mapLegacySectorResult(
+  r: typeof testResults.$inferSelect,
+  sampleMap: Record<number, SectorSampleRow>,
+) {
+  const sample = sampleMap[r.sampleId];
+  const overallResult =
+    r.complianceStatus === "fail" ? "fail" : r.complianceStatus === "pass" ? "pass" : "pending";
+  return {
+    id: r.id,
+    sampleId: r.sampleId,
+    sampleCode: sample?.sampleCode ?? "",
+    contractNumber: sample?.contractNumber ?? "",
+    contractName: sample?.contractName ?? "",
+    contractorName: sample?.contractorName ?? "",
+    referenceNo: sample?.referenceNo ?? null,
+    testTypeCode: "",
+    testTypeNameAr: "نتيجة فحص",
+    testTypeNameEn: "Test Result",
+    testType: "Test Result",
+    overallResult,
+    summaryValues: r.average != null ? { average: r.average } : null,
+    testedBy: r.qcReviewedByName ?? null,
+    testDate: r.qcReviewedAt ?? r.updatedAt,
+    updatedAt: r.updatedAt,
+    isLegacy: true as const,
+  };
+}
+
+async function fetchAllVisibleSectorResults(
+  db: NonNullable<Awaited<ReturnType<typeof getDb>>>,
+  sampleIds: number[],
+  qcIssuedSampleIds: number[],
+  sampleMap: Record<number, SectorSampleRow>,
+) {
+  if (sampleIds.length === 0) return [];
+
+  const specializedRows = await db
+    .select()
+    .from(specializedTestResults)
+    .where(sectorVisibleResultsCondition(sampleIds, qcIssuedSampleIds))
+    .orderBy(desc(specializedTestResults.updatedAt));
+
+  const samplesWithSpecialized = new Set(specializedRows.map((r) => r.sampleId));
+  const legacySampleIds = qcIssuedSampleIds.filter((id) => !samplesWithSpecialized.has(id));
+  let legacyRows: typeof testResults.$inferSelect[] = [];
+  if (legacySampleIds.length > 0) {
+    legacyRows = await db
+      .select()
+      .from(testResults)
+      .where(and(inArray(testResults.sampleId, legacySampleIds), isNotNull(testResults.qcReviewedAt)))
+      .orderBy(desc(testResults.updatedAt));
+  }
+
+  const specializedMapped = specializedRows.map((r) => ({
+    ...r,
+    isLegacy: false as const,
+  }));
+  const legacyMapped = legacyRows.map((r) => mapLegacySectorResult(r, sampleMap));
+
+  return [...specializedMapped, ...legacyMapped].sort(
+    (a, b) => new Date(b.updatedAt ?? 0).getTime() - new Date(a.updatedAt ?? 0).getTime(),
+  );
+}
+
+async function resolveSectorDisplayNames(
+  db: NonNullable<Awaited<ReturnType<typeof getDb>>>,
+  sectorKey: string,
+  fallback?: { nameAr: string; nameEn: string },
+) {
+  const sectorRow = await getSectorByKey(sectorKey);
+  if (sectorRow) {
+    return { sectorKey, nameAr: sectorRow.nameAr, nameEn: sectorRow.nameEn };
+  }
+  if (fallback) return { sectorKey, nameAr: fallback.nameAr, nameEn: fallback.nameEn };
+  const rows = await db
+    .select({ sectorKey: sectorAccounts.sectorKey, nameAr: sectorAccounts.nameAr, nameEn: sectorAccounts.nameEn })
+    .from(sectorAccounts)
+    .where(eq(sectorAccounts.sectorKey, sectorKey as any))
+    .limit(1);
+  if (!rows[0]) return null;
+  return rows[0];
+}
+
+function sectorResultIsVisible(
+  result: { status: string; sampleId: number },
+  sampleStatus: string | null | undefined,
+) {
+  if (result.status === "approved") return true;
+  return QC_ISSUED_SAMPLE_STATUSES.has(sampleStatus ?? "");
+}
+
+function formatSectorResultRow(
+  r: Awaited<ReturnType<typeof fetchAllVisibleSectorResults>>[number],
+  sampleMap: Record<number, SectorSampleRow>,
+  testResultReadAtMap: Map<number, Date>,
+) {
+  if (r.isLegacy) {
+    return {
+      id: r.id,
+      sampleId: r.sampleId,
+      sampleCode: r.sampleCode,
+      contractNumber: r.contractNumber,
+      contractName: r.contractName,
+      contractorName: r.contractorName,
+      referenceNo: r.referenceNo,
+      testTypeCode: r.testTypeCode,
+      testTypeNameAr: r.testTypeNameAr,
+      testTypeNameEn: r.testTypeNameEn,
+      testType: r.testType,
+      overallResult: r.overallResult,
+      summaryValues: r.summaryValues,
+      testedBy: r.testedBy,
+      testDate: r.testDate,
+      updatedAt: r.updatedAt,
+      isRead: testResultReadAtMap.has(r.id),
+      failedAlertActive: isFailedResultAlertActive(r.overallResult, r.id, testResultReadAtMap),
+      isLegacy: true as const,
+    };
+  }
+
+  const typeMeta = resolveTestTypeMeta(r.testTypeCode);
+  const sample = sampleMap[r.sampleId];
+  return {
+    id: r.id,
+    sampleId: r.sampleId,
+    sampleCode: sample?.sampleCode ?? "",
+    contractNumber: sample?.contractNumber ?? "",
+    contractName: sample?.contractName ?? "",
+    contractorName: sample?.contractorName ?? "",
+    referenceNo: sample?.referenceNo ?? null,
+    ...typeMeta,
+    testType: typeMeta.testTypeNameEn,
+    overallResult: r.overallResult,
+    summaryValues: r.summaryValues,
+    testedBy: r.testedBy,
+    testDate: r.testDate,
+    updatedAt: r.updatedAt,
+    isRead: testResultReadAtMap.has(r.id),
+    failedAlertActive: isFailedResultAlertActive(r.overallResult, r.id, testResultReadAtMap),
+    isLegacy: false as const,
   };
 }
 
@@ -210,8 +413,10 @@ export const sectorRouter = router({
         sector: {
           id: account.id,
           sectorKey: account.sectorKey,
-          nameAr: account.nameAr,
-          nameEn: account.nameEn,
+          ...(await resolveSectorDisplayNames(db, account.sectorKey, {
+            nameAr: account.nameAr,
+            nameEn: account.nameEn,
+          })),
         },
       };
     }),
@@ -220,13 +425,9 @@ export const sectorRouter = router({
   me: sectorProcedure.query(async ({ ctx }) => {
     const db = await getDb();
     if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
-    const rows = await db
-      .select({ sectorKey: sectorAccounts.sectorKey, nameAr: sectorAccounts.nameAr, nameEn: sectorAccounts.nameEn })
-      .from(sectorAccounts)
-      .where(eq(sectorAccounts.sectorKey, ctx.sectorKey as any))
-      .limit(1);
-    if (!rows[0]) throw new TRPCError({ code: "NOT_FOUND" });
-    return rows[0];
+    const info = await resolveSectorDisplayNames(db, ctx.sectorKey);
+    if (!info) throw new TRPCError({ code: "NOT_FOUND" });
+    return info;
   }),
 
   // ── Dashboard stats ────────────────────────────────────────────────────────
@@ -246,57 +447,39 @@ export const sectorRouter = router({
     const totalSamples = sampleKpis.total;
     const completedSamples = sampleKpis.completed;
 
-    const approvedCountRow = await db
-      .select({ count: sql<number>`COUNT(*)` })
-      .from(specializedTestResults)
-      .innerJoin(samples, eq(specializedTestResults.sampleId, samples.id))
-      .where(and(baseWhere, eq(specializedTestResults.status, "approved")));
-    const approvedResults = Number(approvedCountRow[0]?.count ?? 0);
-
-    const [passCountRow] = await db
-      .select({ count: sql<number>`COUNT(*)` })
-      .from(specializedTestResults)
-      .innerJoin(samples, eq(specializedTestResults.sampleId, samples.id))
-      .where(and(baseWhere, eq(specializedTestResults.status, "approved"), eq(specializedTestResults.overallResult, "pass")));
-    const readyResults = Number(passCountRow?.count ?? 0);
-
-    const [failCountRow] = await db
-      .select({ count: sql<number>`COUNT(*)` })
-      .from(specializedTestResults)
-      .innerJoin(samples, eq(specializedTestResults.sampleId, samples.id))
-      .where(and(baseWhere, eq(specializedTestResults.status, "approved"), eq(specializedTestResults.overallResult, "fail")));
-    const failedResultsIssued = Number(failCountRow?.count ?? 0);
-
-    /** Sector view: received samples still in the lab — balances with total = inLab + pass + fail issued. */
+    const qcPassedSamples = statusRows
+      .filter((r) => r.status === "qc_passed" || r.status === "clearance_issued")
+      .reduce((sum, r) => sum + Number(r.count ?? 0), 0);
+    const qcFailedSamples = statusRows
+      .filter((r) => r.status === "qc_failed")
+      .reduce((sum, r) => sum + Number(r.count ?? 0), 0);
+    const readyResults = qcPassedSamples;
+    const failedResultsIssued = qcFailedSamples;
     const samplesInLab = Math.max(0, totalSamples - readyResults - failedResultsIssued);
 
-    const failedRows = await db
-      .select({
-        id: specializedTestResults.id,
-        overallResult: specializedTestResults.overallResult,
-      })
-      .from(specializedTestResults)
-      .innerJoin(samples, eq(specializedTestResults.sampleId, samples.id))
-      .where(and(baseWhere, eq(specializedTestResults.status, "approved"), eq(specializedTestResults.overallResult, "fail")));
+    const { sampleIds, qcIssuedSampleIds, sampleMap } = await loadSectorSampleContext(db, ctx.sectorKey);
+    const allVisibleResults = await fetchAllVisibleSectorResults(db, sampleIds, qcIssuedSampleIds, sampleMap);
+    const approvedResults = allVisibleResults.length;
+
+    const failedRows = allVisibleResults
+      .filter((r) => r.overallResult === "fail")
+      .map((r) => ({ id: r.id, overallResult: "fail" as const }));
 
     const testResultReadAtMap = await getSectorTestResultReadAtMap(db, ctx.sectorKey);
     const failedResults = countActiveFailedAlerts(failedRows, testResultReadAtMap);
 
-    const recentFailedRows = await db
-      .select({
-        id: specializedTestResults.id,
-        sampleCode: samples.sampleCode,
-        contractNumber: samples.contractNumber,
-        testTypeCode: specializedTestResults.testTypeCode,
-        testDate: specializedTestResults.testDate,
-        updatedAt: specializedTestResults.updatedAt,
-        summaryValues: specializedTestResults.summaryValues,
-      })
-      .from(specializedTestResults)
-      .innerJoin(samples, eq(specializedTestResults.sampleId, samples.id))
-      .where(and(baseWhere, eq(specializedTestResults.status, "approved"), eq(specializedTestResults.overallResult, "fail")))
-      .orderBy(desc(specializedTestResults.updatedAt))
-      .limit(5);
+    const recentFailedRows = allVisibleResults
+      .filter((r) => r.overallResult === "fail")
+      .slice(0, 5)
+      .map((r) => ({
+        id: r.id,
+        sampleCode: sampleMap[r.sampleId]?.sampleCode ?? "",
+        contractNumber: sampleMap[r.sampleId]?.contractNumber ?? "",
+        testTypeCode: "testTypeCode" in r ? r.testTypeCode : "",
+        testDate: r.testDate,
+        updatedAt: r.updatedAt,
+        summaryValues: "summaryValues" in r ? r.summaryValues : null,
+      }));
 
     const recentFailedResults = recentFailedRows
       .filter((r) => isFailedResultAlertActive("fail", r.id, testResultReadAtMap))
@@ -320,13 +503,7 @@ export const sectorRouter = router({
       });
 
     const readResultIds = new Set(testResultReadAtMap.keys());
-
-    const approvedIds = await db
-      .select({ id: specializedTestResults.id })
-      .from(specializedTestResults)
-      .innerJoin(samples, eq(specializedTestResults.sampleId, samples.id))
-      .where(and(baseWhere, eq(specializedTestResults.status, "approved")));
-    const unreadResults = approvedIds.filter((r: { id: number }) => !readResultIds.has(r.id)).length;
+    const unreadResults = allVisibleResults.filter((r) => !readResultIds.has(r.id)).length;
 
     const contractIdRows = await db
       .selectDistinct({ contractId: samples.contractId })
@@ -461,7 +638,7 @@ export const sectorRouter = router({
       return { sample, orders, attachments };
     }),
 
-  // ── Test results (approved only) ───────────────────────────────────────────
+  // ── Test results (QC-issued + approved) ─────────────────────────────────────
   getTestResults: sectorProcedure
     .input(z.object({ page: z.number().default(1), limit: z.number().default(20) }))
     .query(async ({ ctx, input }) => {
@@ -469,68 +646,19 @@ export const sectorRouter = router({
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
       const offset = (input.page - 1) * input.limit;
 
-      const sectorSamples = await db
-        .select({ id: samples.id, sampleCode: samples.sampleCode, contractNumber: samples.contractNumber, contractName: samples.contractName, contractorName: samples.contractorName, referenceNo: samples.referenceNo })
-        .from(samples)
-        .where(sectorSamplesWhere(db, ctx.sectorKey));
+      const { sampleIds, qcIssuedSampleIds, sampleMap } = await loadSectorSampleContext(db, ctx.sectorKey);
+      if (sampleIds.length === 0) return { results: [], total: 0, unreadCount: 0, activeFailedCount: 0 };
 
-      if (sectorSamples.length === 0) return { results: [], total: 0, unreadCount: 0 };
-
-      const sampleIds = sectorSamples.map((s: { id: number }) => s.id);
-      const sampleMap: Record<number, typeof sectorSamples[0]> = Object.fromEntries(
-        sectorSamples.map((s: typeof sectorSamples[0]) => [s.id, s])
-      );
-
-      const results = await db
-        .select()
-        .from(specializedTestResults)
-        .where(and(
-          inArray(specializedTestResults.sampleId, sampleIds),
-          eq(specializedTestResults.status, "approved")
-        ))
-        .orderBy(desc(specializedTestResults.updatedAt))
-        .limit(input.limit)
-        .offset(offset);
-
-      const allApproved = await db
-        .select({
-          id: specializedTestResults.id,
-          overallResult: specializedTestResults.overallResult,
-        })
-        .from(specializedTestResults)
-        .where(and(
-          inArray(specializedTestResults.sampleId, sampleIds),
-          eq(specializedTestResults.status, "approved")
-        ));
+      const allVisible = await fetchAllVisibleSectorResults(db, sampleIds, qcIssuedSampleIds, sampleMap);
+      const pageResults = allVisible.slice(offset, offset + input.limit);
 
       const testResultReadAtMap = await getSectorTestResultReadAtMap(db, ctx.sectorKey);
-      const readIds = new Set(testResultReadAtMap.keys());
-      const unreadCount = allApproved.filter((r: { id: number }) => !readIds.has(r.id)).length;
-      const activeFailedCount = countActiveFailedAlerts(allApproved, testResultReadAtMap);
+      const unreadCount = allVisible.filter((r) => !testResultReadAtMap.has(r.id)).length;
+      const activeFailedCount = countActiveFailedAlerts(allVisible, testResultReadAtMap);
 
       return {
-        results: results.map((r: any) => {
-          const typeMeta = resolveTestTypeMeta(r.testTypeCode);
-          return {
-            id: r.id,
-            sampleId: r.sampleId,
-            sampleCode: sampleMap[r.sampleId]?.sampleCode ?? "",
-            contractNumber: sampleMap[r.sampleId]?.contractNumber ?? "",
-            contractName: sampleMap[r.sampleId]?.contractName ?? "",
-            contractorName: sampleMap[r.sampleId]?.contractorName ?? "",
-            referenceNo: sampleMap[r.sampleId]?.referenceNo ?? null,
-            ...typeMeta,
-            testType: typeMeta.testTypeNameEn,
-            overallResult: r.overallResult,
-            summaryValues: r.summaryValues,
-            testedBy: r.testedBy,
-            testDate: r.testDate,
-            updatedAt: r.updatedAt,
-            isRead: readIds.has(r.id),
-            failedAlertActive: isFailedResultAlertActive(r.overallResult, r.id, testResultReadAtMap),
-          };
-        }),
-        total: allApproved.length,
+        results: pageResults.map((r) => formatSectorResultRow(r, sampleMap, testResultReadAtMap)),
+        total: allVisible.length,
         unreadCount,
         activeFailedCount,
       };
@@ -541,36 +669,52 @@ export const sectorRouter = router({
     .input(z.object({ resultId: z.number() }))
     .query(async ({ ctx, input }) => {
       const result = await getSpecializedTestResultById(input.resultId);
-      if (!result) throw new TRPCError({ code: "NOT_FOUND" });
-      if (result.status !== "approved") {
-        throw new TRPCError({ code: "FORBIDDEN", message: "Report not available until approved" });
+      if (result) {
+        const sample = await getSampleById(result.sampleId);
+        if (!sample || sample.sector !== ctx.sectorKey) {
+          throw new TRPCError({ code: "FORBIDDEN" });
+        }
+        if (result.status !== "approved" && !QC_ISSUED_SAMPLE_STATUSES.has(sample.status ?? "")) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Report not available until approved" });
+        }
+
+        const dist = await getDistributionById(result.distributionId);
+        if (!dist) throw new TRPCError({ code: "NOT_FOUND", message: "Distribution not found" });
+
+        const legacyResult = await getTestResultByDistribution(result.distributionId);
+
+        let batchDists: Awaited<ReturnType<typeof getDistributionsByBatch>> = [];
+        let batchResults: Array<{ sample: Awaited<ReturnType<typeof getSampleById>>; testResults: Awaited<ReturnType<typeof getSpecializedTestResultsBySample>> }> = [];
+
+        if (dist.batchDistributionId) {
+          batchDists = await getDistributionsByBatch(dist.batchDistributionId);
+          const sampleIds = Array.from(new Set(batchDists.map((d) => d.sampleId)));
+          batchResults = await Promise.all(
+            sampleIds.map(async (sampleId) => ({
+              sample: await getSampleById(sampleId),
+              testResults: await getSpecializedTestResultsBySample(sampleId),
+            }))
+          );
+        }
+
+        return { result, dist, legacyResult, batchDists, batchResults };
       }
 
-      const sample = await getSampleById(result.sampleId);
+      const legacyResult = await getTestResultById(input.resultId);
+      if (!legacyResult?.qcReviewedAt) throw new TRPCError({ code: "NOT_FOUND" });
+
+      const sample = await getSampleById(legacyResult.sampleId);
       if (!sample || sample.sector !== ctx.sectorKey) {
         throw new TRPCError({ code: "FORBIDDEN" });
       }
-
-      const dist = await getDistributionById(result.distributionId);
-      if (!dist) throw new TRPCError({ code: "NOT_FOUND", message: "Distribution not found" });
-
-      const legacyResult = await getTestResultByDistribution(result.distributionId);
-
-      let batchDists: Awaited<ReturnType<typeof getDistributionsByBatch>> = [];
-      let batchResults: Array<{ sample: Awaited<ReturnType<typeof getSampleById>>; testResults: Awaited<ReturnType<typeof getSpecializedTestResultsBySample>> }> = [];
-
-      if (dist.batchDistributionId) {
-        batchDists = await getDistributionsByBatch(dist.batchDistributionId);
-        const sampleIds = Array.from(new Set(batchDists.map((d) => d.sampleId)));
-        batchResults = await Promise.all(
-          sampleIds.map(async (sampleId) => ({
-            sample: await getSampleById(sampleId),
-            testResults: await getSpecializedTestResultsBySample(sampleId),
-          }))
-        );
+      if (!QC_ISSUED_SAMPLE_STATUSES.has(sample.status ?? "")) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Report not available until approved" });
       }
 
-      return { result, dist, legacyResult, batchDists, batchResults };
+      const dist = await getDistributionById(legacyResult.distributionId);
+      if (!dist) throw new TRPCError({ code: "NOT_FOUND", message: "Distribution not found" });
+
+      return { result: null, dist, legacyResult, batchDists: [], batchResults: [] };
     }),
 
   markResultRead: sectorProcedure
@@ -702,34 +846,23 @@ export const sectorRouter = router({
     const db = await getDb();
     if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
 
-    const sectorSamples = await db
-      .select({ id: samples.id, contractId: samples.contractId })
-      .from(samples)
-      .where(sectorSamplesWhere(db, ctx.sectorKey));
-
-    const sampleIds = sectorSamples.map((s: { id: number }) => s.id);
+    const { sampleIds, qcIssuedSampleIds, sampleMap } = await loadSectorSampleContext(db, ctx.sectorKey);
     let unreadResults = 0;
     let unreadClearances = 0;
     let failedResults = 0;
 
     if (sampleIds.length > 0) {
-      const approvedRows = await db
-        .select({ id: specializedTestResults.id, overallResult: specializedTestResults.overallResult })
-        .from(specializedTestResults)
-        .where(and(
-          inArray(specializedTestResults.sampleId, sampleIds),
-          eq(specializedTestResults.status, "approved")
-        ));
+      const visibleRows = await fetchAllVisibleSectorResults(db, sampleIds, qcIssuedSampleIds, sampleMap);
 
       const testResultReadAtMap = await getSectorTestResultReadAtMap(db, ctx.sectorKey);
       const readResultIds = new Set(testResultReadAtMap.keys());
-      unreadResults = approvedRows.filter((r: { id: number }) => !readResultIds.has(r.id)).length;
-      failedResults = countActiveFailedAlerts(approvedRows, testResultReadAtMap);
+      unreadResults = visibleRows.filter((r) => !readResultIds.has(r.id)).length;
+      failedResults = countActiveFailedAlerts(visibleRows, testResultReadAtMap);
 
       const contractIds = Array.from(new Set(
-        sectorSamples
-          .map((s: { contractId: number | null }) => s.contractId)
-          .filter((id: number | null): id is number => id !== null)
+        Object.values(sampleMap)
+          .map((s) => s.contractId)
+          .filter((id): id is number => id !== null)
       ));
       if (contractIds.length > 0) {
         const allClearances = await db
@@ -993,33 +1126,21 @@ export const sectorRouter = router({
       .orderBy(desc(notifications.createdAt))
       .limit(100);
 
-    // 2. Approved test results
-    const sectorSamples = await db
-      .select({ id: samples.id, sampleCode: samples.sampleCode, contractNumber: samples.contractNumber })
-      .from(samples)
-      .where(sectorSamplesWhere(db, ctx.sectorKey));
-    const sampleIds = sectorSamples.map((s: { id: number }) => s.id);
-    const sampleMap: Record<number, { sampleCode: string; contractNumber: string | null }> = Object.fromEntries(
-      sectorSamples.map((s: { id: number; sampleCode: string; contractNumber: string | null }) => [s.id, s])
-    );
+    // 2. QC-issued and approved test results
+    const { sampleIds, qcIssuedSampleIds, sampleMap } = await loadSectorSampleContext(db, ctx.sectorKey);
 
     let resultItems: any[] = [];
     if (sampleIds.length > 0) {
-      const results = await db
-        .select()
-        .from(specializedTestResults)
-        .where(and(
-          inArray(specializedTestResults.sampleId, sampleIds),
-          eq(specializedTestResults.status, "approved")
-        ))
-        .orderBy(desc(specializedTestResults.updatedAt))
-        .limit(100);
+      const results = await fetchAllVisibleSectorResults(db, sampleIds, qcIssuedSampleIds, sampleMap);
+      const visibleResults = results.slice(0, 100);
 
       const testResultReadAtMap = await getSectorTestResultReadAtMap(db, ctx.sectorKey);
       const readResultIds = new Set(testResultReadAtMap.keys());
 
-      resultItems = results.map((r: any) => {
-        const typeMeta = resolveTestTypeMeta(r.testTypeCode);
+      resultItems = visibleResults.map((r) => {
+        const typeMeta = r.isLegacy
+          ? { testTypeCode: r.testTypeCode, testTypeNameAr: r.testTypeNameAr, testTypeNameEn: r.testTypeNameEn }
+          : resolveTestTypeMeta(r.testTypeCode);
         const contractNumber = sampleMap[r.sampleId]?.contractNumber ?? "";
         const testLabel = typeMeta.testTypeNameAr || typeMeta.testTypeCode;
         return {
@@ -1119,24 +1240,69 @@ export const sectorRouter = router({
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
 
       if (input.type === "result") {
-        // Fetch specialized test result with sample info
-        const [result] = await db
+        const [specialized] = await db
           .select()
           .from(specializedTestResults)
           .where(eq(specializedTestResults.id, input.refId))
           .limit(1);
-        if (!result) throw new TRPCError({ code: "NOT_FOUND" });
 
-        // Verify this result belongs to the sector
+        if (specialized) {
+          const [sample] = await db
+            .select()
+            .from(samples)
+            .where(eq(samples.id, specialized.sampleId))
+            .limit(1);
+          if (!sample || sample.sector !== ctx.sectorKey) {
+            throw new TRPCError({ code: "FORBIDDEN" });
+          }
+          if (!sectorResultIsVisible(specialized, sample.status)) {
+            throw new TRPCError({ code: "FORBIDDEN", message: "Report not available until approved" });
+          }
+
+          const existing = await db
+            .select()
+            .from(sectorReportReads)
+            .where(and(
+              eq(sectorReportReads.sectorKey, ctx.sectorKey as any),
+              eq(sectorReportReads.reportType, "test_result"),
+              eq(sectorReportReads.reportId, input.refId)
+            ))
+            .limit(1);
+          if (existing.length === 0) {
+            await mysqlRawInsertRow(db, "sector_report_reads", {
+              sectorKey: ctx.sectorKey as string,
+              reportType: "test_result",
+              reportId: input.refId,
+            });
+          }
+
+          const typeMeta = resolveTestTypeMeta(specialized.testTypeCode);
+          return {
+            type: "result" as const,
+            result: {
+              ...specialized,
+              ...typeMeta,
+              testTypeName: typeMeta.testTypeNameAr,
+            },
+            sample,
+          };
+        }
+
+        const legacy = await getTestResultById(input.refId);
+        if (!legacy?.qcReviewedAt) throw new TRPCError({ code: "NOT_FOUND" });
+
         const [sample] = await db
           .select()
           .from(samples)
-          .where(eq(samples.id, result.sampleId))
+          .where(eq(samples.id, legacy.sampleId))
           .limit(1);
-        if (!sample || sample.sector !== ctx.sectorKey)
+        if (!sample || sample.sector !== ctx.sectorKey) {
           throw new TRPCError({ code: "FORBIDDEN" });
+        }
+        if (!QC_ISSUED_SAMPLE_STATUSES.has(sample.status ?? "")) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Report not available until approved" });
+        }
 
-        // Mark as read
         const existing = await db
           .select()
           .from(sectorReportReads)
@@ -1154,14 +1320,24 @@ export const sectorRouter = router({
           });
         }
 
-        const typeMeta = resolveTestTypeMeta(result.testTypeCode);
-
+        const overallResult =
+          legacy.complianceStatus === "fail" ? "fail" : legacy.complianceStatus === "pass" ? "pass" : "pending";
         return {
           type: "result" as const,
           result: {
-            ...result,
-            ...typeMeta,
-            testTypeName: typeMeta.testTypeNameAr,
+            id: legacy.id,
+            sampleId: legacy.sampleId,
+            testTypeCode: "",
+            testTypeNameAr: "نتيجة فحص",
+            testTypeNameEn: "Test Result",
+            testTypeName: "نتيجة فحص",
+            overallResult,
+            summaryValues: legacy.average != null ? { average: legacy.average } : null,
+            testedBy: legacy.qcReviewedByName,
+            testDate: legacy.qcReviewedAt ?? legacy.updatedAt,
+            updatedAt: legacy.updatedAt,
+            qcReviewedByName: legacy.qcReviewedByName,
+            qcReviewedAt: legacy.qcReviewedAt,
           },
           sample,
         };
