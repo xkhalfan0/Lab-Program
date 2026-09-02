@@ -2215,7 +2215,7 @@ ${testSummaries.length > 0 ? testSummaries.join("\n\n") : "لم تُجرَ اخ�
         trn: z.string().max(15).optional(),
       }))
       .mutation(async ({ ctx, input }) => {
-        requireRole(ctx.user.role, ["admin", "qc_inspector"]);
+        requireRole(ctx.user.role, ["admin", "lab_manager", "qc_inspector"]);
         await createContractor({ ...input, isActive: true });
         return { success: true };
       }),
@@ -2233,7 +2233,7 @@ ${testSummaries.length > 0 ? testSummaries.join("\n\n") : "لم تُجرَ اخ�
         isActive: z.boolean().optional(),
       }))
       .mutation(async ({ ctx, input }) => {
-        requireRole(ctx.user.role, ["admin", "qc_inspector"]);
+        requireRole(ctx.user.role, ["admin", "lab_manager", "qc_inspector"]);
         const { id, ...rest } = input;
         await updateContractor(id, rest);
         return { success: true };
@@ -2273,7 +2273,7 @@ ${testSummaries.length > 0 ? testSummaries.join("\n\n") : "لم تُجرَ اخ�
         notes: z.string().optional(),
       }))
       .mutation(async ({ ctx, input }) => {
-        requireRole(ctx.user.role, ["admin", "qc_inspector"]);
+        requireRole(ctx.user.role, ["admin", "lab_manager", "qc_inspector"]);
         // Check uniqueness
         const existing = await getContractByNumber(input.contractNumber);
         if (existing) throw new TRPCError({ code: "CONFLICT", message: "Contract number already exists" });
@@ -2316,7 +2316,7 @@ ${testSummaries.length > 0 ? testSummaries.join("\n\n") : "لم تُجرَ اخ�
         isActive: z.boolean().optional(),
       }))
       .mutation(async ({ ctx, input }) => {
-        requireRole(ctx.user.role, ["admin", "qc_inspector"]);
+        requireRole(ctx.user.role, ["admin", "lab_manager", "qc_inspector"]);
         const { id, startDate, endDate, ...rest } = input;
         // Resolve sector names if only key provided
         let sectorNameAr = rest.sectorNameAr;

@@ -136,14 +136,38 @@ function TestTypesTab() {
 // ─── Contractors Tab ───────────────────────────────────────────────────────────
 function ContractorsTab() {
   const { lang } = useLanguage();
+  const utils = trpc.useUtils();
   const [showDialog, setShowDialog] = useState(false);
   const [editItem, setEditItem] = useState<any>(null);
   const [form, setForm] = useState({ nameEn: "", nameAr: "", contactPerson: "", phone: "", email: "", address: "", contractorCode: "", trn: "" });
 
-  const { data: list = [], refetch } = trpc.contractors.list.useQuery();
-  const createMut = trpc.contractors.create.useMutation({ onSuccess: () => { refetch(); setShowDialog(false); toast.success(lang === "ar" ? "تم إضافة المقاول" : "Contractor added"); } });
-  const updateMut = trpc.contractors.update.useMutation({ onSuccess: () => { refetch(); setShowDialog(false); toast.success(lang === "ar" ? "تم تحديث المقاول" : "Contractor updated"); } });
-  const deleteMut = trpc.contractors.delete.useMutation({ onSuccess: () => { refetch(); toast.success(lang === "ar" ? "تم حذف المقاول" : "Contractor removed"); } });
+  const { data: list = [], refetch, isLoading, isError, error } = trpc.contractors.list.useQuery();
+  const createMut = trpc.contractors.create.useMutation({
+    onSuccess: () => {
+      void refetch();
+      void utils.contractors.list.invalidate();
+      setShowDialog(false);
+      toast.success(lang === "ar" ? "تم إضافة المقاول" : "Contractor added");
+    },
+    onError: (err) => toast.error(err.message),
+  });
+  const updateMut = trpc.contractors.update.useMutation({
+    onSuccess: () => {
+      void refetch();
+      void utils.contractors.list.invalidate();
+      setShowDialog(false);
+      toast.success(lang === "ar" ? "تم تحديث المقاول" : "Contractor updated");
+    },
+    onError: (err) => toast.error(err.message),
+  });
+  const deleteMut = trpc.contractors.delete.useMutation({
+    onSuccess: () => {
+      void refetch();
+      void utils.contractors.list.invalidate();
+      toast.success(lang === "ar" ? "تم حذف المقاول" : "Contractor removed");
+    },
+    onError: (err) => toast.error(err.message),
+  });
 
   const openCreate = () => {
     setEditItem(null);
@@ -174,6 +198,15 @@ function ContractorsTab() {
         <Button size="sm" onClick={openCreate}><Plus className="w-4 h-4 me-1" />{lang === "ar" ? "إضافة مقاول" : "Add Contractor"}</Button>
       </div>
 
+      {isError && (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+          {lang === "ar" ? "تعذّر تحميل المقاولين:" : "Could not load contractors:"} {error?.message ?? "Unknown error"}
+        </div>
+      )}
+
+      {isLoading ? (
+        <div className="py-12 text-center text-muted-foreground">{lang === "ar" ? "جاري التحميل..." : "Loading..."}</div>
+      ) : (
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {list.map(c => (
           <Card key={c.id} className="hover:shadow-md transition-shadow">
@@ -208,6 +241,7 @@ function ContractorsTab() {
           </div>
         )}
       </div>
+      )}
 
       <Dialog open={showDialog} onOpenChange={setShowDialog}>
         <DialogContent className="max-w-md">
@@ -276,6 +310,7 @@ function ContractorsTab() {
 // ─── Contracts Tab ─────────────────────────────────────────────────────────────
 function ContractsTab() {
   const { lang } = useLanguage();
+  const utils = trpc.useUtils();
   const [showDialog, setShowDialog] = useState(false);
   const [editItem, setEditItem] = useState<any>(null);
   const [form, setForm] = useState({
@@ -289,10 +324,15 @@ function ContractsTab() {
   });
 
   const { data: contracts = [], refetch } = trpc.contracts.list.useQuery();
-  const { data: contractors = [] } = trpc.contractors.list.useQuery();
+  const { data: contractors = [], isError: contractorsError, error: contractorsLoadError } = trpc.contractors.list.useQuery();
   const { data: sectors = [] } = trpc.sectors.list.useQuery();
   const createMut = trpc.contracts.create.useMutation({
-    onSuccess: () => { refetch(); setShowDialog(false); toast.success(lang === "ar" ? "تم إضافة العقد بنجاح" : "Contract added successfully"); },
+    onSuccess: () => {
+      void refetch();
+      void utils.contracts.list.invalidate();
+      setShowDialog(false);
+      toast.success(lang === "ar" ? "تم إضافة العقد بنجاح" : "Contract added successfully");
+    },
     onError: (err) => toast.error(err.message),
   });
   const updateMut = trpc.contracts.update.useMutation({
@@ -436,7 +476,17 @@ function ContractsTab() {
               </div>
               <div>
                 <Label>{lang === "ar" ? "المقاول *" : "Contractor *"}</Label>
-                <Select value={form.contractorId} onValueChange={v => setForm(f => ({ ...f, contractorId: v }))}>
+                {contractorsError ? (
+                  <p className="text-xs text-red-600 mt-1">
+                    {lang === "ar" ? "تعذّر تحميل المقاولين — أضف مقاولاً من تبويب المقاولين أولاً." : "Could not load contractors — add one from the Contractors tab first."}
+                    {contractorsLoadError?.message ? ` (${contractorsLoadError.message})` : ""}
+                  </p>
+                ) : contractors.length === 0 ? (
+                  <p className="text-xs text-amber-700 mt-1">
+                    {lang === "ar" ? "لا يوجد مقاولون — أضف مقاولاً من تبويب المقاولين أولاً." : "No contractors yet — add one from the Contractors tab first."}
+                  </p>
+                ) : null}
+                <Select value={form.contractorId} onValueChange={v => setForm(f => ({ ...f, contractorId: v }))} disabled={contractors.length === 0}>
                   <SelectTrigger>
                     <SelectValue placeholder={lang === "ar" ? "اختر مقاولاً..." : "Select contractor..."} />
                   </SelectTrigger>
