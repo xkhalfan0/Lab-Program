@@ -33,6 +33,7 @@ const t = {
     subtitle: "جميع نتائج الفحص المعتمدة من المختبر — اضغط على أي نتيجة لعرض التقرير",
     sampleCode: "رمز العينة",
     contractNumber: "رقم العقد",
+    inspectionReferenceNo: "رقم مرجع التفتيش",
     testType: "نوع الاختبار",
     result: "النتيجة",
     testedBy: "الفني",
@@ -46,8 +47,8 @@ const t = {
     unread: "جديد",
     pass: "ناجح",
     fail: "راسب",
-    search: "بحث برمز العينة أو رقم العقد أو نوع الاختبار...",
-    refSearch: "رقم المرجع...",
+    search: "بحث برمز العينة أو العقد أو مرجع التفتيش أو نوع الاختبار...",
+    refSearch: "رقم مرجع التفتيش...",
     clearFilters: "مسح الفلاتر",
     allResults: "الكل",
     from: "من تاريخ",
@@ -66,6 +67,7 @@ const t = {
     subtitle: "All approved lab test results — click any row to open the report",
     sampleCode: "Sample Code",
     contractNumber: "Contract No.",
+    inspectionReferenceNo: "Inspection Reference No.",
     testType: "Test Type",
     result: "Result",
     testedBy: "Technician",
@@ -79,8 +81,8 @@ const t = {
     unread: "New",
     pass: "Pass",
     fail: "Fail",
-    search: "Search by sample code, contract no., or test type...",
-    refSearch: "Ref No. filter...",
+    search: "Search by sample code, contract, inspection ref., or test type...",
+    refSearch: "Inspection Reference No....",
     clearFilters: "Clear Filters",
     allResults: "All",
     from: "From Date",
@@ -137,13 +139,14 @@ export default function SectorResults() {
       const match =
         r.sampleCode?.toLowerCase().includes(q) ||
         r.contractNumber?.toLowerCase().includes(q) ||
+        r.referenceNo?.toLowerCase().includes(q) ||
         testLabel?.toLowerCase().includes(q) ||
         r.testTypeCode?.toLowerCase().includes(q);
       if (!match) return false;
     }
     if (refSearch.trim()) {
       const q = refSearch.trim().toLowerCase();
-      if (!(r as any).referenceNo?.toLowerCase().includes(q)) return false;
+      if (!r.referenceNo?.toLowerCase().includes(q)) return false;
     }
     if (resultFilter === "pass" && r.overallResult?.toLowerCase() !== "pass") return false;
     if (resultFilter === "fail" && r.overallResult?.toLowerCase() !== "fail") return false;
@@ -287,7 +290,7 @@ export default function SectorResults() {
               <thead>
                 <tr className={sectorTheme.tableHeadRow}>
                   <th className="w-5 px-4 py-4" />
-                  {[T.sampleCode, T.contractNumber, T.testType, T.result, T.testedBy, T.testDate, T.actions].map((h) => (
+                  {[T.sampleCode, T.contractNumber, T.inspectionReferenceNo, T.testType, T.result, T.testedBy, T.testDate, T.actions].map((h) => (
                     <th key={h} className={sectorTheme.tableHeadCell}>{h}</th>
                   ))}
                 </tr>
@@ -331,6 +334,7 @@ export default function SectorResults() {
                         ) : null}
                       </td>
                       <td className={`${sectorTheme.tableCell} font-mono text-slate-600`}>{r.contractNumber ?? "—"}</td>
+                      <td className={`${sectorTheme.tableCell} font-mono text-slate-600`}>{r.referenceNo?.trim() || "—"}</td>
                       <td className={`${sectorTheme.tableCell} max-w-[260px] break-words font-medium text-slate-800`}>{testLabel ?? "—"}</td>
                       <td className={sectorTheme.tableCell}>
                         <span className={`inline-flex items-center gap-1.5 text-[15px] font-semibold ${isPass ? "text-emerald-700" : isFail ? "text-red-700" : "text-slate-600"}`}>
