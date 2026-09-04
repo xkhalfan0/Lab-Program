@@ -42,6 +42,8 @@ import {
   labOrders,
   distributions,
   testTypes,
+  users,
+  concreteTestGroups,
 } from "../../drizzle/schema";
 import { eq, and, desc, inArray, sql, or, like, gte, lte, isNotNull, isNull, ne, notInArray } from "drizzle-orm";
 import { storagePut } from "../storage";
@@ -108,7 +110,53 @@ type DistributionMeta = {
   testType: string | null;
   testNameAr: string | null;
   testNameEn: string | null;
+  assignedTechnicianId: number | null;
 };
+
+type UserDisplayRow = {
+  name: string | null;
+  username: string | null;
+  role: string;
+};
+
+type TechnicianResolutionContext = {
+  userMap: Record<number, UserDisplayRow>;
+  concreteTestedByMap: Record<number, string>;
+};
+
+const NON_FIELD_TECH_ROLES = new Set([
+  "admin",
+  "lab_manager",
+  "qc_inspector",
+  "reception",
+  "accountant",
+  "sample_manager",
+]);
+
+function userDisplayName(user?: UserDisplayRow | null): string | null {
+  if (!user) return null;
+  return user.name?.trim() || user.username?.trim() || null;
+}
+
+function resolvePerformedByName(opts: {
+  testedBy?: string | null;
+  technicianId?: number | null;
+  assignedTechnicianId?: number | null;
+  userMap: Record<number, UserDisplayRow>;
+}): string | null {
+  const explicit = opts.testedBy?.trim() || null;
+  const performer = opts.technicianId ? opts.userMap[opts.technicianId] : undefined;
+  const assigned = opts.assignedTechnicianId ? opts.userMap[opts.assignedTechnicianId] : undefined;
+  const performerName = userDisplayName(performer);
+  const assignedName = userDisplayName(assigned);
+
+  if (explicit && performer?.role === "technician") return explicit;
+  if (assignedName && (!performer || NON_FIELD_TECH_ROLES.has(performer.role))) return assignedName;
+  if (explicit) return explicit;
+  if (performerName && performer?.role === "technician") return performerName;
+  if (assignedName) return assignedName;
+  return performerName;
+}
 
 async function loadDistributionMetaMap(
   db: NonNullable<Awaited<ReturnType<typeof getDb>>>,
@@ -122,11 +170,60 @@ async function loadDistributionMetaMap(
       testType: distributions.testType,
       testNameAr: testTypes.nameAr,
       testNameEn: testTypes.nameEn,
+      assignedTechnicianId: distributions.assignedTechnicianId,
     })
     .from(distributions)
     .leftJoin(testTypes, eq(distributions.testType, testTypes.code))
     .where(inArray(distributions.id, distributionIds));
   return Object.fromEntries(rows.map((r) => [r.id, r]));
+}
+
+async function loadTechnicianResolutionContext(
+  db: NonNullable<Awaited<ReturnType<typeof getDb>>>,
+  results: Array<{ distributionId: number; technicianId?: number; isLegacy?: boolean }>,
+  distMap: Record<number, DistributionMeta>,
+): Promise<TechnicianResolutionContext> {
+  const distributionIds = Array.from(new Set(results.map((r) => r.distributionId)));
+  const userIds = new Set<number>();
+  for (const r of results) {
+    if (r.technicianId) userIds.add(r.technicianId);
+    const assignedId = distMap[r.distributionId]?.assignedTechnicianId;
+    if (assignedId) userIds.add(assignedId);
+  }
+
+  const [userRows, concreteRows] = await Promise.all([
+    userIds.size === 0
+      ? Promise.resolve([])
+      : db
+          .select({
+            id: users.id,
+            name: users.name,
+            username: users.username,
+            role: users.role,
+          })
+          .from(users)
+          .where(inArray(users.id, Array.from(userIds))),
+    distributionIds.length === 0
+      ? Promise.resolve([])
+      : db
+          .select({
+            distributionId: concreteTestGroups.distributionId,
+            testedBy: concreteTestGroups.testedBy,
+          })
+          .from(concreteTestGroups)
+          .where(inArray(concreteTestGroups.distributionId, distributionIds)),
+  ]);
+
+  const userMap = Object.fromEntries(userRows.map((r) => [r.id, r]));
+  const concreteTestedByMap: Record<number, string> = {};
+  for (const row of concreteRows) {
+    const testedBy = row.testedBy?.trim();
+    if (testedBy && !concreteTestedByMap[row.distributionId]) {
+      concreteTestedByMap[row.distributionId] = testedBy;
+    }
+  }
+
+  return { userMap, concreteTestedByMap };
 }
 
 function distributionTestHints(dist?: DistributionMeta | null) {
@@ -248,8 +345,8 @@ function mapLegacySectorResult(
     testType: typeMeta.testTypeNameEn,
     overallResult,
     summaryValues: r.average != null ? { average: r.average } : null,
-    testedBy: r.qcReviewedByName ?? null,
-    testDate: r.qcReviewedAt ?? r.updatedAt,
+    technicianId: r.technicianId,
+    testDate: r.processedAt ?? r.updatedAt,
     updatedAt: r.updatedAt,
     isLegacy: true as const,
   };
@@ -329,8 +426,19 @@ function formatSectorResultRow(
   sampleMap: Record<number, SectorSampleRow>,
   testResultReadAtMap: Map<number, Date>,
   distMap: Record<number, DistributionMeta>,
+  techCtx: TechnicianResolutionContext,
 ) {
   const resultSource: SectorResultSource = r.isLegacy ? "legacy" : "specialized";
+  const dist = distMap[r.distributionId];
+  const testedBy = resolvePerformedByName({
+    testedBy: r.isLegacy
+      ? techCtx.concreteTestedByMap[r.distributionId] ?? null
+      : r.testedBy,
+    technicianId: r.technicianId,
+    assignedTechnicianId: dist?.assignedTechnicianId ?? null,
+    userMap: techCtx.userMap,
+  });
+
   if (r.isLegacy) {
     return {
       id: r.id,
@@ -347,7 +455,7 @@ function formatSectorResultRow(
       testType: r.testType,
       overallResult: r.overallResult,
       summaryValues: r.summaryValues,
-      testedBy: r.testedBy,
+      testedBy,
       testDate: r.testDate,
       updatedAt: r.updatedAt,
       isRead: testResultReadAtMap.has(r.id),
@@ -356,7 +464,6 @@ function formatSectorResultRow(
     };
   }
 
-  const dist = distMap[r.distributionId];
   const typeMeta = resolveTestTypeMeta(r.testTypeCode, {
     ...distributionTestHints(dist),
     formTemplate: r.formTemplate,
@@ -375,7 +482,7 @@ function formatSectorResultRow(
     testType: typeMeta.testTypeNameEn,
     overallResult: r.overallResult,
     summaryValues: r.summaryValues,
-    testedBy: r.testedBy,
+    testedBy,
     testDate: r.testDate,
     updatedAt: r.updatedAt,
     isRead: testResultReadAtMap.has(r.id),
@@ -746,17 +853,16 @@ export const sectorRouter = router({
       const allVisible = await fetchAllVisibleSectorResults(db, sampleIds, qcIssuedSampleIds, sampleMap);
       const pageResults = allVisible.slice(offset, offset + input.limit);
 
-      const distIds = Array.from(new Set(
-        allVisible.filter((r) => !r.isLegacy).map((r) => r.distributionId),
-      ));
+      const distIds = Array.from(new Set(allVisible.map((r) => r.distributionId)));
       const distMap = await loadDistributionMetaMap(db, distIds);
+      const techCtx = await loadTechnicianResolutionContext(db, allVisible, distMap);
 
       const testResultReadAtMap = await getSectorTestResultReadAtMap(db, ctx.sectorKey);
       const unreadCount = allVisible.filter((r) => !testResultReadAtMap.has(r.id)).length;
       const activeFailedCount = countActiveFailedAlerts(allVisible, testResultReadAtMap);
 
       return {
-        results: pageResults.map((r) => formatSectorResultRow(r, sampleMap, testResultReadAtMap, distMap)),
+        results: pageResults.map((r) => formatSectorResultRow(r, sampleMap, testResultReadAtMap, distMap, techCtx)),
         total: allVisible.length,
         unreadCount,
         activeFailedCount,
@@ -1365,9 +1471,20 @@ export const sectorRouter = router({
         if (resolved.source === "specialized") {
           const specialized = resolved.row;
           const distMap = await loadDistributionMetaMap(db, [specialized.distributionId]);
+          const techCtx = await loadTechnicianResolutionContext(
+            db,
+            [{ ...specialized, isLegacy: false }],
+            distMap,
+          );
           const typeMeta = resolveTestTypeMeta(specialized.testTypeCode, {
             ...distributionTestHints(distMap[specialized.distributionId]),
             formTemplate: specialized.formTemplate,
+          });
+          const testedBy = resolvePerformedByName({
+            testedBy: specialized.testedBy,
+            technicianId: specialized.technicianId,
+            assignedTechnicianId: distMap[specialized.distributionId]?.assignedTechnicianId ?? null,
+            userMap: techCtx.userMap,
           });
           return {
             type: "result" as const,
@@ -1376,6 +1493,7 @@ export const sectorRouter = router({
               ...specialized,
               ...typeMeta,
               testTypeName: typeMeta.testTypeNameAr,
+              testedBy,
             },
             sample: resolved.sample,
           };
@@ -1383,9 +1501,20 @@ export const sectorRouter = router({
 
         const legacy = resolved.row;
         const distMap = await loadDistributionMetaMap(db, [legacy.distributionId]);
+        const techCtx = await loadTechnicianResolutionContext(
+          db,
+          [{ distributionId: legacy.distributionId, technicianId: legacy.technicianId, isLegacy: true }],
+          distMap,
+        );
         const typeMeta = resolveTestTypeMeta(distMap[legacy.distributionId]?.testType ?? "", distributionTestHints(distMap[legacy.distributionId]));
         const overallResult =
           legacy.complianceStatus === "fail" ? "fail" : legacy.complianceStatus === "pass" ? "pass" : "pending";
+        const testedBy = resolvePerformedByName({
+          testedBy: techCtx.concreteTestedByMap[legacy.distributionId] ?? null,
+          technicianId: legacy.technicianId,
+          assignedTechnicianId: distMap[legacy.distributionId]?.assignedTechnicianId ?? null,
+          userMap: techCtx.userMap,
+        });
         return {
           type: "result" as const,
           resultSource: "legacy" as const,
@@ -1396,8 +1525,8 @@ export const sectorRouter = router({
             testTypeName: typeMeta.testTypeNameAr,
             overallResult,
             summaryValues: legacy.average != null ? { average: legacy.average } : null,
-            testedBy: legacy.qcReviewedByName,
-            testDate: legacy.qcReviewedAt ?? legacy.updatedAt,
+            testedBy,
+            testDate: legacy.processedAt ?? legacy.updatedAt,
             updatedAt: legacy.updatedAt,
             qcReviewedByName: legacy.qcReviewedByName,
             qcReviewedAt: legacy.qcReviewedAt,
