@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { useParams, useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { redirectAfterTestSave } from "@/lib/batchHelpers";
@@ -11,7 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Plus, Trash2, Send, FlaskConical, Printer } from "lucide-react";
+import { Send, FlaskConical, Printer } from "lucide-react";
 import { useLanguage } from "@/contexts/LanguageContext";
 
 // ─── Field Density Test (Relative Compaction) — Sand Replacement Method ───────
@@ -82,6 +82,46 @@ function createEmptyTestPoint(pointNumber: number): TestPoint {
   };
 }
 
+function resolveRegisteredPointQuantity(
+  dist: { orderItemQuantity?: number | null; quantity?: number | null } | null | undefined,
+): number {
+  const q = Number(dist?.orderItemQuantity ?? dist?.quantity) || 1;
+  return Math.max(1, Math.min(999, q));
+}
+
+function pointsFromQuantity(quantity: number): TestPoint[] {
+  const n = Math.max(1, Math.min(999, quantity));
+  return Array.from({ length: n }, (_, i) => createEmptyTestPoint(i + 1));
+}
+
+function syncPointsToQuantity(points: TestPoint[], quantity: number): TestPoint[] {
+  const n = Math.max(1, Math.min(999, quantity));
+  if (points.length === n) return points;
+  if (points.length > n) {
+    return points.slice(0, n).map((p, idx) => ({ ...p, pointNumber: idx + 1 }));
+  }
+  return [
+    ...points,
+    ...Array.from({ length: n - points.length }, (_, i) => createEmptyTestPoint(points.length + i + 1)),
+  ];
+}
+
+function mapSavedTestPoint(raw: Record<string, unknown>, index: number): TestPoint {
+  return {
+    id: String(raw.id ?? `pt_${Date.now()}_${index}`),
+    pointNumber: Number(raw.pointNumber) || index + 1,
+    location: String(raw.location ?? ""),
+    depth: String(raw.depth ?? ""),
+    wtWetSoilFromHole: String(raw.wtWetSoilFromHole ?? ""),
+    wtSandInCylinderBefore: String(raw.wtSandInCylinderBefore ?? ""),
+    wtSandInCylinderAfter: String(raw.wtSandInCylinderAfter ?? ""),
+    containerNo: String(raw.containerNo ?? ""),
+    wtWetSoilPlusContainer: String(raw.wtWetSoilPlusContainer ?? ""),
+    wtDrySoilPlusContainer: String(raw.wtDrySoilPlusContainer ?? ""),
+    wtContainer: String(raw.wtContainer ?? ""),
+  };
+}
+
 function computePoint(point: TestPoint, params: FieldDensityParams): ComputedPoint {
   const mdd = parseFloat(params.mdd) || 0;
   const wtSandInCone = parseFloat(params.wtSandInCone) || 0;
@@ -138,6 +178,10 @@ export default function SoilFieldDensity() {
   const [, setLocation] = useLocation();
   const distId = parseInt(distributionId ?? "0");
   const { data: dist } = trpc.distributions.get.useQuery({ id: distId }, { enabled: !!distId });
+  const { data: existing, isFetched: existingFetched } = trpc.specializedTests.getByDistribution.useQuery(
+    { distributionId: distId },
+    { enabled: !!distId },
+  );
 
   const [params, setParams] = useState<FieldDensityParams>({
     testMethod: "SAND_REPLACEMENT",
@@ -150,9 +194,11 @@ export default function SoilFieldDensity() {
     location: "",
   });
   const [notes, setNotes] = useState("");
-  const [testPoints, setTestPoints] = useState<TestPoint[]>([createEmptyTestPoint(1)]);
+  const [testPoints, setTestPoints] = useState<TestPoint[]>([]);
   const [saving, setSaving] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+
+  const pointCount = useMemo(() => resolveRegisteredPointQuantity(dist), [dist]);
 
   const saveResult = trpc.specializedTests.save.useMutation({
     onSuccess: (_, vars) => {
@@ -174,19 +220,44 @@ export default function SoilFieldDensity() {
   const overallResult: "pass" | "fail" | "pending" =
     allResults.length === 0 ? "pending" : overallPass ? "pass" : "fail";
 
-  const updatePoint = (idx: number, field: keyof TestPoint, value: string) => {
+  const updatePoint = useCallback((idx: number, field: keyof TestPoint, value: string) => {
     setTestPoints((prev) => prev.map((p, i) => (i === idx ? { ...p, [field]: value } : p)));
-  };
+  }, []);
 
-  const addTestPoint = () => {
-    setTestPoints((prev) => [...prev, createEmptyTestPoint(prev.length + 1)]);
-  };
+  useEffect(() => {
+    if (!existing?.formData) return;
+    const fd = existing.formData as Record<string, unknown>;
+    if (fd.testMethod && fd.testMethod in METHODS) {
+      setParams((prev) => ({ ...prev, testMethod: fd.testMethod as Method }));
+    }
+    if (fd.mdd != null) setParams((prev) => ({ ...prev, mdd: String(fd.mdd) }));
+    if (fd.mddReference) setParams((prev) => ({ ...prev, mddReference: String(fd.mddReference) }));
+    if (fd.coneNo) setParams((prev) => ({ ...prev, coneNo: String(fd.coneNo) }));
+    if (fd.wtSandInCone != null) setParams((prev) => ({ ...prev, wtSandInCone: String(fd.wtSandInCone) }));
+    if (fd.bulkDensityOfSand != null) setParams((prev) => ({ ...prev, bulkDensityOfSand: String(fd.bulkDensityOfSand) }));
+    if (fd.requiredCompaction != null) setParams((prev) => ({ ...prev, requiredCompaction: String(fd.requiredCompaction) }));
+    if (fd.location) setParams((prev) => ({ ...prev, location: String(fd.location) }));
 
-  const deletePoint = (id: string) => {
-    setTestPoints((prev) =>
-      prev.filter((p) => p.id !== id).map((p, idx) => ({ ...p, pointNumber: idx + 1 }))
-    );
-  };
+    const savedPoints = fd.testPoints as Array<Record<string, unknown>> | undefined;
+    if (Array.isArray(savedPoints) && savedPoints.length > 0) {
+      const mapped = savedPoints.map((item, i) => mapSavedTestPoint(item, i));
+      setTestPoints(existing.status === "submitted" ? mapped : syncPointsToQuantity(mapped, pointCount));
+    }
+    if (existing.status === "submitted") setSubmitted(true);
+  }, [existing, pointCount]);
+
+  useEffect(() => {
+    if (!dist || !existingFetched || submitted) return;
+    const fd = existing?.formData as Record<string, unknown> | undefined;
+    const savedPoints = fd?.testPoints;
+    if (Array.isArray(savedPoints) && savedPoints.length > 0) {
+      if (existing?.status !== "submitted") {
+        setTestPoints((prev) => syncPointsToQuantity(prev, pointCount));
+      }
+      return;
+    }
+    setTestPoints(pointsFromQuantity(pointCount));
+  }, [dist, dist?.orderItemQuantity, dist?.quantity, existingFetched, existing?.formData, existing?.status, pointCount, submitted]);
 
   const handleSave = async (status: "draft" | "submitted") => {
     if (!dist?.sampleId) {
@@ -195,6 +266,14 @@ export default function SoilFieldDensity() {
     }
     if (status === "submitted" && allResults.length === 0) {
       toast.error(ar ? "الرجاء إدخال نتيجة نقطة اختبار واحدة على الأقل" : "Please enter at least one test point result");
+      return;
+    }
+    if (status === "submitted" && allResults.length < pointCount) {
+      toast.error(
+        ar
+          ? `الرجاء إدخال نتائج لجميع نقاط الاختبار (${pointCount}) حسب الكمية المسجلة في الاستلام`
+          : `Please enter results for all ${pointCount} test point(s) registered at reception`,
+      );
       return;
     }
     setSaving(true);
@@ -296,6 +375,8 @@ export default function SoilFieldDensity() {
             </h1>
             <p className="text-slate-500 text-sm mt-1">
               BS 1377-9 / ASTM D1556 | {ar ? "التوزيع" : "Distribution"}: {dist?.distributionCode ?? `DIST-${distId}`}
+              {" · "}
+              {ar ? `عدد النقاط: ${pointCount}` : `Test points: ${pointCount}`}
             </p>
           </div>
           <div className="flex gap-2">
@@ -438,12 +519,9 @@ export default function SoilFieldDensity() {
         {/* SECTION 2 + 4: Test Points Table */}
         <Card>
           <CardHeader className="pb-3">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-base">{ar ? "نقاط الاختبار الميداني" : "Field Test Points"}</CardTitle>
-              <Button variant="outline" size="sm" onClick={addTestPoint}>
-                <Plus size={14} className="mr-1" /> {ar ? "إضافة نقطة" : "Add Point"}
-              </Button>
-            </div>
+            <CardTitle className="text-base">
+              {ar ? `نقاط الاختبار الميداني (${pointCount})` : `Field Test Points (${pointCount})`}
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="overflow-x-auto">
@@ -460,7 +538,6 @@ export default function SoilFieldDensity() {
                     </th>
                     <th colSpan={4} className={thCls}>{ar ? "تحليل الرطوبة" : "Moisture Analysis"}</th>
                     <th colSpan={3} className={`${thCls} bg-green-50`}>{ar ? "النتائج" : "Results"}</th>
-                    <th rowSpan={2} className={thCls}>{ar ? "الإجراء" : "Action"}</th>
                   </tr>
                   {/* Sub-header row */}
                   <tr className="bg-slate-50">
@@ -551,24 +628,12 @@ export default function SoilFieldDensity() {
                       >
                         {point.compaction > 0 ? `${point.compaction}%` : "—"}
                       </td>
-                      <td className="border border-slate-200 px-1 py-1 text-center">
-                        {testPoints.length > 1 && (
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => deletePoint(point.id)}
-                            className="h-7 w-7 p-0 text-red-600 hover:text-red-700"
-                          >
-                            <Trash2 size={12} />
-                          </Button>
-                        )}
-                      </td>
                     </tr>
                   ))}
                 </tbody>
                 <tfoot>
                   <tr>
-                    <td colSpan={15} className="border border-slate-200 px-3 py-2 text-[11px] text-slate-500 bg-slate-50">
+                    <td colSpan={14} className="border border-slate-200 px-3 py-2 text-[11px] text-slate-500 bg-slate-50">
                       {ar
                         ? `نسبة الدمك المطلوبة: ${params.requiredCompaction || 95}% | النجاح = نسبة الدمك ≥ ${params.requiredCompaction || 95}%`
                         : `Required Compaction: ${params.requiredCompaction || 95}% | Pass = RC ≥ ${params.requiredCompaction || 95}%`}
