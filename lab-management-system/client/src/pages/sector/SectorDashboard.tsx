@@ -103,7 +103,11 @@ type InboxItem = {
   failedAlertActive?: boolean;
   createdAt: string | Date | null;
   refId: number;
+  resultSource?: "specialized" | "legacy";
   sampleCode?: string;
+  contractNumber?: string;
+  testTypeNameAr?: string;
+  testTypeNameEn?: string;
 };
 
 function timeAgo(dateVal: unknown, lang: "ar" | "en"): string {
@@ -317,6 +321,9 @@ function ActivityRow({
   const isFail = isFailedResultAlert(item);
   const label = activityLabel(item, lang);
   const code = item.sampleCode ?? (isRtl ? item.title : item.titleEn ?? item.title);
+  const contractLine = item.contractNumber
+    ? `${code} · ${item.contractNumber}`
+    : code;
 
   let Icon = Bell;
   let iconBg = "bg-blue-50 border-blue-100";
@@ -351,7 +358,7 @@ function ActivityRow({
       </div>
       <div className="min-w-0 flex-1">
         <p className={`truncate text-sm font-semibold ${isFail ? "text-red-800" : "text-slate-800"}`}>{label}</p>
-        <p className={`truncate text-xs ${isFail ? "text-red-600" : "text-slate-500"}`}>{code}</p>
+        <p className={`truncate text-xs ${isFail ? "text-red-600" : "text-slate-500"}`}>{contractLine}</p>
       </div>
       {isFail && (
         <span className="flex-shrink-0 rounded-full bg-red-600 px-2 py-0.5 text-[10px] font-bold uppercase text-white">
@@ -377,6 +384,7 @@ export default function SectorDashboard() {
   const [feedTab, setFeedTab] = useState<"all" | "result" | "clearance">("all");
   const [showAllFeed, setShowAllFeed] = useState(false);
   const [selectedResultId, setSelectedResultId] = useState<number | null>(null);
+  const [selectedResultSource, setSelectedResultSource] = useState<"specialized" | "legacy" | undefined>();
   const [selectedTestLabel, setSelectedTestLabel] = useState("");
 
   const { data: stats, isLoading: statsLoading } = trpc.sector.getDashboardStats.useQuery(undefined, {
@@ -401,14 +409,22 @@ export default function SectorDashboard() {
     }).slice(0, showAllFeed ? 100 : 12);
   }, [items, feedTab, showAllFeed]);
 
-  const openResult = (id: number, label = "") => {
+  const openResult = (
+    id: number,
+    label = "",
+    resultSource?: "specialized" | "legacy",
+  ) => {
     setSelectedResultId(id);
+    setSelectedResultSource(resultSource);
     setSelectedTestLabel(label);
   };
 
   const handleActivityClick = (item: InboxItem) => {
     if (item.type === "result") {
-      openResult(item.refId, item.subtitle?.split(" — ").slice(1).join(" — ") ?? "");
+      const testLabel = isRtl
+        ? (item.testTypeNameAr ?? item.subtitle?.split(" — ").slice(1).join(" — "))
+        : (item.testTypeNameEn ?? item.subtitle?.split(" — ").slice(1).join(" — "));
+      openResult(item.refId, testLabel ?? "", item.resultSource);
     } else if (item.type === "clearance") {
       setLocation("/sector/clearances");
     }
@@ -510,8 +526,12 @@ export default function SectorDashboard() {
 
       <SectorTestResultDialog
         resultId={selectedResultId}
+        resultSource={selectedResultSource}
         open={!!selectedResultId}
-        onClose={() => setSelectedResultId(null)}
+        onClose={() => {
+          setSelectedResultId(null);
+          setSelectedResultSource(undefined);
+        }}
         lang={lang}
         testTypeLabel={selectedTestLabel}
       />

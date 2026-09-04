@@ -108,6 +108,7 @@ export default function SectorResults() {
   const [dateTo, setDateTo] = useState("");
   const [showDateFilters, setShowDateFilters] = useState(false);
   const [selectedResultId, setSelectedResultId] = useState<number | null>(null);
+  const [selectedResultSource, setSelectedResultSource] = useState<"specialized" | "legacy" | undefined>();
   const [selectedTestTypeLabel, setSelectedTestTypeLabel] = useState<string>("");
   const T = t[lang];
   const isRtl = lang === "ar";
@@ -162,8 +163,13 @@ export default function SectorResults() {
   const hasDateFilters = dateFrom || dateTo;
   const hasActiveFilters = resultFilter || readFilter || hasDateFilters || search || refSearch;
 
-  const openReport = (id: number, testTypeLabel: string) => {
+  const openReport = (
+    id: number,
+    testTypeLabel: string,
+    resultSource?: "specialized" | "legacy",
+  ) => {
     setSelectedResultId(id);
+    setSelectedResultSource(resultSource);
     setSelectedTestTypeLabel(testTypeLabel);
   };
 
@@ -290,7 +296,10 @@ export default function SectorResults() {
                 {filtered.map((r, i) => {
                   const isPass = r.overallResult?.toLowerCase() === "pass";
                   const isFail = r.overallResult?.toLowerCase() === "fail";
-                  const testLabel = isRtl ? (r.testTypeNameAr ?? r.testType ?? r.testTypeCode) : (r.testTypeNameEn ?? r.testType ?? r.testTypeCode);
+                  const testLabel =
+                    (isRtl
+                      ? (r.testTypeNameAr || r.testType || r.testTypeCode)
+                      : (r.testTypeNameEn || r.testType || r.testTypeCode)) || "—";
                   const showFailAlert = Boolean(r.failedAlertActive);
                   return (
                     <tr
@@ -304,7 +313,7 @@ export default function SectorResults() {
                               ? "bg-slate-50/40"
                               : "bg-white"
                       }`}
-                      onClick={() => openReport(r.id, testLabel ?? "")}
+                      onClick={() => openReport(r.id, testLabel, r.resultSource)}
                     >
                       <td className="px-4 py-4">
                         {showFailAlert ? (
@@ -337,7 +346,7 @@ export default function SectorResults() {
                       <td className={sectorTheme.tableCell}>
                         <button
                           type="button"
-                          onClick={(e) => { e.stopPropagation(); openReport(r.id, testLabel ?? ""); }}
+                          onClick={(e) => { e.stopPropagation(); openReport(r.id, testLabel, r.resultSource); }}
                           className={sectorTheme.actionButton}
                         >
                           <FileText className="h-4 w-4" />
@@ -369,8 +378,12 @@ export default function SectorResults() {
 
       <SectorTestResultDialog
         resultId={selectedResultId}
+        resultSource={selectedResultSource}
         open={selectedResultId !== null}
-        onClose={() => setSelectedResultId(null)}
+        onClose={() => {
+          setSelectedResultId(null);
+          setSelectedResultSource(undefined);
+        }}
         lang={lang}
         testTypeLabel={selectedTestTypeLabel}
       />

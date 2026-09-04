@@ -4885,9 +4885,10 @@ export function SpecializedTestReportBody({
 type SpecializedTestReportProps = {
   /** When set, loads approved report data via sector portal auth (same UI as lab). */
   sectorResultId?: number;
+  sectorResultSource?: "specialized" | "legacy";
 };
 
-export default function SpecializedTestReport({ sectorResultId }: SpecializedTestReportProps = {}) {
+export default function SpecializedTestReport({ sectorResultId, sectorResultSource }: SpecializedTestReportProps = {}) {
   const { distributionId } = useParams<{ distributionId: string }>();
   const { lang, setLang } = useLanguage();
   const ar = lang === "ar";
@@ -4897,7 +4898,7 @@ export default function SpecializedTestReport({ sectorResultId }: SpecializedTes
   const distIdFromRoute = parseInt(distributionId ?? "0");
 
   const { data: sectorBundle, isLoading: sectorLoading, isError: sectorError } = trpc.sector.getTestReportBundle.useQuery(
-    { resultId: sectorResultId! },
+    { resultId: sectorResultId!, resultSource: sectorResultSource },
     { enabled: isSectorMode }
   );
 

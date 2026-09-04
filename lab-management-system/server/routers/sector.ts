@@ -40,6 +40,8 @@ import {
   notifications,
   contracts,
   labOrders,
+  distributions,
+  testTypes,
 } from "../../drizzle/schema";
 import { eq, and, desc, inArray, sql, or, like, gte, lte, isNotNull, isNull, ne, notInArray } from "drizzle-orm";
 import { storagePut } from "../storage";
@@ -50,7 +52,7 @@ import {
   validateClearanceLetterFile,
 } from "../uploadUtils";
 import { buildSampleVisibilityCondition } from "../db";
-import { getOfficialTestByCode } from "../data/official-test-catalog";
+import { getOfficialTestByCode, OFFICIAL_TEST_CATALOG } from "../data/official-test-catalog";
 import { computeSampleKpisFromStatusCounts } from "../../shared/dashboardInsights";
 import {
   buildReportReadAtMap,
@@ -77,13 +79,93 @@ async function getSectorTestResultReadAtMap(
   return buildReportReadAtMap(rows);
 }
 
-function resolveTestTypeMeta(testTypeCode: string | null | undefined) {
-  const meta = getOfficialTestByCode(testTypeCode);
+function resolveTestTypeMeta(
+  testTypeCode: string | null | undefined,
+  hints?: { testName?: string | null; formTemplate?: string | null },
+) {
+  const code = (testTypeCode ?? "").trim();
+  let meta = getOfficialTestByCode(code || undefined);
+  if (!meta && code) {
+    meta = OFFICIAL_TEST_CATALOG.find(
+      (t) => code === t.code || code.startsWith(`${t.code}_`) || code.startsWith(`${t.code}-`),
+    );
+  }
+  if (!meta && hints?.formTemplate) {
+    meta = OFFICIAL_TEST_CATALOG.find((t) => t.formTemplate === hints.formTemplate);
+  }
+  const nameFallback = hints?.testName?.trim() || code || "—";
   return {
-    testTypeCode: testTypeCode ?? "",
-    testTypeNameAr: meta?.nameAr ?? testTypeCode ?? "",
-    testTypeNameEn: meta?.nameEn ?? testTypeCode ?? "",
+    testTypeCode: code,
+    testTypeNameAr: meta?.nameAr || nameFallback,
+    testTypeNameEn: meta?.nameEn || nameFallback,
   };
+}
+
+type SectorResultSource = "specialized" | "legacy";
+
+type DistributionMeta = {
+  testName: string | null;
+  testType: string | null;
+  testNameAr: string | null;
+  testNameEn: string | null;
+};
+
+async function loadDistributionMetaMap(
+  db: NonNullable<Awaited<ReturnType<typeof getDb>>>,
+  distributionIds: number[],
+): Promise<Record<number, DistributionMeta>> {
+  if (distributionIds.length === 0) return {};
+  const rows = await db
+    .select({
+      id: distributions.id,
+      testName: distributions.testName,
+      testType: distributions.testType,
+      testNameAr: testTypes.nameAr,
+      testNameEn: testTypes.nameEn,
+    })
+    .from(distributions)
+    .leftJoin(testTypes, eq(distributions.testType, testTypes.code))
+    .where(inArray(distributions.id, distributionIds));
+  return Object.fromEntries(rows.map((r) => [r.id, r]));
+}
+
+function distributionTestHints(dist?: DistributionMeta | null) {
+  if (!dist) return {};
+  return {
+    testName: dist.testNameAr ?? dist.testNameEn ?? dist.testName ?? dist.testType,
+    formTemplate: undefined as string | undefined,
+  };
+}
+
+async function resolveSectorResultRecord(
+  ctx: { sectorKey: string },
+  refId: number,
+  source?: SectorResultSource,
+) {
+  const trySpecialized = async () => {
+    const row = await getSpecializedTestResultById(refId);
+    if (!row) return null;
+    const sample = await getSampleById(row.sampleId);
+    if (!sample || sample.sector !== ctx.sectorKey) return null;
+    if (!sectorResultIsVisible(row, sample.status)) return null;
+    return { source: "specialized" as const, row, sample };
+  };
+
+  const tryLegacy = async () => {
+    const row = await getTestResultById(refId);
+    if (!row?.qcReviewedAt) return null;
+    const sample = await getSampleById(row.sampleId);
+    if (!sample || sample.sector !== ctx.sectorKey) return null;
+    if (!QC_ISSUED_SAMPLE_STATUSES.has(sample.status ?? "")) return null;
+    return { source: "legacy" as const, row, sample };
+  };
+
+  if (source === "legacy") return (await tryLegacy()) ?? null;
+  if (source === "specialized") return (await trySpecialized()) ?? null;
+
+  const specialized = await trySpecialized();
+  if (specialized) return specialized;
+  return tryLegacy();
 }
 
 const QC_ISSUED_SAMPLE_STATUSES = new Set(["qc_passed", "qc_failed", "clearance_issued"]);
@@ -146,22 +228,24 @@ function sectorVisibleResultsCondition(sampleIds: number[], qcIssuedSampleIds: n
 function mapLegacySectorResult(
   r: typeof testResults.$inferSelect,
   sampleMap: Record<number, SectorSampleRow>,
+  distMap: Record<number, DistributionMeta>,
 ) {
   const sample = sampleMap[r.sampleId];
+  const dist = distMap[r.distributionId];
+  const typeMeta = resolveTestTypeMeta(dist?.testType ?? "", distributionTestHints(dist));
   const overallResult =
     r.complianceStatus === "fail" ? "fail" : r.complianceStatus === "pass" ? "pass" : "pending";
   return {
     id: r.id,
     sampleId: r.sampleId,
+    distributionId: r.distributionId,
     sampleCode: sample?.sampleCode ?? "",
     contractNumber: sample?.contractNumber ?? "",
     contractName: sample?.contractName ?? "",
     contractorName: sample?.contractorName ?? "",
     referenceNo: sample?.referenceNo ?? null,
-    testTypeCode: "",
-    testTypeNameAr: "نتيجة فحص",
-    testTypeNameEn: "Test Result",
-    testType: "Test Result",
+    ...typeMeta,
+    testType: typeMeta.testTypeNameEn,
     overallResult,
     summaryValues: r.average != null ? { average: r.average } : null,
     testedBy: r.qcReviewedByName ?? null,
@@ -196,11 +280,17 @@ async function fetchAllVisibleSectorResults(
       .orderBy(desc(testResults.updatedAt));
   }
 
+  const distIds = Array.from(new Set([
+    ...specializedRows.map((r) => r.distributionId),
+    ...legacyRows.map((r) => r.distributionId),
+  ]));
+  const distMap = await loadDistributionMetaMap(db, distIds);
+
   const specializedMapped = specializedRows.map((r) => ({
     ...r,
     isLegacy: false as const,
   }));
-  const legacyMapped = legacyRows.map((r) => mapLegacySectorResult(r, sampleMap));
+  const legacyMapped = legacyRows.map((r) => mapLegacySectorResult(r, sampleMap, distMap));
 
   return [...specializedMapped, ...legacyMapped].sort(
     (a, b) => new Date(b.updatedAt ?? 0).getTime() - new Date(a.updatedAt ?? 0).getTime(),
@@ -238,10 +328,13 @@ function formatSectorResultRow(
   r: Awaited<ReturnType<typeof fetchAllVisibleSectorResults>>[number],
   sampleMap: Record<number, SectorSampleRow>,
   testResultReadAtMap: Map<number, Date>,
+  distMap: Record<number, DistributionMeta>,
 ) {
+  const resultSource: SectorResultSource = r.isLegacy ? "legacy" : "specialized";
   if (r.isLegacy) {
     return {
       id: r.id,
+      resultSource,
       sampleId: r.sampleId,
       sampleCode: r.sampleCode,
       contractNumber: r.contractNumber,
@@ -263,10 +356,15 @@ function formatSectorResultRow(
     };
   }
 
-  const typeMeta = resolveTestTypeMeta(r.testTypeCode);
+  const dist = distMap[r.distributionId];
+  const typeMeta = resolveTestTypeMeta(r.testTypeCode, {
+    ...distributionTestHints(dist),
+    formTemplate: r.formTemplate,
+  });
   const sample = sampleMap[r.sampleId];
   return {
     id: r.id,
+    resultSource,
     sampleId: r.sampleId,
     sampleCode: sample?.sampleCode ?? "",
     contractNumber: sample?.contractNumber ?? "",
@@ -447,23 +545,19 @@ export const sectorRouter = router({
     const totalSamples = sampleKpis.total;
     const completedSamples = sampleKpis.completed;
 
-    const qcPassedSamples = statusRows
-      .filter((r) => r.status === "qc_passed" || r.status === "clearance_issued")
-      .reduce((sum, r) => sum + Number(r.count ?? 0), 0);
-    const qcFailedSamples = statusRows
-      .filter((r) => r.status === "qc_failed")
-      .reduce((sum, r) => sum + Number(r.count ?? 0), 0);
-    const readyResults = qcPassedSamples;
-    const failedResultsIssued = qcFailedSamples;
-    const samplesInLab = Math.max(0, totalSamples - readyResults - failedResultsIssued);
-
     const { sampleIds, qcIssuedSampleIds, sampleMap } = await loadSectorSampleContext(db, ctx.sectorKey);
     const allVisibleResults = await fetchAllVisibleSectorResults(db, sampleIds, qcIssuedSampleIds, sampleMap);
     const approvedResults = allVisibleResults.length;
 
+    const readyResults = allVisibleResults.filter((r) => r.overallResult === "pass").length;
+
     const failedRows = allVisibleResults
       .filter((r) => r.overallResult === "fail")
       .map((r) => ({ id: r.id, overallResult: "fail" as const }));
+    const failedResultsIssued = failedRows.length;
+
+    const samplesWithVisibleResults = new Set(allVisibleResults.map((r) => r.sampleId)).size;
+    const samplesInLab = Math.max(0, totalSamples - samplesWithVisibleResults);
 
     const testResultReadAtMap = await getSectorTestResultReadAtMap(db, ctx.sectorKey);
     const failedResults = countActiveFailedAlerts(failedRows, testResultReadAtMap);
@@ -652,12 +746,17 @@ export const sectorRouter = router({
       const allVisible = await fetchAllVisibleSectorResults(db, sampleIds, qcIssuedSampleIds, sampleMap);
       const pageResults = allVisible.slice(offset, offset + input.limit);
 
+      const distIds = Array.from(new Set(
+        allVisible.filter((r) => !r.isLegacy).map((r) => r.distributionId),
+      ));
+      const distMap = await loadDistributionMetaMap(db, distIds);
+
       const testResultReadAtMap = await getSectorTestResultReadAtMap(db, ctx.sectorKey);
       const unreadCount = allVisible.filter((r) => !testResultReadAtMap.has(r.id)).length;
       const activeFailedCount = countActiveFailedAlerts(allVisible, testResultReadAtMap);
 
       return {
-        results: pageResults.map((r) => formatSectorResultRow(r, sampleMap, testResultReadAtMap)),
+        results: pageResults.map((r) => formatSectorResultRow(r, sampleMap, testResultReadAtMap, distMap)),
         total: allVisible.length,
         unreadCount,
         activeFailedCount,
@@ -666,18 +765,16 @@ export const sectorRouter = router({
 
   // ── Mark test result as read ───────────────────────────────────────────────
   getTestReportBundle: sectorProcedure
-    .input(z.object({ resultId: z.number() }))
+    .input(z.object({
+      resultId: z.number(),
+      resultSource: z.enum(["specialized", "legacy"]).optional(),
+    }))
     .query(async ({ ctx, input }) => {
-      const result = await getSpecializedTestResultById(input.resultId);
-      if (result) {
-        const sample = await getSampleById(result.sampleId);
-        if (!sample || sample.sector !== ctx.sectorKey) {
-          throw new TRPCError({ code: "FORBIDDEN" });
-        }
-        if (result.status !== "approved" && !QC_ISSUED_SAMPLE_STATUSES.has(sample.status ?? "")) {
-          throw new TRPCError({ code: "FORBIDDEN", message: "Report not available until approved" });
-        }
+      const resolved = await resolveSectorResultRecord(ctx, input.resultId, input.resultSource);
+      if (!resolved) throw new TRPCError({ code: "NOT_FOUND" });
 
+      if (resolved.source === "specialized") {
+        const result = resolved.row;
         const dist = await getDistributionById(result.distributionId);
         if (!dist) throw new TRPCError({ code: "NOT_FOUND", message: "Distribution not found" });
 
@@ -688,33 +785,23 @@ export const sectorRouter = router({
 
         if (dist.batchDistributionId) {
           batchDists = await getDistributionsByBatch(dist.batchDistributionId);
-          const sampleIds = Array.from(new Set(batchDists.map((d) => d.sampleId)));
+          const batchSampleIds = Array.from(new Set(batchDists.map((d) => d.sampleId)));
           batchResults = await Promise.all(
-            sampleIds.map(async (sampleId) => ({
+            batchSampleIds.map(async (sampleId) => ({
               sample: await getSampleById(sampleId),
               testResults: await getSpecializedTestResultsBySample(sampleId),
             }))
           );
         }
 
-        return { result, dist, legacyResult, batchDists, batchResults };
+        return { result, dist, legacyResult, batchDists, batchResults, resultSource: "specialized" as const };
       }
 
-      const legacyResult = await getTestResultById(input.resultId);
-      if (!legacyResult?.qcReviewedAt) throw new TRPCError({ code: "NOT_FOUND" });
-
-      const sample = await getSampleById(legacyResult.sampleId);
-      if (!sample || sample.sector !== ctx.sectorKey) {
-        throw new TRPCError({ code: "FORBIDDEN" });
-      }
-      if (!QC_ISSUED_SAMPLE_STATUSES.has(sample.status ?? "")) {
-        throw new TRPCError({ code: "FORBIDDEN", message: "Report not available until approved" });
-      }
-
+      const legacyResult = resolved.row;
       const dist = await getDistributionById(legacyResult.distributionId);
       if (!dist) throw new TRPCError({ code: "NOT_FOUND", message: "Distribution not found" });
 
-      return { result: null, dist, legacyResult, batchDists: [], batchResults: [] };
+      return { result: null, dist, legacyResult, batchDists: [], batchResults: [], resultSource: "legacy" as const };
     }),
 
   markResultRead: sectorProcedure
@@ -1134,17 +1221,30 @@ export const sectorRouter = router({
       const results = await fetchAllVisibleSectorResults(db, sampleIds, qcIssuedSampleIds, sampleMap);
       const visibleResults = results.slice(0, 100);
 
+      const distIds = Array.from(new Set(
+        visibleResults.filter((r) => !r.isLegacy).map((r) => r.distributionId),
+      ));
+      const distMap = await loadDistributionMetaMap(db, distIds);
+
       const testResultReadAtMap = await getSectorTestResultReadAtMap(db, ctx.sectorKey);
       const readResultIds = new Set(testResultReadAtMap.keys());
 
       resultItems = visibleResults.map((r) => {
+        const resultSource: SectorResultSource = r.isLegacy ? "legacy" : "specialized";
         const typeMeta = r.isLegacy
-          ? { testTypeCode: r.testTypeCode, testTypeNameAr: r.testTypeNameAr, testTypeNameEn: r.testTypeNameEn }
-          : resolveTestTypeMeta(r.testTypeCode);
+          ? {
+              testTypeCode: r.testTypeCode,
+              testTypeNameAr: r.testTypeNameAr,
+              testTypeNameEn: r.testTypeNameEn,
+            }
+          : resolveTestTypeMeta(r.testTypeCode, {
+              ...distributionTestHints(distMap[r.distributionId]),
+              formTemplate: r.formTemplate,
+            });
         const contractNumber = sampleMap[r.sampleId]?.contractNumber ?? "";
-        const testLabel = typeMeta.testTypeNameAr || typeMeta.testTypeCode;
+        const testLabel = typeMeta.testTypeNameAr || typeMeta.testTypeNameEn || typeMeta.testTypeCode || "—";
         return {
-          id: `result-${r.id}`,
+          id: `result-${resultSource}-${r.id}`,
           type: "result" as const,
           title: `نتيجة فحص: ${sampleMap[r.sampleId]?.sampleCode ?? r.sampleId}`,
           titleEn: `Test Result: ${sampleMap[r.sampleId]?.sampleCode ?? r.sampleId}`,
@@ -1154,6 +1254,7 @@ export const sectorRouter = router({
           failedAlertActive: isFailedResultAlertActive(r.overallResult, r.id, testResultReadAtMap),
           createdAt: r.updatedAt ?? r.testDate,
           refId: r.id,
+          resultSource,
           sampleCode: sampleMap[r.sampleId]?.sampleCode,
           contractNumber,
           testTypeCode: typeMeta.testTypeCode,
@@ -1234,74 +1335,15 @@ export const sectorRouter = router({
     .input(z.object({
       type: z.enum(["result", "clearance", "notification"]),
       refId: z.number(),
+      resultSource: z.enum(["specialized", "legacy"]).optional(),
     }))
     .query(async ({ ctx, input }) => {
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
 
       if (input.type === "result") {
-        const [specialized] = await db
-          .select()
-          .from(specializedTestResults)
-          .where(eq(specializedTestResults.id, input.refId))
-          .limit(1);
-
-        if (specialized) {
-          const [sample] = await db
-            .select()
-            .from(samples)
-            .where(eq(samples.id, specialized.sampleId))
-            .limit(1);
-          if (!sample || sample.sector !== ctx.sectorKey) {
-            throw new TRPCError({ code: "FORBIDDEN" });
-          }
-          if (!sectorResultIsVisible(specialized, sample.status)) {
-            throw new TRPCError({ code: "FORBIDDEN", message: "Report not available until approved" });
-          }
-
-          const existing = await db
-            .select()
-            .from(sectorReportReads)
-            .where(and(
-              eq(sectorReportReads.sectorKey, ctx.sectorKey as any),
-              eq(sectorReportReads.reportType, "test_result"),
-              eq(sectorReportReads.reportId, input.refId)
-            ))
-            .limit(1);
-          if (existing.length === 0) {
-            await mysqlRawInsertRow(db, "sector_report_reads", {
-              sectorKey: ctx.sectorKey as string,
-              reportType: "test_result",
-              reportId: input.refId,
-            });
-          }
-
-          const typeMeta = resolveTestTypeMeta(specialized.testTypeCode);
-          return {
-            type: "result" as const,
-            result: {
-              ...specialized,
-              ...typeMeta,
-              testTypeName: typeMeta.testTypeNameAr,
-            },
-            sample,
-          };
-        }
-
-        const legacy = await getTestResultById(input.refId);
-        if (!legacy?.qcReviewedAt) throw new TRPCError({ code: "NOT_FOUND" });
-
-        const [sample] = await db
-          .select()
-          .from(samples)
-          .where(eq(samples.id, legacy.sampleId))
-          .limit(1);
-        if (!sample || sample.sector !== ctx.sectorKey) {
-          throw new TRPCError({ code: "FORBIDDEN" });
-        }
-        if (!QC_ISSUED_SAMPLE_STATUSES.has(sample.status ?? "")) {
-          throw new TRPCError({ code: "FORBIDDEN", message: "Report not available until approved" });
-        }
+        const resolved = await resolveSectorResultRecord(ctx, input.refId, input.resultSource);
+        if (!resolved) throw new TRPCError({ code: "NOT_FOUND" });
 
         const existing = await db
           .select()
@@ -1320,17 +1362,38 @@ export const sectorRouter = router({
           });
         }
 
+        if (resolved.source === "specialized") {
+          const specialized = resolved.row;
+          const distMap = await loadDistributionMetaMap(db, [specialized.distributionId]);
+          const typeMeta = resolveTestTypeMeta(specialized.testTypeCode, {
+            ...distributionTestHints(distMap[specialized.distributionId]),
+            formTemplate: specialized.formTemplate,
+          });
+          return {
+            type: "result" as const,
+            resultSource: "specialized" as const,
+            result: {
+              ...specialized,
+              ...typeMeta,
+              testTypeName: typeMeta.testTypeNameAr,
+            },
+            sample: resolved.sample,
+          };
+        }
+
+        const legacy = resolved.row;
+        const distMap = await loadDistributionMetaMap(db, [legacy.distributionId]);
+        const typeMeta = resolveTestTypeMeta(distMap[legacy.distributionId]?.testType ?? "", distributionTestHints(distMap[legacy.distributionId]));
         const overallResult =
           legacy.complianceStatus === "fail" ? "fail" : legacy.complianceStatus === "pass" ? "pass" : "pending";
         return {
           type: "result" as const,
+          resultSource: "legacy" as const,
           result: {
             id: legacy.id,
             sampleId: legacy.sampleId,
-            testTypeCode: "",
-            testTypeNameAr: "نتيجة فحص",
-            testTypeNameEn: "Test Result",
-            testTypeName: "نتيجة فحص",
+            ...typeMeta,
+            testTypeName: typeMeta.testTypeNameAr,
             overallResult,
             summaryValues: legacy.average != null ? { average: legacy.average } : null,
             testedBy: legacy.qcReviewedByName,
@@ -1339,7 +1402,7 @@ export const sectorRouter = router({
             qcReviewedByName: legacy.qcReviewedByName,
             qcReviewedAt: legacy.qcReviewedAt,
           },
-          sample,
+          sample: resolved.sample,
         };
       }
 

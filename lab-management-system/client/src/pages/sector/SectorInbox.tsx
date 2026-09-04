@@ -201,6 +201,7 @@ type InboxItem = {
   failedAlertActive?: boolean;
   createdAt: any;
   refId: number;
+  resultSource?: "specialized" | "legacy";
   sampleCode?: string;
   contractNumber?: string;
 };
@@ -1032,6 +1033,7 @@ export default function SectorInbox() {
       {selectedItem?.type === "result" ? (
         <SectorTestResultDialog
           resultId={selectedItem.refId}
+          resultSource={selectedItem.resultSource}
           open={!!selectedItem}
           onClose={() => { setSelectedItem(null); refetch(); }}
           lang={lang as "ar" | "en"}

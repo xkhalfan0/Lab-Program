@@ -105,12 +105,14 @@ function DetailRow({
 
 export function SectorTestResultDialog({
   resultId,
+  resultSource,
   open,
   onClose,
   lang,
   testTypeLabel,
 }: {
   resultId: number | null;
+  resultSource?: "specialized" | "legacy";
   open: boolean;
   onClose: () => void;
   lang: "ar" | "en";
@@ -121,7 +123,7 @@ export function SectorTestResultDialog({
 
   const utils = trpc.useUtils();
   const { data: detail, isLoading, isError } = trpc.sector.getInboxItemDetail.useQuery(
-    { type: "result", refId: resultId ?? 0 },
+    { type: "result", refId: resultId ?? 0, resultSource },
     { enabled: open && !!resultId, staleTime: 30000 }
   );
 
@@ -140,7 +142,9 @@ export function SectorTestResultDialog({
 
   function handleOpenReport() {
     if (!resultId) return;
-    const url = `/sector/test-report/${resultId}`;
+    const source = resultSource ?? detail?.resultSource;
+    const qs = source ? `?source=${source}` : "";
+    const url = `/sector/test-report/${resultId}${qs}`;
     const opened = window.open(url, "_blank");
     if (!opened) window.location.href = url;
   }

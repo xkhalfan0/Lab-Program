@@ -9,6 +9,9 @@ export default function SectorTestReportPage() {
   const id = parseInt(resultId ?? "0", 10);
   const { lang } = useSectorLang();
   const { setLang } = useLanguage();
+  const resultSource = typeof window !== "undefined"
+    ? (new URLSearchParams(window.location.search).get("source") as "specialized" | "legacy" | null)
+    : null;
 
   useEffect(() => {
     setLang(lang);
@@ -22,5 +25,10 @@ export default function SectorTestReportPage() {
     );
   }
 
-  return <SpecializedTestReport sectorResultId={id} />;
+  return (
+    <SpecializedTestReport
+      sectorResultId={id}
+      sectorResultSource={resultSource === "legacy" || resultSource === "specialized" ? resultSource : undefined}
+    />
+  );
 }
