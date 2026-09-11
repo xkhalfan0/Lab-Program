@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { trpc } from "@/lib/trpc";
 import { SectorLayout, useSectorLang } from "./SectorLayout";
 import { SectorTestResultDialog } from "./SectorTestResultDialog";
@@ -22,7 +22,6 @@ import {
   XCircle,
   Circle,
   Eye,
-  X,
   Calendar,
   FileText,
 } from "lucide-react";
@@ -47,10 +46,13 @@ const t = {
     unread: "جديد",
     pass: "ناجح",
     fail: "راسب",
-    search: "بحث برمز العينة أو العقد أو مرجع التفتيش أو نوع الاختبار...",
-    refSearch: "رقم مرجع التفتيش...",
+    search: "بحث برمز العينة أو مرجع التفتيش...",
     clearFilters: "مسح الفلاتر",
     allResults: "الكل",
+    allContracts: "كل العقود",
+    allTestTypes: "كل الاختبارات",
+    filterContract: "رقم العقد",
+    filterTestType: "نوع الاختبار",
     from: "من تاريخ",
     to: "إلى تاريخ",
     filterStatus: "الحالة",
@@ -81,10 +83,13 @@ const t = {
     unread: "New",
     pass: "Pass",
     fail: "Fail",
-    search: "Search by sample code, contract, inspection ref., or test type...",
-    refSearch: "Inspection Reference No....",
+    search: "Search by sample code or inspection ref....",
     clearFilters: "Clear Filters",
     allResults: "All",
+    allContracts: "All contracts",
+    allTestTypes: "All test types",
+    filterContract: "Contract No.",
+    filterTestType: "Test Type",
     from: "From Date",
     to: "To Date",
     filterStatus: "Status",
@@ -103,7 +108,8 @@ export default function SectorResults() {
   const [location] = useLocation();
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
-  const [refSearch, setRefSearch] = useState("");
+  const [contractFilter, setContractFilter] = useState("");
+  const [testTypeFilter, setTestTypeFilter] = useState("");
   const [resultFilter, setResultFilter] = useState("");
   const [readFilter, setReadFilter] = useState("");
   const [dateFrom, setDateFrom] = useState("");
@@ -132,21 +138,39 @@ export default function SectorResults() {
   const failCount = allResults.filter((r) => r.overallResult?.toLowerCase() === "fail").length;
   const activeFailedCount = data?.activeFailedCount ?? allResults.filter((r) => r.failedAlertActive).length;
 
+  const contractOptions = useMemo(() => {
+    const values = new Set<string>();
+    for (const r of allResults) {
+      const contractNumber = r.contractNumber?.trim();
+      if (contractNumber) values.add(contractNumber);
+    }
+    return Array.from(values).sort((a, b) => a.localeCompare(b));
+  }, [allResults]);
+
+  const testTypeOptions = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const r of allResults) {
+      const code = (r.testTypeCode || r.testType || "").trim();
+      if (!code) continue;
+      const label =
+        (isRtl ? (r.testTypeNameAr ?? r.testType) : (r.testTypeNameEn ?? r.testType)) || code;
+      if (!map.has(code)) map.set(code, label);
+    }
+    return Array.from(map.entries()).sort((a, b) => a[1].localeCompare(b[1], isRtl ? "ar" : "en"));
+  }, [allResults, isRtl]);
+
   const filtered = allResults.filter((r) => {
-    const testLabel = isRtl ? (r.testTypeNameAr ?? r.testType) : (r.testTypeNameEn ?? r.testType);
     if (search) {
       const q = search.toLowerCase();
       const match =
         r.sampleCode?.toLowerCase().includes(q) ||
-        r.contractNumber?.toLowerCase().includes(q) ||
-        r.referenceNo?.toLowerCase().includes(q) ||
-        testLabel?.toLowerCase().includes(q) ||
-        r.testTypeCode?.toLowerCase().includes(q);
+        r.referenceNo?.toLowerCase().includes(q);
       if (!match) return false;
     }
-    if (refSearch.trim()) {
-      const q = refSearch.trim().toLowerCase();
-      if (!r.referenceNo?.toLowerCase().includes(q)) return false;
+    if (contractFilter && r.contractNumber !== contractFilter) return false;
+    if (testTypeFilter) {
+      const code = (r.testTypeCode || r.testType || "").trim();
+      if (code !== testTypeFilter) return false;
     }
     if (resultFilter === "pass" && r.overallResult?.toLowerCase() !== "pass") return false;
     if (resultFilter === "fail" && r.overallResult?.toLowerCase() !== "fail") return false;
@@ -164,7 +188,8 @@ export default function SectorResults() {
 
   const totalPages = Math.max(1, Math.ceil((data?.total ?? 0) / limit));
   const hasDateFilters = dateFrom || dateTo;
-  const hasActiveFilters = resultFilter || readFilter || hasDateFilters || search || refSearch;
+  const hasActiveFilters =
+    resultFilter || readFilter || hasDateFilters || search || contractFilter || testTypeFilter;
 
   const openReport = (
     id: number,
@@ -182,46 +207,55 @@ export default function SectorResults() {
     setDateFrom("");
     setDateTo("");
     setSearch("");
-    setRefSearch("");
+    setContractFilter("");
+    setTestTypeFilter("");
     setPage(1);
   };
+
+  const filterSelectClass =
+    "h-[42px] min-w-[180px] rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100";
 
   return (
     <SectorLayout>
       <SectorPageHeader title={T.title} subtitle={T.subtitle} />
 
       <div className="mb-5 space-y-4">
-        <div className="flex flex-col gap-3 sm:flex-row">
-          <div className="flex-1">
-            <SectorSearchBar
-              value={search}
-              onChange={(value) => { setSearch(value); setPage(1); }}
-              placeholder={T.search}
-              isRtl={isRtl}
-            />
-          </div>
-          <div className="relative sm:w-56">
-            <input
-              type="text"
-              value={refSearch}
-              onChange={(e) => { setRefSearch(e.target.value.replace(/\s/g, "")); setPage(1); }}
-              placeholder={T.refSearch}
-              className={`${sectorTheme.searchInput} ${refSearch ? (isRtl ? "pl-10 pr-4" : "pr-10 pl-4") : ""}`}
-            />
-            {refSearch && (
-              <button
-                type="button"
-                onClick={() => { setRefSearch(""); setPage(1); }}
-                className={`absolute top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 transition ${isRtl ? "left-4" : "right-4"}`}
-                aria-label="Clear ref search"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            )}
-          </div>
-        </div>
+        <SectorSearchBar
+          value={search}
+          onChange={(value) => { setSearch(value); setPage(1); }}
+          placeholder={T.search}
+          isRtl={isRtl}
+        />
 
         <div className="flex flex-wrap items-end gap-4">
+          <div className="inline-flex flex-col gap-1.5">
+            <span className="px-1 text-xs font-semibold uppercase tracking-wide text-slate-500">{T.filterContract}</span>
+            <select
+              value={contractFilter}
+              onChange={(e) => { setContractFilter(e.target.value); setPage(1); }}
+              className={filterSelectClass}
+            >
+              <option value="">{T.allContracts}</option>
+              {contractOptions.map((contractNumber) => (
+                <option key={contractNumber} value={contractNumber}>{contractNumber}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="inline-flex flex-col gap-1.5">
+            <span className="px-1 text-xs font-semibold uppercase tracking-wide text-slate-500">{T.filterTestType}</span>
+            <select
+              value={testTypeFilter}
+              onChange={(e) => { setTestTypeFilter(e.target.value); setPage(1); }}
+              className={`${filterSelectClass} min-w-[220px]`}
+            >
+              <option value="">{T.allTestTypes}</option>
+              {testTypeOptions.map(([code, label]) => (
+                <option key={code} value={code}>{label}</option>
+              ))}
+            </select>
+          </div>
+
           <SectorSegmentedFilter
             label={T.filterStatus}
             value={readFilter}
