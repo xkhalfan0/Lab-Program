@@ -3,9 +3,28 @@ import {
   getOfficialTestByCode,
   normalizeTestCode,
   type OfficialTest,
+  type TestCategory,
 } from "../../../server/data/official-test-catalog";
 
 export { getOfficialTestByCode, normalizeTestCode };
+export type { TestCategory };
+
+/** Map a test code to its main catalog category (concrete, steel, soil, etc.). */
+export function getOfficialTestCategory(code: string | null | undefined): TestCategory | null {
+  const normalized = normalizeTestCode(code)?.trim();
+  if (!normalized) return null;
+
+  const direct = getOfficialTestByCode(normalized);
+  if (direct) return direct.category;
+
+  const prefixMatch = OFFICIAL_TEST_CATALOG.find(
+    (t) =>
+      normalized === t.code ||
+      normalized.startsWith(`${t.code}_`) ||
+      normalized.startsWith(`${t.code}-`),
+  );
+  return prefixMatch?.category ?? null;
+}
 
 /** Active tests from the official catalog (source of truth for codes, names, categories). */
 export function getOfficialTestCatalog(): OfficialTest[] {

@@ -25,6 +25,23 @@ import {
   Calendar,
   FileText,
 } from "lucide-react";
+import { getOfficialTestCategory, type TestCategory } from "@/lib/officialTestCatalog";
+import { sampleTypeFilterLabel } from "@/lib/listFilters";
+
+const MAIN_TEST_CATEGORY_ORDER: TestCategory[] = [
+  "concrete",
+  "soil",
+  "steel",
+  "asphalt",
+  "aggregates",
+];
+
+function resolveResultCategory(r: {
+  testTypeCode?: string | null;
+  testType?: string | null;
+}): TestCategory | null {
+  return getOfficialTestCategory(r.testTypeCode || r.testType || null);
+}
 
 const t = {
   ar: {
@@ -50,9 +67,9 @@ const t = {
     clearFilters: "مسح الفلاتر",
     allResults: "الكل",
     allContracts: "كل العقود",
-    allTestTypes: "كل الاختبارات",
+    allTestTypes: "كل الأنواع",
     filterContract: "رقم العقد",
-    filterTestType: "نوع الاختبار",
+    filterTestType: "نوع الاختبار الرئيسي",
     from: "من تاريخ",
     to: "إلى تاريخ",
     filterStatus: "الحالة",
@@ -87,9 +104,9 @@ const t = {
     clearFilters: "Clear Filters",
     allResults: "All",
     allContracts: "All contracts",
-    allTestTypes: "All test types",
+    allTestTypes: "All types",
     filterContract: "Contract No.",
-    filterTestType: "Test Type",
+    filterTestType: "Main Test Type",
     from: "From Date",
     to: "To Date",
     filterStatus: "Status",
@@ -148,16 +165,13 @@ export default function SectorResults() {
   }, [allResults]);
 
   const testTypeOptions = useMemo(() => {
-    const map = new Map<string, string>();
+    const present = new Set<TestCategory>();
     for (const r of allResults) {
-      const code = (r.testTypeCode || r.testType || "").trim();
-      if (!code) continue;
-      const label =
-        (isRtl ? (r.testTypeNameAr ?? r.testType) : (r.testTypeNameEn ?? r.testType)) || code;
-      if (!map.has(code)) map.set(code, label);
+      const category = resolveResultCategory(r);
+      if (category) present.add(category);
     }
-    return Array.from(map.entries()).sort((a, b) => a[1].localeCompare(b[1], isRtl ? "ar" : "en"));
-  }, [allResults, isRtl]);
+    return MAIN_TEST_CATEGORY_ORDER.filter((category) => present.has(category));
+  }, [allResults]);
 
   const filtered = allResults.filter((r) => {
     if (search) {
@@ -168,10 +182,7 @@ export default function SectorResults() {
       if (!match) return false;
     }
     if (contractFilter && r.contractNumber !== contractFilter) return false;
-    if (testTypeFilter) {
-      const code = (r.testTypeCode || r.testType || "").trim();
-      if (code !== testTypeFilter) return false;
-    }
+    if (testTypeFilter && resolveResultCategory(r) !== testTypeFilter) return false;
     if (resultFilter === "pass" && r.overallResult?.toLowerCase() !== "pass") return false;
     if (resultFilter === "fail" && r.overallResult?.toLowerCase() !== "fail") return false;
     if (resultFilter === "fail" && !r.failedAlertActive) return false;
@@ -250,8 +261,10 @@ export default function SectorResults() {
               className={`${filterSelectClass} min-w-[220px]`}
             >
               <option value="">{T.allTestTypes}</option>
-              {testTypeOptions.map(([code, label]) => (
-                <option key={code} value={code}>{label}</option>
+              {testTypeOptions.map((category) => (
+                <option key={category} value={category}>
+                  {sampleTypeFilterLabel(category, lang)}
+                </option>
               ))}
             </select>
           </div>
