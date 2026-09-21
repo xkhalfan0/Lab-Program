@@ -42,6 +42,7 @@ import { FOAM_DENSITY_TEST_CODE } from "@shared/foamConcreteTests";
 import { buildConcreteSpecimenPrepPairs } from "@shared/concreteSpecimenPrepFields";
 import { collectStandardReportNoteLines } from "@shared/concreteReportNotes";
 import { buildConcreteCubeTestConditionPairs } from "@/lib/concreteCubeTestConditions";
+import { resolveReportReceptionFields } from "@shared/receptionEntryFields";
 import {
   ReportDetailGrid,
   ReportInfoHeading,
@@ -4657,6 +4658,8 @@ export type SpecializedTestReportBodyProps = {
     contractName?: string | null;
     sector?: string | null;
     sampleLocation?: string | null;
+    sourceSupplier?: string | null;
+    sampleNotes?: string | null;
     castingDate?: Date | string | null;
     createdAt?: Date | string | null;
     testNameEn?: string | null;
@@ -4750,14 +4753,25 @@ export function SpecializedTestReportBody({
         })
       : [];
 
+  const receptionFields = resolveReportReceptionFields({
+    notes: dist?.sampleNotes,
+    location: dist?.sampleLocation,
+  });
+  const reportSampleLocation = dist?.sampleLocation ?? receptionFields.sampleLocation;
+  const reportSourceSupplier =
+    dist?.sourceSupplier ??
+    receptionFields.sourceSupplier ??
+    (typeof formData.source === "string" ? formData.source : null) ??
+    (typeof formData.sourceSupplier === "string" ? formData.sourceSupplier : null);
+
   /** Batch cover + section header already show sample/ref/contractor/project/test name/standard. */
   const batchSupplementLeft: [string, string][] = [
     [isAr ? "رقم العقد" : "Contract No.", String(dist?.contractNumber ?? result.contractNo ?? "—")],
-    [isAr ? "المورد" : "Source / Supplier", String(formData.source ?? formData.sourceSupplier ?? "—")],
+    [isAr ? "المورد" : "Source / Supplier", reportSourceSupplier?.trim() || "—"],
     [isAr ? "القطاع" : "Sector", dist?.sector ? String(dist.sector).replace("_", " ").toUpperCase() : "—"],
   ];
   const batchSupplementRight: [string, string][] = [
-    [isAr ? "موقع العينة" : "Sample Location", String(dist?.sampleLocation ?? "—")],
+    [isAr ? "موقع العينة" : "Sample Location", reportSampleLocation?.trim() || "—"],
     [isAr ? "تاريخ الفحص" : "Test date", fmtDate(result.testDate)],
     [isAr ? "تاريخ التقرير" : "Report Date", reportDateStr],
   ];
@@ -4820,7 +4834,7 @@ export function SpecializedTestReportBody({
           right={[
             [isAr ? "اسم المشروع" : "Project Name", String(dist?.contractName ?? result.projectName ?? "—")],
             [isAr ? "القطاع" : "Sector", dist?.sector ? String(dist.sector).replace("_", " ").toUpperCase() : "—"],
-            [isAr ? "موقع العينة" : "Sample Location", String(dist?.sampleLocation ?? "—")],
+            [isAr ? "موقع العينة" : "Sample Location", reportSampleLocation?.trim() || "—"],
             [isAr ? "تاريخ الفحص" : "Test date", fmtDate(result.testDate)],
             [isAr ? "تاريخ التقرير" : "Report Date", reportDateStr],
           ]}

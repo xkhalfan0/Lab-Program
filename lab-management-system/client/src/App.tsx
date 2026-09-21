@@ -14,6 +14,7 @@ import BatchOverview from "./pages/BatchOverview";
 import BatchReport from "./pages/BatchReport";
 import ManagerReview from "./pages/ManagerReview";
 import QCReview from "./pages/QCReview";
+import QCDevices from "./pages/QCDevices";
 import Clearance from "./pages/ClearancePage";
 import ConcreteTest from "./pages/ConcreteTest";
 import ConcreteReport from "./pages/ConcreteReport";
@@ -69,6 +70,7 @@ const PERM_TO_PATH: Array<{ permKey: string; path: string }> = [
   { permKey: "results",            path: "/technician" },
   { permKey: "supervisor",         path: "/manager-review" },
   { permKey: "qc",                 path: "/qc-review" },
+  { permKey: "qc_devices",         path: "/qc-devices" },
   { permKey: "certificates",       path: "/clearance" },
   { permKey: "analytics",          path: "/analytics" },
 ];
@@ -100,6 +102,7 @@ const ROUTE_ROLES: Record<string, string[]> = {
   "/batch-report/:sampleId/:orderId": ["admin", "technician", "lab_manager"],
   "/manager-review": ["admin", "lab_manager"],
   "/qc-review": ["admin", "qc_inspector", "lab_manager"],
+  "/qc-devices": ["admin", "qc_inspector", "lab_manager"],
   "/clearance": ["admin", "lab_manager", "accountant"],
   "/manager-dashboard": ["admin", "lab_manager", "supervisor"],
   "/users": ["admin"],
@@ -243,6 +246,9 @@ function Router() {
       </Route>
       <Route path="/qc-review">
         {() => <ProtectedRoute component={QCReview} path="/qc-review" />}
+      </Route>
+      <Route path="/qc-devices">
+        {() => <ProtectedRoute component={QCDevices} path="/qc-devices" />}
       </Route>
       <Route path="/clearance">
         {() => <ProtectedRoute component={Clearance} path="/clearance" />}

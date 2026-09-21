@@ -32,6 +32,7 @@ const translations: Record<string, Record<Language, string>> = {
   "nav.supervisorDashboard": { en: "Supervisor View", ar: "لوحة المتابعة" },
   "nav.managerReview": { en: "Test Results", ar: "نتائج الاختبارات" },
   "nav.qcReview": { en: "Quality Control", ar: "ضبط الجودة" },
+  "nav.qcDevices": { en: "Devices & Calibration", ar: "الأجهزة والمعايرة" },
   "nav.clearance": { en: "Clearance Certificate", ar: "شهادة براءة الذمة" },
   "nav.clearanceArchive": { en: "Clearance Archive", ar: "أرشيف براءة الذمة" },
   "nav.users": { en: "User Management", ar: "إدارة المستخدمين" },

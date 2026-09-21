@@ -322,3 +322,47 @@ export function getReceptionEntryDisplayPairs(options: {
 
   return pairs;
 }
+
+const REPORT_SOURCE_ENTRY_KEYS = [
+  "source",
+  "sourceOfMaterial",
+  "sourceOfAgg",
+  "aggSource",
+  "plantName",
+] as const;
+
+const REPORT_LOCATION_ENTRY_KEYS = [
+  "sampleLocation",
+  "sampleDescription",
+  "site",
+  "facility",
+  "layer",
+  "description",
+] as const;
+
+function firstNonEmptyEntryValue(
+  entry: Record<string, string>,
+  keys: readonly string[],
+): string | null {
+  for (const key of keys) {
+    const value = entry[key]?.trim();
+    if (value) return value;
+  }
+  return null;
+}
+
+/** Sample location + source/supplier for test/batch reports (reception + notes). */
+export function resolveReportReceptionFields(options: {
+  notes?: string | null;
+  location?: string | null;
+}): { sampleLocation: string | null; sourceSupplier: string | null } {
+  const entry = parseEntryDataFromNotes(options.notes);
+  const fromSupplierTag = parseSupplierFromNotes(options.notes);
+  const sourceSupplier =
+    fromSupplierTag || firstNonEmptyEntryValue(entry, REPORT_SOURCE_ENTRY_KEYS);
+  const sampleLocation =
+    options.location?.trim() ||
+    firstNonEmptyEntryValue(entry, REPORT_LOCATION_ENTRY_KEYS) ||
+    null;
+  return { sampleLocation, sourceSupplier };
+}

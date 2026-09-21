@@ -19,6 +19,7 @@ import { ensureConcreteCubeTestConditionColumns } from "../migrations/ensureConc
 import { ensureFoamConcreteTestTypes } from "../migrations/ensureFoamConcreteTestTypes";
 import { ensureLabTaxSettings } from "../migrations/ensureLabTaxSettings";
 import { ensureContractorsAndContractsSchema } from "../migrations/ensureContractorsAndContractsSchema";
+import { ensureLabDevicesSchema } from "../migrations/ensureLabDevicesSchema";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -47,6 +48,7 @@ async function startServer() {
       ["ensureFoamConcreteTestTypes", ensureFoamConcreteTestTypes],
       ["ensureLabTaxSettings", ensureLabTaxSettings],
       ["ensureContractorsAndContractsSchema", ensureContractorsAndContractsSchema],
+      ["ensureLabDevicesSchema", ensureLabDevicesSchema],
     ];
     for (const [name, fn] of migrations) {
       try {

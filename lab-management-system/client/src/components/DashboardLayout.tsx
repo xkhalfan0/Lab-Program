@@ -23,7 +23,7 @@ import { useIsMobile } from "@/hooks/useMobile";
 import {
   LayoutDashboard, LogOut, PanelLeft, PanelRight,
   FlaskConical, ClipboardList, Microscope,
-  CheckSquare, ShieldCheck, Award, Users, Bell, Languages, TrendingUp, Home, Target, Eye, KeyRound, Archive,
+  CheckSquare, ShieldCheck, Award, Users, Bell, Languages, TrendingUp, Home, Target, Eye, KeyRound, Archive, Wrench,
 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { CSSProperties, useEffect, useRef, useState } from "react";
@@ -52,6 +52,7 @@ const ALL_MENU_ITEMS = [
   { icon: Microscope, labelKey: "nav.assignments", path: "/technician", permKey: "results", minLevel: "view", allowedRoles: ["admin", "technician"] as AllowedRole[] },
   { icon: CheckSquare, labelKey: "nav.managerReview", path: "/manager-review", permKey: "supervisor", minLevel: "view", allowedRoles: ["admin", "lab_manager", "supervisor", "qc_inspector"] as AllowedRole[] },
   { icon: ShieldCheck, labelKey: "nav.qcReview", path: "/qc-review", permKey: "qc", minLevel: "view", allowedRoles: ["admin", "lab_manager", "qc_inspector"] as AllowedRole[] },
+  { icon: Wrench, labelKey: "nav.qcDevices", path: "/qc-devices", permKey: "qc_devices", minLevel: "view", allowedRoles: ["admin", "lab_manager", "qc_inspector"] as AllowedRole[] },
   { icon: Award, labelKey: "nav.clearance", path: "/clearance", permKey: "certificates", minLevel: "view", allowedRoles: ["admin", "lab_manager", "accountant", "qc_inspector"] as AllowedRole[] },
   { icon: Archive, labelKey: "nav.clearanceArchive", path: "/clearance-archive", permKey: "cert_archive", minLevel: "view", allowedRoles: ["admin", "lab_manager", "accountant"] as AllowedRole[] },
   { icon: Users, labelKey: "nav.users", path: "/users", permKey: "users", minLevel: "view", allowedRoles: ["admin"] as AllowedRole[] },
@@ -82,7 +83,7 @@ const ROLE_DEFAULT_PERMS: Record<string, PermMap> = {
   admin: {
     admin_dashboard: "edit", supervisor_dashboard: "edit",
     manager_dashboard: "edit", samples: "edit", distribution: "edit", results: "edit",
-    supervisor: "edit", qc: "edit", certificates: "edit", cert_archive: "edit",
+    supervisor: "edit", qc: "edit", qc_devices: "edit", certificates: "edit", cert_archive: "edit",
     users: "edit", settings: "edit", analytics: "edit", monthly_report: "edit", deletion_requests: "edit",
   },
   // Reception: only Sample Reception page
@@ -96,7 +97,7 @@ const ROLE_DEFAULT_PERMS: Record<string, PermMap> = {
   lab_manager: {
     admin_dashboard: false, supervisor_dashboard: false,
     manager_dashboard: false, samples: false, distribution: "edit", results: false,
-    supervisor: "edit", qc: false, certificates: false,
+    supervisor: "edit", qc: false, qc_devices: "view", certificates: false,
     users: false, settings: false, analytics: "view", monthly_report: "view", deletion_requests: "view",
   },
   // Technician: only My Assignments
@@ -110,7 +111,7 @@ const ROLE_DEFAULT_PERMS: Record<string, PermMap> = {
   qc_inspector: {
     admin_dashboard: false, supervisor_dashboard: false,
     manager_dashboard: false, samples: false, distribution: false, results: false,
-    supervisor: false, qc: "edit", certificates: false,
+    supervisor: false, qc: "edit", qc_devices: "edit", certificates: false,
     users: false, settings: false, analytics: false, deletion_requests: false,
   },
   // Accountant: Clearance + Archive

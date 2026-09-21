@@ -28,6 +28,7 @@ import {
   SpecializedTestReportBody,
 } from "@/pages/tests/SpecializedTestReport";
 import { buildReportSummaryPairs } from "@/lib/reportFormatting";
+import { resolveReportReceptionFields } from "@shared/receptionEntryFields";
 import { ConcreteCubeReportPage } from "@/pages/ConcreteReport";
 import { ReportSignatures, pickReviewSignatures } from "@/components/reports/ReportSignatures";
 import {
@@ -195,12 +196,18 @@ function mergeDistForReport(
     contractName?: string | null;
     contractNumber?: string | null;
     sampleLocation?: string | null;
+    location?: string | null;
+    notes?: string | null;
     sector?: string | null;
     castingDate?: string | Date | null;
     retestNumber?: number | null;
     originalSampleCode?: string | null;
   } | null,
 ) {
+  const reception = resolveReportReceptionFields({
+    notes: sample?.notes,
+    location: sample?.sampleLocation ?? sample?.location ?? sibling.sampleLocation ?? null,
+  });
   return {
     ...sibling,
     sampleCode: sample?.sampleCode ?? null,
@@ -209,7 +216,8 @@ function mergeDistForReport(
     contractorName: sample?.contractorName ?? sibling.contractorName ?? null,
     contractName: sample?.contractName ?? sibling.contractName ?? null,
     contractNumber: sample?.contractNumber ?? sibling.contractNumber ?? null,
-    sampleLocation: sample?.sampleLocation ?? sibling.sampleLocation ?? null,
+    sampleLocation: reception.sampleLocation,
+    sourceSupplier: reception.sourceSupplier,
     sector: sample?.sector ?? sibling.sector ?? null,
     castingDate: sample?.castingDate ?? sibling.castingDate ?? null,
     retestNumber: sample?.retestNumber ?? null,

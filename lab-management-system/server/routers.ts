@@ -8,6 +8,7 @@ import { systemRouter } from "./_core/systemRouter";
 import { sectorRouter } from "./routers/sector";
 import { dashboardRouter } from "./routers/dashboard";
 import { deletionRouter } from "./routers/deletion";
+import { devicesRouter } from "./routers/devices";
 import { labOrderReceptionCreateInputSchema, runLabOrderReceptionCreate } from "./routers/orders";
 import { sanitizeUploadFileName, validateClearanceLetterFile, decodeBase64Payload, mimeFromClearanceFileName } from "./uploadUtils";
 import { ensureConcreteGroupsFromReceptionPlan } from "./concreteCubeGroups";
@@ -3598,6 +3599,7 @@ ${testSummaries.length > 0 ? testSummaries.join("\n\n") : "لم تُجرَ اخ�
   // ─── Notifications ───────────────────────────────────────────────────────────────────────────────────────
   dashboard: dashboardRouter,
   deletion: deletionRouter,
+  devices: devicesRouter,
 
   // ─── Monthly Performance Report ─────────────────────────────────────────────────────────────────────────
   reports: router({

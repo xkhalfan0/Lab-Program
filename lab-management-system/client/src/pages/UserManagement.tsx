@@ -46,6 +46,7 @@ const PERMISSION_GROUPS_EN = [
   { group: "Reviews", permissions: [
     { key: "supervisor",   label: "Supervisor Review",    viewOnly: false },
     { key: "qc",           label: "QC Review",            viewOnly: false },
+    { key: "qc_devices",   label: "Devices & Calibration", viewOnly: false },
   ]},
   { group: "Certificates", permissions: [
     { key: "certificates",  label: "Clearance Certificate",         viewOnly: false },
@@ -75,6 +76,7 @@ const PERMISSION_GROUPS_AR = [
   { group: "المراجعات", permissions: [
     { key: "supervisor",   label: "مراجعة المشرف",           viewOnly: false },
     { key: "qc",           label: "ضبط الجودة",              viewOnly: false },
+    { key: "qc_devices",   label: "الأجهزة والمعايرة",        viewOnly: false },
   ]},
   { group: "الشهادات", permissions: [
     { key: "certificates",  label: "براءة الذمة",            viewOnly: false },
@@ -93,7 +95,7 @@ const ROLE_DEFAULT_PERMISSIONS: Record<string, PermMap> = {
   admin: {
     admin_dashboard: "edit", supervisor_dashboard: "edit", analytics: "edit",
     samples: "edit", distribution: "edit", results: "edit",
-    supervisor: "edit", qc: "edit", certificates: "edit", cert_archive: "view",
+    supervisor: "edit", qc: "edit", qc_devices: "edit", certificates: "edit", cert_archive: "view",
     users: "edit", settings: "edit",
   },
   reception: {
@@ -105,7 +107,7 @@ const ROLE_DEFAULT_PERMISSIONS: Record<string, PermMap> = {
   lab_manager: {
     admin_dashboard: false, supervisor_dashboard: false, analytics: "view",
     samples: false, distribution: "edit", results: false,
-    supervisor: "edit", qc: false, certificates: false, cert_archive: false,
+    supervisor: "edit", qc: false, qc_devices: "view", certificates: false, cert_archive: false,
     users: false, settings: false,
   },
   technician: {
@@ -117,7 +119,7 @@ const ROLE_DEFAULT_PERMISSIONS: Record<string, PermMap> = {
   qc_inspector: {
     admin_dashboard: false, supervisor_dashboard: false, analytics: false,
     samples: false, distribution: false, results: false,
-    supervisor: false, qc: "edit", certificates: false, cert_archive: false,
+    supervisor: false, qc: "edit", qc_devices: "edit", certificates: false, cert_archive: false,
     users: false, settings: false,
   },
   accountant: {
