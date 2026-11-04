@@ -596,6 +596,89 @@
     color: #cbd5e1 !important;
   }
 
+  /* ── Combined batch report: cover on page 1, each test starts on a new page ── */
+  .lab-print-root .batch-report-cover {
+    break-after: page;
+    page-break-after: always;
+  }
+
+  .lab-print-root .batch-test-section {
+    break-before: page;
+    page-break-before: always;
+  }
+
+  .lab-print-root .batch-test-section:first-of-type {
+    break-before: auto;
+    page-break-before: auto;
+  }
+
+  /* Single-test batch: keep cover + test flowing (no forced blank page) */
+  .lab-print-root.batch-report--single-test .batch-report-cover {
+    break-after: avoid;
+    page-break-after: avoid;
+  }
+  .lab-print-root.batch-report--single-test .batch-test-section {
+    break-before: avoid;
+    page-break-before: avoid;
+  }
+
+  .lab-print-root .batch-test-section-card {
+    border: 1px solid #d1d5db !important;
+    margin-bottom: 0 !important;
+    overflow: visible !important;
+  }
+
+  .lab-print-root .batch-test-section-body {
+    padding: 0.35rem 0.5rem !important;
+  }
+
+  .lab-print-root .batch-test-report-body {
+    padding-top: 0.25rem !important;
+  }
+
+  .lab-print-root .batch-test-conditions-block {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .lab-print-root .batch-test-detailed-intro {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .lab-print-root .batch-test-embed table.lab-results-table {
+    break-inside: auto;
+    page-break-inside: auto;
+  }
+
+  .lab-print-root .batch-test-embed table.lab-results-table thead {
+    display: table-header-group;
+  }
+
+  .lab-print-root.batch-report--single-test .batch-report-tests-heading {
+    display: none !important;
+  }
+
+  .lab-print-root.batch-report--single-test .batch-report-cover .lab-report-header {
+    margin-bottom: 0.5rem !important;
+  }
+
+  .lab-print-root .batch-test-embed .space-y-3 > * + * {
+    margin-top: 0.35rem !important;
+  }
+
+  .lab-print-root .batch-test-embed .report-info-section {
+    margin-bottom: 0.35rem !important;
+  }
+
+  .lab-print-root .batch-test-embed table {
+    font-size: 8px !important;
+  }
+
+  .lab-print-root .batch-test-embed .report-stat-cards {
+    margin-bottom: 0.35rem !important;
+  }
+
   * {
     box-shadow: none !important;
     text-shadow: none !important;

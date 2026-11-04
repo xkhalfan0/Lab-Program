@@ -506,37 +506,39 @@ export default function BatchReport({ sectorMode = false }: { sectorMode?: boole
         ) : (
           <div
             ref={printRef}
-            className={LAB_PRINT_PAGE_CLASS}
+            className={`${LAB_PRINT_PAGE_CLASS}${total === 1 ? " batch-report--single-test" : ""}`}
             style={LAB_PRINT_PAGE_STYLE}
           >
             <div className={LAB_PRINT_BODY_CLASS}>
-            <LabReportHeader
-              lang={isAr ? "ar" : "en"}
-              docNo={String(orderId)}
-              docLabel={isAr ? "رقم الطلب:" : "Order:"}
-              reportDate={reportDateStr}
-              titlePrimary={isAr ? "تقرير الحزمة المجمع" : "Combined Batch Test Report"}
-              titleSecondary={isAr ? `${total} اختبارات` : `${total} tests`}
-              className="mb-5"
-            />
-            <BatchStatusPanel status={batchStatus} passCount={passCount} total={total} isAr={isAr} />
-
-            <ReportInfoSection>
-              <ReportReferenceBar
-                items={[
-                  { label: isAr ? "رقم العينة" : "Sample No.", value: sample?.sampleCode ?? EM_DASH },
-                  {
-                    label: inspectionRefLabel(isAr ? "ar" : "en"),
-                    value: formatInspectionReference(sample?.referenceNo),
-                  },
-                  { label: isAr ? "المقاول" : "Contractor", value: sample?.contractorName ?? EM_DASH },
-                  { label: isAr ? "المشروع" : "Project", value: sample?.contractName ?? EM_DASH },
-                ]}
+            <div className="batch-report-cover print-no-break">
+              <LabReportHeader
+                lang={isAr ? "ar" : "en"}
+                docNo={String(orderId)}
+                docLabel={isAr ? "رقم الطلب:" : "Order:"}
+                reportDate={reportDateStr}
+                titlePrimary={isAr ? "تقرير الحزمة المجمع" : "Combined Batch Test Report"}
+                titleSecondary={isAr ? `${total} اختبارات` : `${total} tests`}
+                className={total === 1 ? "mb-3" : "mb-5"}
               />
-            </ReportInfoSection>
+              <BatchStatusPanel status={batchStatus} passCount={passCount} total={total} isAr={isAr} />
 
-            <div className="mb-5 space-y-6">
-              <h3 className="text-xs font-bold text-gray-700 uppercase border-b border-gray-300 pb-1">
+              <ReportInfoSection className={total === 1 ? "mb-2" : undefined}>
+                <ReportReferenceBar
+                  items={[
+                    { label: isAr ? "رقم العينة" : "Sample No.", value: sample?.sampleCode ?? EM_DASH },
+                    {
+                      label: inspectionRefLabel(isAr ? "ar" : "en"),
+                      value: formatInspectionReference(sample?.referenceNo),
+                    },
+                    { label: isAr ? "المقاول" : "Contractor", value: sample?.contractorName ?? EM_DASH },
+                    { label: isAr ? "المشروع" : "Project", value: sample?.contractName ?? EM_DASH },
+                  ]}
+                />
+              </ReportInfoSection>
+            </div>
+
+            <div className="batch-report-tests space-y-6">
+              <h3 className="text-xs font-bold text-gray-700 uppercase border-b border-gray-300 pb-1 batch-report-tests-heading">
                 {isAr ? "\u0646\u062a\u0627\u0626\u062c \u0627\u0644\u0627\u062e\u062a\u0628\u0627\u0631\u0627\u062a" : "Test Results"}
               </h3>
 
@@ -560,13 +562,8 @@ export default function BatchReport({ sectorMode = false }: { sectorMode?: boole
                 const refNo = sibling.distributionCode ?? `DIST-${sibling.id}`;
 
                 return (
-                  <div
-                    key={sibling.id}
-                    className={index > 0 ? "print-break-before pt-6" : undefined}
-                  >
-                  <div
-                    className="border-2 border-slate-300 rounded-lg overflow-hidden"
-                  >
+                  <div key={sibling.id} className="batch-test-section">
+                  <div className="batch-test-section-card border-2 border-slate-300 rounded-lg overflow-hidden">
                     {/* Test section header — batch connector */}
                     <div className="bg-slate-800 text-white px-4 py-2.5 flex flex-wrap justify-between items-center gap-2">
                       <div>
@@ -590,7 +587,7 @@ export default function BatchReport({ sectorMode = false }: { sectorMode?: boole
                         <PassFailBadge result={overallResult} size="sm" lang={isAr ? "ar" : "en"} />
                       )}
                     </div>
-                    <div className="p-4">
+                    <div className="p-4 batch-test-section-body">
                       {hasLegacyConcrete ? (
                         legacyConcreteGroups.map((group, gi) => (
                           <div

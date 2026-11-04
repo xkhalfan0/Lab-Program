@@ -277,8 +277,8 @@ export function ConcreteCubeReportPage({
     [ar ? "تاريخ الصب" : "Date of Casting", fmtDate(distCastingDate ?? group.batchDateTime) || "—"],
     [ar ? "عدد العينات" : "Sample count", String(cubes.length || "—")],
   ];
-  /** In batch embed, stat cards already show avg / required / test age. */
-  const displaySummaryPairs = embedInBatch ? summaryPairs.slice(3) : summaryPairs;
+  /** In batch embed, detailed stat cards cover avg / required / age — skip duplicate summary table. */
+  const displaySummaryPairs = embedInBatch ? [] : summaryPairs;
 
   const detailLeft: [string, string][] = [
     [ar ? "نوع الفحص" : "Test Type", ar ? "مقاومة ضغط المكعبات الخرسانية" : "Compressive Strength of Concrete Cubes"],
@@ -313,7 +313,7 @@ export function ConcreteCubeReportPage({
     <div
       className={
         embedInBatch
-          ? "batch-test-report-body space-y-5"
+          ? "batch-test-embed batch-test-report-body space-y-3"
           : "report-page bg-white flex flex-col mx-auto shadow-lg print:shadow-none print:mx-0 print:w-full print:max-w-none print:p-0"
       }
       dir={ar ? "rtl" : "ltr"}
@@ -347,8 +347,9 @@ export function ConcreteCubeReportPage({
       )}
       {/* PASS badge only on standalone reports — batch section header shows status */}
 
+      <div className={embedInBatch ? "batch-test-print-block" : undefined}>
       {/* Sample identification — borderless; results tables below keep borders */}
-      <ReportInfoSection>
+      <ReportInfoSection className={embedInBatch ? "mb-2" : undefined}>
         {!embedInBatch && (
         <ReportReferenceBar
           items={[
@@ -384,7 +385,7 @@ export function ConcreteCubeReportPage({
         />
       </ReportInfoSection>
 
-      {/* Summary Results — in batch embed, omit rows duplicated by stat cards above */}
+      {/* Summary Results */}
       {displaySummaryPairs.length > 0 && (
       <div className="mb-5">
         <ReportInfoHeading>{ar ? "ملخص النتائج" : "Summary Results"}</ReportInfoHeading>
@@ -392,17 +393,20 @@ export function ConcreteCubeReportPage({
       </div>
       )}
 
+      <div className={embedInBatch ? "batch-test-detailed-group space-y-2" : undefined}>
       {/* Test preparation & loading (BS 1881) */}
-      <div className="mb-5">
+      <div className={embedInBatch ? "mb-2 batch-test-conditions-block" : "mb-5"}>
         <ReportInfoHeading>{ar ? "ظروف الاختبار والتحضير" : "Test Conditions & Preparation"}</ReportInfoHeading>
         <ReportInfoPairsTable pairs={testConditionPairs} />
       </div>
 
       {/* Detailed Results */}
-      <div className="mb-5">
+      <div className={embedInBatch ? "mb-2" : "mb-5"}>
         <ReportInfoHeading>{ar ? "النتائج التفصيلية" : "Detailed Results"}</ReportInfoHeading>
 
-        <div className="grid grid-cols-3 gap-2 mb-4">
+        <div
+          className={`grid grid-cols-3 gap-2 ${embedInBatch ? "mb-2 batch-test-detailed-intro" : "mb-4"}`}
+        >
           <div
             className={`border rounded p-3 text-center ${
               isPassed ? "bg-emerald-50 border-emerald-200" : avg !== null ? "bg-red-50 border-red-200" : "bg-gray-50 border-gray-200"
@@ -547,6 +551,7 @@ export function ConcreteCubeReportPage({
             ? "نوع الكسر: SF — مقبول، USF — غير مقبول. المقاومة محسوبة وفق BS 1881 الجزء 116."
             : "Fracture: SF — Satisfactory, USF — Unsatisfactory. Strength per BS 1881 Part 116."}
         </p>
+      </div>
       </div>
       </div>
 
