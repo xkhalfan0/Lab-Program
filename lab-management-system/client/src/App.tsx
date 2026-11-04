@@ -45,6 +45,7 @@ import SectorResults from "./pages/sector/SectorResults";
 import SectorClearances from "./pages/sector/SectorClearances";
 import SectorNotifications from "./pages/sector/SectorNotifications";
 import SectorTestReportPage from "./pages/sector/SectorTestReportPage";
+import SectorBatchReportPage from "./pages/sector/SectorBatchReportPage";
 import SectorReceiptPage from "./pages/sector/SectorReceiptPage";
 import { Loader2 } from "lucide-react";
 import { useEffect } from "react";
@@ -336,6 +337,7 @@ function Router() {
       <Route path="/sector/receipt/:sampleId">{() => <SectorPage component={SectorReceiptPage} />}</Route>
       <Route path="/sector/results">{() => <SectorPage component={SectorResults} />}</Route>
       <Route path="/sector/test-report/:resultId">{() => <SectorPage component={SectorTestReportPage} />}</Route>
+      <Route path="/sector/batch-report/:sampleId/:orderId">{() => <SectorPage component={SectorBatchReportPage} />}</Route>
       <Route path="/sector/clearances">{() => <SectorPage component={SectorClearances} />}</Route>
       <Route path="/sector/notifications">{() => <SectorPage component={SectorNotifications} />}</Route>
 

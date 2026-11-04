@@ -167,6 +167,7 @@ function FailedCriticalSection({
   totalFailed: number;
   items: Array<{
     id: number;
+    resultSource?: "specialized" | "legacy";
     sampleCode: string;
     testTypeNameAr: string;
     testTypeNameEn: string;
@@ -174,7 +175,7 @@ function FailedCriticalSection({
     createdAt: string | Date | null;
   }>;
   lang: "ar" | "en";
-  onViewReport: (id: number, label: string) => void;
+  onViewReport: (id: number, label: string, resultSource?: "specialized" | "legacy") => void;
 }) {
   const T = t[lang];
   const isRtl = lang === "ar";
@@ -237,7 +238,7 @@ function FailedCriticalSection({
                   <span className="text-xs text-slate-400">{timeAgo(item.createdAt, lang)}</span>
                   <button
                     type="button"
-                    onClick={() => onViewReport(item.id, testLabel)}
+                    onClick={() => onViewReport(item.id, testLabel, item.resultSource)}
                     className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-slate-50 sm:text-sm"
                   >
                     <FileText className="h-3.5 w-3.5 text-slate-500" />

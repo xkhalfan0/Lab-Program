@@ -4916,7 +4916,11 @@ export default function SpecializedTestReport({ sectorResultId, sectorResultSour
     { enabled: isSectorMode }
   );
 
-  const resolvedDistId = isSectorMode ? (sectorBundle?.result?.distributionId ?? 0) : distIdFromRoute;
+  const resolvedDistId = isSectorMode
+    ? (sectorBundle?.result?.distributionId ??
+        sectorBundle?.legacyResult?.distributionId ??
+        0)
+    : distIdFromRoute;
 
   const { data: specResult, isLoading: specLoading } = trpc.specializedTests.getByDistribution.useQuery(
     { distributionId: resolvedDistId },
@@ -4950,18 +4954,33 @@ export default function SpecializedTestReport({ sectorResultId, sectorResultSour
 
   const pageLoading = isSectorMode ? sectorLoading : (specLoading || legacyLoading);
 
+  const sectorBatchCount =
+    (sectorBundle as { batchTestCount?: number } | undefined)?.batchTestCount ?? 1;
+  const sectorLabOrderId =
+    (sectorBundle as { labOrderId?: number | null } | undefined)?.labOrderId ?? null;
+  const sectorSampleId =
+    (sectorBundle?.dist as { sampleId?: number } | undefined)?.sampleId ?? null;
+
+  useEffect(() => {
+    if (!isSectorMode || sectorLoading || !sectorBundle) return;
+    if (sectorBatchCount > 1 && sectorLabOrderId && sectorSampleId) {
+      window.location.replace(`/sector/batch-report/${sectorSampleId}/${sectorLabOrderId}`);
+    }
+  }, [isSectorMode, sectorLoading, sectorBundle, sectorBatchCount, sectorLabOrderId, sectorSampleId]);
+
   // Lab-order batches (orderId + 2+ sibling distributions) are viewed at
   // /batch-report/:sampleId/:orderId via BatchOverview — no redirect from this page.
   // This route always renders the individual distribution report.
 
   // Block batches (shared batchDistributionId) may still consolidate below via getByBatch.
   useEffect(() => {
+    if (isSectorMode) return;
     if (!distIdForRender || result) return;
     const src = (legacyResult?.chartsData as { source?: string } | undefined)?.source;
     if (src === "concrete_cubes") {
       window.location.replace(`/concrete-report/${distIdForRender}`);
     }
-  }, [distIdForRender, result, legacyResult]);
+  }, [isSectorMode, distIdForRender, result, legacyResult]);
 
   const handleClose = () => {
     if (window.opener) {
@@ -5011,7 +5030,12 @@ export default function SpecializedTestReport({ sectorResultId, sectorResultSour
     );
   }
 
-  if (!result && legacyResult && (legacyResult.chartsData as { source?: string } | null)?.source === "concrete_cubes") {
+  if (
+    !isSectorMode &&
+    !result &&
+    legacyResult &&
+    (legacyResult.chartsData as { source?: string } | null)?.source === "concrete_cubes"
+  ) {
     return (
       <div className="flex flex-col items-center justify-center h-screen gap-3">
         <Loader2 className="animate-spin text-slate-400" size={32} />

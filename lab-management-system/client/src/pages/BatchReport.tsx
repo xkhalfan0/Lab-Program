@@ -22,7 +22,7 @@ import {
   LAB_PRINT_TAIL_CLASS,
   printLabReport,
 } from "@/lib/labPrintLayout";
-import { getOfficialTestDisplayName } from "@/lib/officialTestCatalog";
+import { getOfficialTestByCode, getOfficialTestDisplayName } from "@/lib/officialTestCatalog";
 import { ReportReferenceBar, ReportInfoSection, ReportInfoPairsTable } from "@/components/reports/ReportInfoLayout";
 import {
   SpecializedTestReportBody,
@@ -321,7 +321,7 @@ function BatchStatusPanel({
   );
 }
 
-export default function BatchReport() {
+export default function BatchReport({ sectorMode = false }: { sectorMode?: boolean } = {}) {
   const params = useParams<{ sampleId: string; orderId: string }>();
   const [, navigate] = useLocation();
   const { lang, setLang } = useLanguage();
@@ -331,10 +331,17 @@ export default function BatchReport() {
   const sampleId = parseInt(params.sampleId ?? "0", 10);
   const orderId = parseInt(params.orderId ?? "0", 10);
 
-  const { data: batchOverview, isLoading: batchLoading } = trpc.distributions.getBatchByOrder.useQuery(
+  const sectorBatchQuery = trpc.sector.getBatchByOrder.useQuery(
     { orderId, includeResults: true },
-    { enabled: orderId > 0 },
+    { enabled: sectorMode && orderId > 0 },
   );
+  const labBatchQuery = trpc.distributions.getBatchByOrder.useQuery(
+    { orderId, includeResults: true },
+    { enabled: !sectorMode && orderId > 0 },
+  );
+  const batchOverview = sectorMode ? sectorBatchQuery.data : labBatchQuery.data;
+  const batchLoading = sectorMode ? sectorBatchQuery.isLoading : labBatchQuery.isLoading;
+  const batchError = sectorMode ? sectorBatchQuery.isError : labBatchQuery.isError;
 
   const sample = batchOverview?.sample ?? null;
   const siblings = batchOverview?.siblings ?? [];
@@ -342,7 +349,7 @@ export default function BatchReport() {
 
   const { data: concreteGroupsBySample = [] } = trpc.concrete.groupsBySample.useQuery(
     { sampleId: resolvedSampleId },
-    { enabled: resolvedSampleId > 0 },
+    { enabled: resolvedSampleId > 0 && !sectorMode },
   );
 
   const concreteGroupsByDist = useMemo(() => {
@@ -357,7 +364,9 @@ export default function BatchReport() {
     return map;
   }, [concreteGroupsBySample]);
 
-  const { data: testTypes = [] } = trpc.testTypes.list.useQuery();
+  const { data: testTypes = [] } = trpc.testTypes.list.useQuery(undefined, {
+    enabled: !sectorMode,
+  });
 
   const [isDownloadLoading, setIsDownloadLoading] = useState(false);
 
@@ -378,12 +387,13 @@ export default function BatchReport() {
             (sibling.testType.startsWith("ASPH_EXTRACTED_SIEVE") && t.code === "ASPH_EXTRACTED_SIEVE"),
         );
         const catalogName = getOfficialTestDisplayName(sibling.testType, isAr ? "ar" : "en");
+        const catalogTest = getOfficialTestByCode(sibling.testType);
         return {
           sibling,
           overallResult,
           summaryValues,
           testName: catalogName ?? (isAr ? tt?.nameAr ?? tt?.nameEn ?? sibling.testName : tt?.nameEn ?? tt?.nameAr ?? sibling.testName),
-          standard: tt?.standardRef ?? EM_DASH,
+          standard: tt?.standardRef ?? catalogTest?.standardRef ?? EM_DASH,
           formTemplate: sibling.specializedTestResults?.[0]?.formTemplate ?? null,
           formData: sibling.specializedTestResults?.[0]?.formData ?? null,
           testedBy: sibling.specializedTestResults?.[0]?.testedBy ?? undefined,
@@ -416,6 +426,7 @@ export default function BatchReport() {
 
   const handleClose = () => {
     if (window.opener) window.close();
+    else if (sectorMode) navigate("/sector/results");
     else navigate(`/batch/order/${orderId}`);
   };
 
@@ -433,8 +444,8 @@ export default function BatchReport() {
     setIsDownloadLoading(false);
   };
 
-  return (
-    <DashboardLayout>
+  const reportChrome = (
+    <>
       <div className="print:hidden bg-slate-800 text-white px-4 md:px-6 py-3 flex items-center justify-between sticky top-0 z-10" dir={isAr ? "rtl" : "ltr"}>
         <div className="flex items-center gap-2">
           <Button variant="ghost" className="text-white hover:bg-slate-700 gap-2" onClick={handleClose}>
@@ -475,6 +486,12 @@ export default function BatchReport() {
           <div className="flex justify-center py-24">
             <Loader2 className="w-8 h-8 animate-spin text-slate-400" />
           </div>
+        ) : batchError ? (
+          <Card className="max-w-lg mx-auto">
+            <CardContent className="py-10 text-center text-slate-600">
+              {isAr ? "تعذّر تحميل التقرير." : "Could not load this report."}
+            </CardContent>
+          </Card>
         ) : total === 0 ? (
           <Card className="max-w-lg mx-auto">
             <CardContent className="py-10 text-center text-slate-600">
@@ -656,6 +673,9 @@ export default function BatchReport() {
           </div>
         )}
       </div>
-    </DashboardLayout>
+    </>
   );
+
+  if (sectorMode) return reportChrome;
+  return <DashboardLayout>{reportChrome}</DashboardLayout>;
 }

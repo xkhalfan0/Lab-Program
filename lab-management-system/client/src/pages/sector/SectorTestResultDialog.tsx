@@ -142,6 +142,17 @@ export function SectorTestResultDialog({
 
   function handleOpenReport() {
     if (!resultId) return;
+    if (
+      detail?.type === "result" &&
+      (detail.batchTestCount ?? 1) > 1 &&
+      detail.labOrderId &&
+      detail.sample?.id
+    ) {
+      const url = `/sector/batch-report/${detail.sample.id}/${detail.labOrderId}`;
+      const opened = window.open(url, "_blank");
+      if (!opened) window.location.href = url;
+      return;
+    }
     const source = resultSource ?? detail?.resultSource;
     const qs = source ? `?source=${source}` : "";
     const url = `/sector/test-report/${resultId}${qs}`;

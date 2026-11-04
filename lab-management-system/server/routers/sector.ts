@@ -25,6 +25,8 @@ import {
   getSpecializedTestResultsBySample,
   getAttachmentsBySample,
   getLabOrderItems,
+  getBatchOverviewData,
+  getBatchSiblingDistributions,
 } from "../db";
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
@@ -421,6 +423,19 @@ function sectorResultIsVisible(
   return QC_ISSUED_SAMPLE_STATUSES.has(sampleStatus ?? "");
 }
 
+async function resolveSectorLabOrderBatchMeta(
+  distributionId: number,
+  sampleId: number,
+): Promise<{ labOrderId: number | null; batchTestCount: number }> {
+  const dist = await getDistributionById(distributionId);
+  const labOrderId = dist?.orderId ?? null;
+  if (!labOrderId) {
+    return { labOrderId: null, batchTestCount: 1 };
+  }
+  const siblings = await getBatchSiblingDistributions(sampleId, labOrderId, {});
+  return { labOrderId, batchTestCount: siblings.length };
+}
+
 function formatSectorResultRow(
   r: Awaited<ReturnType<typeof fetchAllVisibleSectorResults>>[number],
   sampleMap: Record<number, SectorSampleRow>,
@@ -691,8 +706,10 @@ export const sectorRouter = router({
           (summary?.overallIndex != null ? String(summary.overallIndex) : null) ??
           (summary?.result != null ? String(summary.result) : null) ??
           meta.testTypeNameAr;
+        const resultSource: SectorResultSource = r.isLegacy ? "legacy" : "specialized";
         return {
           id: r.id,
+          resultSource,
           sampleCode: r.sampleCode,
           contractNumber: r.contractNumber,
           testTypeCode: meta.testTypeCode,
@@ -900,14 +917,49 @@ export const sectorRouter = router({
           );
         }
 
-        return { result, dist, legacyResult, batchDists, batchResults, resultSource: "specialized" as const };
+        const batchMeta = await resolveSectorLabOrderBatchMeta(result.distributionId, result.sampleId);
+      return {
+        result,
+        dist,
+        legacyResult,
+        batchDists,
+        batchResults,
+        resultSource: "specialized" as const,
+        ...batchMeta,
+      };
       }
 
       const legacyResult = resolved.row;
       const dist = await getDistributionById(legacyResult.distributionId);
       if (!dist) throw new TRPCError({ code: "NOT_FOUND", message: "Distribution not found" });
 
-      return { result: null, dist, legacyResult, batchDists: [], batchResults: [], resultSource: "legacy" as const };
+      const batchMeta = await resolveSectorLabOrderBatchMeta(legacyResult.distributionId, legacyResult.sampleId);
+      return {
+        result: null,
+        dist,
+        legacyResult,
+        batchDists: [],
+        batchResults: [],
+        resultSource: "legacy" as const,
+        ...batchMeta,
+      };
+    }),
+
+  getBatchByOrder: sectorProcedure
+    .input(
+      z.object({
+        orderId: z.number(),
+        includeResults: z.boolean().optional(),
+      }),
+    )
+    .query(async ({ ctx, input }) => {
+      const data = await getBatchOverviewData(input.orderId, {
+        includeResults: input.includeResults ?? true,
+      });
+      if (!data.sample || data.sample.sector !== ctx.sectorKey) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Order not found for this sector" });
+      }
+      return data;
     }),
 
   markResultRead: sectorProcedure
@@ -1486,6 +1538,10 @@ export const sectorRouter = router({
             assignedTechnicianId: distMap[specialized.distributionId]?.assignedTechnicianId ?? null,
             userMap: techCtx.userMap,
           });
+          const batchMeta = await resolveSectorLabOrderBatchMeta(
+            specialized.distributionId,
+            specialized.sampleId,
+          );
           return {
             type: "result" as const,
             resultSource: "specialized" as const,
@@ -1496,6 +1552,7 @@ export const sectorRouter = router({
               testedBy,
             },
             sample: resolved.sample,
+            ...batchMeta,
           };
         }
 
@@ -1515,6 +1572,7 @@ export const sectorRouter = router({
           assignedTechnicianId: distMap[legacy.distributionId]?.assignedTechnicianId ?? null,
           userMap: techCtx.userMap,
         });
+        const batchMeta = await resolveSectorLabOrderBatchMeta(legacy.distributionId, legacy.sampleId);
         return {
           type: "result" as const,
           resultSource: "legacy" as const,
@@ -1532,6 +1590,7 @@ export const sectorRouter = router({
             qcReviewedAt: legacy.qcReviewedAt,
           },
           sample: resolved.sample,
+          ...batchMeta,
         };
       }
 
