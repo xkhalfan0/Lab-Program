@@ -43,6 +43,7 @@ import { buildConcreteSpecimenPrepPairs } from "@shared/concreteSpecimenPrepFiel
 import { collectStandardReportNoteLines } from "@shared/concreteReportNotes";
 import { buildConcreteCubeTestConditionPairs } from "@/lib/concreteCubeTestConditions";
 import { resolveReportReceptionFields } from "@shared/receptionEntryFields";
+import { ConcreteDistributionReportShell } from "@/pages/ConcreteReport";
 import {
   ReportDetailGrid,
   ReportInfoHeading,
@@ -5055,6 +5056,48 @@ export default function SpecializedTestReport({ sectorResultId, sectorResultSour
           {isAr ? "إغلاق" : "Close"}
         </Button>
       </div>
+    );
+  }
+
+  const sectorConcreteGroups =
+    (sectorBundle as { concreteGroups?: unknown[] } | undefined)?.concreteGroups ?? [];
+
+  // Legacy concrete cubes — full BS report (same as lab /concrete-report)
+  if (
+    isSectorMode &&
+    !result &&
+    legacyResult &&
+    sectorConcreteGroups.length > 0
+  ) {
+    const handleConcretePrint = () => printLabReport();
+    const handleConcreteDownload = async () => {
+      if (!printRef.current) return;
+      setIsDownloadLoading(true);
+      const refNo =
+        (dist as { distributionCode?: string } | null | undefined)?.distributionCode ??
+        `DIST-${distIdForRender}`;
+      const { generatePdfFromElement } = await import("@/lib/pdf");
+      const ok = await generatePdfFromElement(printRef.current, {
+        filename: `concrete-report-${refNo}`,
+        mode: "download",
+      });
+      if (!ok) window.print();
+      setIsDownloadLoading(false);
+    };
+
+    return (
+      <ConcreteDistributionReportShell
+        distId={distIdForRender}
+        groups={sectorConcreteGroups}
+        distribution={dist}
+        testResult={legacyResult}
+        lang={isAr ? "ar" : "en"}
+        printRef={printRef}
+        isDownloadLoading={isDownloadLoading}
+        onClose={handleClose}
+        onPrint={handleConcretePrint}
+        onDownload={handleConcreteDownload}
+      />
     );
   }
 

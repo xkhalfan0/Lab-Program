@@ -1,6 +1,6 @@
 import { useParams } from "wouter";
 import { trpc } from "@/lib/trpc";
-import { useRef, useState } from "react";
+import { useRef, useState, type RefObject } from "react";
 import { Button } from "@/components/ui/button";
 import { Printer, X, Download, Loader2, CheckCircle, XCircle } from "lucide-react";
 import { generatePdfFromElement } from "@/lib/pdf";
@@ -603,6 +603,102 @@ export function ConcreteCubeReportPage({
   );
 }
 
+export type ConcreteDistributionReportShellProps = {
+  distId: number;
+  groups: any[];
+  distribution: any;
+  testResult: any;
+  lang: "en" | "ar";
+  printRef: RefObject<HTMLDivElement | null>;
+  isDownloadLoading: boolean;
+  onClose: () => void;
+  onPrint: () => void;
+  onDownload: () => void;
+};
+
+export function ConcreteDistributionReportShell({
+  distId,
+  groups,
+  distribution,
+  testResult,
+  lang,
+  printRef,
+  isDownloadLoading,
+  onClose,
+  onPrint,
+  onDownload,
+}: ConcreteDistributionReportShellProps) {
+  const ar = lang === "ar";
+  const refNo = distribution?.distributionCode ?? `DIST-${distId}`;
+  const distributionAny = distribution;
+  const testResultAny = testResult;
+
+  return (
+    <>
+      <div
+        className="print:hidden bg-gray-800 text-white px-6 py-3 flex items-center justify-between sticky top-0 z-10"
+        dir={ar ? "rtl" : "ltr"}
+      >
+        <div className="flex items-center gap-3">
+          <Button variant="ghost" size="sm" className="text-white hover:text-white hover:bg-gray-700" onClick={onClose}>
+            <X className="w-4 h-4 me-1" /> {ar ? "إغلاق" : "Close"}
+          </Button>
+          <span className="text-sm text-gray-300">
+            {ar ? "تقرير ضغط مكعبات الخرسانة" : "Concrete Compression Test Report"} — {refNo}
+          </span>
+        </div>
+        <div className="flex gap-2">
+          <Button
+            onClick={onDownload}
+            disabled={isDownloadLoading}
+            variant="outline"
+            className="bg-gray-700 border-gray-600 text-white hover:bg-gray-600 gap-2"
+          >
+            {isDownloadLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+            {ar ? "تحميل PDF" : "Download PDF"}
+          </Button>
+          <Button onClick={onPrint} className="bg-blue-600 hover:bg-blue-700 gap-2">
+            <Printer className="w-4 h-4" />
+            {ar ? "طباعة / حفظ PDF" : "Print / Save PDF"}
+          </Button>
+        </div>
+      </div>
+
+      <div className={LAB_PRINT_CANVAS_CLASS} dir={ar ? "rtl" : "ltr"}>
+        <div ref={printRef}>
+          {groups.length === 0 ? (
+            <div className="text-center py-20 text-gray-500">
+              {ar ? "لا توجد نتائج. يرجى إدخال النتائج أولاً." : "No test results found. Please enter results first."}
+            </div>
+          ) : (
+            groups.map((group: any, idx: number, arr: any[]) => (
+              <div key={group.id} className={`mb-6 print:mb-0 ${idx > 0 ? "print-break-before" : ""}`}>
+                <ConcreteCubeReportPage
+                  group={group}
+                  refNo={refNo}
+                  distribution={distributionAny}
+                  castingDate={distribution?.castingDate}
+                  testedByName={distributionAny?.technicianName ?? testResultAny?.testedBy ?? group?.testedBy}
+                  managerReviewedByName={testResultAny?.managerReviewedByName ?? null}
+                  qcReviewedByName={testResultAny?.qcReviewedByName ?? null}
+                  managerNotes={testResultAny?.managerNotes ?? null}
+                  qcNotes={testResultAny?.qcNotes ?? null}
+                  lang={lang}
+                  pageIndex={idx}
+                  totalPages={arr.length}
+                  testedSignedAt={testResultAny?.processedAt ?? null}
+                  managerSignedAt={testResultAny?.managerReviewedAt ?? null}
+                  qcSignedAt={testResultAny?.qcReviewedAt ?? null}
+                />
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+    </>
+  );
+}
+
 // ─── Main Report Page ─────────────────────────────────────────────────────────
 export default function ConcreteReport() {
   const { lang } = useLanguage();
@@ -639,8 +735,9 @@ export default function ConcreteReport() {
   const handleDownload = async () => {
     if (!printRef.current) return;
     setIsDownloadLoading(true);
+    const fileRef = distribution?.distributionCode ?? `DIST-${distId}`;
     const ok = await generatePdfFromElement(printRef.current, {
-      filename: `concrete-report-${refNo}`,
+      filename: `concrete-report-${fileRef}`,
       mode: "download",
     });
     if (!ok) window.print();
@@ -656,67 +753,18 @@ export default function ConcreteReport() {
     );
   }
 
-  const refNo = distribution?.distributionCode ?? `DIST-${distId}`;
-  const distributionAny = distribution as any;
-  const testResultAny = testResult as any;
-
   return (
-    <>
-      {/* Print Controls — hidden when printing */}
-      <div className="print:hidden bg-gray-800 text-white px-6 py-3 flex items-center justify-between sticky top-0 z-10">
-        <div className="flex items-center gap-3">
-          <Button variant="ghost" size="sm" className="text-white hover:text-white hover:bg-gray-700"
-            onClick={handleClose}>
-            <X className="w-4 h-4 mr-1" /> Close
-          </Button>
-          <span className="text-sm text-gray-300">
-            Concrete Compression Test Report — {refNo}
-          </span>
-        </div>
-        <div className="flex gap-2">
-          <Button onClick={handleDownload} disabled={isDownloadLoading} variant="outline" className="bg-gray-700 border-gray-600 text-white hover:bg-gray-600 gap-2">
-            {isDownloadLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
-            Download PDF
-          </Button>
-          <Button onClick={handlePrint} className="bg-blue-600 hover:bg-blue-700 gap-2">
-            <Printer className="w-4 h-4" />
-            Print / Save PDF
-          </Button>
-        </div>
-      </div>
-
-      {/* Report Content */}
-      <div className={LAB_PRINT_CANVAS_CLASS} dir={lang === "ar" ? "rtl" : "ltr"}>
-        <div ref={printRef}>
-        {(groups as any[]).length === 0 ? (
-          <div className="text-center py-20 text-gray-500">
-            No test results found. Please enter results first.
-          </div>
-        ) : (
-          (groups as any[]).map((group: any, idx: number, arr: any[]) => (
-            <div key={group.id} className={`mb-6 print:mb-0 ${idx > 0 ? "print-break-before" : ""}`}>
-              <ConcreteCubeReportPage
-                group={group}
-                refNo={refNo}
-                distribution={distributionAny}
-                castingDate={distribution?.castingDate}
-                testedByName={distributionAny?.technicianName ?? testResultAny?.testedBy ?? group?.testedBy}
-                managerReviewedByName={testResultAny?.managerReviewedByName ?? null}
-                qcReviewedByName={testResultAny?.qcReviewedByName ?? null}
-                managerNotes={testResultAny?.managerNotes ?? null}
-                qcNotes={testResultAny?.qcNotes ?? null}
-                lang={lang}
-                pageIndex={idx}
-                totalPages={arr.length}
-                testedSignedAt={testResultAny?.processedAt ?? null}
-                managerSignedAt={testResultAny?.managerReviewedAt ?? null}
-                qcSignedAt={testResultAny?.qcReviewedAt ?? null}
-              />
-            </div>
-          ))
-        )}
-        </div>
-      </div>
-    </>
+    <ConcreteDistributionReportShell
+      distId={distId}
+      groups={groups as any[]}
+      distribution={distribution}
+      testResult={testResult}
+      lang={lang}
+      printRef={printRef}
+      isDownloadLoading={isDownloadLoading}
+      onClose={handleClose}
+      onPrint={handlePrint}
+      onDownload={handleDownload}
+    />
   );
 }

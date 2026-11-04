@@ -27,6 +27,9 @@ import {
   getLabOrderItems,
   getBatchOverviewData,
   getBatchSiblingDistributions,
+  getConcreteGroupsByDistribution,
+  getConcreteGroupsBySample,
+  getCubesByGroup,
 } from "../db";
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
@@ -421,6 +424,28 @@ function sectorResultIsVisible(
 ) {
   if (result.status === "approved") return true;
   return QC_ISSUED_SAMPLE_STATUSES.has(sampleStatus ?? "");
+}
+
+async function loadConcreteGroupsForDistribution(distributionId: number) {
+  const groups = await getConcreteGroupsByDistribution(distributionId);
+  return Promise.all(
+    groups.map(async (g) => ({
+      ...g,
+      cubes: await getCubesByGroup(g.id),
+    })),
+  );
+}
+
+function distributionUsesConcreteCubeReport(
+  dist: { testType?: string | null },
+  legacyResult?: { chartsData?: unknown } | null,
+) {
+  const chartsSource = (legacyResult?.chartsData as { source?: string } | null)?.source;
+  return (
+    chartsSource === "concrete_cubes" ||
+    dist.testType === "CONC_CUBE" ||
+    (dist.testType?.startsWith("CONC_CUBE") ?? false)
+  );
 }
 
 async function resolveSectorLabOrderBatchMeta(
@@ -918,15 +943,19 @@ export const sectorRouter = router({
         }
 
         const batchMeta = await resolveSectorLabOrderBatchMeta(result.distributionId, result.sampleId);
-      return {
-        result,
-        dist,
-        legacyResult,
-        batchDists,
-        batchResults,
-        resultSource: "specialized" as const,
-        ...batchMeta,
-      };
+        const concreteGroups = distributionUsesConcreteCubeReport(dist, legacyResult)
+          ? await loadConcreteGroupsForDistribution(dist.id)
+          : [];
+        return {
+          result,
+          dist,
+          legacyResult,
+          batchDists,
+          batchResults,
+          concreteGroups,
+          resultSource: "specialized" as const,
+          ...batchMeta,
+        };
       }
 
       const legacyResult = resolved.row;
@@ -934,15 +963,35 @@ export const sectorRouter = router({
       if (!dist) throw new TRPCError({ code: "NOT_FOUND", message: "Distribution not found" });
 
       const batchMeta = await resolveSectorLabOrderBatchMeta(legacyResult.distributionId, legacyResult.sampleId);
+      const concreteGroups = distributionUsesConcreteCubeReport(dist, legacyResult)
+        ? await loadConcreteGroupsForDistribution(dist.id)
+        : [];
       return {
         result: null,
         dist,
         legacyResult,
         batchDists: [],
         batchResults: [],
+        concreteGroups,
         resultSource: "legacy" as const,
         ...batchMeta,
       };
+    }),
+
+  getConcreteGroupsBySample: sectorProcedure
+    .input(z.object({ sampleId: z.number() }))
+    .query(async ({ ctx, input }) => {
+      const sample = await getSampleById(input.sampleId);
+      if (!sample || sample.sector !== ctx.sectorKey) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Sample not found for this sector" });
+      }
+      const groups = await getConcreteGroupsBySample(input.sampleId);
+      return Promise.all(
+        groups.map(async (g) => ({
+          ...g,
+          cubes: await getCubesByGroup(g.id),
+        })),
+      );
     }),
 
   getBatchByOrder: sectorProcedure

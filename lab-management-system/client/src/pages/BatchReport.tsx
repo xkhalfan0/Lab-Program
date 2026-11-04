@@ -347,10 +347,15 @@ export default function BatchReport({ sectorMode = false }: { sectorMode?: boole
   const siblings = batchOverview?.siblings ?? [];
   const resolvedSampleId = sample?.id ?? sampleId;
 
-  const { data: concreteGroupsBySample = [] } = trpc.concrete.groupsBySample.useQuery(
+  const { data: labConcreteGroups = [] } = trpc.concrete.groupsBySample.useQuery(
     { sampleId: resolvedSampleId },
     { enabled: resolvedSampleId > 0 && !sectorMode },
   );
+  const { data: sectorConcreteGroups = [] } = trpc.sector.getConcreteGroupsBySample.useQuery(
+    { sampleId: resolvedSampleId },
+    { enabled: resolvedSampleId > 0 && sectorMode },
+  );
+  const concreteGroupsBySample = sectorMode ? sectorConcreteGroups : labConcreteGroups;
 
   const concreteGroupsByDist = useMemo(() => {
     const map = new Map<number, typeof concreteGroupsBySample>();
