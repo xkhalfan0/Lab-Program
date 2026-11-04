@@ -604,6 +604,7 @@ export function ConcreteCubeReportPage({
       </div>
       )}
       </div>
+      </div>
     </div>
   );
 }

@@ -23,8 +23,11 @@ const t = {
   ar: {
     title: "العينات المستلمة",
     subtitle: "جميع العينات المقدمة من قطاعكم — يمكنكم عرض وصل الاستلام لكل عينة",
-    search: "بحث برمز العينة أو رقم العقد أو المقاول...",
+    search: "بحث برمز العينة أو رقم العقد أو المقاول أو الموقع...",
     sampleCode: "رمز العينة",
+    sampleLocation: "موقع العينة",
+    filterLocation: "الموقع",
+    allLocations: "كل المواقع",
     contractNumber: "رقم العقد",
     contractName: "اسم العقد",
     contractor: "المقاول",
@@ -49,8 +52,11 @@ const t = {
   en: {
     title: "Received Samples",
     subtitle: "All samples submitted by your sector — open the reception receipt for any sample",
-    search: "Search by sample code, contract no., or contractor...",
+    search: "Search by sample code, contract, contractor, or location...",
     sampleCode: "Sample Code",
+    sampleLocation: "Sample Location",
+    filterLocation: "Location",
+    allLocations: "All locations",
     contractNumber: "Contract No.",
     contractName: "Contract Name",
     contractor: "Contractor",
@@ -87,6 +93,7 @@ export default function SectorSamples() {
   const { lang } = useSectorLang();
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
+  const [locationFilter, setLocationFilter] = useState("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [showDateFilters, setShowDateFilters] = useState(false);
@@ -94,10 +101,14 @@ export default function SectorSamples() {
   const isRtl = lang === "ar";
   const limit = 15;
 
+  const { data: locationOptionsData } = trpc.sector.getSampleLocations.useQuery();
+  const locationOptions = locationOptionsData?.locations ?? [];
+
   const { data, isLoading, isError, refetch } = trpc.sector.getSamples.useQuery({
     page,
     limit,
     search: search.trim() || undefined,
+    location: locationFilter || undefined,
     dateFrom: dateFrom || undefined,
     dateTo: dateTo || undefined,
   });
@@ -106,20 +117,33 @@ export default function SectorSamples() {
   const total = data?.total ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / limit));
   const hasDateFilters = Boolean(dateFrom || dateTo);
-  const hasActiveFilters = hasDateFilters || Boolean(search.trim());
+  const hasActiveFilters = hasDateFilters || Boolean(search.trim()) || Boolean(locationFilter);
 
   const clearFilters = () => {
     setDateFrom("");
     setDateTo("");
     setSearch("");
+    setLocationFilter("");
     setPage(1);
   };
+
+  const filterSelectClass =
+    "h-[42px] min-w-[180px] rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100";
 
   const openReceipt = (sampleId: number) => {
     window.open(`/sector/receipt/${sampleId}?lang=${lang}`, "_blank", "noopener,noreferrer");
   };
 
-  const headers = [T.sampleCode, T.contractNumber, T.contractName, T.contractor, T.sampleType, T.receipt, T.receivedAt];
+  const headers = [
+    T.sampleCode,
+    T.contractNumber,
+    T.contractName,
+    T.contractor,
+    T.sampleLocation,
+    T.sampleType,
+    T.receipt,
+    T.receivedAt,
+  ];
 
   return (
     <SectorLayout>
@@ -136,11 +160,32 @@ export default function SectorSamples() {
           isRtl={isRtl}
         />
 
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex flex-wrap items-end gap-4">
+          {locationOptions.length > 0 && (
+            <div className="inline-flex flex-col gap-1.5">
+              <span className="px-1 text-xs font-semibold uppercase tracking-wide text-slate-500">{T.filterLocation}</span>
+              <select
+                value={locationFilter}
+                onChange={(e) => {
+                  setLocationFilter(e.target.value);
+                  setPage(1);
+                }}
+                className={filterSelectClass}
+              >
+                <option value="">{T.allLocations}</option>
+                {locationOptions.map((loc) => (
+                  <option key={loc} value={loc}>
+                    {loc}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
           <button
             type="button"
             onClick={() => setShowDateFilters((v) => !v)}
-            className={`${sectorTheme.filterPill} ${
+            className={`${sectorTheme.filterPill} self-end ${
               showDateFilters || hasDateFilters ? sectorTheme.filterPillActive : sectorTheme.filterPillIdle
             }`}
           >
@@ -210,6 +255,9 @@ export default function SectorSamples() {
                         <Building2 className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />
                         <span className="break-words">{s.contractorName ?? "—"}</span>
                       </div>
+                    </td>
+                    <td className={`${sectorTheme.tableCell} max-w-[200px] break-words text-slate-700`}>
+                      {s.location ?? "—"}
                     </td>
                     <td className={sectorTheme.tableCell}>
                       <SectorSampleTypeBadge sampleType={s.sampleType} lang={lang} />

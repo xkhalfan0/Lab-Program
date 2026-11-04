@@ -78,6 +78,11 @@ import {
   validateConcInterlockReceptionQuantity,
 } from "@shared/receptionTestQuantityLimits";
 import {
+  isSampleLocationProvided,
+  sampleLocationRequiredMessage,
+  trimSampleLocation,
+} from "@shared/sampleLocation";
+import {
   MIN_CONC_FOAM_CUBE_COUNT,
   isFoamConcreteTestCode,
   validateFoamReceptionQuantity,
@@ -350,7 +355,7 @@ export default function Reception() {
   const [refSearch, setRefSearch] = useState("");
   const [sectorFilter, setSectorFilter] = useState<string>("all");
   const [sampleTypeFilter, setSampleTypeFilter] = useState<string>("all");
-  const [form, setForm] = useState(emptyForm());
+  const [form, setForm] = useState(emptyForm);
   const [selectedTests, setSelectedTests] = useState<SelectedTest[]>([]);
   // For subtype selection per test
   const [subtypeFor, setSubtypeFor] = useState<number | null>(null); // testTypeId being configured
@@ -1166,6 +1171,11 @@ export default function Reception() {
       toast.error(lang === "ar" ? "يرجى اختيار نوع طبقة الأسفلت (Wearing / Binder / Base Course)" : "Please select the Asphalt Mix Course (Wearing / Binder / Base Course)");
       return;
     }
+    if (!isSampleLocationProvided(form.location)) {
+      toast.error(sampleLocationRequiredMessage(uiLang));
+      setFocusedStep(4);
+      return;
+    }
     if (isCastingRequired && !form.castingDate) {
       toast.error(lang === "ar" ? "يرجى إدخال تاريخ الصب" : "Please enter casting date");
       return;
@@ -1271,7 +1281,7 @@ export default function Reception() {
         serializeEntryData(entryData) ?? "",
         form.notes || "",
       ].filter(Boolean).join("\n") || undefined,
-      location: form.location || undefined,
+      location: trimSampleLocation(form.location),
       referenceNo: form.referenceNo?.trim() || undefined,
       castingDate: castingDateISO || undefined,
       priority: form.priority,
@@ -1869,8 +1879,17 @@ export default function Reception() {
                       ) : (
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div className="space-y-2 sm:col-span-2">
-                          <Label className="text-[15px]">{lang === "ar" ? "الموقع" : "Location"}</Label>
-                          <Input className="h-10 text-base" placeholder={lang === "ar" ? "اختياري" : "Optional"} value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} />
+                          <Label className="text-[15px]">
+                            {lang === "ar" ? "موقع العينة" : "Sample location"}
+                            <span className="text-red-500 ms-0.5">*</span>
+                          </Label>
+                          <Input
+                            className="h-10 text-base"
+                            required
+                            placeholder={lang === "ar" ? "مثال: الطابق 3، العمود C2" : "e.g. Floor 3, Column C2"}
+                            value={form.location}
+                            onChange={(e) => setForm({ ...form, location: e.target.value })}
+                          />
                         </div>
                         <div className="space-y-2 sm:col-span-2">
                           <Label className="text-[15px]">
@@ -2285,8 +2304,11 @@ export default function Reception() {
                 <Input value={editingOrder.contractorName} onChange={e => setEditingOrder(o => o ? { ...o, contractorName: e.target.value } : o)} />
               </div>
               <div className="space-y-1.5">
-                <Label>{lang === "ar" ? "الموقع" : "Location"}</Label>
-                <Input value={editingOrder.location} onChange={e => setEditingOrder(o => o ? { ...o, location: e.target.value } : o)} />
+                <Label>
+                  {lang === "ar" ? "موقع العينة" : "Sample location"}
+                  <span className="text-red-500 ms-0.5">*</span>
+                </Label>
+                <Input required value={editingOrder.location} onChange={e => setEditingOrder(o => o ? { ...o, location: e.target.value } : o)} />
               </div>
               <div className="space-y-1.5">
                 <Label>{lang === "ar" ? "تاريخ الصب" : "Casting Date"}</Label>
@@ -2347,13 +2369,19 @@ export default function Reception() {
               )}
               <div className="flex gap-2 pt-2">
                 <Button className="flex-1" disabled={updateOrder.isPending}
-                  onClick={() => updateOrder.mutate({
+                  onClick={() => {
+                    if (!isSampleLocationProvided(editingOrder.location)) {
+                      toast.error(sampleLocationRequiredMessage(uiLang));
+                      return;
+                    }
+                    updateOrder.mutate({
                     orderId: editingOrder.id,
                     contractorName: editingOrder.contractorName,
-                    location: editingOrder.location,
+                    location: trimSampleLocation(editingOrder.location),
                     notes: editingOrder.notes,
                     castingDate: editingOrder.castingDate ? format(editingOrder.castingDate, "yyyy-MM-dd") : null,
-                  })}>
+                  });
+                  }}>
                   {updateOrder.isPending ? (lang === "ar" ? "جاري الحفظ..." : "Saving...") : (lang === "ar" ? "حفظ التعديلات" : "Save Changes")}
                 </Button>
                 <Button variant="outline" onClick={() => { setEditOpen(false); setEditingOrder(null); }}>

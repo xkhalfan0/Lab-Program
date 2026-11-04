@@ -63,7 +63,10 @@ const t = {
     unread: "جديد",
     pass: "ناجح",
     fail: "راسب",
-    search: "بحث برمز العينة أو مرجع التفتيش...",
+    search: "بحث برمز العينة أو مرجع التفتيش أو الموقع...",
+    sampleLocation: "موقع العينة",
+    filterLocation: "الموقع",
+    allLocations: "كل المواقع",
     clearFilters: "مسح الفلاتر",
     allResults: "الكل",
     allContracts: "كل العقود",
@@ -100,7 +103,10 @@ const t = {
     unread: "New",
     pass: "Pass",
     fail: "Fail",
-    search: "Search by sample code or inspection ref....",
+    search: "Search by sample code, inspection ref., or location...",
+    sampleLocation: "Sample Location",
+    filterLocation: "Location",
+    allLocations: "All locations",
     clearFilters: "Clear Filters",
     allResults: "All",
     allContracts: "All contracts",
@@ -126,6 +132,7 @@ export default function SectorResults() {
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
   const [contractFilter, setContractFilter] = useState("");
+  const [locationFilter, setLocationFilter] = useState("");
   const [testTypeFilter, setTestTypeFilter] = useState("");
   const [resultFilter, setResultFilter] = useState("");
   const [readFilter, setReadFilter] = useState("");
@@ -144,6 +151,9 @@ export default function SectorResults() {
     const filter = params.get("filter");
     if (filter === "fail" || filter === "pass") setResultFilter(filter);
   }, [location]);
+
+  const { data: locationOptionsData } = trpc.sector.getSampleLocations.useQuery();
+  const locationOptions = locationOptionsData?.locations ?? [];
 
   const { data, isLoading } = trpc.sector.getTestResults.useQuery({ page, limit });
 
@@ -164,6 +174,16 @@ export default function SectorResults() {
     return Array.from(values).sort((a, b) => a.localeCompare(b));
   }, [allResults]);
 
+  const resultLocationOptions = useMemo(() => {
+    const values = new Set<string>();
+    for (const loc of locationOptions) values.add(loc);
+    for (const r of allResults) {
+      const sampleLocation = (r as { sampleLocation?: string | null }).sampleLocation?.trim();
+      if (sampleLocation) values.add(sampleLocation);
+    }
+    return Array.from(values).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
+  }, [allResults, locationOptions]);
+
   const testTypeOptions = useMemo(() => {
     const present = new Set<TestCategory>();
     for (const r of allResults) {
@@ -176,12 +196,20 @@ export default function SectorResults() {
   const filtered = allResults.filter((r) => {
     if (search) {
       const q = search.toLowerCase();
+      const loc = (r as { sampleLocation?: string | null }).sampleLocation?.toLowerCase() ?? "";
       const match =
         r.sampleCode?.toLowerCase().includes(q) ||
-        r.referenceNo?.toLowerCase().includes(q);
+        r.referenceNo?.toLowerCase().includes(q) ||
+        loc.includes(q);
       if (!match) return false;
     }
     if (contractFilter && r.contractNumber !== contractFilter) return false;
+    if (
+      locationFilter &&
+      (r as { sampleLocation?: string | null }).sampleLocation !== locationFilter
+    ) {
+      return false;
+    }
     if (testTypeFilter && resolveResultCategory(r) !== testTypeFilter) return false;
     if (resultFilter === "pass" && r.overallResult?.toLowerCase() !== "pass") return false;
     if (resultFilter === "fail" && r.overallResult?.toLowerCase() !== "fail") return false;
@@ -200,7 +228,13 @@ export default function SectorResults() {
   const totalPages = Math.max(1, Math.ceil((data?.total ?? 0) / limit));
   const hasDateFilters = dateFrom || dateTo;
   const hasActiveFilters =
-    resultFilter || readFilter || hasDateFilters || search || contractFilter || testTypeFilter;
+    resultFilter ||
+    readFilter ||
+    hasDateFilters ||
+    search ||
+    contractFilter ||
+    locationFilter ||
+    testTypeFilter;
 
   const openReport = (
     id: number,
@@ -219,6 +253,7 @@ export default function SectorResults() {
     setDateTo("");
     setSearch("");
     setContractFilter("");
+    setLocationFilter("");
     setTestTypeFilter("");
     setPage(1);
   };
@@ -252,6 +287,22 @@ export default function SectorResults() {
               ))}
             </select>
           </div>
+
+          {resultLocationOptions.length > 0 && (
+            <div className="inline-flex flex-col gap-1.5">
+              <span className="px-1 text-xs font-semibold uppercase tracking-wide text-slate-500">{T.filterLocation}</span>
+              <select
+                value={locationFilter}
+                onChange={(e) => { setLocationFilter(e.target.value); setPage(1); }}
+                className={filterSelectClass}
+              >
+                <option value="">{T.allLocations}</option>
+                {resultLocationOptions.map((loc) => (
+                  <option key={loc} value={loc}>{loc}</option>
+                ))}
+              </select>
+            </div>
+          )}
 
           <div className="inline-flex flex-col gap-1.5">
             <span className="px-1 text-xs font-semibold uppercase tracking-wide text-slate-500">{T.filterTestType}</span>

@@ -3244,7 +3244,7 @@ ${testSummaries.length > 0 ? testSummaries.join("\n\n") : "لم تُجرَ اخ�
       .input(z.object({
         orderId: z.number(),
         contractorName: z.string().optional(),
-        location: z.string().optional(),
+        location: z.string().trim().min(1, "Sample location is required").optional(),
         notes: z.string().optional(),
         priority: z.enum(["low", "normal", "high", "urgent"]).optional(),
         castingDate: z.string().optional().nullable(), // ISO yyyy-mm-dd or null
@@ -3259,7 +3259,7 @@ ${testSummaries.length > 0 ? testSummaries.join("\n\n") : "لم تُجرَ اخ�
         }
         await updateLabOrderFields(input.orderId, {
           contractorName: input.contractorName,
-          location: input.location,
+          location: input.location?.trim(),
           notes: input.notes,
           priority: input.priority,
           castingDate: input.castingDate === null ? null : input.castingDate ? new Date(input.castingDate) : undefined,

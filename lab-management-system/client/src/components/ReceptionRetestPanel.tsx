@@ -9,6 +9,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Search, FlaskConical, Loader2, Lock } from "lucide-react";
 import { RETEST_REASONS } from "@shared/retestReasons";
+import {
+  isSampleLocationProvided,
+  sampleLocationRequiredMessage,
+  trimSampleLocation,
+} from "@shared/sampleLocation";
 import { ReceptionNominalCubeSizePanel, isValidNominalCubeSize } from "@/components/ReceptionNominalCubeSizePanel";
 import {
   TestPriceBadge,
@@ -172,6 +177,10 @@ export function ReceptionRetestPanel({ onSuccess, onCancel }: Props) {
       toast.error(isAr ? "يرجى اختيار الحجم الاسمي للمكعب" : "Please select the nominal cube size");
       return;
     }
+    if (!isSampleLocationProvided(location)) {
+      toast.error(sampleLocationRequiredMessage(lang === "ar" ? "ar" : "en"));
+      return;
+    }
     if (!source) return;
 
     createRetest.mutate({
@@ -188,7 +197,7 @@ export function ReceptionRetestPanel({ onSuccess, onCancel }: Props) {
       sectorNameEn: source.header.sectorNameEn ?? undefined,
       condition: "good",
       notes: notes || undefined,
-      location: location || undefined,
+      location: trimSampleLocation(location),
       castingDate: castingDate || undefined,
       priority: "normal",
       nominalCubeSize: selected.some((t) => t.testTypeCode === "CONC_CUBE") ? nominalCubeSize : undefined,
@@ -330,8 +339,16 @@ export function ReceptionRetestPanel({ onSuccess, onCancel }: Props) {
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <Label className="text-[15px]">{isAr ? "الموقع" : "Location"}</Label>
-                <Input className="h-10 text-base mt-1.5" value={location} onChange={(e) => setLocation(e.target.value)} />
+                <Label className="text-[15px]">
+                  {isAr ? "موقع العينة" : "Sample location"}
+                  <span className="text-red-500 ms-0.5">*</span>
+                </Label>
+                <Input
+                  required
+                  className="h-10 text-base mt-1.5"
+                  value={location}
+                  onChange={(e) => setLocation(e.target.value)}
+                />
               </div>
               <div>
                 <Label className="text-[15px]">{isAr ? "تاريخ الصب" : "Casting date"}</Label>

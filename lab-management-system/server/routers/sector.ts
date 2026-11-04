@@ -281,6 +281,7 @@ type SectorSampleRow = {
   contractorName: string | null;
   referenceNo: string | null;
   contractId: number | null;
+  location: string | null;
 };
 
 async function loadSectorSampleContext(
@@ -297,6 +298,7 @@ async function loadSectorSampleContext(
       contractorName: samples.contractorName,
       referenceNo: samples.referenceNo,
       contractId: samples.contractId,
+      location: samples.location,
     })
     .from(samples)
     .where(sectorSamplesWhere(db, sectorKey));
@@ -489,6 +491,7 @@ function formatSectorResultRow(
       contractName: r.contractName,
       contractorName: r.contractorName,
       referenceNo: r.referenceNo,
+      sampleLocation: sampleMap[r.sampleId]?.location ?? null,
       testTypeCode: r.testTypeCode,
       testTypeNameAr: r.testTypeNameAr,
       testTypeNameEn: r.testTypeNameEn,
@@ -518,6 +521,7 @@ function formatSectorResultRow(
     contractName: sample?.contractName ?? "",
     contractorName: sample?.contractorName ?? "",
     referenceNo: sample?.referenceNo ?? null,
+    sampleLocation: sample?.location ?? null,
     ...typeMeta,
     testType: typeMeta.testTypeNameEn,
     overallResult: r.overallResult,
@@ -534,7 +538,7 @@ function formatSectorResultRow(
 function sectorSamplesWhere(
   db: NonNullable<Awaited<ReturnType<typeof getDb>>>,
   sectorKey: string,
-  filters?: { search?: string; status?: string; dateFrom?: string; dateTo?: string }
+  filters?: { search?: string; location?: string; status?: string; dateFrom?: string; dateTo?: string }
 ) {
   const conditions = [
     eq(samples.sector, sectorKey as any),
@@ -558,9 +562,13 @@ function sectorSamplesWhere(
         like(samples.sampleCode, q),
         like(samples.contractNumber, q),
         like(samples.contractName, q),
-        like(samples.contractorName, q)
+        like(samples.contractorName, q),
+        like(samples.location, q)
       )!
     );
+  }
+  if (filters?.location?.trim()) {
+    conditions.push(eq(samples.location, filters.location.trim()));
   }
   if (filters?.dateFrom) {
     conditions.push(gte(samples.receivedAt, new Date(filters.dateFrom)));
@@ -789,11 +797,32 @@ export const sectorRouter = router({
   }),
 
   // ── Samples received for this sector ──────────────────────────────────────
+  getSampleLocations: sectorProcedure.query(async ({ ctx }) => {
+    const db = await getDb();
+    if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+    const rows = await db
+      .selectDistinct({ location: samples.location })
+      .from(samples)
+      .where(
+        and(
+          eq(samples.sector, ctx.sectorKey as any),
+          buildSampleVisibilityCondition(),
+          ne(samples.status, "deleted"),
+        ),
+      );
+    const locations = rows
+      .map((r) => r.location?.trim())
+      .filter((v): v is string => Boolean(v))
+      .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
+    return { locations };
+  }),
+
   getSamples: sectorProcedure
     .input(z.object({
       page: z.number().default(1),
       limit: z.number().default(20),
       search: z.string().optional(),
+      location: z.string().optional(),
       status: z.string().optional(),
       dateFrom: z.string().optional(),
       dateTo: z.string().optional(),
@@ -804,6 +833,7 @@ export const sectorRouter = router({
       const offset = (input.page - 1) * input.limit;
       const filters = {
         search: input.search,
+        location: input.location,
         status: input.status,
         dateFrom: input.dateFrom,
         dateTo: input.dateTo,
@@ -845,6 +875,7 @@ export const sectorRouter = router({
           contractorName: s.contractorName,
           sampleType: s.sampleType,
           quantity: s.quantity,
+          location: s.location ?? null,
           receivedAt: s.receivedAt,
         })),
         total: Number(countRow[0]?.count ?? 0),
