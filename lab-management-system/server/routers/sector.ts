@@ -538,7 +538,7 @@ function formatSectorResultRow(
 function sectorSamplesWhere(
   db: NonNullable<Awaited<ReturnType<typeof getDb>>>,
   sectorKey: string,
-  filters?: { search?: string; location?: string; status?: string; dateFrom?: string; dateTo?: string }
+  filters?: { search?: string; status?: string; dateFrom?: string; dateTo?: string }
 ) {
   const conditions = [
     eq(samples.sector, sectorKey as any),
@@ -566,9 +566,6 @@ function sectorSamplesWhere(
         like(samples.location, q)
       )!
     );
-  }
-  if (filters?.location?.trim()) {
-    conditions.push(eq(samples.location, filters.location.trim()));
   }
   if (filters?.dateFrom) {
     conditions.push(gte(samples.receivedAt, new Date(filters.dateFrom)));
@@ -797,32 +794,11 @@ export const sectorRouter = router({
   }),
 
   // ── Samples received for this sector ──────────────────────────────────────
-  getSampleLocations: sectorProcedure.query(async ({ ctx }) => {
-    const db = await getDb();
-    if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
-    const rows = await db
-      .selectDistinct({ location: samples.location })
-      .from(samples)
-      .where(
-        and(
-          eq(samples.sector, ctx.sectorKey as any),
-          buildSampleVisibilityCondition(),
-          ne(samples.status, "deleted"),
-        ),
-      );
-    const locations = rows
-      .map((r) => r.location?.trim())
-      .filter((v): v is string => Boolean(v))
-      .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
-    return { locations };
-  }),
-
   getSamples: sectorProcedure
     .input(z.object({
       page: z.number().default(1),
       limit: z.number().default(20),
       search: z.string().optional(),
-      location: z.string().optional(),
       status: z.string().optional(),
       dateFrom: z.string().optional(),
       dateTo: z.string().optional(),
@@ -833,7 +809,6 @@ export const sectorRouter = router({
       const offset = (input.page - 1) * input.limit;
       const filters = {
         search: input.search,
-        location: input.location,
         status: input.status,
         dateFrom: input.dateFrom,
         dateTo: input.dateTo,
@@ -914,7 +889,13 @@ export const sectorRouter = router({
 
   // ── Test results (QC-issued + approved) ─────────────────────────────────────
   getTestResults: sectorProcedure
-    .input(z.object({ page: z.number().default(1), limit: z.number().default(20) }))
+    .input(
+      z.object({
+        page: z.number().default(1),
+        limit: z.number().default(20),
+        search: z.string().optional(),
+      }),
+    )
     .query(async ({ ctx, input }) => {
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
@@ -924,7 +905,19 @@ export const sectorRouter = router({
       if (sampleIds.length === 0) return { results: [], total: 0, unreadCount: 0, activeFailedCount: 0 };
 
       const allVisible = await fetchAllVisibleSectorResults(db, sampleIds, qcIssuedSampleIds, sampleMap);
-      const pageResults = allVisible.slice(offset, offset + input.limit);
+      const searchQ = input.search?.trim().toLowerCase();
+      const matchedVisible = searchQ
+        ? allVisible.filter((r) => {
+            const sample = sampleMap[r.sampleId];
+            return (
+              sample?.sampleCode?.toLowerCase().includes(searchQ) ||
+              sample?.contractNumber?.toLowerCase().includes(searchQ) ||
+              sample?.referenceNo?.toLowerCase().includes(searchQ) ||
+              sample?.location?.toLowerCase().includes(searchQ)
+            );
+          })
+        : allVisible;
+      const pageResults = matchedVisible.slice(offset, offset + input.limit);
 
       const distIds = Array.from(new Set(allVisible.map((r) => r.distributionId)));
       const distMap = await loadDistributionMetaMap(db, distIds);
@@ -936,7 +929,7 @@ export const sectorRouter = router({
 
       return {
         results: pageResults.map((r) => formatSectorResultRow(r, sampleMap, testResultReadAtMap, distMap, techCtx)),
-        total: allVisible.length,
+        total: matchedVisible.length,
         unreadCount,
         activeFailedCount,
       };
