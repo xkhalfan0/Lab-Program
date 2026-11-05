@@ -376,9 +376,9 @@ export default function PrintReceipt({ sectorSampleId }: { sectorSampleId?: numb
         </div>
       </div>
 
-      <div className="bg-gray-200 print:bg-white min-h-screen py-6 print:py-0">
+      <div className="sample-receipt-canvas bg-gray-200 print:bg-white min-h-screen py-6 print:py-0">
         <div
-          className="mx-auto bg-white shadow-lg print:shadow-none"
+          className="sample-receipt-sheet mx-auto bg-white shadow-lg print:shadow-none"
           style={{
             width: "210mm",
             padding: "12mm 14mm 10mm 14mm",
@@ -464,6 +464,7 @@ export default function PrintReceipt({ sectorSampleId }: { sectorSampleId?: numb
 
           {/* Title bar */}
           <div
+            className="sample-receipt-title-bar"
             style={{
               background: "linear-gradient(180deg, #1e293b 0%, #0f172a 100%)",
               color: "white",
@@ -480,7 +481,10 @@ export default function PrintReceipt({ sectorSampleId }: { sectorSampleId?: numb
           </div>
 
           {/* Data table */}
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "12px", marginBottom: "8px", border: "1px solid #dbe3ee" }}>
+          <table
+            className="sample-receipt-table"
+            style={{ width: "100%", borderCollapse: "collapse", fontSize: "12px", marginBottom: "8px", border: "1px solid #dbe3ee" }}
+          >
             <tbody>
               <tr>
                 {th("sampleNo")}
@@ -611,7 +615,7 @@ export default function PrintReceipt({ sectorSampleId }: { sectorSampleId?: numb
               )}
               {entryDataGroups.length > 0 && (
                 <>
-                  <tr>
+                  <tr className="receipt-details-heading">
                     <td
                       colSpan={4}
                       style={{
@@ -628,7 +632,7 @@ export default function PrintReceipt({ sectorSampleId }: { sectorSampleId?: numb
                   </tr>
                   {entryDataGroups.map((group) => (
                     <Fragment key={group.testCode}>
-                      <tr>
+                      <tr className="receipt-test-group-head">
                         <td
                           colSpan={4}
                           style={{
@@ -662,6 +666,7 @@ export default function PrintReceipt({ sectorSampleId }: { sectorSampleId?: numb
 
           {/* Footer */}
           <div
+            className="sample-receipt-footer"
             style={{
               marginTop: "12px",
               paddingTop: "10px",
@@ -685,14 +690,6 @@ export default function PrintReceipt({ sectorSampleId }: { sectorSampleId?: numb
         </div>
       </div>
 
-      <style>{`
-        @media print {
-          @page { size: A4 portrait; margin: 0; }
-          body { margin: 0; }
-          .print\\:hidden { display: none !important; }
-          .print\\:py-0 { padding-top: 0 !important; padding-bottom: 0 !important; }
-        }
-      `}</style>
     </>
   );
 }

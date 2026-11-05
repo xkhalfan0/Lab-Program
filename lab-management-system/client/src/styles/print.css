@@ -679,6 +679,55 @@
     margin-bottom: 0.35rem !important;
   }
 
+  /* ── Sample reception receipt (/print-receipt, sector receipt) ── */
+  .sample-receipt-canvas {
+    min-height: auto !important;
+  }
+
+  .sample-receipt-sheet {
+    width: 100% !important;
+    max-width: 100% !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    box-shadow: none !important;
+  }
+
+  .sample-receipt-title-bar,
+  .sample-receipt-table .receipt-test-group-head td,
+  .sample-receipt-table .receipt-details-heading td {
+    print-color-adjust: exact !important;
+    -webkit-print-color-adjust: exact !important;
+  }
+
+  .sample-receipt-table {
+    break-inside: auto;
+    page-break-inside: auto;
+  }
+
+  .sample-receipt-table tbody tr {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .sample-receipt-table .receipt-details-heading {
+    break-before: page;
+    page-break-before: always;
+    break-after: avoid;
+    page-break-after: avoid;
+  }
+
+  .sample-receipt-table .receipt-test-group-head {
+    break-after: avoid;
+    page-break-after: avoid;
+  }
+
+  .sample-receipt-footer {
+    break-inside: avoid;
+    page-break-inside: avoid;
+    margin-top: 8mm !important;
+    padding-top: 3mm !important;
+  }
+
   * {
     box-shadow: none !important;
     text-shadow: none !important;
