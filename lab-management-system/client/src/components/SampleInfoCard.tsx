@@ -2,6 +2,7 @@ import { differenceInDays, parseISO } from "date-fns";
 import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { formatCalendarDate } from "@/lib/dateFormat";
+import { formatInspectionReference } from "@/lib/inspectionReference";
 
 // ─── Type definition for distribution data ───────────────────────────────────
 interface SampleInfoCardProps {
@@ -21,6 +22,7 @@ interface SampleInfoCardProps {
     priority?: string | null;
     sampleType?: string | null;
     sampleLocation?: string | null;
+    referenceNo?: string | null;
     receivedAt?: Date | string | null;
     createdAt?: Date | string | null;
     expectedCompletionDate?: Date | string | null;
@@ -68,9 +70,15 @@ export function SampleInfoCard({ dist, extraFields }: SampleInfoCardProps) {
 
   const receivedOrCreated = dist.receivedAt ?? dist.createdAt;
 
+  const inspectionRef = formatInspectionReference(dist.referenceNo);
+
   const baseRows: { label: string; value: string | number | null | undefined }[] = [
     { label: "Sample Code / رمز العينة", value: dist.sampleCode },
     { label: "Contract No. / رقم العقد", value: dist.contractNumber },
+    {
+      label: "Inspection Reference No. / رقم مرجع التفتيش",
+      value: inspectionRef !== "—" ? inspectionRef : undefined,
+    },
     { label: "Project / المشروع", value: dist.contractName },
     { label: "Contractor / المقاول", value: dist.contractorName },
     { label: "Sector / القطاع", value: dist.sector },

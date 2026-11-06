@@ -4,6 +4,7 @@
  */
 import { launchPuppeteerBrowser } from "./puppeteerBrowser";
 import {
+  buildContractEndDateMap,
   computeContractReadinessRows,
   computeContractorScores,
   computeOrderKpisFromStatusCounts,
@@ -13,6 +14,7 @@ import {
   getAllLabOrders,
   getAllUsers,
   getAllDistributions,
+  getAllContracts,
 } from "./db";
 import { SAMPLE_STATUS_GROUPS, isInGroup } from "@shared/statusGroups";
 
@@ -256,7 +258,9 @@ async function collectSectionData(sections: ReportSection[], from: Date, to: Dat
   }
 
   if (sections.includes("readiness")) {
-    data.readiness = computeContractReadinessRows(allOrders);
+    const contracts = await getAllContracts();
+    const contractEndByNumber = buildContractEndDateMap(contracts);
+    data.readiness = computeContractReadinessRows(allOrders, contractEndByNumber);
   }
   if (sections.includes("scorecard")) {
     data.scorecard = computeContractorScores(allOrders);

@@ -3,7 +3,7 @@ import DashboardLayout from "@/components/DashboardLayout";
 import DashboardReportPreviewDialog, {
   type ReportPreviewPayload,
 } from "@/components/DashboardReportPreviewDialog";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -12,10 +12,12 @@ import { trpc } from "@/lib/trpc";
 import { useLanguage, formatDateForLang } from "@/contexts/LanguageContext";
 import { toast } from "sonner";
 import {
+  buildContractEndDateMap,
   computeContractReadinessRows,
   computeContractorScores,
   computeContractorBreakdown,
   computeQualityAlerts,
+  CONTRACT_CLOSURE_ALERT_DAYS,
   type QualityAlert,
   type ContractorBreakdown,
 } from "@shared/dashboardInsights";
@@ -174,12 +176,14 @@ function ContractorCard({
   const [expanded, setExpanded] = useState(false);
   const isAr = lang === "ar";
 
-  const riskConfig = {
-    low: { cls: "bg-green-100 text-green-700", label: isAr ? "منخفض" : "Low Risk", bar: "bg-green-500" },
-    medium: { cls: "bg-amber-100 text-amber-700", label: isAr ? "متوسط" : "Medium", bar: "bg-amber-500" },
-    high: { cls: "bg-orange-100 text-orange-700", label: isAr ? "عالٍ" : "High Risk", bar: "bg-orange-500" },
-    critical: { cls: "bg-red-100 text-red-700 animate-pulse", label: isAr ? "حرجة" : "Critical", bar: "bg-red-500" },
-  }[c.riskLevel];
+  const riskConfig = c.insufficientData
+    ? { cls: "bg-slate-100 text-slate-600", label: isAr ? "بيانات غير كافية" : "Not enough data", bar: "bg-slate-300" }
+    : {
+        low: { cls: "bg-green-100 text-green-700", label: isAr ? "منخفض" : "Low Risk", bar: "bg-green-500" },
+        medium: { cls: "bg-amber-100 text-amber-700", label: isAr ? "متوسط" : "Medium", bar: "bg-amber-500" },
+        high: { cls: "bg-orange-100 text-orange-700", label: isAr ? "عالٍ" : "High Risk", bar: "bg-orange-500" },
+        critical: { cls: "bg-red-100 text-red-700", label: isAr ? "حرجة" : "Critical", bar: "bg-red-500" },
+      }[c.riskLevel];
 
   return (
     <div className="border rounded-xl p-3 space-y-2 bg-card shadow-sm">
@@ -201,10 +205,18 @@ function ContractorCard({
 
       <div className="flex items-center justify-between text-[10px] text-muted-foreground">
         <span className="flex items-center gap-1">
-          {c.passRate >= 60 ? <TrendingUp className="w-3 h-3 text-green-600" /> : <TrendingDown className="w-3 h-3 text-red-600" />}
-          <span className={c.passRate >= 60 ? "text-green-600 font-semibold" : "text-red-600 font-semibold"}>
-            {c.passRate}% {isAr ? "نجاح" : "pass"}
-          </span>
+          {c.insufficientData ? (
+            <span className="text-slate-500 font-medium">
+              {isAr ? "يحتاج 3+ طلبات بنتيجة نهائية" : "Needs 3+ finished results"}
+            </span>
+          ) : (
+            <>
+              {c.passRate >= 60 ? <TrendingUp className="w-3 h-3 text-green-600" /> : <TrendingDown className="w-3 h-3 text-red-600" />}
+              <span className={c.passRate >= 60 ? "text-green-600 font-semibold" : "text-red-600 font-semibold"}>
+                {c.passRate}% {isAr ? "نجاح (معتمد/مرفوض)" : "pass (approved/rejected)"}
+              </span>
+            </>
+          )}
         </span>
         <button
           className="flex items-center gap-0.5 text-blue-500 hover:text-blue-700 font-medium"
@@ -367,6 +379,7 @@ export default function ManagerDashboard() {
   const { data: stats } = trpc.analytics.testStats.useQuery(queryInput);
   const { data: sampleStats } = trpc.samples.stats.useQuery();
   const { data: rawOrdersData = [] } = trpc.orders.list.useQuery();
+  const { data: contractsList = [] } = trpc.contracts.list.useQuery();
   const { data: techStats } = trpc.dashboard.technicianStats.useQuery();
   const { data: clearanceStats } = trpc.dashboard.clearanceStats.useQuery();
 
@@ -397,10 +410,27 @@ export default function ManagerDashboard() {
   const completed = sampleStats?.completed ?? 0;
   const needsAction = sampleStats?.needsAction ?? 0;
 
-  const contractReadinessRows = useMemo(() => computeContractReadinessRows(orders), [orders]);
+  const contractEndByNumber = useMemo(
+    () =>
+      buildContractEndDateMap(
+        contractsList.map((c) => ({
+          contractNumber: c.contractNumber,
+          endDate: c.endDate,
+        })),
+      ),
+    [contractsList],
+  );
+
+  const contractReadinessRows = useMemo(
+    () => computeContractReadinessRows(orders, contractEndByNumber),
+    [orders, contractEndByNumber],
+  );
   const contractorScores = useMemo(() => computeContractorScores(orders), [orders]);
   const contractorBreakdown = useMemo(() => computeContractorBreakdown(orders), [orders]);
-  const qualityAlerts = useMemo(() => computeQualityAlerts(orders), [orders]);
+  const qualityAlerts = useMemo(
+    () => computeQualityAlerts(orders, contractEndByNumber),
+    [orders, contractEndByNumber],
+  );
   const topTests = useMemo(() => (stats?.byTestType ?? []).slice(0, 6), [stats?.byTestType]);
 
   const criticalAlerts = qualityAlerts.filter(a => a.severity === "critical");
@@ -476,11 +506,12 @@ export default function ManagerDashboard() {
                 </div>
                 <div>
                   <h2 className="text-sm font-bold text-slate-800">
-                    {isAr ? "تنبيهات ذكاء الجودة" : "Quality Intelligence Alerts"}
+                    {isAr ? "تنبيهات تحتاج متابعة" : "Alerts that need attention"}
                   </h2>
                   <p className="text-xs text-slate-500">
-                    {qualityAlerts.length} {isAr ? "مؤشر نشط" : "active indicator(s)"}
-                    {criticalAlerts.length > 0 && ` · ${criticalAlerts.length} ${isAr ? "حرجة" : "critical"}`}
+                    {isAr
+                      ? "جودة المقاول، مشاكل موقع/مورد، أو تأخر المختبر قبل انتهاء العقد (خلال 60 يوماً)."
+                      : "Contractor quality, site/supplier issues, or lab backlog within 60 days of contract end."}
                   </p>
                 </div>
               </div>
@@ -503,7 +534,7 @@ export default function ManagerDashboard() {
               {[
                 { type: "contractor_systemic", icon: ShieldAlert, labelEn: "Contractor Quality", labelAr: "جودة المقاول", color: "text-red-600 bg-red-50 border-red-200" },
                 { type: "project_anomaly", icon: MapPin, labelEn: "Site / Supplier Issue", labelAr: "مشكلة موقع / مورد", color: "text-orange-600 bg-orange-50 border-orange-200" },
-                { type: "closure_risk", icon: AlertOctagon, labelEn: "Closure Risk", labelAr: "خطر الإغلاق", color: "text-amber-600 bg-amber-50 border-amber-200" },
+                { type: "closure_risk", icon: AlertOctagon, labelEn: "Before contract end", labelAr: "قبل انتهاء العقد", color: "text-amber-600 bg-amber-50 border-amber-200" },
               ].map(({ type, icon: LegendIcon, labelEn, labelAr, color }) => {
                 const count = qualityAlerts.filter(a => a.type === type).length;
                 if (count === 0) return null;
@@ -538,21 +569,28 @@ export default function ManagerDashboard() {
             </div>
             <div>
               <p className="text-sm font-bold text-green-800">
-                {isAr ? "لا توجد مؤشرات مقلقة" : "No Quality Issues Detected"}
+                {isAr ? "لا توجد تنبيهات حالياً" : "No alerts right now"}
               </p>
               <p className="text-xs text-green-600">
-                {isAr ? "جميع المقاولين والمشاريع ضمن الحدود المقبولة." : "All contractors and projects are within acceptable quality thresholds."}
+                {isAr
+                  ? "لا يوجد مقاول بجودة منخفضة، ولا شذوذ موقع، ولا عقد قريب الانتهاء مع تأخر كبير في المختبر."
+                  : "No low-quality contractor, site anomaly, or near-deadline contract with a large lab backlog."}
               </p>
             </div>
           </div>
         )}
 
-        {/* Overview KPIs */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <KpiCard label={t("dashboard.totalSamples")} value={total} icon={FlaskConical} color="text-blue-500" borderColor="border-l-blue-500" />
-          <KpiCard label={t("dashboard.active")} value={active} icon={Activity} color="text-orange-500" borderColor="border-l-orange-500" />
-          <KpiCard label={t("dashboard.completed")} value={completed} icon={CheckCircle} color="text-green-500" borderColor="border-l-green-500" />
-          <KpiCard label={t("dashboard.needsAction")} value={needsAction} icon={AlertTriangle} color="text-amber-500" borderColor="border-l-amber-500" />
+        {/* Overview KPIs — sample counts (not the same as alert rules) */}
+        <div className="space-y-2">
+          <p className="text-xs font-semibold text-slate-600 px-0.5">
+            {isAr ? "ملخص العينات في المختبر (كل الحالات)" : "Lab sample overview (all statuses)"}
+          </p>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <KpiCard label={t("dashboard.totalSamples")} value={total} icon={FlaskConical} color="text-blue-500" borderColor="border-l-blue-500" />
+            <KpiCard label={t("dashboard.active")} value={active} icon={Activity} color="text-orange-500" borderColor="border-l-orange-500" />
+            <KpiCard label={t("dashboard.completed")} value={completed} icon={CheckCircle} color="text-green-500" borderColor="border-l-green-500" />
+            <KpiCard label={t("dashboard.needsAction")} value={needsAction} icon={AlertTriangle} color="text-amber-500" borderColor="border-l-amber-500" />
+          </div>
         </div>
 
         {/* Technicians & Clearances KPIs */}
@@ -595,10 +633,17 @@ export default function ManagerDashboard() {
         <Card>
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between gap-2 flex-wrap">
-              <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                <Award className="w-4 h-4 text-rose-600" />
-                {isAr ? "بطاقة جودة المقاولين" : "Contractor Quality Scorecard"}
-              </CardTitle>
+              <div>
+                <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                  <Award className="w-4 h-4 text-rose-600" />
+                  {isAr ? "جودة المقاولين" : "Contractor quality"}
+                </CardTitle>
+                <CardDescription className="mt-1.5 text-xs">
+                  {isAr
+                    ? "نسبة النجاح من الطلبات التي صدر لها قرار (معتمد أو مرفوض) — الطلبات قيد العمل لا تُحسب."
+                    : "Pass rate among orders with a final outcome (approved or rejected) — in-progress orders are excluded."}
+                </CardDescription>
+              </div>
               {contractorBreakdown.length > 0 && (
                 <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
                   <span className="flex items-center gap-1">
@@ -636,10 +681,17 @@ export default function ManagerDashboard() {
         {/* Contract Closure Readiness */}
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-semibold flex items-center gap-2">
-              <FileText className="w-4 h-4 text-blue-600" />
-              {isAr ? "جاهزية إغلاق العقود" : "Contract Closure Readiness"}
-            </CardTitle>
+            <div>
+              <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                <FileText className="w-4 h-4 text-blue-600" />
+                {isAr ? "تقدم طلبات المختبر حسب العقد" : "Lab order progress by contract"}
+              </CardTitle>
+              <CardDescription className="mt-1.5 text-xs">
+                {isAr
+                  ? `«مكتمل» = معتمد QC فقط. التنبيه قبل انتهاء العقد يظهر خلال ${CONTRACT_CLOSURE_ALERT_DAYS} يوماً من تاريخ الانتهاء.`
+                  : `"Completed" = QC approved only. End-date alert applies within ${CONTRACT_CLOSURE_ALERT_DAYS} days of contract end.`}
+              </CardDescription>
+            </div>
           </CardHeader>
           <CardContent>
             {contractReadinessRows.length === 0 ? (
@@ -655,21 +707,45 @@ export default function ManagerDashboard() {
                       <th className="text-center px-3 py-2">{isAr ? "مكتمل" : "Completed"}</th>
                       <th className="text-center px-3 py-2">{isAr ? "قيد التنفيذ" : "In Progress"}</th>
                       <th className="text-center px-3 py-2">{isAr ? "معلق" : "Pending"}</th>
-                      <th className="text-end px-3 py-2">{isAr ? "الجاهزية %" : "Readiness %"}</th>
+                      <th className="text-center px-3 py-2">{isAr ? "انتهاء العقد" : "Contract end"}</th>
+                      <th className="text-end px-3 py-2">{isAr ? "معتمد %" : "QC done %"}</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {contractReadinessRows.slice(0, 10).map((r) => (
-                      <tr key={`${r.contractNo}-${r.contractor}`} className={`border-b last:border-0 ${r.readiness < 30 && r.total >= 5 ? "bg-red-50/40" : ""}`}>
+                    {contractReadinessRows.slice(0, 10).map((r) => {
+                      const warn =
+                        r.inClosureWindow && r.readiness < 30 && r.total >= 5;
+                      return (
+                      <tr key={`${r.contractNo}-${r.contractor}`} className={`border-b last:border-0 ${warn ? "bg-red-50/40" : ""}`}>
                         <td className="px-3 py-2 font-mono">
                           {r.contractNo}
-                          {r.readiness < 30 && r.total >= 5 && <span className="ms-1 text-red-500 text-[10px]">⚠</span>}
+                          {warn && <span className="ms-1 text-red-500 text-[10px]">⚠</span>}
                         </td>
                         <td className="px-3 py-2">{r.contractor}</td>
                         <td className="px-3 py-2 text-center font-semibold">{r.total}</td>
                         <td className="px-3 py-2 text-center text-green-700 font-semibold">{r.completed}</td>
                         <td className="px-3 py-2 text-center text-amber-700 font-semibold">{r.inProgress}</td>
                         <td className="px-3 py-2 text-center text-slate-700 font-semibold">{r.pending}</td>
+                        <td className="px-3 py-2 text-center text-slate-600 whitespace-nowrap">
+                          {r.endDate
+                            ? formatDateForLang(r.endDate, lang)
+                            : "—"}
+                          {r.daysUntilEnd != null && r.inClosureWindow && (
+                            <span className={`block text-[10px] font-semibold ${r.daysUntilEnd < 0 ? "text-red-600" : "text-amber-700"}`}>
+                              {r.daysUntilEnd < 0
+                                ? isAr
+                                  ? `متأخر ${Math.abs(r.daysUntilEnd)} ي`
+                                  : `${Math.abs(r.daysUntilEnd)}d overdue`
+                                : r.daysUntilEnd === 0
+                                  ? isAr
+                                    ? "اليوم"
+                                    : "Today"
+                                  : isAr
+                                    ? `${r.daysUntilEnd} ي`
+                                    : `${r.daysUntilEnd}d left`}
+                            </span>
+                          )}
+                        </td>
                         <td className="px-3 py-2 text-end">
                           <span className={`px-2 py-1 rounded font-bold ${
                             r.readiness >= 80 ? "bg-green-100 text-green-700" :
@@ -680,7 +756,8 @@ export default function ManagerDashboard() {
                           </span>
                         </td>
                       </tr>
-                    ))}
+                    );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -692,9 +769,14 @@ export default function ManagerDashboard() {
         {topTests.length > 0 && (
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-semibold">
-                {isAr ? "أكثر الاختبارات تكراراً" : "Most Frequent Tests"}
-              </CardTitle>
+              <div>
+                <CardTitle className="text-sm font-semibold">
+                  {isAr ? "أكثر الاختبارات تكراراً" : "Most frequent tests"}
+                </CardTitle>
+                <CardDescription className="mt-1.5 text-xs">
+                  {isAr ? "آخر 3 أشهر — نسبة النجاح حسب نتائج الفحص." : "Last 3 months — pass rate from test outcomes."}
+                </CardDescription>
+              </div>
             </CardHeader>
             <CardContent>
               <div className="overflow-x-auto">

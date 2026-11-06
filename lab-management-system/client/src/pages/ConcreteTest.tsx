@@ -42,6 +42,7 @@ import {
   MIN_CONC_CUBE_COUNT,
   type ConcCubeReceptionPlan,
 } from "@shared/concreteCubeReception";
+import { formatInspectionReference, inspectionRefLabel } from "@/lib/inspectionReference";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface CubeRow {
@@ -1268,6 +1269,7 @@ export default function ConcreteTest() {
   const { distributionId } = useParams<{ distributionId: string }>();
   const distId = parseInt(distributionId ?? "0");
   const { user } = useAuth();
+  const { lang } = useLanguage();
   const [newAge, setNewAge] = useState("28");
   const [showAddAge, setShowAddAge] = useState(false);
   const [nominalCubeSize, setNominalCubeSize] = useState("150mm");
@@ -1349,6 +1351,10 @@ export default function ConcreteTest() {
             <CardContent className="pt-4 pb-3">
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
                 <div><span className="text-gray-500">Contract No:</span> <strong>{distribution.contractNumber ?? distribution.sampleId}</strong></div>
+                <div>
+                  <span className="text-gray-500">{inspectionRefLabel(lang)}:</span>{" "}
+                  <strong className="font-mono">{formatInspectionReference(distribution.referenceNo)}</strong>
+                </div>
                 <div><span className="text-gray-500">Priority:</span> <strong className="capitalize">{distribution.priority}</strong></div>
                 {isConcCubeOrder && (
                   <>

@@ -36,6 +36,7 @@ import {
 import { useEffect, useMemo, useState, type ReactElement } from "react";
 import { useLocation } from "wouter";
 import { toast } from "sonner";
+import { formatInspectionReference, inspectionRefLabel } from "@/lib/inspectionReference";
 
 // ─── Bilingual labels ─────────────────────────────────────────────────────────
 const T = {
@@ -312,6 +313,7 @@ function TechnicianAssignmentCard({
   const subLabel = getSubTypeLabel(dist.sampleSubType, lang);
   const contractor = sample?.contractorName ?? "—";
   const contractNo = sample?.contractNumber ?? "—";
+  const inspectionRef = formatInspectionReference(sample?.referenceNo);
   const sampleCode = dist.sampleCode ?? sample?.sampleCode ?? "—";
 
   const receivedDate = dist.sampleReceivedAt || dist.createdAt;
@@ -344,7 +346,7 @@ function TechnicianAssignmentCard({
               {PendingDeletionBadge}
             </div>
             {subLabel && <p className="text-xs text-muted-foreground">{subLabel}</p>}
-            <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
+            <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
               <div>
                 <p className="text-xs text-muted-foreground">{tx("sampleCode", lang)}</p>
                 <p className="font-mono text-sm font-medium">{sampleCode}</p>
@@ -357,6 +359,10 @@ function TechnicianAssignmentCard({
               <div>
                 <p className="text-xs text-muted-foreground">{tx("contractNo", lang)}</p>
                 <p className="font-mono text-sm font-medium">{contractNo}</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">{inspectionRefLabel(lang)}</p>
+                <p className="font-mono text-sm font-medium">{inspectionRef}</p>
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">{tx("received", lang)}</p>
@@ -641,6 +647,7 @@ export default function Technician() {
       return matchesListSearch(listSearch, [
         dist.sampleCode,
         sample?.sampleCode,
+        sample?.referenceNo,
         sample?.contractorName,
         sample?.contractNumber,
         dist.orderCode,

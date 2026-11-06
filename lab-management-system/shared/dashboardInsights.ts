@@ -107,7 +107,58 @@ export type LabOrderRow = {
   status?: string | null;
 };
 
-export function computeContractReadinessRows(orders: LabOrderRow[]) {
+/** Show closure alerts when contract end is within this many days (includes overdue). */
+export const CONTRACT_CLOSURE_ALERT_DAYS = 60;
+
+export function buildContractEndDateMap(
+  contracts: Array<{ contractNumber: string; endDate?: Date | string | null }>,
+): Map<string, Date | null> {
+  const map = new Map<string, Date | null>();
+  for (const c of contracts) {
+    const key = c.contractNumber?.trim();
+    if (!key) continue;
+    map.set(key, c.endDate ? new Date(c.endDate) : null);
+  }
+  return map;
+}
+
+/** Calendar days until end date (negative = overdue). Null if no end date. */
+export function daysUntilContractEnd(endDate: Date | null | undefined, now = new Date()): number | null {
+  if (!endDate) return null;
+  const end = new Date(endDate);
+  end.setHours(23, 59, 59, 999);
+  const start = new Date(now);
+  start.setHours(0, 0, 0, 0);
+  return Math.ceil((end.getTime() - start.getTime()) / (24 * 60 * 60 * 1000));
+}
+
+export function isContractInClosureAlertWindow(
+  endDate: Date | null | undefined,
+  daysBefore = CONTRACT_CLOSURE_ALERT_DAYS,
+  now = new Date(),
+): boolean {
+  const days = daysUntilContractEnd(endDate, now);
+  if (days === null) return false;
+  return days <= daysBefore;
+}
+
+export type ContractReadinessRow = {
+  contractNo: string;
+  contractor: string;
+  total: number;
+  completed: number;
+  inProgress: number;
+  pending: number;
+  readiness: number;
+  endDate: Date | null;
+  daysUntilEnd: number | null;
+  inClosureWindow: boolean;
+};
+
+export function computeContractReadinessRows(
+  orders: LabOrderRow[],
+  contractEndByNumber?: Map<string, Date | null>,
+): ContractReadinessRow[] {
   const grouped = new Map<
     string,
     {
@@ -136,8 +187,25 @@ export function computeContractReadinessRows(orders: LabOrderRow[]) {
   }
 
   return Array.from(grouped.values())
-    .map(r => ({ ...r, readiness: r.total > 0 ? Math.round((r.completed / r.total) * 100) : 0 }))
-    .sort((a, b) => a.readiness - b.readiness);
+    .map((r) => {
+      const endDate = contractEndByNumber?.get(r.contractNo) ?? null;
+      const daysUntilEnd = daysUntilContractEnd(endDate);
+      const inClosureWindow = isContractInClosureAlertWindow(endDate);
+      return {
+        ...r,
+        readiness: r.total > 0 ? Math.round((r.completed / r.total) * 100) : 0,
+        endDate,
+        daysUntilEnd,
+        inClosureWindow,
+      };
+    })
+    .sort((a, b) => {
+      if (a.inClosureWindow !== b.inClosureWindow) return a.inClosureWindow ? -1 : 1;
+      if (a.daysUntilEnd != null && b.daysUntilEnd != null && a.daysUntilEnd !== b.daysUntilEnd) {
+        return a.daysUntilEnd - b.daysUntilEnd;
+      }
+      return a.readiness - b.readiness;
+    });
 }
 
 export function computeContractorScores(orders: LabOrderRow[]) {
@@ -203,6 +271,8 @@ export type ContractorBreakdown = {
   passRate: number;
   contractCount: number;
   riskLevel: "low" | "medium" | "high" | "critical";
+  /** Fewer than 3 orders with pass/fail outcome — risk badge is not meaningful. */
+  insufficientData: boolean;
   projects: ContractProjectStat[];
 };
 
@@ -244,13 +314,27 @@ export function computeContractorBreakdown(orders: LabOrderRow[]): ContractorBre
       const passRate = decided > 0 ? Math.round((passed / decided) * 100) : 0;
       const contractCount = projects.length;
 
+      const insufficientData = decided < 3;
       let riskLevel: "low" | "medium" | "high" | "critical" = "low";
-      if (passRate >= 80) riskLevel = "low";
-      else if (passRate >= 60) riskLevel = "medium";
-      else if (passRate >= 40) riskLevel = "high";
-      else riskLevel = "critical";
+      if (!insufficientData) {
+        if (passRate >= 80) riskLevel = "low";
+        else if (passRate >= 60) riskLevel = "medium";
+        else if (passRate >= 40) riskLevel = "high";
+        else riskLevel = "critical";
+      }
 
-      return { contractor, totalOrders, decided, passed, failed, passRate, contractCount, riskLevel, projects };
+      return {
+        contractor,
+        totalOrders,
+        decided,
+        passed,
+        failed,
+        passRate,
+        contractCount,
+        riskLevel,
+        insufficientData,
+        projects,
+      };
     })
     .sort((a, b) => riskOrder[a.riskLevel] - riskOrder[b.riskLevel]);
 }
@@ -277,7 +361,10 @@ export type QualityAlert = {
   contractNo?: string;
 };
 
-export function computeQualityAlerts(orders: LabOrderRow[]): QualityAlert[] {
+export function computeQualityAlerts(
+  orders: LabOrderRow[],
+  contractEndByNumber?: Map<string, Date | null>,
+): QualityAlert[] {
   const alerts: QualityAlert[] = [];
   const breakdown = computeContractorBreakdown(orders);
 
@@ -323,19 +410,40 @@ export function computeQualityAlerts(orders: LabOrderRow[]): QualityAlert[] {
     }
   }
 
-  // 3. Contract closure risk: readiness < 30% with total orders > 4
-  const readiness = computeContractReadinessRows(orders);
+  // 3. Lab backlog before contract end (only if end date is within alert window)
+  const readiness = computeContractReadinessRows(orders, contractEndByNumber);
   for (const r of readiness) {
+    if (!r.inClosureWindow || r.endDate == null) continue;
     if (r.total >= 5 && r.readiness < 30 && r.pending >= 3) {
+      const days = r.daysUntilEnd;
+      const timeEn =
+        days == null
+          ? ""
+          : days < 0
+            ? ` Contract ended ${Math.abs(days)} day(s) ago.`
+            : days === 0
+              ? " Contract ends today."
+              : ` ${days} day(s) until contract end.`;
+      const timeAr =
+        days == null
+          ? ""
+          : days < 0
+            ? ` انتهى العقد منذ ${Math.abs(days)} يوماً.`
+            : days === 0
+              ? " ينتهي العقد اليوم."
+              : ` متبقٍ ${days} يوماً على انتهاء العقد.`;
       alerts.push({
         id: `closure_risk_${r.contractNo}`,
         type: "closure_risk",
-        severity: r.readiness < 15 ? "critical" : "medium",
-        titleEn: "Contract Closure Risk",
-        titleAr: "خطر إغلاق العقد",
-        bodyEn: `Contract ${r.contractNo} (${r.contractor}) is only ${r.readiness}% ready — ${r.pending} orders still pending out of ${r.total} total.`,
-        bodyAr: `عقد ${r.contractNo} (${r.contractor}) جاهزيته ${r.readiness}% فقط — ${r.pending} طلباً معلقاً من أصل ${r.total}.`,
-        metric: `${r.readiness}% ready, ${r.pending} pending`,
+        severity: r.readiness < 15 || (days != null && days < 0) ? "critical" : "medium",
+        titleEn: "Lab backlog before contract end",
+        titleAr: "تأخر المختبر قبل انتهاء العقد",
+        bodyEn: `Contract ${r.contractNo} (${r.contractor}): only ${r.readiness}% of lab orders are QC-approved (${r.completed}/${r.total}); ${r.pending} still pending.${timeEn}`,
+        bodyAr: `العقد ${r.contractNo} (${r.contractor}): ${r.readiness}% فقط من طلبات المختبر معتمدة (${r.completed}/${r.total})؛ ${r.pending} معلقة.${timeAr}`,
+        metric:
+          days != null
+            ? `${r.readiness}% ready · ${days < 0 ? `${Math.abs(days)}d overdue` : `${days}d left`}`
+            : `${r.readiness}% ready`,
         contractor: r.contractor,
         contractNo: r.contractNo,
       });
