@@ -572,6 +572,7 @@ export async function getAllSamples(options?: { includeDeleted?: boolean }) {
     testTypeName: samples.testTypeName,
     batchId: samples.batchId,
     location: samples.location,
+    referenceNo: samples.referenceNo,
     nominalCubeSize: samples.nominalCubeSize,
     castingDate: samples.castingDate,
     receivedById: samples.receivedById,
@@ -1026,6 +1027,10 @@ export async function getDistributionsByTechnician(technicianId: number) {
       sampleCode: samples.sampleCode,
       sampleQuantity: samples.quantity,
       sampleSubType: samples.sampleSubType,
+      referenceNo: samples.referenceNo,
+      contractNumber: samples.contractNumber,
+      contractorName: samples.contractorName,
+      sampleReceivedAt: samples.receivedAt,
     };
   if (samplesHasRetestColumns()) {
     rowSelect.retestNumber = samples.retestNumber;

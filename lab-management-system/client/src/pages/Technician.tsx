@@ -311,9 +311,11 @@ function TechnicianAssignmentCard({
     nameAr: dist.testNameAr,
   });
   const subLabel = getSubTypeLabel(dist.sampleSubType, lang);
-  const contractor = sample?.contractorName ?? "—";
-  const contractNo = sample?.contractNumber ?? "—";
-  const inspectionRef = formatInspectionReference(sample?.referenceNo);
+  const contractor = sample?.contractorName ?? dist.contractorName ?? "—";
+  const contractNo = sample?.contractNumber ?? dist.contractNumber ?? "—";
+  const inspectionRef = formatInspectionReference(
+    sample?.referenceNo ?? (dist as { referenceNo?: string | null }).referenceNo
+  );
   const sampleCode = dist.sampleCode ?? sample?.sampleCode ?? "—";
 
   const receivedDate = dist.sampleReceivedAt || dist.createdAt;
@@ -643,11 +645,12 @@ export default function Technician() {
     return sortedTasks.filter((dist) => {
       const sample = allSamples.find((s: any) => s.id === dist.sampleId);
       if (sampleTypeFilter !== "all" && sample?.sampleType !== sampleTypeFilter) return false;
-      if (refSearch.trim() && !matchesListSearch(refSearch, [sample?.referenceNo])) return false;
+      const inspectionRef = sample?.referenceNo ?? (dist as { referenceNo?: string | null }).referenceNo;
+      if (refSearch.trim() && !matchesListSearch(refSearch, [inspectionRef])) return false;
       return matchesListSearch(listSearch, [
         dist.sampleCode,
         sample?.sampleCode,
-        sample?.referenceNo,
+        inspectionRef,
         sample?.contractorName,
         sample?.contractNumber,
         dist.orderCode,
