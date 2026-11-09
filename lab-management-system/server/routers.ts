@@ -134,6 +134,7 @@ import {
   getLabOrderItems,
   getActiveLabOrderItemsForAnalytics,
   getSpecializedResultsByDistributionIds,
+  getSavedTestOutcomes,
   getLabOrdersByStatus,
   getLabOrdersByTechnician,
   updateLabOrderStatus,
@@ -2923,6 +2924,7 @@ ${testSummaries.length > 0 ? testSummaries.join("\n\n") : "لم تُجرَ اخ�
         const specByDist = new Map(
           specResults.map((r) => [r.distributionId, r])
         );
+        const outcomeByDist = await getSavedTestOutcomes(distIds);
 
         const rows: {
           sampleCode: string;
@@ -2962,9 +2964,8 @@ ${testSummaries.length > 0 ? testSummaries.join("\n\n") : "لم تُجرَ اخ�
           const specResult = item.distributionId
             ? specByDist.get(item.distributionId)
             : null;
-          let result: "pass" | "fail" | "pending" = "pending";
-          if (specResult?.overallResult === "pass") result = "pass";
-          else if (specResult?.overallResult === "fail") result = "fail";
+          const result: "pass" | "fail" | "pending" =
+            (item.distributionId ? outcomeByDist.get(item.distributionId) : undefined) ?? "pending";
 
           const contract = item.contractId ? contractById.get(item.contractId) : null;
           const billUnits = billingUnitCount(tt, item.testTypeCode, specResult) * units;

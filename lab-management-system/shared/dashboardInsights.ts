@@ -146,14 +146,53 @@ export type ContractReadinessRow = {
   contractNo: string;
   contractor: string;
   total: number;
+  /** QC approved orders. */
   completed: number;
+  /** Assigned or being tested. */
   inProgress: number;
+  /** Not yet distributed. */
   pending: number;
+  /** Technician finished; waiting for manager or QC. */
+  waitingReview: number;
+  rejected: number;
   readiness: number;
   endDate: Date | null;
   daysUntilEnd: number | null;
   inClosureWindow: boolean;
 };
+
+export type TestOutcome = "pass" | "fail" | "pending";
+
+const SUBMITTED_FORM_STATUS = new Set(["submitted", "approved", "rejected", "processed"]);
+
+/** Pass/fail from the test that was actually saved — concrete groups, specialized forms, or legacy results. */
+export function resolveTestOutcome(input: {
+  specialized?: { overallResult?: string | null; status?: string | null } | null;
+  concreteGroups?: Array<{ complianceStatus?: string | null; status?: string | null }>;
+  legacy?: { complianceStatus?: string | null; status?: string | null } | null;
+}): TestOutcome {
+  const concrete = (input.concreteGroups ?? []).filter(
+    (g) =>
+      !!g.status &&
+      SUBMITTED_FORM_STATUS.has(g.status) &&
+      (g.complianceStatus === "pass" || g.complianceStatus === "fail"),
+  );
+  if (concrete.some((g) => g.complianceStatus === "fail")) return "fail";
+  if (concrete.some((g) => g.complianceStatus === "pass")) return "pass";
+
+  const spec = input.specialized;
+  if (spec?.status && SUBMITTED_FORM_STATUS.has(spec.status)) {
+    if (spec.overallResult === "pass") return "pass";
+    if (spec.overallResult === "fail") return "fail";
+  }
+
+  const legacy = input.legacy;
+  if (legacy && (!legacy.status || SUBMITTED_FORM_STATUS.has(legacy.status))) {
+    if (legacy.complianceStatus === "pass") return "pass";
+    if (legacy.complianceStatus === "fail") return "fail";
+  }
+  return "pending";
+}
 
 export function computeContractReadinessRows(
   orders: LabOrderRow[],
@@ -168,6 +207,8 @@ export function computeContractReadinessRows(
       completed: number;
       inProgress: number;
       pending: number;
+      waitingReview: number;
+      rejected: number;
     }
   >();
 
@@ -176,13 +217,24 @@ export function computeContractReadinessRows(
     const contractor = o.contractorName ?? "—";
     const key = `${contractNo}::${contractor}`;
     if (!grouped.has(key)) {
-      grouped.set(key, { contractNo, contractor, total: 0, completed: 0, inProgress: 0, pending: 0 });
+      grouped.set(key, {
+        contractNo,
+        contractor,
+        total: 0,
+        completed: 0,
+        inProgress: 0,
+        pending: 0,
+        waitingReview: 0,
+        rejected: 0,
+      });
     }
     const row = grouped.get(key)!;
     row.total++;
     const st = o.status ?? "";
-    if (st === "qc_passed" || st === "completed") row.completed++;
-    else if (["distributed", "in_progress", "reviewed"].includes(st)) row.inProgress++;
+    if (st === "qc_passed") row.completed++;
+    else if (st === "rejected") row.rejected++;
+    else if (st === "completed" || st === "reviewed") row.waitingReview++;
+    else if (st === "distributed" || st === "in_progress") row.inProgress++;
     else row.pending++;
   }
 

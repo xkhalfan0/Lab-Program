@@ -18,6 +18,7 @@ import {
   getAllDistributions,
   getAllLabOrders,
   getAllClearanceRequests,
+  getQualityFollowUp,
   getDistributionsBySample,
   getLabOrderItems,
   getTestResultBySample,
@@ -934,6 +935,10 @@ export const dashboardRouter = router({
       })
       .filter((t) => t.assigned > 0 || t.doneToday > 0)
       .sort((a, b) => b.assigned - a.assigned);
+  }),
+
+  qualityFollowUp: protectedProcedure.query(async () => {
+    return getQualityFollowUp();
   }),
 
   clearanceStats: protectedProcedure.query(async () => {

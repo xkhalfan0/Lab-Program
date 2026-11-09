@@ -1,4 +1,4 @@
-import { computeOrderKpisFromStatusCounts } from "@shared/dashboardInsights";
+import { computeOrderKpisFromStatusCounts, resolveTestOutcome } from "@shared/dashboardInsights";
 import { and, asc, desc, eq, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import { alias } from "drizzle-orm/mysql-core";
@@ -851,6 +851,277 @@ export async function getDashboardStats() {
     byStatus,
     byType,
   };
+}
+
+export type QualityFollowUp = {
+  toStart: number;
+  testing: number;
+  withManager: number;
+  withQc: number;
+  passed: number;
+  failed: number;
+  receivedToday: number;
+  submittedToday: number;
+  followUps: Array<{
+    distributionId: number;
+    sampleCode: string;
+    testName: string;
+    contractor: string;
+    contractNo: string;
+    stage: "to_start" | "testing" | "manager" | "qc";
+    ageDays: number;
+  }>;
+  byTest: Array<{
+    code: string;
+    nameEn: string;
+    nameAr: string;
+    open: number;
+    submitted: number;
+    passed: number;
+    failed: number;
+  }>;
+};
+
+const EMPTY_QUALITY_FOLLOW_UP: QualityFollowUp = {
+  toStart: 0,
+  testing: 0,
+  withManager: 0,
+  withQc: 0,
+  passed: 0,
+  failed: 0,
+  receivedToday: 0,
+  submittedToday: 0,
+  followUps: [],
+  byTest: [],
+};
+
+/** Live lab follow-up: one row per assigned test, with the saved pass/fail when the form was submitted. */
+export async function getQualityFollowUp(): Promise<QualityFollowUp> {
+  const db = await getDb();
+  if (!db) return EMPTY_QUALITY_FOLLOW_UP;
+
+  const rows = await db
+    .select({
+      id: distributions.id,
+      status: distributions.status,
+      testType: distributions.testType,
+      testName: distributions.testName,
+      createdAt: distributions.createdAt,
+      updatedAt: distributions.updatedAt,
+      sampleCode: samples.sampleCode,
+      contractNumber: samples.contractNumber,
+      contractorName: samples.contractorName,
+      orderStatus: labOrders.status,
+      itemStatus: labOrderItems.status,
+      nameEn: testTypes.nameEn,
+      nameAr: testTypes.nameAr,
+    })
+    .from(distributions)
+    .innerJoin(samples, eq(distributions.sampleId, samples.id))
+    .leftJoin(labOrderItems, eq(labOrderItems.distributionId, distributions.id))
+    .leftJoin(labOrders, eq(labOrders.id, labOrderItems.orderId))
+    .leftJoin(testTypes, eq(distributions.testType, testTypes.code))
+    .where(
+      and(
+        isNull(distributions.deletedAt),
+        ne(samples.status, "deleted"),
+        buildSampleVisibilityCondition(),
+        or(isNull(labOrders.id), isNull(labOrders.deletedAt)),
+        or(isNull(labOrderItems.id), ne(labOrderItems.status, "cancelled")),
+      ),
+    );
+
+  const byId = new Map<number, (typeof rows)[number]>();
+  for (const row of rows) {
+    const prev = byId.get(row.id);
+    if (!prev || (!prev.orderStatus && row.orderStatus)) byId.set(row.id, row);
+  }
+  const dists = Array.from(byId.values());
+  const ids = dists.map((d) => d.id);
+
+  const [specRows, legacyRows, concreteRows, receivedRows] = await Promise.all([
+    ids.length
+      ? db
+          .select({
+            distributionId: specializedTestResults.distributionId,
+            overallResult: specializedTestResults.overallResult,
+            status: specializedTestResults.status,
+          })
+          .from(specializedTestResults)
+          .where(inArray(specializedTestResults.distributionId, ids))
+      : Promise.resolve([]),
+    ids.length
+      ? db
+          .select({
+            distributionId: testResults.distributionId,
+            complianceStatus: testResults.complianceStatus,
+            status: testResults.status,
+          })
+          .from(testResults)
+          .where(inArray(testResults.distributionId, ids))
+      : Promise.resolve([]),
+    ids.length
+      ? db
+          .select({
+            distributionId: concreteTestGroups.distributionId,
+            complianceStatus: concreteTestGroups.complianceStatus,
+            status: concreteTestGroups.status,
+          })
+          .from(concreteTestGroups)
+          .where(inArray(concreteTestGroups.distributionId, ids))
+      : Promise.resolve([]),
+    db
+      .select({ id: samples.id })
+      .from(samples)
+      .where(
+        and(
+          ne(samples.status, "deleted"),
+          buildSampleVisibilityCondition(),
+          sql`${samples.receivedAt} >= CURDATE()`,
+        ),
+      ),
+  ]);
+
+  const specByDist = new Map(specRows.map((r) => [r.distributionId, r]));
+  const legacyByDist = new Map(legacyRows.map((r) => [r.distributionId, r]));
+  const concreteByDist = new Map<number, typeof concreteRows>();
+  for (const g of concreteRows) {
+    const list = concreteByDist.get(g.distributionId) ?? [];
+    list.push(g);
+    concreteByDist.set(g.distributionId, list);
+  }
+
+  const startOfToday = new Date();
+  startOfToday.setHours(0, 0, 0, 0);
+  const now = new Date();
+
+  const snapshot: QualityFollowUp = {
+    ...EMPTY_QUALITY_FOLLOW_UP,
+    receivedToday: receivedRows.length,
+    followUps: [],
+    byTest: [],
+  };
+  const tests = new Map<string, QualityFollowUp["byTest"][number]>();
+
+  for (const d of dists) {
+    const outcome = resolveTestOutcome({
+      specialized: specByDist.get(d.id) ?? null,
+      concreteGroups: concreteByDist.get(d.id) ?? [],
+      legacy: legacyByDist.get(d.id) ?? null,
+    });
+    const orderStatus = d.orderStatus ?? "";
+    const distStatus = d.status ?? "";
+    let stage: QualityFollowUp["followUps"][number]["stage"] | "done" = "to_start";
+    if (orderStatus === "qc_passed" || orderStatus === "rejected" || outcome !== "pending") stage = "done";
+    else if (orderStatus === "reviewed") stage = "qc";
+    else if (orderStatus === "completed" || distStatus === "completed") stage = "manager";
+    else if (distStatus === "in_progress") stage = "testing";
+    else stage = "to_start";
+
+    if (outcome === "fail" || (orderStatus === "rejected" && outcome !== "pass")) snapshot.failed++;
+    else if (outcome === "pass" || orderStatus === "qc_passed") snapshot.passed++;
+    else if (stage === "to_start") snapshot.toStart++;
+    else if (stage === "testing") snapshot.testing++;
+    else if (stage === "qc") snapshot.withQc++;
+    else if (stage === "manager") snapshot.withManager++;
+
+    if (distStatus === "completed" && d.updatedAt && new Date(d.updatedAt) >= startOfToday) {
+      snapshot.submittedToday++;
+    }
+
+    const code = d.testType || "—";
+    if (!tests.has(code)) {
+      tests.set(code, {
+        code,
+        nameEn: d.nameEn || d.testName || code,
+        nameAr: d.nameAr || d.testName || code,
+        open: 0,
+        submitted: 0,
+        passed: 0,
+        failed: 0,
+      });
+    }
+    const bucket = tests.get(code)!;
+    if (distStatus === "pending" || distStatus === "in_progress") bucket.open++;
+    if (distStatus === "completed") bucket.submitted++;
+    if (outcome === "pass") bucket.passed++;
+    if (outcome === "fail") bucket.failed++;
+
+    if (stage !== "done") {
+      const from = d.createdAt ? new Date(d.createdAt) : now;
+      const ageDays = Math.max(0, Math.floor((now.getTime() - from.getTime()) / 86400000));
+      snapshot.followUps.push({
+        distributionId: d.id,
+        sampleCode: d.sampleCode ?? "—",
+        testName: d.nameEn || d.testName || code,
+        contractor: d.contractorName ?? "—",
+        contractNo: d.contractNumber ?? "—",
+        stage,
+        ageDays,
+      });
+    }
+  }
+
+  snapshot.followUps.sort((a, b) => b.ageDays - a.ageDays);
+  snapshot.followUps = snapshot.followUps.slice(0, 12);
+  snapshot.byTest = Array.from(tests.values()).sort((a, b) => b.open + b.submitted - (a.open + a.submitted));
+  return snapshot;
+}
+
+/** Saved pass/fail for each distribution, including concrete cube groups and legacy results. */
+export async function getSavedTestOutcomes(distributionIds: number[]) {
+  const map = new Map<number, ReturnType<typeof resolveTestOutcome>>();
+  if (!distributionIds.length) return map;
+  const db = await getDb();
+  if (!db) return map;
+
+  const [specRows, legacyRows, concreteRows] = await Promise.all([
+    db
+      .select({
+        distributionId: specializedTestResults.distributionId,
+        overallResult: specializedTestResults.overallResult,
+        status: specializedTestResults.status,
+      })
+      .from(specializedTestResults)
+      .where(inArray(specializedTestResults.distributionId, distributionIds)),
+    db
+      .select({
+        distributionId: testResults.distributionId,
+        complianceStatus: testResults.complianceStatus,
+        status: testResults.status,
+      })
+      .from(testResults)
+      .where(inArray(testResults.distributionId, distributionIds)),
+    db
+      .select({
+        distributionId: concreteTestGroups.distributionId,
+        complianceStatus: concreteTestGroups.complianceStatus,
+        status: concreteTestGroups.status,
+      })
+      .from(concreteTestGroups)
+      .where(inArray(concreteTestGroups.distributionId, distributionIds)),
+  ]);
+
+  const concreteByDist = new Map<number, typeof concreteRows>();
+  for (const g of concreteRows) {
+    const list = concreteByDist.get(g.distributionId) ?? [];
+    list.push(g);
+    concreteByDist.set(g.distributionId, list);
+  }
+  const specByDist = new Map(specRows.map((r) => [r.distributionId, r]));
+  const legacyByDist = new Map(legacyRows.map((r) => [r.distributionId, r]));
+
+  for (const id of distributionIds) {
+    map.set(
+      id,
+      resolveTestOutcome({
+        specialized: specByDist.get(id) ?? null,
+        concreteGroups: concreteByDist.get(id) ?? [],
+        legacy: legacyByDist.get(id) ?? null,
+      }),
+    );
+  }
+  return map;
 }
 
 // --- Daily Work ---
@@ -2221,8 +2492,7 @@ export async function buildClearanceInventoryForContract(contractId: number) {
         .filter((id): id is number => id != null)
     ),
   ];
-  const specResults = await getSpecializedResultsByDistributionIds(distIds);
-  const specByDist = new Map(specResults.map((r) => [r.distributionId, r]));
+  const outcomeByDist = await getSavedTestOutcomes(distIds);
   const allTT = await getAllTestTypes();
   const ttByCode = new Map(allTT.map((t) => [t.code ?? "", t]));
 
@@ -2246,10 +2516,7 @@ export async function buildClearanceInventoryForContract(contractId: number) {
   for (const item of items) {
     const units = Math.max(1, Number(item.quantity) || 1);
     const tt = ttByCode.get(item.testTypeCode) ?? null;
-    const specResult = item.distributionId ? specByDist.get(item.distributionId) : null;
-    let result = "pending";
-    if (specResult?.overallResult === "pass") result = "pass";
-    else if (specResult?.overallResult === "fail") result = "fail";
+    const result = (item.distributionId ? outcomeByDist.get(item.distributionId) : undefined) ?? "pending";
     const unitPrice = tt ? Number(tt.unitPrice) : Number(item.unitPrice) || 0;
     const price = unitPrice * units;
     totalTests += units;

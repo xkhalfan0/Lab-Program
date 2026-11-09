@@ -5,7 +5,6 @@ import DashboardReportPreviewDialog, {
 } from "@/components/DashboardReportPreviewDialog";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { trpc } from "@/lib/trpc";
@@ -14,7 +13,6 @@ import { toast } from "sonner";
 import {
   buildContractEndDateMap,
   computeContractReadinessRows,
-  computeContractorScores,
   computeContractorBreakdown,
   computeQualityAlerts,
   CONTRACT_CLOSURE_ALERT_DAYS,
@@ -22,23 +20,13 @@ import {
   type ContractorBreakdown,
 } from "@shared/dashboardInsights";
 import {
-  FlaskConical, AlertTriangle, CheckCircle, Activity, Target,
+  FlaskConical, CheckCircle, Activity, Target,
   Calendar, FileText, Users, Award,
-  Loader2, BarChart2, Eye, ChevronDown, ChevronUp, ShieldAlert,
-  Building2, MapPin, Zap, AlertOctagon, XCircle, ThumbsUp, Settings2,
+  Loader2, Eye, ChevronDown, ChevronUp, ShieldAlert,
+  MapPin, Zap, AlertOctagon, XCircle, ThumbsUp, Settings2,
 } from "lucide-react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { DEFAULT_VAT_RATE, formatVatRatePercent } from "@shared/tax";
-
-const CATEGORY_LABELS: Record<string, { ar: string; en: string }> = {
-  concrete:   { ar: "خرسانة",  en: "Concrete" },
-  soil:       { ar: "تربة",    en: "Soil" },
-  steel:      { ar: "حديد",    en: "Steel" },
-  asphalt:    { ar: "أسفلت",   en: "Asphalt" },
-  aggregates: { ar: "ركام",    en: "Aggregates" },
-};
-
-const COLORS = { pass: "#22c55e", fail: "#ef4444", pending: "#f59e0b" };
 
 const REPORT_SECTIONS = [
   { value: "overview",   en: "Overview KPIs",            ar: "المؤشرات العامة" },
@@ -365,13 +353,6 @@ export default function ManagerDashboard() {
   const isAr = lang === "ar";
   const now = new Date();
 
-  const [dateFrom] = useState(() => {
-    const d = new Date();
-    d.setMonth(d.getMonth() - 3);
-    return d.toISOString().slice(0, 10);
-  });
-  const [dateTo] = useState(() => new Date().toISOString().slice(0, 10));
-
   const [reportSections, setReportSections] = useState<string[]>([
     "overview", "status", "type", "trend", "passfail",
   ]);
@@ -383,13 +364,10 @@ export default function ManagerDashboard() {
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewPayload, setPreviewPayload] = useState<ReportPreviewPayload | null>(null);
 
-  const queryInput = useMemo(() => ({ dateFrom, dateTo }), [dateFrom, dateTo]);
-
-  const { data: stats } = trpc.analytics.testStats.useQuery(queryInput);
-  const { data: sampleStats } = trpc.samples.stats.useQuery();
   const { data: rawOrdersData = [] } = trpc.orders.list.useQuery();
   const { data: contractsList = [] } = trpc.contracts.list.useQuery();
-  const { data: techStats } = trpc.dashboard.technicianStats.useQuery();
+  const { data: followUp } = trpc.dashboard.qualityFollowUp.useQuery();
+  const { data: techWork = [] } = trpc.dashboard.technicianDailyWork.useQuery();
   const { data: clearanceStats } = trpc.dashboard.clearanceStats.useQuery();
 
   const generateReport = trpc.reports.generate.useMutation({
@@ -414,11 +392,6 @@ export default function ManagerDashboard() {
     status: o.status != null ? String(o.status) : null,
   }));
 
-  const total = sampleStats?.total ?? 0;
-  const active = sampleStats?.active ?? 0;
-  const completed = sampleStats?.completed ?? 0;
-  const needsAction = sampleStats?.needsAction ?? 0;
-
   const contractEndByNumber = useMemo(
     () =>
       buildContractEndDateMap(
@@ -434,14 +407,11 @@ export default function ManagerDashboard() {
     () => computeContractReadinessRows(orders, contractEndByNumber),
     [orders, contractEndByNumber],
   );
-  const contractorScores = useMemo(() => computeContractorScores(orders), [orders]);
   const contractorBreakdown = useMemo(() => computeContractorBreakdown(orders), [orders]);
   const qualityAlerts = useMemo(
     () => computeQualityAlerts(orders, contractEndByNumber),
     [orders, contractEndByNumber],
   );
-  const topTests = useMemo(() => (stats?.byTestType ?? []).slice(0, 6), [stats?.byTestType]);
-
   const criticalAlerts = qualityAlerts.filter(a => a.severity === "critical");
   const highAlerts = qualityAlerts.filter(a => a.severity === "high");
 
@@ -489,7 +459,11 @@ export default function ManagerDashboard() {
               <Target className="w-6 h-6 text-primary" />
               {isAr ? "ذكاء الجودة" : "Quality Intelligence"}
             </h1>
-            <p className="text-muted-foreground text-sm mt-0.5">{t("app.subtitle")}</p>
+            <p className="text-muted-foreground text-sm mt-0.5">
+              {isAr
+                ? "متابعة اليوم: ما لم يبدأ، ما هو قيد الفحص، وما ينتظر المراجعة أو ضبط الجودة."
+                : "Today’s follow-up: not started, in testing, and waiting for review or QC."}
+            </p>
           </div>
           <div className="flex items-center gap-3 bg-primary/10 border border-primary/20 rounded-2xl px-5 py-3 shadow-sm">
             <Calendar className="w-6 h-6 text-primary shrink-0" />
@@ -589,53 +563,104 @@ export default function ManagerDashboard() {
           </div>
         )}
 
-        {/* Overview KPIs — sample counts (not the same as alert rules) */}
-        <div className="space-y-2">
-          <p className="text-xs font-semibold text-slate-600 px-0.5">
-            {isAr ? "ملخص العينات في المختبر (كل الحالات)" : "Lab sample overview (all statuses)"}
-          </p>
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <KpiCard label={t("dashboard.totalSamples")} value={total} icon={FlaskConical} color="text-blue-500" borderColor="border-l-blue-500" />
-            <KpiCard label={t("dashboard.active")} value={active} icon={Activity} color="text-orange-500" borderColor="border-l-orange-500" />
-            <KpiCard label={t("dashboard.completed")} value={completed} icon={CheckCircle} color="text-green-500" borderColor="border-l-green-500" />
-            <KpiCard label={t("dashboard.needsAction")} value={needsAction} icon={AlertTriangle} color="text-amber-500" borderColor="border-l-amber-500" />
-          </div>
+        <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
+          <KpiCard label={isAr ? "لم يبدأ" : "To start"} value={followUp?.toStart ?? 0} sub={isAr ? "موزّع ولم يُفتح" : "Assigned, not opened"} icon={Activity} color="text-slate-600" borderColor="border-l-slate-400" />
+          <KpiCard label={isAr ? "قيد الفحص" : "In testing"} value={followUp?.testing ?? 0} sub={isAr ? "عند الفني الآن" : "With a technician"} icon={FlaskConical} color="text-blue-600" borderColor="border-l-blue-500" />
+          <KpiCard label={isAr ? "عند المدير" : "Manager review"} value={followUp?.withManager ?? 0} sub={isAr ? "الفني أنهى الفحص" : "Technician finished"} icon={FileText} color="text-amber-600" borderColor="border-l-amber-500" />
+          <KpiCard label={isAr ? "ضبط الجودة" : "QC review"} value={followUp?.withQc ?? 0} sub={isAr ? "بانتظار الاعتماد" : "Waiting for approval"} icon={Award} color="text-violet-600" borderColor="border-l-violet-500" />
+          <KpiCard label={isAr ? "ناجح" : "Passed"} value={followUp?.passed ?? 0} sub={isAr ? "نتيجة محفوظة أو معتمد QC" : "Saved result or QC approved"} icon={CheckCircle} color="text-green-600" borderColor="border-l-green-500" />
+          <KpiCard label={isAr ? "راسب" : "Failed"} value={followUp?.failed ?? 0} sub={isAr ? "نتيجة راسبة أو طلب مرفوض" : "Failed result or rejected order"} icon={XCircle} color="text-red-600" borderColor="border-l-red-500" />
         </div>
 
-        {/* Technicians & Clearances KPIs */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <KpiCard
-            label={isAr ? "الفنيون النشطون" : "Active technicians"}
-            value={techStats?.activeCount ?? 0}
-            sub={isAr ? "في الوردية" : "on shift"}
-            icon={Users}
-            color="text-indigo-600"
-            borderColor="border-l-indigo-400"
-          />
-          <KpiCard
-            label={isAr ? "اختبارات / فني" : "Tests / technician"}
-            value={techStats?.avgTestsPerTech ?? 0}
-            sub={isAr ? "متوسط هذا الأسبوع" : "avg this week"}
-            icon={BarChart2}
-            color="text-violet-600"
-            borderColor="border-l-violet-400"
-          />
-          <KpiCard
-            label={isAr ? "طلبات براءة الذمة" : "Clearance requests"}
-            value={clearanceStats?.totalRequests ?? 0}
-            sub={`${clearanceStats?.inProgress ?? 0} ${isAr ? "قيد الإجراء" : "in progress"}`}
-            icon={FileText}
-            color="text-amber-600"
-            borderColor="border-l-amber-400"
-          />
-          <KpiCard
-            label={isAr ? "براءات صادرة" : "Clearances done"}
-            value={clearanceStats?.issued ?? 0}
-            sub={isAr ? "شهادات صادرة" : "certificates issued"}
-            icon={Award}
-            color="text-emerald-600"
-            borderColor="border-l-emerald-400"
-          />
+        <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
+          <Card className="lg:col-span-3">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-semibold">{isAr ? "يحتاج متابعة" : "Needs follow-up"}</CardTitle>
+              <CardDescription className="text-xs">
+                {isAr
+                  ? `اليوم: ${followUp?.receivedToday ?? 0} عينة مستلمة · ${followUp?.submittedToday ?? 0} فحص أُرسل. القائمة هي الفحوصات التي لم تُعتمد بعد، الأقدم أولاً.`
+                  : `Today: ${followUp?.receivedToday ?? 0} samples received · ${followUp?.submittedToday ?? 0} tests submitted. Oldest unfinished tests first.`}
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {(followUp?.followUps.length ?? 0) === 0 ? (
+                <p className="text-sm text-muted-foreground py-6 text-center">{isAr ? "لا توجد فحوصات معلقة" : "Nothing waiting"}</p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="border-b text-muted-foreground">
+                        <th className="text-start py-2 px-2 font-medium">{isAr ? "العينة" : "Sample"}</th>
+                        <th className="text-start py-2 px-2 font-medium">{isAr ? "الفحص" : "Test"}</th>
+                        <th className="text-start py-2 px-2 font-medium">{isAr ? "المقاول" : "Contractor"}</th>
+                        <th className="text-start py-2 px-2 font-medium">{isAr ? "المرحلة" : "Stage"}</th>
+                        <th className="text-end py-2 px-2 font-medium">{isAr ? "منذ" : "Age"}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {followUp?.followUps.map((row) => {
+                        const stageLabel = {
+                          to_start: isAr ? "لم يبدأ" : "To start",
+                          testing: isAr ? "قيد الفحص" : "In testing",
+                          manager: isAr ? "عند المدير" : "Manager",
+                          qc: isAr ? "ضبط الجودة" : "QC",
+                        }[row.stage];
+                        return (
+                          <tr key={row.distributionId} className="border-b last:border-0">
+                            <td className="py-2 px-2 font-mono">{row.sampleCode}</td>
+                            <td className="py-2 px-2">{row.testName}</td>
+                            <td className="py-2 px-2">
+                              <span className="block">{row.contractor}</span>
+                              <span className="text-[10px] text-muted-foreground font-mono">{row.contractNo}</span>
+                            </td>
+                            <td className="py-2 px-2">{stageLabel}</td>
+                            <td className="py-2 px-2 text-end tabular-nums">{row.ageDays}{isAr ? " ي" : "d"}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card className="lg:col-span-2">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                <Users className="w-4 h-4 text-indigo-600" />
+                {isAr ? "عمل الفنيين اليوم" : "Technicians today"}
+              </CardTitle>
+              <CardDescription className="text-xs">
+                {isAr ? "الفحوصات المفتوحة وما أُنهي اليوم." : "Open tests, and how many were finished today."}
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {techWork.length === 0 ? (
+                <p className="text-sm text-muted-foreground py-6 text-center">{isAr ? "لا يوجد تكليف مفتوح" : "No open assignments"}</p>
+              ) : (
+                <div className="space-y-2">
+                  {techWork.map((tech) => (
+                    <div key={tech.id} className="flex items-center justify-between gap-3 rounded-lg border px-3 py-2">
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium truncate">{tech.name}</p>
+                        {tech.specialty ? <p className="text-[10px] text-muted-foreground truncate">{tech.specialty}</p> : null}
+                      </div>
+                      <div className="text-end shrink-0 text-xs">
+                        <p className="font-semibold text-blue-700">{tech.assigned} {isAr ? "مفتوح" : "open"}</p>
+                        <p className="text-green-700">{tech.doneToday} {isAr ? "اليوم" : "today"}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {(clearanceStats?.totalRequests ?? 0) > 0 && (
+                <p className="text-xs text-muted-foreground mt-3">
+                  {isAr ? "براءة الذمة" : "Clearance"}: {clearanceStats?.inProgress ?? 0} {isAr ? "قيد الإجراء" : "in progress"} · {clearanceStats?.issued ?? 0} {isAr ? "صادرة" : "issued"}
+                </p>
+              )}
+            </CardContent>
+          </Card>
         </div>
 
         {/* Contractor Quality — enhanced scorecard with drill-down */}
@@ -697,8 +722,8 @@ export default function ManagerDashboard() {
               </CardTitle>
               <CardDescription className="mt-1.5 text-xs">
                 {isAr
-                  ? `«مكتمل» = معتمد QC فقط. التنبيه قبل انتهاء العقد يظهر خلال ${CONTRACT_CLOSURE_ALERT_DAYS} يوماً من تاريخ الانتهاء.`
-                  : `"Completed" = QC approved only. End-date alert applies within ${CONTRACT_CLOSURE_ALERT_DAYS} days of contract end.`}
+                  ? `«معتمد QC» بعد اعتماد ضبط الجودة فقط. «مراجعة» = أنهى الفني وبانتظار المدير أو QC. التنبيه خلال ${CONTRACT_CLOSURE_ALERT_DAYS} يوماً من نهاية العقد.`
+                  : `QC done is approval only. Review means the technician finished and the order is with the manager or QC. The end-date flag applies within ${CONTRACT_CLOSURE_ALERT_DAYS} days.`}
               </CardDescription>
             </div>
           </CardHeader>
@@ -713,9 +738,10 @@ export default function ManagerDashboard() {
                       <th className="text-start px-3 py-2">{isAr ? "رقم العقد" : "Contract No."}</th>
                       <th className="text-start px-3 py-2">{isAr ? "المقاول" : "Contractor"}</th>
                       <th className="text-center px-3 py-2">{isAr ? "إجمالي" : "Total"}</th>
-                      <th className="text-center px-3 py-2">{isAr ? "مكتمل" : "Completed"}</th>
-                      <th className="text-center px-3 py-2">{isAr ? "قيد التنفيذ" : "In Progress"}</th>
-                      <th className="text-center px-3 py-2">{isAr ? "معلق" : "Pending"}</th>
+                      <th className="text-center px-3 py-2">{isAr ? "في المختبر" : "In lab"}</th>
+                      <th className="text-center px-3 py-2">{isAr ? "مراجعة" : "Review"}</th>
+                      <th className="text-center px-3 py-2">{isAr ? "معتمد QC" : "QC done"}</th>
+                      <th className="text-center px-3 py-2">{isAr ? "مرفوض" : "Rejected"}</th>
                       <th className="text-center px-3 py-2">{isAr ? "انتهاء العقد" : "Contract end"}</th>
                       <th className="text-end px-3 py-2">{isAr ? "معتمد %" : "QC done %"}</th>
                     </tr>
@@ -732,9 +758,10 @@ export default function ManagerDashboard() {
                         </td>
                         <td className="px-3 py-2">{r.contractor}</td>
                         <td className="px-3 py-2 text-center font-semibold">{r.total}</td>
+                        <td className="px-3 py-2 text-center text-blue-700 font-semibold">{r.pending + r.inProgress}</td>
+                        <td className="px-3 py-2 text-center text-amber-700 font-semibold">{r.waitingReview}</td>
                         <td className="px-3 py-2 text-center text-green-700 font-semibold">{r.completed}</td>
-                        <td className="px-3 py-2 text-center text-amber-700 font-semibold">{r.inProgress}</td>
-                        <td className="px-3 py-2 text-center text-slate-700 font-semibold">{r.pending}</td>
+                        <td className="px-3 py-2 text-center text-red-700 font-semibold">{r.rejected}</td>
                         <td className="px-3 py-2 text-center text-slate-600 whitespace-nowrap">
                           {r.endDate
                             ? formatDateForLang(r.endDate, lang)
@@ -774,64 +801,52 @@ export default function ManagerDashboard() {
           </CardContent>
         </Card>
 
-        {/* Most Frequent Tests */}
-        {topTests.length > 0 && (
-          <Card>
-            <CardHeader className="pb-2">
-              <div>
-                <CardTitle className="text-sm font-semibold">
-                  {isAr ? "أكثر الاختبارات تكراراً" : "Most frequent tests"}
-                </CardTitle>
-                <CardDescription className="mt-1.5 text-xs">
-                  {isAr ? "آخر 3 أشهر — نسبة النجاح حسب نتائج الفحص." : "Last 3 months — pass rate from test outcomes."}
-                </CardDescription>
-              </div>
-            </CardHeader>
-            <CardContent>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-semibold">{isAr ? "الفحوصات" : "Tests"}</CardTitle>
+            <CardDescription className="mt-1.5 text-xs">
+              {isAr
+                ? "مفتوح = لم يُرسل بعد. مُرسل = أنهى الفني. النجاح والرسوب من نتيجة المكعبات أو نموذج الفحص بعد الإرسال، وليس من المسودة."
+                : "Open = not submitted yet. Submitted = technician finished. Pass and fail come from the saved cube or test form after submit, not from a draft."}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {(followUp?.byTest.length ?? 0) === 0 ? (
+              <p className="text-sm text-muted-foreground py-4 text-center">{isAr ? "لا توجد فحوصات مكلّفة" : "No assigned tests"}</p>
+            ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-xs">
                   <thead>
                     <tr className="border-b">
-                      <th className="text-start py-2 px-3 text-muted-foreground font-medium">{isAr ? "نوع الاختبار" : "Test Type"}</th>
-                      <th className="text-center py-2 px-3 text-muted-foreground font-medium">{isAr ? "الفئة" : "Category"}</th>
-                      <th className="text-center py-2 px-3 text-muted-foreground font-medium">{isAr ? "العدد" : "Count"}</th>
+                      <th className="text-start py-2 px-3 text-muted-foreground font-medium">{isAr ? "الفحص" : "Test"}</th>
+                      <th className="text-center py-2 px-3 text-muted-foreground font-medium">{isAr ? "مفتوح" : "Open"}</th>
+                      <th className="text-center py-2 px-3 text-muted-foreground font-medium">{isAr ? "مُرسل" : "Submitted"}</th>
                       <th className="text-center py-2 px-3 text-muted-foreground font-medium">{isAr ? "ناجح" : "Pass"}</th>
                       <th className="text-center py-2 px-3 text-muted-foreground font-medium">{isAr ? "راسب" : "Fail"}</th>
-                      <th className="text-end py-2 px-3 text-muted-foreground font-medium">{isAr ? "نسبة النجاح" : "Pass Rate"}</th>
+                      <th className="text-end py-2 px-3 text-muted-foreground font-medium">{isAr ? "النجاح" : "Pass rate"}</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {topTests.map((t2, i) => {
-                      const pr = t2.count > 0 ? Math.round((t2.passed / t2.count) * 100) : 0;
-                      const catLabel = CATEGORY_LABELS[t2.category];
+                    {followUp?.byTest.map((row) => {
+                      const decided = row.passed + row.failed;
+                      const pr = decided > 0 ? Math.round((row.passed / decided) * 100) : null;
                       return (
-                        <tr key={i} className="border-b last:border-0 hover:bg-muted/30 transition-colors">
-                          <td className="py-2 px-3 font-medium">{isAr ? t2.nameAr || t2.nameEn : t2.nameEn}</td>
-                          <td className="py-2 px-3 text-center">
-                            <Badge variant="outline" className="text-[10px]">
-                              {isAr ? catLabel?.ar ?? t2.category : catLabel?.en ?? t2.category}
-                            </Badge>
-                          </td>
-                          <td className="py-2 px-3 text-center font-bold">{t2.count}</td>
-                          <td className="py-2 px-3 text-center text-green-700 font-medium">{t2.passed}</td>
-                          <td className="py-2 px-3 text-center text-red-700 font-medium">{t2.failed || "—"}</td>
-                          <td className="py-2 px-3 text-end">
-                            <div className="flex items-center justify-end gap-2">
-                              <div className="w-16 bg-muted rounded-full h-1.5 overflow-hidden">
-                                <div className="h-full rounded-full" style={{ width: `${pr}%`, backgroundColor: pr >= 80 ? COLORS.pass : pr >= 60 ? COLORS.pending : COLORS.fail }} />
-                              </div>
-                              <span className={`font-bold ${pr >= 80 ? "text-green-600" : pr >= 60 ? "text-amber-600" : "text-red-600"}`}>{pr}%</span>
-                            </div>
-                          </td>
+                        <tr key={row.code} className="border-b last:border-0">
+                          <td className="py-2 px-3 font-medium">{isAr ? row.nameAr || row.nameEn : row.nameEn}</td>
+                          <td className="py-2 px-3 text-center text-blue-700 font-semibold">{row.open}</td>
+                          <td className="py-2 px-3 text-center font-semibold">{row.submitted}</td>
+                          <td className="py-2 px-3 text-center text-green-700 font-semibold">{row.passed}</td>
+                          <td className="py-2 px-3 text-center text-red-700 font-semibold">{row.failed}</td>
+                          <td className="py-2 px-3 text-end text-muted-foreground">{pr == null ? "—" : `${pr}%`}</td>
                         </tr>
                       );
                     })}
                   </tbody>
                 </table>
               </div>
-            </CardContent>
-          </Card>
-        )}
+            )}
+          </CardContent>
+        </Card>
 
         {/* VAT / TRN Settings */}
         <LabTaxSettingsCard lang={lang as "ar" | "en"} />
