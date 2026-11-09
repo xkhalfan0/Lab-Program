@@ -771,7 +771,15 @@ export default function ManagerDashboard() {
                             </span>
                           )}
                         </td>
-                        <td className="px-3 py-2 text-center text-amber-700 font-semibold">{r.waitingReview}</td>
+                        <td className="px-3 py-2 text-center text-amber-700 font-semibold">
+                          {r.waitingReview}
+                          {r.reviewOrders.length > 0 && (
+                            <span className="block text-[10px] font-normal text-slate-500">
+                              {r.reviewOrders.slice(0, 3).join(", ")}
+                              {r.reviewOrders.length > 3 ? ` +${r.reviewOrders.length - 3}` : ""}
+                            </span>
+                          )}
+                        </td>
                         <td className="px-3 py-2 text-center text-green-700 font-semibold">{r.completed}</td>
                         <td className="px-3 py-2 text-center text-red-700 font-semibold">{r.rejected}</td>
                         <td className="px-3 py-2 text-center text-slate-600 whitespace-nowrap">

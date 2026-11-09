@@ -1,480 +1,388 @@
 /**
- * Supervisor + QC operational dashboard
+ * Supervisor desk — find any order and see which page actually holds it.
  */
-import { useState, useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useLocation } from "wouter";
 import {
-  FlaskConical, Clock, AlertTriangle, CheckCircle2,
-  Activity, RefreshCw, ChevronRight, CalendarDays,
-  PackageOpen, ArrowRight, Beaker, ShieldCheck, Building2, Search, Users,
+  Search, RefreshCw, ClipboardList, FlaskConical, CheckSquare,
+  ShieldCheck, ArrowUpRight, AlertTriangle, UserRound,
 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import DashboardLayout from "@/components/DashboardLayout";
-import { ListFilterBar } from "@/components/ListFilterBar";
-import { matchesListSearch, hasActiveListFilters } from "@/lib/listFilters";
-import { StatusBadge } from "@/components/StatusBadge";
-import { SAMPLE_TYPE_LABELS } from "@/lib/labTypes";
 
-type Period = "today" | "week" | "month";
+type DeskFilter = "open" | "assign" | "lab" | "review" | "qc" | "done" | "rejected";
 
-const SECTORS = [
-  { value: "sector_1", ar: "قطاع/1", en: "Sector 1" },
-  { value: "sector_2", ar: "قطاع/2", en: "Sector 2" },
-  { value: "sector_3", ar: "قطاع/3", en: "Sector 3" },
-  { value: "sector_4", ar: "قطاع/4", en: "Sector 4" },
-  { value: "sector_5", ar: "قطاع/5", en: "Sector 5" },
-];
-
-const REASON_LABELS: Record<string, { en: string; ar: string }> = {
-  "in testing": { en: "In testing", ar: "قيد الفحص" },
-  "in progress": { en: "In progress", ar: "قيد التنفيذ" },
-  "pending distribution": { en: "Pending distribution", ar: "بانتظار التوزيع" },
-  "awaiting review": { en: "Awaiting review", ar: "بانتظار المراجعة" },
-  "review wait": { en: "Awaiting review", ar: "بانتظار المراجعة" },
-  "awaiting qc": { en: "Awaiting QC", ar: "بانتظار ضبط الجودة" },
-  "no technician assigned": { en: "No technician assigned", ar: "لم يُعيَّن فني" },
-  "past expected date": { en: "Past expected date", ar: "تجاوز التاريخ المتوقع" },
+type BoardOrder = {
+  id: number;
+  orderCode: string;
+  sampleId: number;
+  sampleCode: string | null;
+  referenceNo: string | null;
+  sampleStatus: string | null;
+  contractNumber: string | null;
+  contractorName: string | null;
+  status: string;
+  priority: string;
+  technician: string | null;
+  tests: string;
+  updatedAt: string | null;
 };
 
-function todayStr() {
-  return new Date().toISOString().split("T")[0];
+const SAMPLE_EXPECTS_ORDER: Record<string, string> = {
+  received: "pending",
+  distributed: "distributed",
+  testing_in_progress: "in_progress",
+  awaiting_review: "completed",
+  under_review: "completed",
+  processed: "completed",
+  tested: "completed",
+  reviewed: "reviewed",
+  approved: "reviewed",
+  qc_passed: "qc_passed",
+  clearance_requested: "qc_passed",
+  clearance_issued: "qc_passed",
+  qc_failed: "rejected",
+  rejected: "rejected",
+  revision_requested: "in_progress",
+};
+
+function bucketOf(status: string): Exclude<DeskFilter, "open"> {
+  if (status === "pending") return "assign";
+  if (status === "distributed" || status === "in_progress") return "lab";
+  if (status === "completed") return "review";
+  if (status === "reviewed") return "qc";
+  if (status === "rejected") return "rejected";
+  return "done";
+}
+
+function ageDays(iso: string | null) {
+  if (!iso) return 0;
+  const ms = Date.now() - new Date(iso).getTime();
+  return Math.max(0, Math.floor(ms / 86_400_000));
 }
 
 export default function SupervisorDashboard() {
-  const [period, setPeriod] = useState<Period>("today");
   const [, navigate] = useLocation();
-  const { lang, t, dir } = useLanguage();
+  const { lang, dir } = useLanguage();
   const isAr = lang === "ar";
+  const [filter, setFilter] = useState<DeskFilter>("open");
+  const [query, setQuery] = useState("");
+  const [techFocus, setTechFocus] = useState<string | null>(null);
 
-  const [fromDate, setFromDate] = useState(todayStr);
-  const [toDate, setToDate] = useState(todayStr);
-  const [appliedFrom, setAppliedFrom] = useState(todayStr);
-  const [appliedTo, setAppliedTo] = useState(todayStr);
-  const [sectorFilter, setSectorFilter] = useState<string>("all");
-  const [listSearch, setListSearch] = useState("");
-  const [refSearch, setRefSearch] = useState("");
-  const [sampleTypeFilter, setSampleTypeFilter] = useState("all");
+  const { data, isLoading, refetch, isFetching } = trpc.dashboard.supervisorBoard.useQuery();
+  const orders = (data ?? []) as BoardOrder[];
 
-  const { data: kpis, isLoading: kpisLoading, refetch } = trpc.dashboard.kpis.useQuery({ period });
-  const { data: alerts, isLoading: alertsLoading } = trpc.dashboard.alerts.useQuery();
-  const { data: activity, isLoading: activityLoading } = trpc.dashboard.labActivity.useQuery({ limit: 15 });
-  const { data: reviewQueue, isLoading: queueLoading } = trpc.dashboard.reviewQueue.useQuery();
-  const { data: stuckOrders, isLoading: stuckLoading } = trpc.dashboard.stuckOrders.useQuery();
-  const { data: techDaily, isLoading: techDailyLoading } = trpc.dashboard.technicianDailyWork.useQuery();
-  const { data: dailyData, isLoading: dailyLoading } = trpc.samples.dailyWork.useQuery({
-    fromDate: appliedFrom,
-    toDate: appliedTo,
-  });
+  const counts = useMemo(() => {
+    const c = { open: 0, assign: 0, lab: 0, review: 0, qc: 0, done: 0, rejected: 0 };
+    for (const order of orders) {
+      const bucket = bucketOf(order.status);
+      c[bucket] += 1;
+      if (bucket !== "done" && bucket !== "rejected") c.open += 1;
+    }
+    return c;
+  }, [orders]);
 
-  const criticalCount = alerts?.filter(a => a.severity === "critical").length ?? 0;
+  const technicians = useMemo(() => {
+    const map = new Map<string, { name: string; count: number; oldest: string }>();
+    for (const order of orders) {
+      if (bucketOf(order.status) !== "lab") continue;
+      const name = order.technician?.trim() || (isAr ? "بدون فني" : "No technician");
+      const current = map.get(name) ?? { name, count: 0, oldest: order.orderCode };
+      current.count += 1;
+      map.set(name, current);
+    }
+    return Array.from(map.values()).sort((a, b) => b.count - a.count);
+  }, [orders, isAr]);
 
-  function sectorLabel(val: string | null | undefined) {
-    if (!val) return "—";
-    const s = SECTORS.find(x => x.value === val);
-    return s ? (isAr ? s.ar : s.en) : val;
+  const visible = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return orders.filter((order) => {
+      if (techFocus && (order.technician?.trim() || (isAr ? "بدون فني" : "No technician")) !== techFocus) {
+        return false;
+      }
+      if (!q && filter !== "open" && bucketOf(order.status) !== filter) return false;
+      if (!q && filter === "open" && (bucketOf(order.status) === "done" || bucketOf(order.status) === "rejected")) {
+        return false;
+      }
+      if (!q) return true;
+      return [
+        order.orderCode,
+        order.sampleCode,
+        order.referenceNo,
+        order.contractNumber,
+        order.contractorName,
+        order.technician,
+        order.tests,
+      ].some((value) => (value ?? "").toLowerCase().includes(q));
+    });
+  }, [orders, filter, query, techFocus, isAr]);
+
+  const chips: { id: DeskFilter; en: string; ar: string }[] = [
+    { id: "open", en: "Still open", ar: "ما زال مفتوحاً" },
+    { id: "assign", en: "Not assigned", ar: "لم يوزَّع" },
+    { id: "lab", en: "In lab", ar: "في المختبر" },
+    { id: "review", en: "Your review", ar: "مراجعتك" },
+    { id: "qc", en: "QC", ar: "ضبط الجودة" },
+    { id: "done", en: "QC done", ar: "معتمد" },
+    { id: "rejected", en: "Rejected", ar: "مرفوض" },
+  ];
+
+  function place(order: BoardOrder) {
+    const bucket = bucketOf(order.status);
+    if (bucket === "assign") {
+      return {
+        stage: isAr ? "لم يوزَّع" : "Not assigned",
+        where: isAr ? "لا يظهر عند الفني ولا في المراجعة" : "Not on the technician list or in review",
+        page: isAr ? "التوزيع" : "Distribution",
+        href: "/distribution",
+        tone: "bg-slate-100 text-slate-700",
+      };
+    }
+    if (bucket === "lab") {
+      const who = order.technician?.trim();
+      return {
+        stage: isAr ? "في المختبر" : "In lab",
+        where: who
+          ? (isAr ? `عند الفني ${who}` : `With ${who}`)
+          : (isAr ? "موزّع بدون اسم فني" : "Assigned, but no technician name"),
+        page: isAr ? "العينة" : "Sample",
+        href: `/sample/${order.sampleId}`,
+        tone: "bg-blue-50 text-blue-700",
+      };
+    }
+    if (bucket === "review") {
+      return {
+        stage: isAr ? "مراجعة المشرف" : "Supervisor review",
+        where: isAr ? "الفني أنهى الفحص" : "Technician has finished",
+        page: isAr ? "مراجعة المشرف" : "Supervisor review",
+        href: "/manager-review",
+        tone: "bg-amber-50 text-amber-800",
+      };
+    }
+    if (bucket === "qc") {
+      return {
+        stage: isAr ? "ضبط الجودة" : "QC",
+        where: isAr ? "بانتظار اعتماد الجودة" : "Waiting for QC approval",
+        page: isAr ? "مراجعة الجودة" : "QC review",
+        href: "/qc-review",
+        tone: "bg-violet-50 text-violet-700",
+      };
+    }
+    if (bucket === "rejected") {
+      return {
+        stage: isAr ? "مرفوض" : "Rejected",
+        where: isAr ? "أُغلق كمرفوض" : "Closed as rejected",
+        page: isAr ? "العينة" : "Sample",
+        href: `/sample/${order.sampleId}`,
+        tone: "bg-red-50 text-red-700",
+      };
+    }
+    return {
+      stage: isAr ? "معتمد" : "QC done",
+      where: isAr ? "انتهى مسار الطلب" : "Order is finished",
+      page: isAr ? "التقرير" : "Report",
+      href: `/order/${order.id}`,
+      tone: "bg-emerald-50 text-emerald-700",
+    };
   }
 
-  const dailySamples = useMemo(() => {
-    const base = (sectorFilter === "all"
-      ? dailyData?.samples
-      : dailyData?.samples?.filter(s => (s as { sector?: string }).sector === sectorFilter)) ?? [];
-
-    return base.filter((sample) => {
-      if (sampleTypeFilter !== "all" && sample.sampleType !== sampleTypeFilter) return false;
-      if (refSearch.trim() && !matchesListSearch(refSearch, [(sample as any).referenceNo])) return false;
-      return matchesListSearch(listSearch, [
-        sample.sampleCode,
-        sample.contractNumber,
-        sample.contractorName,
-        sample.contractName,
-      ]);
-    });
-  }, [dailyData?.samples, sectorFilter, sampleTypeFilter, listSearch, refSearch]);
-  const dailySummary = dailyData?.summary;
-  const isSingleDay = appliedFrom === appliedTo;
-
-  const periodLabel = isSingleDay && appliedFrom === todayStr()
-    ? t("dashboard.todayWork")
-    : isSingleDay
-    ? `${t("dashboard.workOn")} ${new Date(appliedFrom).toLocaleDateString(isAr ? "ar-AE" : "en-AE", { day: "numeric", month: "short", year: "numeric" })}`
-    : `${t("dashboard.workFrom")} ${new Date(appliedFrom).toLocaleDateString(isAr ? "ar-AE" : "en-AE", { day: "numeric", month: "short" })} ${isAr ? "إلى" : "to"} ${new Date(appliedTo).toLocaleDateString(isAr ? "ar-AE" : "en-AE", { day: "numeric", month: "short", year: "numeric" })}`;
-
-  const handleApplyFilter = () => { setAppliedFrom(fromDate); setAppliedTo(toDate); };
-  const handleTodayFilter = () => {
-    const td = todayStr();
-    setFromDate(td); setToDate(td); setAppliedFrom(td); setAppliedTo(td);
-  };
-
-  const maxAssigned = Math.max(1, ...(techDaily ?? []).map(t => t.assigned));
-
-  const priorityColor = (p: string) =>
-    p === "urgent" ? "bg-red-100 text-red-700" :
-    p === "high" ? "bg-orange-100 text-orange-700" :
-    p === "low" ? "bg-slate-100 text-slate-600" :
-    "bg-blue-100 text-blue-700";
+  function gap(order: BoardOrder) {
+    if (!order.sampleStatus) return null;
+    const expected = SAMPLE_EXPECTS_ORDER[order.sampleStatus];
+    if (!expected || expected === order.status) return null;
+    return isAr
+      ? `العينة حالتها ${order.sampleStatus} بينما الطلب ${order.status}، لذلك قد لا يظهر في الصفحة المتوقعة.`
+      : `Sample is ${order.sampleStatus.replaceAll("_", " ")} while the order is ${order.status.replaceAll("_", " ")}, so it can be missing from the page you expect.`;
+  }
 
   return (
     <DashboardLayout>
-    <div className="p-4 md:p-6 space-y-5" dir={dir}>
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-bold text-slate-800">
-            {isAr ? "لوحة العمليات" : "Supervisor Dashboard"}
-          </h1>
-          <p className="text-sm text-slate-500">
-            {isAr ? "متابعة العمليات اليومية" : "Daily operations monitoring"}
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <div className="flex bg-white border border-slate-200 rounded-lg p-0.5 shadow-sm">
-            {(["today", "week", "month"] as Period[]).map((p) => (
-              <button
-                key={p}
-                onClick={() => setPeriod(p)}
-                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${period === p ? "bg-blue-600 text-white shadow-sm" : "text-slate-600 hover:text-slate-800"}`}
-              >
-                {p === "today" ? (isAr ? "اليوم" : "Today") : p === "week" ? (isAr ? "الأسبوع" : "Week") : (isAr ? "الشهر" : "Month")}
-              </button>
-            ))}
+      <div className="p-4 md:p-6 space-y-4" dir={dir}>
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <h1 className="text-xl font-bold text-slate-900">
+              {isAr ? "متابعة المشرف" : "Supervisor desk"}
+            </h1>
+            <p className="text-sm text-slate-500 mt-1 max-w-2xl">
+              {isAr
+                ? "ابحث برقم الطلب أو العينة أو العقد. كل صف يقول من يمسك الطلب الآن وأي صفحة تفتحها."
+                : "Search by order, sample, or contract. Each row says who holds it and which page to open."}
+            </p>
           </div>
-          <Button variant="outline" size="sm" onClick={() => refetch()} className="gap-1.5">
-            <RefreshCw className="w-3.5 h-3.5" />
+          <Button variant="outline" size="sm" onClick={() => refetch()} className="gap-1.5 w-fit">
+            <RefreshCw className={`w-3.5 h-3.5 ${isFetching ? "animate-spin" : ""}`} />
+            {isAr ? "تحديث" : "Refresh"}
           </Button>
         </div>
-      </div>
 
-      {/* Critical alert banner */}
-      {!alertsLoading && criticalCount > 0 && (
-        <div className="bg-red-50 border border-red-200 rounded-xl p-3 flex items-center gap-3">
-          <AlertTriangle className="w-5 h-5 text-red-500 flex-shrink-0" />
-          <span className="text-sm font-medium text-red-700">
-            {criticalCount} {isAr ? "تنبيه حرج" : "critical alert(s)"}
-          </span>
-        </div>
-      )}
-
-      {/* Live KPIs — 5 */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-        {[
-          { title: isAr ? "قيد التنفيذ" : "In progress", value: kpis?.inProgress.value ?? 0, icon: Activity, color: "text-amber-600", bg: "bg-amber-50" },
-          { title: isAr ? "مراجعة المدير" : "Manager review", value: kpis?.pendingManagerReview?.value ?? 0, icon: CheckCircle2, color: "text-blue-600", bg: "bg-blue-50" },
-          { title: isAr ? "مراجعة الجودة" : "QC review", value: kpis?.pendingQcReview?.value ?? 0, icon: ShieldCheck, color: "text-indigo-600", bg: "bg-indigo-50" },
-          { title: isAr ? "متأخرة" : "Overdue", value: kpis?.overdue.value ?? 0, icon: AlertTriangle, color: "text-red-600", bg: "bg-red-50", critical: true },
-          { title: isAr ? "متوسط وقت التسليم" : "Avg TAT", value: `${kpis?.avgTAT.value ?? 0}h`, icon: Clock, color: "text-purple-600", bg: "bg-purple-50" },
-        ].map((card, i) => (
-          <Card key={i} className={`border-0 shadow-sm ${card.critical && Number(card.value) > 0 ? "ring-2 ring-red-300" : ""}`}>
-            <CardContent className="p-4">
-              {kpisLoading ? (
-                <div className="space-y-2"><Skeleton className="h-4 w-20" /><Skeleton className="h-8 w-12" /></div>
-              ) : (
-                <>
-                  <div className={`p-2 rounded-lg ${card.bg} w-fit mb-2`}>
-                    <card.icon className={`w-4 h-4 ${card.color}`} />
-                  </div>
-                  <div className={`text-2xl font-bold ${card.critical && String(card.value) !== "0h" ? "text-red-600" : "text-slate-800"}`}>
-                    {card.value}
-                  </div>
-                  <div className="text-xs text-slate-500 mt-0.5 font-medium">{card.title}</div>
-                </>
-              )}
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-
-      {/* Review queue + Stuck/Overdue */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <Card className="border-0 shadow-sm">
-          <CardHeader className="pb-2 px-4 pt-4">
-            <CardTitle className="text-sm font-semibold text-slate-700">
-              {isAr ? "طابور المراجعة" : "Review queue"}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="px-4 pb-4">
-            {queueLoading ? (
-              <div className="space-y-2">{[1,2,3].map(i => <Skeleton key={i} className="h-10 w-full" />)}</div>
-            ) : !reviewQueue?.length ? (
-              <p className="text-sm text-slate-400 py-4 text-center">{isAr ? "لا توجد عناصر" : "Queue empty"}</p>
-            ) : (
-              <div className="space-y-2 max-h-52 overflow-y-auto">
-                {reviewQueue.slice(0, 10).map((row) => (
-                  <div key={row.sampleCode} className="flex items-center gap-2 p-2.5 rounded-lg bg-slate-50 border border-slate-100">
-                    <div className="flex-1 min-w-0">
-                      <span className="text-xs font-mono font-semibold text-blue-600">{row.sampleCode}</span>
-                      <p className="text-xs text-slate-600 break-words leading-snug">{row.testName}</p>
-                    </div>
-                    <span className="text-xs text-slate-500">{row.waitHours}h</span>
-                    <Badge className={`text-[10px] ${priorityColor(row.priority)}`}>{row.priority}</Badge>
-                  </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card className="border-0 shadow-sm">
-          <CardHeader className="pb-2 px-4 pt-4">
-            <CardTitle className="text-sm font-semibold text-slate-700">
-              {isAr ? "عالق / متأخر" : "Stuck / overdue"}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="px-4 pb-4">
-            {stuckLoading ? (
-              <div className="space-y-2">{[1,2,3].map(i => <Skeleton key={i} className="h-10 w-full" />)}</div>
-            ) : !stuckOrders?.length ? (
-              <p className="text-sm text-slate-400 py-4 text-center">{isAr ? "لا توجد مشاكل" : "Nothing stuck"}</p>
-            ) : (
-              <div className="space-y-2 max-h-52 overflow-y-auto">
-                {stuckOrders.slice(0, 10).map((row, i) => (
-                  <div key={`${row.sampleCode}-${i}`} className="flex items-center gap-2 p-2.5 rounded-lg bg-red-50/50 border border-red-100">
-                    <div className="flex-1 min-w-0">
-                      <span className="text-xs font-mono font-semibold text-blue-600">{row.sampleCode}</span>
-                      <p className="text-xs text-slate-600">
-                        {isAr ? (REASON_LABELS[row.reason]?.ar ?? row.reasonAr) : (REASON_LABELS[row.reason]?.en ?? row.reason)}
-                      </p>
-                    </div>
-                    <span className="text-xs font-bold text-red-600 shrink-0">{row.ageDays}d</span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Today's Work */}
-      <Card className="border-0 shadow-sm">
-        <CardHeader className="pb-3 px-4 pt-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <CardTitle className="text-base font-semibold flex items-center gap-2">
-              <CalendarDays className="w-5 h-5 text-primary" />
-              {periodLabel}
-            </CardTitle>
-            <div className="flex items-center gap-2 flex-wrap">
-              <Button size="sm" variant="outline" onClick={handleTodayFilter} className="text-xs h-8 px-3">
-                {t("dashboard.today")}
-              </Button>
-              <Input type="date" value={fromDate} onChange={e => setFromDate(e.target.value)} className="h-8 text-xs w-36" />
-              <Input type="date" value={toDate} onChange={e => setToDate(e.target.value)} className="h-8 text-xs w-36" />
-              <Button size="sm" onClick={handleApplyFilter} className="h-8 px-3 text-xs gap-1">
-                <Search className="w-3.5 h-3.5" />
-                {t("dashboard.apply")}
-              </Button>
-            </div>
-          </div>
-          <div className="flex items-center gap-2 flex-wrap mt-2">
-            <Building2 className="w-4 h-4 text-muted-foreground" />
-            <button onClick={() => setSectorFilter("all")} className={`px-3 py-1 rounded-full text-xs border ${sectorFilter === "all" ? "bg-primary text-primary-foreground" : "bg-background"}`}>
-              {isAr ? "الكل" : "All"}
-            </button>
-            {SECTORS.map(sec => (
-              <button key={sec.value} onClick={() => setSectorFilter(sec.value)} className={`px-3 py-1 rounded-full text-xs border ${sectorFilter === sec.value ? "bg-blue-600 text-white" : "bg-background"}`}>
-                {isAr ? sec.ar : sec.en}
-              </button>
-            ))}
-          </div>
-          <ListFilterBar
-            lang={lang}
-            search={listSearch}
-            onSearchChange={setListSearch}
-            searchPlaceholder={
-              isAr
-                ? "بحث برمز العينة، العقد، أو المقاول..."
-                : "Search by sample code, contract, or contractor..."
-            }
-            refSearch={refSearch}
-            onRefSearchChange={setRefSearch}
-            sampleType={sampleTypeFilter}
-            onSampleTypeChange={setSampleTypeFilter}
-            showClear={hasActiveListFilters({ search: listSearch, sampleType: sampleTypeFilter, refSearch })}
-            onClear={() => {
-              setListSearch("");
-              setRefSearch("");
-              setSampleTypeFilter("all");
-            }}
-            resultCount={dailySamples.length}
+        <div className="relative">
+          <Search className="w-4 h-4 text-slate-400 absolute top-1/2 -translate-y-1/2 start-3" />
+          <Input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder={isAr ? "مثال: ORD-2026-0220 أو رمز العينة أو العقد أو اسم الفني" : "Try ORD-2026-0220, a sample code, contract, or technician"}
+            className="ps-9 h-11 bg-white"
           />
-        </CardHeader>
-        <CardContent className="px-4 pb-4 space-y-4">
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            {[
-              { label: isAr ? "وارد" : "Received", value: dailySummary?.received ?? 0, icon: PackageOpen, color: "text-blue-600", bg: "bg-blue-50" },
-              { label: isAr ? "موزّع" : "Distributed", value: dailySummary?.distributed ?? 0, icon: ArrowRight, color: "text-purple-600", bg: "bg-purple-50" },
-              { label: isAr ? "مُختبر" : "Tested", value: dailySummary?.processed ?? 0, icon: Beaker, color: "text-orange-600", bg: "bg-orange-50" },
-              { label: isAr ? "صادر" : "Issued", value: dailySummary?.approved ?? 0, icon: ShieldCheck, color: "text-green-600", bg: "bg-green-50" },
-            ].map(({ label, value, icon: Icon, color, bg }) => (
-              <div key={label} className={`rounded-lg p-3 ${bg} flex items-center gap-3`}>
-                <Icon className={`w-5 h-5 ${color}`} />
-                <div>
-                  <p className="text-xs text-muted-foreground">{label}</p>
-                  <p className={`text-2xl font-bold ${color}`}>{value}</p>
-                </div>
+        </div>
+
+        <div className="flex gap-2 flex-wrap">
+          {chips.map((chip) => {
+            const active = !query && filter === chip.id && !techFocus;
+            return (
+              <button
+                key={chip.id}
+                type="button"
+                onClick={() => {
+                  setFilter(chip.id);
+                  setQuery("");
+                  setTechFocus(null);
+                }}
+                className={`rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
+                  active ? "bg-slate-900 text-white border-slate-900" : "bg-white text-slate-600 border-slate-200 hover:border-slate-400"
+                }`}
+              >
+                {isAr ? chip.ar : chip.en}
+                <span className={`ms-1.5 tabular-nums ${active ? "text-white/80" : "text-slate-400"}`}>{counts[chip.id]}</span>
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="grid grid-cols-1 xl:grid-cols-4 gap-4">
+          <div className="xl:col-span-3 bg-white border border-slate-200 rounded-xl overflow-hidden">
+            {isLoading ? (
+              <div className="p-4 space-y-2">
+                {[1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-14 w-full" />)}
               </div>
-            ))}
+            ) : visible.length === 0 ? (
+              <p className="text-sm text-slate-400 py-12 text-center">
+                {query
+                  ? (isAr ? "لا يوجد طلب بهذا البحث" : "No order matches that search")
+                  : (isAr ? "لا توجد طلبات في هذه المرحلة" : "Nothing in this stage")}
+              </p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b bg-slate-50 text-slate-500 text-xs">
+                      <th className="text-start px-3 py-2.5 font-medium">{isAr ? "الطلب" : "Order"}</th>
+                      <th className="text-start px-3 py-2.5 font-medium">{isAr ? "الفحص" : "Test"}</th>
+                      <th className="text-start px-3 py-2.5 font-medium">{isAr ? "العقد" : "Contract"}</th>
+                      <th className="text-start px-3 py-2.5 font-medium">{isAr ? "أين هو" : "Where it is"}</th>
+                      <th className="text-end px-3 py-2.5 font-medium">{isAr ? "منذ" : "Age"}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {visible.slice(0, 80).map((order) => {
+                      const spot = place(order);
+                      const mismatch = gap(order);
+                      const days = ageDays(order.updatedAt);
+                      return (
+                        <tr
+                          key={order.id}
+                          className="border-b last:border-0 hover:bg-slate-50 cursor-pointer align-top"
+                          onClick={() => navigate(spot.href)}
+                        >
+                          <td className="px-3 py-3">
+                            <div className="font-mono text-xs font-semibold text-slate-900">{order.orderCode}</div>
+                            <div className="font-mono text-[11px] text-blue-700">{order.sampleCode ?? "—"}</div>
+                            {order.referenceNo && (
+                              <div className="text-[11px] text-slate-400">{order.referenceNo}</div>
+                            )}
+                            {order.priority === "urgent" || order.priority === "high" ? (
+                              <span className="inline-block mt-1 text-[10px] font-semibold uppercase text-red-600">{order.priority}</span>
+                            ) : null}
+                          </td>
+                          <td className="px-3 py-3 text-xs text-slate-700 max-w-[220px]">
+                            {order.tests}
+                          </td>
+                          <td className="px-3 py-3 text-xs">
+                            <div>{order.contractorName ?? "—"}</div>
+                            <div className="font-mono text-[11px] text-slate-400">{order.contractNumber ?? "—"}</div>
+                          </td>
+                          <td className="px-3 py-3">
+                            <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold ${spot.tone}`}>
+                              {spot.stage}
+                            </span>
+                            <p className="text-xs text-slate-600 mt-1">{spot.where}</p>
+                            {mismatch && (
+                              <p className="text-[11px] text-amber-700 mt-1 flex items-start gap-1">
+                                <AlertTriangle className="w-3 h-3 mt-0.5 shrink-0" />
+                                {mismatch}
+                              </p>
+                            )}
+                            <span className="inline-flex items-center gap-1 text-[11px] text-slate-500 mt-1">
+                              {spot.page}
+                              <ArrowUpRight className="w-3 h-3" />
+                            </span>
+                          </td>
+                          <td className="px-3 py-3 text-end text-xs tabular-nums text-slate-500">
+                            {days}{isAr ? " ي" : "d"}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+                {visible.length > 80 && (
+                  <p className="text-xs text-slate-400 px-3 py-2">
+                    {isAr ? `يُعرض 80 من ${visible.length}. ضيّق البحث لرؤية الباقي.` : `Showing 80 of ${visible.length}. Narrow the search to see the rest.`}
+                  </p>
+                )}
+              </div>
+            )}
           </div>
 
-          {dailyLoading ? (
-            <Skeleton className="h-40 w-full" />
-          ) : dailySamples.length === 0 ? (
-            <p className="text-sm text-slate-400 py-6 text-center">{t("dashboard.noPeriodSamples")}</p>
-          ) : (
-            <div className="overflow-x-auto rounded-lg border">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b bg-muted/30">
-                    {[t("table.num"), t("table.sampleId"), t("table.contractNo"), t("table.contractor"), t("table.type"), isAr ? "القطاع" : "Sector", t("table.qty"), t("table.status"), t("table.receivedAt")].map(h => (
-                      <th key={h} className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground">{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {dailySamples.map((sample, idx) => (
-                    <tr key={sample.id} className="border-b last:border-0 hover:bg-muted/20 cursor-pointer" onClick={() => navigate(`/sample/${sample.id}`)}>
-                      <td className="px-4 py-2.5 text-xs text-muted-foreground">{idx + 1}</td>
-                      <td className="px-4 py-2.5 font-mono text-xs font-semibold text-primary">{sample.sampleCode}</td>
-                      <td className="px-4 py-2.5 text-xs font-mono">{sample.contractNumber ?? "—"}</td>
-                      <td className="px-4 py-2.5 text-xs">{sample.contractorName ?? "—"}</td>
-                      <td className="px-4 py-2.5 text-xs capitalize">{SAMPLE_TYPE_LABELS[sample.sampleType]}</td>
-                      <td className="px-4 py-2.5 text-xs">{sectorLabel((sample as { sector?: string }).sector)}</td>
-                      <td className="px-4 py-2.5 text-xs">{sample.quantity}</td>
-                      <td className="px-4 py-2.5"><StatusBadge status={sample.status} /></td>
-                      <td className="px-4 py-2.5 text-xs text-muted-foreground">
-                        {new Date(sample.receivedAt).toLocaleString(isAr ? "ar-AE" : "en-AE", { hour: "2-digit", minute: "2-digit", day: "2-digit", month: "short" })}
-                      </td>
-                    </tr>
+          <div className="space-y-3">
+            <div className="bg-white border border-slate-200 rounded-xl p-4">
+              <h2 className="text-sm font-semibold text-slate-800 flex items-center gap-2">
+                <UserRound className="w-4 h-4 text-blue-600" />
+                {isAr ? "من يمسك العمل الآن" : "Who has the lab work"}
+              </h2>
+              <p className="text-[11px] text-slate-400 mt-1 mb-3">
+                {isAr ? "فقط الطلبات التي ما زالت عند الفني." : "Orders still with a technician."}
+              </p>
+              {technicians.length === 0 ? (
+                <p className="text-xs text-slate-400">{isAr ? "لا يوجد شيء في المختبر" : "Nothing in the lab"}</p>
+              ) : (
+                <div className="space-y-1.5">
+                  {technicians.map((tech) => (
+                    <button
+                      key={tech.name}
+                      type="button"
+                      onClick={() => {
+                        setTechFocus(tech.name);
+                        setFilter("lab");
+                        setQuery("");
+                      }}
+                      className={`w-full flex items-center justify-between rounded-lg border px-2.5 py-2 text-start ${
+                        techFocus === tech.name ? "border-slate-900 bg-slate-900 text-white" : "border-slate-100 hover:bg-slate-50"
+                      }`}
+                    >
+                      <span className="text-xs font-medium truncate">{tech.name}</span>
+                      <span className="text-xs tabular-nums">{tech.count}</span>
+                    </button>
                   ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Daily work per technician */}
-      <Card className="border-0 shadow-sm">
-        <CardHeader className="pb-2 px-4 pt-4">
-          <CardTitle className="text-sm font-semibold flex items-center gap-2">
-            <Users className="w-4 h-4" />
-            {isAr ? "العمل اليومي لكل فني" : "Daily work per technician"}
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="px-4 pb-4 space-y-3">
-          {techDailyLoading ? (
-            <Skeleton className="h-24 w-full" />
-          ) : !techDaily?.length ? (
-            <p className="text-sm text-slate-400 py-4 text-center">{isAr ? "لا يوجد فنيون نشطون" : "No active technicians"}</p>
-          ) : (
-            techDaily.map((tech) => {
-              const total = tech.assigned + tech.doneToday;
-              const donePct = total > 0 ? (tech.doneToday / maxAssigned) * 100 : 0;
-              const openPct = total > 0 ? (tech.assigned / maxAssigned) * 100 : 0;
-              return (
-                <div key={tech.id} className="p-3 rounded-lg border bg-slate-50/50">
-                  <div className="flex items-center justify-between gap-2 mb-1">
-                    <div>
-                      <span className="text-sm font-semibold">{tech.name}</span>
-                      {tech.specialty && <span className="text-xs text-slate-500 ms-2">{tech.specialty}</span>}
-                    </div>
-                    <span className="text-xs text-slate-600">
-                      {tech.assigned} {isAr ? "مُعيَّن" : "assigned"} · {tech.doneToday} {isAr ? "منجز اليوم" : "done today"}
-                    </span>
-                  </div>
-                  <div className="flex h-2 rounded-full overflow-hidden bg-slate-200">
-                    <div className="bg-emerald-500 transition-all" style={{ width: `${donePct}%` }} />
-                    <div className="bg-blue-500 transition-all" style={{ width: `${openPct}%` }} />
-                  </div>
                 </div>
-              );
-            })
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Alerts + Recent Activity */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <Card className="border-0 shadow-sm">
-          <CardHeader className="pb-2 px-4 pt-4">
-            <CardTitle className="text-sm font-semibold flex items-center gap-2">
-              <AlertTriangle className="w-4 h-4 text-red-500" />
-              {isAr ? "يحتاج انتباهاً" : "Attention Required"}
-              {alerts && alerts.length > 0 && (
-                <Badge variant="destructive" className="text-xs px-1.5 py-0">{alerts.length}</Badge>
               )}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="px-4 pb-4">
-            {alertsLoading ? (
-              <div className="space-y-2">{[1,2,3].map(i => <Skeleton key={i} className="h-10 w-full" />)}</div>
-            ) : !alerts?.length ? (
-              <div className="flex flex-col items-center py-6 text-slate-400">
-                <CheckCircle2 className="w-7 h-7 mb-2 text-emerald-400" />
-                <p className="text-sm">{isAr ? "لا توجد تنبيهات" : "All clear!"}</p>
-              </div>
-            ) : (
-              <div className="space-y-2 max-h-48 overflow-y-auto">
-                {alerts.slice(0, 8).map((alert) => (
-                  <div
-                    key={`${alert.sampleId}-${alert.issueType}`}
-                    className={`flex items-center gap-3 p-2.5 rounded-lg cursor-pointer ${
-                      alert.severity === "critical" ? "bg-red-50 border border-red-100" : "bg-amber-50 border border-amber-100"
-                    }`}
-                    onClick={() => navigate(`/sample/${alert.sampleId}`)}
-                  >
-                    <span className={`w-2 h-2 rounded-full ${alert.severity === "critical" ? "bg-red-500" : "bg-amber-400"}`} />
-                    <div className="flex-1 min-w-0">
-                      <span className="text-xs font-semibold">{alert.sampleCode}</span>
-                      <p className="text-xs text-slate-500">{isAr ? alert.issueLabelAr : alert.issueLabel}</p>
-                    </div>
-                    <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
-                  </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
+            </div>
 
-        <Card className="border-0 shadow-sm">
-          <CardHeader className="pb-2 px-4 pt-4">
-            <CardTitle className="text-sm font-semibold flex items-center gap-2">
-              <FlaskConical className="w-4 h-4 text-slate-500" />
-              {isAr ? "النشاط الأخير" : "Recent Activity"}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="px-4 pb-4">
-            {activityLoading ? (
-              <div className="space-y-2">{[1,2,3].map(i => <Skeleton key={i} className="h-8 w-full" />)}</div>
-            ) : !activity?.length ? (
-              <p className="text-sm text-slate-400 py-4 text-center">{isAr ? "لا يوجد نشاط" : "No recent activity"}</p>
-            ) : (
-              <div className="divide-y divide-slate-50 max-h-48 overflow-y-auto">
-                {activity.map((item) => {
-                  const dot = item.severity === "success" ? "bg-emerald-400" : item.severity === "error" ? "bg-red-400" : item.severity === "warning" ? "bg-amber-400" : "bg-blue-400";
-                  return (
-                    <div key={item.id} className="flex items-center gap-3 py-2">
-                      <div className={`w-1.5 h-1.5 rounded-full ${dot}`} />
-                      <div className="flex-1 min-w-0">
-                        <span className="text-xs font-medium">{isAr ? item.typeAr : item.typeEn}</span>
-                        <span className="text-xs font-mono text-blue-600 ms-1">{item.sampleCode}</span>
-                      </div>
-                      <span className="text-xs text-slate-400">
-                        {new Date(item.timestamp).toLocaleTimeString(isAr ? "ar-SA" : "en-US", { hour: "2-digit", minute: "2-digit" })}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </CardContent>
-        </Card>
+            <div className="bg-slate-900 text-white rounded-xl p-4 space-y-2">
+              <p className="text-xs font-semibold">{isAr ? "أين يظهر الطلب" : "Where an order shows"}</p>
+              <ul className="text-[11px] text-slate-300 space-y-1.5">
+                <li className="flex gap-2"><ClipboardList className="w-3.5 h-3.5 mt-0.5 shrink-0" />{isAr ? "لم يوزَّع: صفحة التوزيع فقط" : "Not assigned: Distribution only"}</li>
+                <li className="flex gap-2"><FlaskConical className="w-3.5 h-3.5 mt-0.5 shrink-0" />{isAr ? "في المختبر: قائمة ذلك الفني" : "In lab: that technician’s list"}</li>
+                <li className="flex gap-2"><CheckSquare className="w-3.5 h-3.5 mt-0.5 shrink-0" />{isAr ? "مراجعتك: بعد ما يرسل الفني النتيجة" : "Your review: after the technician submits"}</li>
+                <li className="flex gap-2"><ShieldCheck className="w-3.5 h-3.5 mt-0.5 shrink-0" />{isAr ? "الجودة: بعد موافقتك" : "QC: after you approve"}</li>
+              </ul>
+            </div>
+          </div>
+        </div>
       </div>
-    </div>
     </DashboardLayout>
   );
 }

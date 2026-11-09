@@ -156,8 +156,10 @@ export type ContractReadinessRow = {
   /** Technician finished; waiting for manager or QC. */
   waitingReview: number;
   rejected: number;
-  /** Sample codes still with the technician or not yet distributed. */
+  /** Order codes still with the technician or not yet distributed. */
   openSamples: string[];
+  /** Order codes waiting for the supervisor or QC. */
+  reviewOrders: string[];
   readiness: number;
   endDate: Date | null;
   daysUntilEnd: number | null;
@@ -213,6 +215,7 @@ export function computeContractReadinessRows(
       waitingReview: number;
       rejected: number;
       openSamples: string[];
+      reviewOrders: string[];
     }
   >();
 
@@ -231,18 +234,25 @@ export function computeContractReadinessRows(
         waitingReview: 0,
         rejected: 0,
         openSamples: [],
+        reviewOrders: [],
       });
     }
     const row = grouped.get(key)!;
     row.total++;
     const st = o.status ?? "";
+    const order = o.orderCode?.trim();
+    const sample = o.sampleCode?.trim();
+    const label = order && sample ? `${order} · ${sample}` : order || sample || "";
     if (st === "qc_passed") row.completed++;
     else if (st === "rejected") row.rejected++;
-    else if (st === "completed" || st === "reviewed") row.waitingReview++;
-    else if (st === "distributed" || st === "in_progress") row.inProgress++;
-    else row.pending++;
-    if (st !== "qc_passed" && st !== "rejected" && st !== "completed" && st !== "reviewed") {
-      const label = o.sampleCode?.trim() || o.orderCode?.trim();
+    else if (st === "completed" || st === "reviewed") {
+      row.waitingReview++;
+      if (label) row.reviewOrders.push(label);
+    } else if (st === "distributed" || st === "in_progress") {
+      row.inProgress++;
+      if (label) row.openSamples.push(label);
+    } else {
+      row.pending++;
       if (label) row.openSamples.push(label);
     }
   }

@@ -19,6 +19,7 @@ import {
   getAllLabOrders,
   getAllClearanceRequests,
   getQualityFollowUp,
+  getSupervisorBoard,
   getDistributionsBySample,
   getLabOrderItems,
   getTestResultBySample,
@@ -939,6 +940,11 @@ export const dashboardRouter = router({
 
   qualityFollowUp: protectedProcedure.query(async () => {
     return getQualityFollowUp();
+  }),
+
+  /** Live order desk for the supervisor view: every order, where it sits, and who holds it. */
+  supervisorBoard: protectedProcedure.query(async () => {
+    return getSupervisorBoard();
   }),
 
   clearanceStats: protectedProcedure.query(async () => {

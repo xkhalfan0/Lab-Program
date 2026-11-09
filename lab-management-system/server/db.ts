@@ -2981,6 +2981,86 @@ export async function getAllLabOrders() {
     .orderBy(desc(labOrders.createdAt));
 }
 
+export type SupervisorBoardOrder = {
+  id: number;
+  orderCode: string;
+  sampleId: number;
+  sampleCode: string | null;
+  referenceNo: string | null;
+  sampleStatus: string | null;
+  contractNumber: string | null;
+  contractorName: string | null;
+  status: string;
+  priority: string;
+  technician: string | null;
+  tests: string;
+  createdAt: string | null;
+  updatedAt: string | null;
+};
+
+/** Every live lab order, with the sample, technician, and tests, for the supervisor desk. */
+export async function getSupervisorBoard(): Promise<SupervisorBoardOrder[]> {
+  const db = await getDb();
+  if (!db) return [];
+  await reconcileLabOrderProgress();
+
+  const [orders, items] = await Promise.all([
+    db
+      .select({
+        id: labOrders.id,
+        orderCode: labOrders.orderCode,
+        sampleId: labOrders.sampleId,
+        sampleCode: samples.sampleCode,
+        referenceNo: samples.referenceNo,
+        sampleStatus: samples.status,
+        contractNumber: labOrders.contractNumber,
+        contractorName: labOrders.contractorName,
+        status: labOrders.status,
+        priority: labOrders.priority,
+        technician: users.name,
+        createdAt: labOrders.createdAt,
+        updatedAt: labOrders.updatedAt,
+      })
+      .from(labOrders)
+      .leftJoin(samples, eq(labOrders.sampleId, samples.id))
+      .leftJoin(users, eq(labOrders.assignedTechnicianId, users.id))
+      .where(isNull(labOrders.deletedAt))
+      .orderBy(desc(labOrders.updatedAt)),
+    db
+      .select({
+        orderId: labOrderItems.orderId,
+        name: labOrderItems.testTypeName,
+        status: labOrderItems.status,
+      })
+      .from(labOrderItems),
+  ]);
+
+  const testsByOrder = new Map<number, string[]>();
+  for (const item of items) {
+    if (item.status === "cancelled" || !item.name) continue;
+    const list = testsByOrder.get(item.orderId) ?? [];
+    list.push(item.name);
+    testsByOrder.set(item.orderId, list);
+  }
+
+  return orders.map((order) => ({
+    id: order.id,
+    orderCode: order.orderCode,
+    sampleId: order.sampleId,
+    sampleCode: order.sampleCode ?? null,
+    referenceNo: order.referenceNo ?? null,
+    sampleStatus: order.sampleStatus ?? null,
+    contractNumber: order.contractNumber ?? null,
+    contractorName: order.contractorName ?? null,
+    status: order.status,
+    priority: order.priority,
+    technician: order.technician ?? null,
+    tests: (testsByOrder.get(order.id) ?? []).join(", ") || "—",
+    createdAt: order.createdAt ? new Date(order.createdAt).toISOString() : null,
+    updatedAt: order.updatedAt ? new Date(order.updatedAt).toISOString() : null,
+  }));
+}
+
 export async function getLabOrderById(id: number) {
   const db = await getDb();
   if (!db) return undefined;
