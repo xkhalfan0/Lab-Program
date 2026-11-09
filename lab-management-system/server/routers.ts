@@ -142,6 +142,8 @@ import {
   updateLabOrderItemStatus,
   updateLabOrderItemDistribution,
   checkAndCompleteOrder,
+  syncLabOrdersForSample,
+  reconcileLabOrderProgress,
   checkAndUpdateSampleStatusAfterSubmission,
 } from "./db";
 import { storagePut } from "./storage";
@@ -1474,6 +1476,7 @@ ${testSummaries.length > 0 ? testSummaries.join("\n\n") : "لم تُجرَ اخ�
             notes: input.comments,
           });
         }
+        await syncLabOrdersForSample(input.sampleId);
         return review;
       }),
     qcReview: protectedProcedure
@@ -1631,6 +1634,7 @@ ${testSummaries.length > 0 ? testSummaries.join("\n\n") : "لم تُجرَ اخ�
             notes: input.comments,
           });
         }
+        await syncLabOrdersForSample(input.sampleId);
         return review;
       }),
   }),
@@ -1745,6 +1749,7 @@ ${testSummaries.length > 0 ? testSummaries.join("\n\n") : "لم تُجرَ اخ�
           notes: input.notes,
         });
         await updateSampleStatus(input.sampleId, "clearance_issued");
+        await syncLabOrdersForSample(input.sampleId);
         await addSampleHistory({
           sampleId: input.sampleId,
           userId: ctx.user.id,
@@ -3127,6 +3132,7 @@ ${testSummaries.length > 0 ? testSummaries.join("\n\n") : "لم تُجرَ اخ�
   orders: router({
     list: protectedProcedure.query(async ({ ctx }) => {
       requireRole(ctx.user.role, ["admin", "reception", "lab_manager", "technician", "qc_inspector"]);
+      await reconcileLabOrderProgress();
       const orders = await getAllLabOrders();
       // Attach items + sampleSubType + assignedTechnicianName to each order
       const allUsers = await getAllUsers();

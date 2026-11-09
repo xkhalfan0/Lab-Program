@@ -751,13 +751,130 @@ export async function checkAndUpdateSampleStatusAfterSubmission(sampleId: number
 
   if (allCompleted) {
     await updateSampleStatus(sampleId, "awaiting_review");
+    await syncLabOrdersForSample(sampleId);
     return "awaiting_review" as const;
   }
   if (someCompleted) {
     await updateSampleStatus(sampleId, "testing_in_progress");
+    await syncLabOrdersForSample(sampleId);
     return "testing_in_progress" as const;
   }
+  await syncLabOrdersForSample(sampleId);
   return "distributed" as const;
+}
+
+const LAB_ORDER_STAGE_RANK: Record<string, number> = {
+  pending: 0,
+  distributed: 1,
+  in_progress: 2,
+  completed: 3,
+  reviewed: 4,
+  qc_passed: 5,
+  rejected: 6,
+};
+
+/** Order stage that matches the sample the review screens actually use. */
+function labOrderStatusForSample(sampleStatus: string | null | undefined): typeof labOrders.$inferSelect.status | null {
+  switch (sampleStatus) {
+    case "distributed":
+      return "distributed";
+    case "testing_in_progress":
+    case "revision_requested":
+      return "in_progress";
+    case "awaiting_review":
+    case "under_review":
+    case "tested":
+    case "processed":
+      return "completed";
+    case "reviewed":
+    case "approved":
+      return "reviewed";
+    case "qc_passed":
+    case "clearance_requested":
+    case "clearance_issued":
+      return "qc_passed";
+    case "qc_failed":
+    case "rejected":
+      return "rejected";
+    default:
+      return null;
+  }
+}
+
+/**
+ * Lab orders were left on "distributed" after the technician submitted, while the
+ * sample moved to awaiting review. Copy the sample/distribution stage onto the order.
+ */
+export async function syncLabOrdersForSample(sampleId: number) {
+  const db = await getDb();
+  if (!db) return;
+  const sample = await getSampleById(sampleId);
+  if (!sample || sample.status === "deleted") return;
+
+  const [orderRows, distRows] = await Promise.all([
+    db
+      .select({ id: labOrders.id, status: labOrders.status })
+      .from(labOrders)
+      .where(and(eq(labOrders.sampleId, sampleId), isNull(labOrders.deletedAt))),
+    db
+      .select({ id: distributions.id, status: distributions.status })
+      .from(distributions)
+      .where(and(eq(distributions.sampleId, sampleId), isNull(distributions.deletedAt))),
+  ]);
+  const distStatus = new Map(distRows.map((d) => [d.id, d.status]));
+  const desired = labOrderStatusForSample(sample.status);
+  const revision = sample.status === "revision_requested";
+
+  for (const order of orderRows) {
+    const items = await getLabOrderItems(order.id);
+    for (const item of items) {
+      const dist = item.distributionId != null ? distStatus.get(item.distributionId) : undefined;
+      if (dist === "completed" && item.status !== "completed" && item.status !== "cancelled") {
+        await updateLabOrderItemStatus(item.id, "completed");
+      } else if (dist === "in_progress" && item.status === "pending") {
+        await updateLabOrderItemStatus(item.id, "in_progress");
+      }
+    }
+
+    let next = desired;
+    if (!next) {
+      const fresh = await getLabOrderItems(order.id);
+      if (
+        fresh.length > 0 &&
+        fresh.every((i) => i.status === "completed" || i.status === "cancelled") &&
+        fresh.some((i) => i.status === "completed")
+      ) {
+        next = "completed";
+      }
+    }
+    if (!next || next === order.status) continue;
+    const currentRank = LAB_ORDER_STAGE_RANK[order.status] ?? 0;
+    const nextRank = LAB_ORDER_STAGE_RANK[next] ?? 0;
+    if (!revision && nextRank <= currentRank) continue;
+    if (revision && (order.status === "qc_passed" || order.status === "rejected")) continue;
+    await updateLabOrderStatus(order.id, next, next === "completed" ? { completedAt: new Date() } : undefined);
+  }
+}
+
+/** Repair orders that never moved when their samples were already submitted or reviewed. */
+export async function reconcileLabOrderProgress() {
+  const db = await getDb();
+  if (!db) return;
+  const rows = await db
+    .select({ sampleId: labOrders.sampleId })
+    .from(labOrders)
+    .innerJoin(samples, eq(labOrders.sampleId, samples.id))
+    .where(
+      and(
+        isNull(labOrders.deletedAt),
+        ne(samples.status, "deleted"),
+        inArray(labOrders.status, ["pending", "distributed", "in_progress", "completed", "reviewed"]),
+      ),
+    );
+  const sampleIds = [...new Set(rows.map((r) => r.sampleId))];
+  for (const sampleId of sampleIds) {
+    await syncLabOrdersForSample(sampleId);
+  }
 }
 
 export async function updateSampleFields(
@@ -899,6 +1016,7 @@ const EMPTY_QUALITY_FOLLOW_UP: QualityFollowUp = {
 export async function getQualityFollowUp(): Promise<QualityFollowUp> {
   const db = await getDb();
   if (!db) return EMPTY_QUALITY_FOLLOW_UP;
+  await reconcileLabOrderProgress();
 
   const rows = await db
     .select({
