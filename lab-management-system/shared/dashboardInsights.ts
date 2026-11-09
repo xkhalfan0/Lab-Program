@@ -246,8 +246,9 @@ export function computeContractorScores(orders: LabOrderRow[]) {
 // ─── Per-order result classification ──────────────────────────────────────────
 
 function orderResult(status: string): "pass" | "fail" | "pending" {
-  if (["qc_passed", "completed", "reviewed", "clearance_issued"].includes(status)) return "pass";
-  if (["rejected", "qc_failed"].includes(status)) return "fail";
+  // Final quality outcome only. "completed" = tests submitted, "reviewed" = waiting for QC.
+  if (status === "qc_passed") return "pass";
+  if (status === "rejected") return "fail";
   return "pending";
 }
 

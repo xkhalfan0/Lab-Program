@@ -23,7 +23,7 @@ import {
 } from "@shared/dashboardInsights";
 import {
   FlaskConical, AlertTriangle, CheckCircle, Activity, Target,
-  Calendar, FileText, Users, Award, TrendingUp, TrendingDown,
+  Calendar, FileText, Users, Award,
   Loader2, BarChart2, Eye, ChevronDown, ChevronUp, ShieldAlert,
   Building2, MapPin, Zap, AlertOctagon, XCircle, ThumbsUp, Settings2,
 } from "lucide-react";
@@ -176,8 +176,15 @@ function ContractorCard({
   const [expanded, setExpanded] = useState(false);
   const isAr = lang === "ar";
 
-  const riskConfig = c.insufficientData
-    ? { cls: "bg-slate-100 text-slate-600", label: isAr ? "بيانات غير كافية" : "Not enough data", bar: "bg-slate-300" }
+  const openOrders = Math.max(0, c.totalOrders - c.decided);
+  const riskConfig = c.decided === 0
+    ? { cls: "bg-slate-100 text-slate-600", label: isAr ? "بانتظار QC" : "Awaiting QC", bar: "bg-slate-300" }
+    : c.insufficientData
+    ? {
+        cls: "bg-slate-100 text-slate-700",
+        label: isAr ? "قراءة أولية" : "Early read",
+        bar: c.passRate >= 60 ? "bg-green-500" : "bg-red-500",
+      }
     : {
         low: { cls: "bg-green-100 text-green-700", label: isAr ? "منخفض" : "Low Risk", bar: "bg-green-500" },
         medium: { cls: "bg-amber-100 text-amber-700", label: isAr ? "متوسط" : "Medium", bar: "bg-amber-500" },
@@ -191,7 +198,7 @@ function ContractorCard({
         <div className="flex-1 min-w-0">
           <p className="text-xs font-bold truncate">{c.contractor}</p>
           <p className="text-[10px] text-muted-foreground mt-0.5">
-            {c.contractCount} {isAr ? "عقد" : "contract(s)"} · {c.decided} {isAr ? "محدد النتيجة" : "decided"}
+            {c.totalOrders} {isAr ? "طلب" : "order(s)"} · {c.decided} {isAr ? "نتيجة QC" : "QC result(s)"} · {openOrders} {isAr ? "ما زال مفتوحاً" : "still open"}
           </p>
         </div>
         <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold shrink-0 ${riskConfig.cls}`}>
@@ -200,22 +207,23 @@ function ContractorCard({
       </div>
 
       <div className="w-full bg-muted rounded-full h-1.5 overflow-hidden">
-        <div className={`h-full ${riskConfig.bar} transition-all`} style={{ width: `${c.passRate}%` }} />
+        <div
+          className={`h-full ${riskConfig.bar} transition-all`}
+          style={{ width: c.decided > 0 ? `${c.passRate}%` : "0%" }}
+        />
       </div>
 
       <div className="flex items-center justify-between text-[10px] text-muted-foreground">
-        <span className="flex items-center gap-1">
-          {c.insufficientData ? (
-            <span className="text-slate-500 font-medium">
-              {isAr ? "يحتاج 3+ طلبات بنتيجة نهائية" : "Needs 3+ finished results"}
+        <span className="flex items-center gap-1 min-w-0">
+          {c.decided === 0 ? (
+            <span className="text-slate-600 font-medium">
+              {isAr ? "لا توجد نتيجة QC بعد — الطلبات المفتوحة ليست نجاحاً ولا رفضاً" : "No QC result yet — open orders are not a pass or a fail"}
             </span>
           ) : (
-            <>
-              {c.passRate >= 60 ? <TrendingUp className="w-3 h-3 text-green-600" /> : <TrendingDown className="w-3 h-3 text-red-600" />}
-              <span className={c.passRate >= 60 ? "text-green-600 font-semibold" : "text-red-600 font-semibold"}>
-                {c.passRate}% {isAr ? "نجاح (معتمد/مرفوض)" : "pass (approved/rejected)"}
-              </span>
-            </>
+            <span className={c.passRate >= 60 ? "text-green-700 font-semibold" : "text-red-700 font-semibold"}>
+              {c.passed} {isAr ? "نجاح" : "pass"} · {c.failed} {isAr ? "رفض" : "fail"} · {c.passRate}%
+              {c.insufficientData ? (isAr ? " · يحتاج 3 نتائج للتقييم" : " · risk rating needs 3 results") : ""}
+            </span>
           )}
         </span>
         <button
@@ -247,11 +255,12 @@ function ContractorCard({
                       <span className="ms-1 text-red-600">⚠</span>
                     )}
                   </span>
-                  <span className="flex items-center gap-1.5 shrink-0">
-                    <span className="text-green-700">{p.passed}✓</span>
-                    <span className="text-red-700">{p.failed}✗</span>
-                    <span className={`font-bold ${p.passRate >= 60 ? "text-green-700" : "text-red-700"}`}>
-                      {p.passRate}%
+                  <span className="flex items-center gap-1.5 shrink-0 text-slate-600">
+                    <span className="text-green-700">{p.passed} {isAr ? "نجاح" : "pass"}</span>
+                    <span className="text-red-700">{p.failed} {isAr ? "رفض" : "fail"}</span>
+                    <span>{Math.max(0, p.total - p.decided)} {isAr ? "مفتوح" : "open"}</span>
+                    <span className={`font-bold ${p.decided === 0 ? "text-slate-400" : p.passRate >= 60 ? "text-green-700" : "text-red-700"}`}>
+                      {p.decided > 0 ? `${p.passRate}%` : "—"}
                     </span>
                   </span>
                 </div>
@@ -640,8 +649,8 @@ export default function ManagerDashboard() {
                 </CardTitle>
                 <CardDescription className="mt-1.5 text-xs">
                   {isAr
-                    ? "نسبة النجاح من الطلبات التي صدر لها قرار (معتمد أو مرفوض) — الطلبات قيد العمل لا تُحسب."
-                    : "Pass rate among orders with a final outcome (approved or rejected) — in-progress orders are excluded."}
+                    ? "النجاح = اعتماد QC فقط، والرفض = رفض الطلب. الطلبات لدى الفني أو بانتظار المراجعة تبقى مفتوحة ولا تُحسب 0%."
+                    : "Pass = QC approved only. Fail = order rejected. Orders still with the technician or waiting for review stay open and are not shown as 0%."}
                 </CardDescription>
               </div>
               {contractorBreakdown.length > 0 && (
