@@ -1,9 +1,8 @@
-import { useState, useMemo } from "react";
+import { useMemo, useState } from "react";
 import DashboardLayout from "@/components/DashboardLayout";
 import DashboardReportPreviewDialog, {
   type ReportPreviewPayload,
 } from "@/components/DashboardReportPreviewDialog";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -17,13 +16,10 @@ import {
   computeQualityAlerts,
   CONTRACT_CLOSURE_ALERT_DAYS,
   type QualityAlert,
-  type ContractorBreakdown,
 } from "@shared/dashboardInsights";
 import {
-  FlaskConical, CheckCircle, Activity, Target,
-  Calendar, FileText, Users, Award,
-  Loader2, Eye, ChevronDown, ChevronUp, ShieldAlert,
-  MapPin, Zap, AlertOctagon, XCircle, ThumbsUp, Settings2,
+  Search, FileText, Users, Eye, Loader2, Settings2,
+  ChevronDown, ChevronUp, AlertTriangle,
 } from "lucide-react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { DEFAULT_VAT_RATE, formatVatRatePercent } from "@shared/tax";
@@ -40,226 +36,7 @@ const REPORT_SECTIONS = [
   { value: "techperf",   en: "Technician performance",   ar: "أداء الفنيين" },
 ] as const;
 
-function KpiCard({
-  icon: Icon,
-  label,
-  value,
-  sub,
-  color = "text-foreground",
-  borderColor = "border-l-slate-300",
-}: {
-  icon: React.ComponentType<{ className?: string }>;
-  label: string;
-  value: string | number;
-  sub?: string;
-  color?: string;
-  borderColor?: string;
-}) {
-  return (
-    <Card className={`border-l-4 ${borderColor}`}>
-      <CardContent className="pt-4 pb-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-xs text-muted-foreground uppercase tracking-wide">{label}</p>
-            <p className={`text-2xl font-bold mt-1 ${color}`}>{value}</p>
-            {sub && <p className="text-xs text-muted-foreground mt-0.5">{sub}</p>}
-          </div>
-          <Icon className={`w-7 h-7 ${color} opacity-80`} />
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-// ── Alert card for each smart indicator ──────────────────────────────────────
-function AlertIndicatorCard({
-  alert,
-  lang,
-  onGenerateReport,
-}: {
-  alert: QualityAlert;
-  lang: "ar" | "en";
-  onGenerateReport: (alert: QualityAlert) => void;
-}) {
-  const isAr = lang === "ar";
-  const icon =
-    alert.type === "contractor_systemic" ? ShieldAlert :
-    alert.type === "project_anomaly" ? MapPin :
-    alert.type === "closure_risk" ? AlertOctagon :
-    Zap;
-
-  const Icon = icon;
-
-  const severityConfig = {
-    critical: {
-      bg: "bg-red-50 border-red-200",
-      iconBg: "bg-red-100",
-      iconColor: "text-red-600",
-      badge: "bg-red-100 text-red-700",
-      badgeLabel: isAr ? "حرجة" : "Critical",
-      dot: "bg-red-500",
-    },
-    high: {
-      bg: "bg-orange-50 border-orange-200",
-      iconBg: "bg-orange-100",
-      iconColor: "text-orange-600",
-      badge: "bg-orange-100 text-orange-700",
-      badgeLabel: isAr ? "عالية" : "High",
-      dot: "bg-orange-500",
-    },
-    medium: {
-      bg: "bg-amber-50 border-amber-200",
-      iconBg: "bg-amber-100",
-      iconColor: "text-amber-600",
-      badge: "bg-amber-100 text-amber-700",
-      badgeLabel: isAr ? "متوسطة" : "Medium",
-      dot: "bg-amber-500",
-    },
-  }[alert.severity];
-
-  return (
-    <div className={`rounded-xl border p-4 flex flex-col gap-3 ${severityConfig.bg}`}>
-      <div className="flex items-start justify-between gap-2">
-        <div className="flex items-center gap-2.5">
-          <div className={`p-2 rounded-lg ${severityConfig.iconBg}`}>
-            <Icon className={`w-4 h-4 ${severityConfig.iconColor}`} />
-          </div>
-          <div>
-            <p className="text-sm font-bold text-slate-800">
-              {isAr ? alert.titleAr : alert.titleEn}
-            </p>
-            <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${severityConfig.badge}`}>
-              {severityConfig.badgeLabel}
-            </span>
-          </div>
-        </div>
-        <span className="text-[10px] font-mono text-slate-500 shrink-0 mt-1">{alert.metric}</span>
-      </div>
-
-      <p className="text-xs text-slate-600 leading-relaxed">
-        {isAr ? alert.bodyAr : alert.bodyEn}
-      </p>
-
-      <Button
-        size="sm"
-        variant="outline"
-        className="h-7 text-xs self-start gap-1.5 border-slate-300 bg-white/70 hover:bg-white"
-        onClick={() => onGenerateReport(alert)}
-      >
-        <FileText className="w-3 h-3" />
-        {isAr ? "إنشاء تقرير" : "Generate Report"}
-      </Button>
-    </div>
-  );
-}
-
-// ── Contractor card with project drill-down ───────────────────────────────────
-function ContractorCard({
-  c,
-  lang,
-}: {
-  c: ContractorBreakdown;
-  lang: "ar" | "en";
-}) {
-  const [expanded, setExpanded] = useState(false);
-  const isAr = lang === "ar";
-
-  const openOrders = Math.max(0, c.totalOrders - c.decided);
-  const riskConfig = c.decided === 0
-    ? { cls: "bg-slate-100 text-slate-600", label: isAr ? "بانتظار QC" : "Awaiting QC", bar: "bg-slate-300" }
-    : c.insufficientData
-    ? {
-        cls: "bg-slate-100 text-slate-700",
-        label: isAr ? "قراءة أولية" : "Early read",
-        bar: c.passRate >= 60 ? "bg-green-500" : "bg-red-500",
-      }
-    : {
-        low: { cls: "bg-green-100 text-green-700", label: isAr ? "منخفض" : "Low Risk", bar: "bg-green-500" },
-        medium: { cls: "bg-amber-100 text-amber-700", label: isAr ? "متوسط" : "Medium", bar: "bg-amber-500" },
-        high: { cls: "bg-orange-100 text-orange-700", label: isAr ? "عالٍ" : "High Risk", bar: "bg-orange-500" },
-        critical: { cls: "bg-red-100 text-red-700", label: isAr ? "حرجة" : "Critical", bar: "bg-red-500" },
-      }[c.riskLevel];
-
-  return (
-    <div className="border rounded-xl p-3 space-y-2 bg-card shadow-sm">
-      <div className="flex items-start justify-between gap-2">
-        <div className="flex-1 min-w-0">
-          <p className="text-xs font-bold truncate">{c.contractor}</p>
-          <p className="text-[10px] text-muted-foreground mt-0.5">
-            {c.totalOrders} {isAr ? "طلب" : "order(s)"} · {c.decided} {isAr ? "نتيجة QC" : "QC result(s)"} · {openOrders} {isAr ? "ما زال مفتوحاً" : "still open"}
-          </p>
-        </div>
-        <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold shrink-0 ${riskConfig.cls}`}>
-          {riskConfig.label}
-        </span>
-      </div>
-
-      <div className="w-full bg-muted rounded-full h-1.5 overflow-hidden">
-        <div
-          className={`h-full ${riskConfig.bar} transition-all`}
-          style={{ width: c.decided > 0 ? `${c.passRate}%` : "0%" }}
-        />
-      </div>
-
-      <div className="flex items-center justify-between text-[10px] text-muted-foreground">
-        <span className="flex items-center gap-1 min-w-0">
-          {c.decided === 0 ? (
-            <span className="text-slate-600 font-medium">
-              {isAr ? "لا توجد نتيجة QC بعد — الطلبات المفتوحة ليست نجاحاً ولا رفضاً" : "No QC result yet — open orders are not a pass or a fail"}
-            </span>
-          ) : (
-            <span className={c.passRate >= 60 ? "text-green-700 font-semibold" : "text-red-700 font-semibold"}>
-              {c.passed} {isAr ? "نجاح" : "pass"} · {c.failed} {isAr ? "رفض" : "fail"} · {c.passRate}%
-              {c.insufficientData ? (isAr ? " · يحتاج 3 نتائج للتقييم" : " · risk rating needs 3 results") : ""}
-            </span>
-          )}
-        </span>
-        <button
-          className="flex items-center gap-0.5 text-blue-500 hover:text-blue-700 font-medium"
-          onClick={() => setExpanded(v => !v)}
-        >
-          {isAr ? "المشاريع" : "Projects"}
-          {expanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-        </button>
-      </div>
-
-      {expanded && (
-        <div className="mt-2 space-y-1.5 pt-2 border-t border-dashed border-slate-200">
-          {c.projects.length === 0 ? (
-            <p className="text-[10px] text-muted-foreground text-center py-1">—</p>
-          ) : (
-            c.projects.map(p => {
-              const anomaly = c.passRate >= 65 && p.passRate < 40 && p.decided >= 3;
-              return (
-                <div
-                  key={p.contractNo}
-                  className={`rounded-lg px-2 py-1.5 text-[10px] flex items-center justify-between gap-2 ${
-                    anomaly ? "bg-red-50 border border-red-200" : "bg-slate-50"
-                  }`}
-                >
-                  <span className="font-mono font-semibold truncate">
-                    {p.contractNo}
-                    {anomaly && (
-                      <span className="ms-1 text-red-600">⚠</span>
-                    )}
-                  </span>
-                  <span className="flex items-center gap-1.5 shrink-0 text-slate-600">
-                    <span className="text-green-700">{p.passed} {isAr ? "نجاح" : "pass"}</span>
-                    <span className="text-red-700">{p.failed} {isAr ? "رفض" : "fail"}</span>
-                    <span>{Math.max(0, p.total - p.decided)} {isAr ? "مفتوح" : "open"}</span>
-                    <span className={`font-bold ${p.decided === 0 ? "text-slate-400" : p.passRate >= 60 ? "text-green-700" : "text-red-700"}`}>
-                      {p.decided > 0 ? `${p.passRate}%` : "—"}
-                    </span>
-                  </span>
-                </div>
-              );
-            })
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
+type OpenStage = "all" | "to_start" | "testing" | "manager" | "qc";
 
 function LabTaxSettingsCard({ lang }: { lang: "ar" | "en" }) {
   const isAr = lang === "ar";
@@ -294,62 +71,56 @@ function LabTaxSettingsCard({ lang }: { lang: "ar" | "en" }) {
   };
 
   return (
-    <Card>
-      <CardHeader className="pb-2">
-        <CardTitle className="text-sm font-semibold flex items-center gap-2">
-          <Settings2 className="w-4 h-4 text-primary" />
-          {isAr ? "إعدادات ضريبة القيمة المضافة" : "VAT & Tax Settings"}
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div>
-            <label className="text-xs text-muted-foreground block mb-1">
-              {isAr ? "نسبة ض.ق.م (%)" : "VAT rate (%)"}
-            </label>
-            <Input
-              type="number"
-              min={0}
-              max={100}
-              step={0.01}
-              value={displayVat}
-              onChange={(e) => setVatPercent(e.target.value)}
-              disabled={!canEdit}
-              className="h-9"
-            />
-          </div>
-          <div>
-            <label className="text-xs text-muted-foreground block mb-1">
-              {isAr ? "الرقم الضريبي للمختبر (TRN)" : "Lab TRN"}
-            </label>
-            <Input
-              value={displayTrn}
-              onChange={(e) => setLabTrn(e.target.value.replace(/\D/g, "").slice(0, 15))}
-              disabled={!canEdit}
-              placeholder="15 digits"
-              className="h-9 font-mono"
-              maxLength={15}
-            />
-          </div>
+    <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-3">
+      <h2 className="text-sm font-semibold text-slate-800 flex items-center gap-2">
+        <Settings2 className="w-4 h-4 text-slate-500" />
+        {isAr ? "ضريبة القيمة المضافة" : "VAT"}
+      </h2>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div>
+          <label className="text-[11px] text-slate-500 block mb-1">
+            {isAr ? "النسبة (%)" : "Rate (%)"}
+          </label>
+          <Input
+            type="number"
+            min={0}
+            max={100}
+            step={0.01}
+            value={displayVat}
+            onChange={(e) => setVatPercent(e.target.value)}
+            disabled={!canEdit}
+            className="h-9"
+          />
         </div>
-        {canEdit ? (
-          <Button size="sm" onClick={handleSave} disabled={updateMut.isPending}>
-            {updateMut.isPending
-              ? (isAr ? "جاري الحفظ..." : "Saving...")
-              : (isAr ? "حفظ الإعدادات" : "Save settings")}
-          </Button>
-        ) : (
-          <p className="text-xs text-muted-foreground">
-            {isAr ? "عرض فقط — التعديل للمدير أو المسؤول" : "Read-only — edit requires admin or lab manager"}
-          </p>
-        )}
-      </CardContent>
-    </Card>
+        <div>
+          <label className="text-[11px] text-slate-500 block mb-1">
+            {isAr ? "الرقم الضريبي" : "Lab TRN"}
+          </label>
+          <Input
+            value={displayTrn}
+            onChange={(e) => setLabTrn(e.target.value.replace(/\D/g, "").slice(0, 15))}
+            disabled={!canEdit}
+            placeholder="15 digits"
+            className="h-9 font-mono"
+            maxLength={15}
+          />
+        </div>
+      </div>
+      {canEdit ? (
+        <Button size="sm" variant="outline" onClick={handleSave} disabled={updateMut.isPending}>
+          {updateMut.isPending ? (isAr ? "جاري الحفظ..." : "Saving...") : (isAr ? "حفظ" : "Save")}
+        </Button>
+      ) : (
+        <p className="text-[11px] text-slate-400">
+          {isAr ? "عرض فقط" : "Read-only"}
+        </p>
+      )}
+    </div>
   );
 }
 
 export default function ManagerDashboard() {
-  const { lang, t, dir } = useLanguage();
+  const { lang, dir } = useLanguage();
   const isAr = lang === "ar";
   const now = new Date();
 
@@ -363,6 +134,9 @@ export default function ManagerDashboard() {
   const [reportLang, setReportLang] = useState<"ar" | "en" | "both">("both");
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewPayload, setPreviewPayload] = useState<ReportPreviewPayload | null>(null);
+  const [stage, setStage] = useState<OpenStage>("all");
+  const [query, setQuery] = useState("");
+  const [openContractor, setOpenContractor] = useState<string | null>(null);
 
   const { data: rawOrdersData = [] } = trpc.orders.list.useQuery();
   const { data: contractsList = [] } = trpc.contracts.list.useQuery();
@@ -414,12 +188,32 @@ export default function ManagerDashboard() {
     () => computeQualityAlerts(orders, contractEndByNumber),
     [orders, contractEndByNumber],
   );
-  const criticalAlerts = qualityAlerts.filter(a => a.severity === "critical");
-  const highAlerts = qualityAlerts.filter(a => a.severity === "high");
+
+  const q = query.trim().toLowerCase();
+
+  const workRows = useMemo(() => {
+    const rows = [...(followUp?.followUps ?? [])];
+    return rows
+      .filter((row) => stage === "all" || row.stage === stage)
+      .filter((row) => {
+        if (!q) return true;
+        return [row.sampleCode, row.testName, row.contractor, row.contractNo, row.technician]
+          .some((value) => (value ?? "").toLowerCase().includes(q));
+      })
+      .sort((a, b) => b.ageDays - a.ageDays);
+  }, [followUp?.followUps, stage, q]);
+
+  const contractRows = useMemo(() => {
+    if (!q) return contractReadinessRows;
+    return contractReadinessRows.filter((row) =>
+      [row.contractNo, row.contractor, ...row.openSamples, ...row.reviewOrders]
+        .some((value) => value.toLowerCase().includes(q)),
+    );
+  }, [contractReadinessRows, q]);
 
   const toggleSection = (value: string) => {
     setReportSections((prev) =>
-      prev.includes(value) ? prev.filter((s) => s !== value) : [...prev, value]
+      prev.includes(value) ? prev.filter((s) => s !== value) : [...prev, value],
     );
   };
 
@@ -439,411 +233,390 @@ export default function ManagerDashboard() {
   };
 
   const handleAlertReport = (alert: QualityAlert) => {
-    const sectionsForAlert: typeof reportSections = ["overview", "scorecard", "readiness"];
-    if (!sectionsForAlert.every(s => reportSections.includes(s))) {
-      setReportSections(sectionsForAlert);
-    }
+    const sectionsForAlert = ["overview", "scorecard", "readiness"];
+    setReportSections((prev) => Array.from(new Set([...prev, ...sectionsForAlert])));
     toast.info(
-      isAr ? "تم تحديد أقسام التقرير" : "Report sections updated",
-      { description: isAr ? "اضغط 'معاينة التقرير' لإنشاء التقرير" : "Click 'Preview report' below to generate" }
+      isAr ? "أُضيفت أقسام التقرير" : "Report sections added",
+      { description: isAr ? "معاينة التقرير في أسفل الصفحة" : "Preview is at the bottom of the page" },
     );
-    // Scroll down to report generator
     setTimeout(() => document.getElementById("report-generator")?.scrollIntoView({ behavior: "smooth" }), 100);
   };
 
+  const stages: { id: OpenStage; en: string; ar: string; value: number }[] = [
+    { id: "all", en: "Open work", ar: "العمل المفتوح", value: (followUp?.toStart ?? 0) + (followUp?.testing ?? 0) + (followUp?.withManager ?? 0) + (followUp?.withQc ?? 0) },
+    { id: "to_start", en: "To start", ar: "لم يبدأ", value: followUp?.toStart ?? 0 },
+    { id: "testing", en: "In testing", ar: "قيد الفحص", value: followUp?.testing ?? 0 },
+    { id: "manager", en: "Your review", ar: "مراجعتك", value: followUp?.withManager ?? 0 },
+    { id: "qc", en: "QC", ar: "ضبط الجودة", value: followUp?.withQc ?? 0 },
+  ];
+
+  const stageLabel = (value: string) => ({
+    to_start: isAr ? "لم يبدأ" : "To start",
+    testing: isAr ? "قيد الفحص" : "In testing",
+    manager: isAr ? "مراجعتك" : "Your review",
+    qc: isAr ? "ضبط الجودة" : "QC",
+  }[value] ?? value);
+
+  const stageTone = (value: string) => ({
+    to_start: "bg-slate-100 text-slate-700",
+    testing: "bg-blue-50 text-blue-700",
+    manager: "bg-amber-50 text-amber-800",
+    qc: "bg-violet-50 text-violet-700",
+  }[value] ?? "bg-slate-100 text-slate-600");
+
   return (
     <DashboardLayout>
-      <div className="space-y-6" dir={dir}>
-        {/* Header */}
-        <div className="flex items-start justify-between gap-4 flex-wrap">
+      <div className="space-y-4" dir={dir}>
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
-              <Target className="w-6 h-6 text-primary" />
+            <h1 className="text-xl font-bold text-slate-900">
               {isAr ? "ذكاء الجودة" : "Quality Intelligence"}
             </h1>
-            <p className="text-muted-foreground text-sm mt-0.5">
+            <p className="text-sm text-slate-500 mt-1">
               {isAr
-                ? "متابعة اليوم: ما لم يبدأ، ما هو قيد الفحص، وما ينتظر المراجعة أو ضبط الجودة."
-                : "Today’s follow-up: not started, in testing, and waiting for review or QC."}
+                ? `${formatDateForLang(now, lang)} · ${followUp?.receivedToday ?? 0} عينة اليوم · ${followUp?.submittedToday ?? 0} فحص أُرسل`
+                : `${formatDateForLang(now, lang)} · ${followUp?.receivedToday ?? 0} received today · ${followUp?.submittedToday ?? 0} tests submitted`}
             </p>
           </div>
-          <div className="flex items-center gap-3 bg-primary/10 border border-primary/20 rounded-2xl px-5 py-3 shadow-sm">
-            <Calendar className="w-6 h-6 text-primary shrink-0" />
-            <div className={dir === "rtl" ? "text-right" : "text-left"}>
-              <p className="text-lg font-bold text-foreground leading-tight">
-                {formatDateForLang(now, lang)}
-              </p>
-              <p className="text-3xl font-extrabold text-primary tabular-nums mt-1 tracking-tight">
-                {now.toLocaleTimeString(isAr ? "ar-AE" : "en-AE", { hour: "2-digit", minute: "2-digit" })}
-              </p>
-              <p className="text-xs text-muted-foreground mt-0.5">{t("dashboard.uaeTime")}</p>
+          <div className="flex items-center gap-4 text-sm">
+            <div className="text-end">
+              <p className="text-[11px] uppercase tracking-wide text-slate-400">{isAr ? "ناجح" : "Passed"}</p>
+              <p className="text-lg font-semibold text-emerald-700 tabular-nums">{followUp?.passed ?? 0}</p>
             </div>
-          </div>
-        </div>
-
-        {/* Smart Quality Alerts Banner */}
-        {qualityAlerts.length > 0 && (
-          <div className={`rounded-2xl border-2 p-4 space-y-4 ${criticalAlerts.length > 0 ? "bg-red-50/60 border-red-200" : "bg-orange-50/60 border-orange-200"}`}>
-            <div className="flex items-center justify-between gap-3">
-              <div className="flex items-center gap-2.5">
-                <div className={`p-2 rounded-xl ${criticalAlerts.length > 0 ? "bg-red-100" : "bg-orange-100"}`}>
-                  <ShieldAlert className={`w-5 h-5 ${criticalAlerts.length > 0 ? "text-red-600" : "text-orange-600"}`} />
-                </div>
-                <div>
-                  <h2 className="text-sm font-bold text-slate-800">
-                    {isAr ? "تنبيهات تحتاج متابعة" : "Alerts that need attention"}
-                  </h2>
-                  <p className="text-xs text-slate-500">
-                    {isAr
-                      ? "جودة المقاول، مشاكل موقع/مورد، أو تأخر المختبر قبل انتهاء العقد (خلال 60 يوماً)."
-                      : "Contractor quality, site/supplier issues, or lab backlog within 60 days of contract end."}
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-center gap-1.5">
-                {criticalAlerts.length > 0 && (
-                  <span className="bg-red-500 text-white text-xs font-bold px-2 py-0.5 rounded-full animate-pulse">
-                    {criticalAlerts.length} {isAr ? "حرجة" : "Critical"}
-                  </span>
-                )}
-                {highAlerts.length > 0 && (
-                  <span className="bg-orange-500 text-white text-xs font-bold px-2 py-0.5 rounded-full">
-                    {highAlerts.length} {isAr ? "عالية" : "High"}
-                  </span>
-                )}
-              </div>
+            <div className="text-end">
+              <p className="text-[11px] uppercase tracking-wide text-slate-400">{isAr ? "راسب" : "Failed"}</p>
+              <p className="text-lg font-semibold text-red-600 tabular-nums">{followUp?.failed ?? 0}</p>
             </div>
-
-            {/* Alert type legend */}
-            <div className="flex flex-wrap gap-2">
-              {[
-                { type: "contractor_systemic", icon: ShieldAlert, labelEn: "Contractor Quality", labelAr: "جودة المقاول", color: "text-red-600 bg-red-50 border-red-200" },
-                { type: "project_anomaly", icon: MapPin, labelEn: "Site / Supplier Issue", labelAr: "مشكلة موقع / مورد", color: "text-orange-600 bg-orange-50 border-orange-200" },
-                { type: "closure_risk", icon: AlertOctagon, labelEn: "Before contract end", labelAr: "قبل انتهاء العقد", color: "text-amber-600 bg-amber-50 border-amber-200" },
-              ].map(({ type, icon: LegendIcon, labelEn, labelAr, color }) => {
-                const count = qualityAlerts.filter(a => a.type === type).length;
-                if (count === 0) return null;
-                return (
-                  <span key={type} className={`flex items-center gap-1 text-xs px-2.5 py-1 rounded-full border font-medium ${color}`}>
-                    <LegendIcon className="w-3 h-3" />
-                    {isAr ? labelAr : labelEn}
-                    <span className="font-bold ms-0.5">({count})</span>
-                  </span>
-                );
-              })}
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-              {qualityAlerts.map(alert => (
-                <AlertIndicatorCard
-                  key={alert.id}
-                  alert={alert}
-                  lang={lang as "ar" | "en"}
-                  onGenerateReport={handleAlertReport}
-                />
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* All-clear when no alerts */}
-        {qualityAlerts.length === 0 && orders.length > 0 && (
-          <div className="rounded-2xl border-2 border-green-200 bg-green-50/60 p-4 flex items-center gap-3">
-            <div className="p-2 rounded-xl bg-green-100">
-              <ThumbsUp className="w-5 h-5 text-green-600" />
-            </div>
-            <div>
-              <p className="text-sm font-bold text-green-800">
-                {isAr ? "لا توجد تنبيهات حالياً" : "No alerts right now"}
-              </p>
-              <p className="text-xs text-green-600">
-                {isAr
-                  ? "لا يوجد مقاول بجودة منخفضة، ولا شذوذ موقع، ولا عقد قريب الانتهاء مع تأخر كبير في المختبر."
-                  : "No low-quality contractor, site anomaly, or near-deadline contract with a large lab backlog."}
-              </p>
-            </div>
-          </div>
-        )}
-
-        <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
-          <KpiCard label={isAr ? "لم يبدأ" : "To start"} value={followUp?.toStart ?? 0} sub={isAr ? "موزّع ولم يُفتح" : "Assigned, not opened"} icon={Activity} color="text-slate-600" borderColor="border-l-slate-400" />
-          <KpiCard label={isAr ? "قيد الفحص" : "In testing"} value={followUp?.testing ?? 0} sub={isAr ? "عند الفني الآن" : "With a technician"} icon={FlaskConical} color="text-blue-600" borderColor="border-l-blue-500" />
-          <KpiCard label={isAr ? "عند المدير" : "Manager review"} value={followUp?.withManager ?? 0} sub={isAr ? "الفني أنهى الفحص" : "Technician finished"} icon={FileText} color="text-amber-600" borderColor="border-l-amber-500" />
-          <KpiCard label={isAr ? "ضبط الجودة" : "QC review"} value={followUp?.withQc ?? 0} sub={isAr ? "بانتظار الاعتماد" : "Waiting for approval"} icon={Award} color="text-violet-600" borderColor="border-l-violet-500" />
-          <KpiCard label={isAr ? "ناجح" : "Passed"} value={followUp?.passed ?? 0} sub={isAr ? "نتيجة محفوظة أو معتمد QC" : "Saved result or QC approved"} icon={CheckCircle} color="text-green-600" borderColor="border-l-green-500" />
-          <KpiCard label={isAr ? "راسب" : "Failed"} value={followUp?.failed ?? 0} sub={isAr ? "نتيجة راسبة أو طلب مرفوض" : "Failed result or rejected order"} icon={XCircle} color="text-red-600" borderColor="border-l-red-500" />
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
-          <Card className="lg:col-span-3">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-semibold">{isAr ? "يحتاج متابعة" : "Needs follow-up"}</CardTitle>
-              <CardDescription className="text-xs">
-                {isAr
-                  ? `اليوم: ${followUp?.receivedToday ?? 0} عينة مستلمة · ${followUp?.submittedToday ?? 0} فحص أُرسل. نفس تكليفات الفنيين فقط، بدون النسخ المكررة.`
-                  : `Today: ${followUp?.receivedToday ?? 0} samples received · ${followUp?.submittedToday ?? 0} tests submitted. Only real technician assignments, with duplicate copies hidden.`}
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {(followUp?.followUps.length ?? 0) === 0 ? (
-                <p className="text-sm text-muted-foreground py-6 text-center">{isAr ? "لا توجد فحوصات معلقة" : "Nothing waiting"}</p>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-xs">
-                    <thead>
-                      <tr className="border-b text-muted-foreground">
-                        <th className="text-start py-2 px-2 font-medium">{isAr ? "العينة" : "Sample"}</th>
-                        <th className="text-start py-2 px-2 font-medium">{isAr ? "الفحص" : "Test"}</th>
-                        <th className="text-start py-2 px-2 font-medium">{isAr ? "المقاول" : "Contractor"}</th>
-                        <th className="text-start py-2 px-2 font-medium">{isAr ? "الفني" : "Technician"}</th>
-                        <th className="text-start py-2 px-2 font-medium">{isAr ? "المرحلة" : "Stage"}</th>
-                        <th className="text-end py-2 px-2 font-medium">{isAr ? "منذ" : "Age"}</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {followUp?.followUps.map((row) => {
-                        const stageLabel = {
-                          to_start: isAr ? "لم يبدأ" : "To start",
-                          testing: isAr ? "قيد الفحص" : "In testing",
-                          manager: isAr ? "عند المدير" : "Manager",
-                          qc: isAr ? "ضبط الجودة" : "QC",
-                        }[row.stage];
-                        return (
-                          <tr key={row.distributionId} className="border-b last:border-0">
-                            <td className="py-2 px-2 font-mono">{row.sampleCode}</td>
-                            <td className="py-2 px-2">{row.testName}</td>
-                            <td className="py-2 px-2">
-                              <span className="block">{row.contractor}</span>
-                              <span className="text-[10px] text-muted-foreground font-mono">{row.contractNo}</span>
-                            </td>
-                            <td className="py-2 px-2">{row.technician}</td>
-                            <td className="py-2 px-2">{stageLabel}</td>
-                            <td className="py-2 px-2 text-end tabular-nums">{row.ageDays}{isAr ? " ي" : "d"}</td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          <Card className="lg:col-span-2">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                <Users className="w-4 h-4 text-indigo-600" />
-                {isAr ? "عمل الفنيين اليوم" : "Technicians today"}
-              </CardTitle>
-              <CardDescription className="text-xs">
-                {isAr ? "الفحوصات المفتوحة وما أُنهي اليوم." : "Open tests, and how many were finished today."}
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {techWork.length === 0 ? (
-                <p className="text-sm text-muted-foreground py-6 text-center">{isAr ? "لا يوجد تكليف مفتوح" : "No open assignments"}</p>
-              ) : (
-                <div className="space-y-2">
-                  {techWork.map((tech) => (
-                    <div key={tech.id} className="flex items-center justify-between gap-3 rounded-lg border px-3 py-2">
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium truncate">{tech.name}</p>
-                        {tech.specialty ? <p className="text-[10px] text-muted-foreground truncate">{tech.specialty}</p> : null}
-                      </div>
-                      <div className="text-end shrink-0 text-xs">
-                        <p className="font-semibold text-blue-700">{tech.assigned} {isAr ? "مفتوح" : "open"}</p>
-                        <p className="text-green-700">{tech.doneToday} {isAr ? "اليوم" : "today"}</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-              {(clearanceStats?.totalRequests ?? 0) > 0 && (
-                <p className="text-xs text-muted-foreground mt-3">
-                  {isAr ? "براءة الذمة" : "Clearance"}: {clearanceStats?.inProgress ?? 0} {isAr ? "قيد الإجراء" : "in progress"} · {clearanceStats?.issued ?? 0} {isAr ? "صادرة" : "issued"}
+            {(clearanceStats?.totalRequests ?? 0) > 0 && (
+              <div className="text-end">
+                <p className="text-[11px] uppercase tracking-wide text-slate-400">{isAr ? "براءة الذمة" : "Clearance"}</p>
+                <p className="text-sm font-medium text-slate-700 tabular-nums">
+                  {clearanceStats?.inProgress ?? 0} {isAr ? "جارية" : "open"} · {clearanceStats?.issued ?? 0} {isAr ? "صادرة" : "issued"}
                 </p>
-              )}
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Contractor Quality — enhanced scorecard with drill-down */}
-        <Card>
-          <CardHeader className="pb-3">
-            <div className="flex items-center justify-between gap-2 flex-wrap">
-              <div>
-                <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                  <Award className="w-4 h-4 text-rose-600" />
-                  {isAr ? "جودة المقاولين" : "Contractor quality"}
-                </CardTitle>
-                <CardDescription className="mt-1.5 text-xs">
-                  {isAr
-                    ? "النجاح = اعتماد QC فقط، والرفض = رفض الطلب. الطلبات لدى الفني أو بانتظار المراجعة تبقى مفتوحة ولا تُحسب 0%."
-                    : "Pass = QC approved only. Fail = order rejected. Orders still with the technician or waiting for review stay open and are not shown as 0%."}
-                </CardDescription>
-              </div>
-              {contractorBreakdown.length > 0 && (
-                <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
-                  <span className="flex items-center gap-1">
-                    <span className="w-2 h-2 rounded-full bg-green-500 inline-block" />
-                    {isAr ? "منخفض" : "Low Risk"}
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <span className="w-2 h-2 rounded-full bg-orange-500 inline-block" />
-                    {isAr ? "عالٍ" : "High"}
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <span className="w-2 h-2 rounded-full bg-red-500 inline-block" />
-                    {isAr ? "حرجة" : "Critical"}
-                  </span>
-                  <span className="ms-1 text-slate-400">
-                    · {isAr ? "انقر على 'المشاريع' لعرض تفاصيل العقود" : "Click 'Projects' to see per-contract breakdown"}
-                  </span>
-                </div>
-              )}
-            </div>
-          </CardHeader>
-          <CardContent>
-            {contractorBreakdown.length === 0 ? (
-              <div className="text-sm text-muted-foreground py-4 text-center">{isAr ? "لا توجد بيانات" : "No data"}</div>
-            ) : (
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-                {contractorBreakdown.slice(0, 8).map(c => (
-                  <ContractorCard key={c.contractor} c={c} lang={lang as "ar" | "en"} />
-                ))}
               </div>
             )}
-          </CardContent>
-        </Card>
+          </div>
+        </div>
 
-        {/* Contract Closure Readiness */}
-        <Card>
-          <CardHeader className="pb-2">
-            <div>
-              <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                <FileText className="w-4 h-4 text-blue-600" />
-                {isAr ? "تقدم طلبات المختبر حسب العقد" : "Lab order progress by contract"}
-              </CardTitle>
-              <CardDescription className="mt-1.5 text-xs">
-                {isAr
-                  ? `«معتمد QC» بعد اعتماد ضبط الجودة فقط. «مراجعة» = أنهى الفني وبانتظار المدير أو QC. التنبيه خلال ${CONTRACT_CLOSURE_ALERT_DAYS} يوماً من نهاية العقد.`
-                  : `QC done is approval only. Review means the technician finished and the order is with the manager or QC. The end-date flag applies within ${CONTRACT_CLOSURE_ALERT_DAYS} days.`}
-              </CardDescription>
+        <div className="relative">
+          <Search className="w-4 h-4 text-slate-400 absolute top-1/2 -translate-y-1/2 start-3" />
+          <Input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder={isAr ? "عينة، فحص، مقاول، عقد، أو رقم طلب" : "Sample, test, contractor, contract, or order number"}
+            className="ps-9 h-11 bg-white"
+          />
+        </div>
+
+        <div className="flex gap-2 flex-wrap">
+          {stages.map((item) => {
+            const active = stage === item.id;
+            return (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => setStage(item.id)}
+                className={`rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
+                  active ? "bg-slate-900 text-white border-slate-900" : "bg-white text-slate-600 border-slate-200 hover:border-slate-400"
+                }`}
+              >
+                {isAr ? item.ar : item.en}
+                <span className={`ms-1.5 tabular-nums ${active ? "text-white/80" : "text-slate-400"}`}>{item.value}</span>
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="grid grid-cols-1 xl:grid-cols-4 gap-4">
+          <section className="xl:col-span-3 bg-white border border-slate-200 rounded-xl overflow-hidden">
+            <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between gap-3">
+              <div>
+                <h2 className="text-sm font-semibold text-slate-800">{isAr ? "يحتاج متابعة" : "Needs follow-up"}</h2>
+                <p className="text-[11px] text-slate-400 mt-0.5">
+                  {isAr ? "الأقدم أولاً. نفس تكليفات الفنيين، بدون النسخ المكررة." : "Oldest first. Real technician assignments only, duplicates hidden."}
+                </p>
+              </div>
+              <span className="text-xs text-slate-400 tabular-nums">{workRows.length}</span>
             </div>
-          </CardHeader>
-          <CardContent>
-            {contractReadinessRows.length === 0 ? (
-              <div className="text-sm text-muted-foreground">{isAr ? "لا توجد عقود نشطة" : "No active contracts"}</div>
+            {workRows.length === 0 ? (
+              <p className="text-sm text-slate-400 py-12 text-center">{isAr ? "لا يوجد شيء في هذا العرض" : "Nothing in this view"}</p>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-xs">
-                  <thead>
-                    <tr className="border-b bg-muted/30">
-                      <th className="text-start px-3 py-2">{isAr ? "رقم العقد" : "Contract No."}</th>
-                      <th className="text-start px-3 py-2">{isAr ? "المقاول" : "Contractor"}</th>
-                      <th className="text-center px-3 py-2">{isAr ? "إجمالي" : "Total"}</th>
-                      <th className="text-center px-3 py-2">{isAr ? "في المختبر" : "In lab"}</th>
-                      <th className="text-center px-3 py-2">{isAr ? "مراجعة" : "Review"}</th>
-                      <th className="text-center px-3 py-2">{isAr ? "معتمد QC" : "QC done"}</th>
-                      <th className="text-center px-3 py-2">{isAr ? "مرفوض" : "Rejected"}</th>
-                      <th className="text-center px-3 py-2">{isAr ? "انتهاء العقد" : "Contract end"}</th>
-                      <th className="text-end px-3 py-2">{isAr ? "معتمد %" : "QC done %"}</th>
+              <div className="overflow-auto max-h-[440px]">
+                <table className="w-full text-sm">
+                  <thead className="sticky top-0 bg-slate-50 text-xs text-slate-500">
+                    <tr>
+                      <th className="text-start px-3 py-2 font-medium">{isAr ? "العينة" : "Sample"}</th>
+                      <th className="text-start px-3 py-2 font-medium">{isAr ? "الفحص" : "Test"}</th>
+                      <th className="text-start px-3 py-2 font-medium">{isAr ? "المقاول" : "Contractor"}</th>
+                      <th className="text-start px-3 py-2 font-medium">{isAr ? "الفني" : "Technician"}</th>
+                      <th className="text-start px-3 py-2 font-medium">{isAr ? "المرحلة" : "Stage"}</th>
+                      <th className="text-end px-3 py-2 font-medium">{isAr ? "منذ" : "Age"}</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {contractReadinessRows.slice(0, 10).map((r) => {
-                      const warn =
-                        r.inClosureWindow && r.readiness < 30 && r.total >= 5;
-                      return (
-                      <tr key={`${r.contractNo}-${r.contractor}`} className={`border-b last:border-0 ${warn ? "bg-red-50/40" : ""}`}>
-                        <td className="px-3 py-2 font-mono">
-                          {r.contractNo}
-                          {warn && <span className="ms-1 text-red-500 text-[10px]">⚠</span>}
+                    {workRows.map((row) => (
+                      <tr key={row.distributionId} className="border-t border-slate-100">
+                        <td className="px-3 py-2.5 font-mono text-xs font-semibold text-slate-900">{row.sampleCode}</td>
+                        <td className="px-3 py-2.5 text-xs text-slate-700">{row.testName}</td>
+                        <td className="px-3 py-2.5 text-xs">
+                          <span className="block">{row.contractor}</span>
+                          <span className="font-mono text-[11px] text-slate-400">{row.contractNo}</span>
                         </td>
-                        <td className="px-3 py-2">{r.contractor}</td>
-                        <td className="px-3 py-2 text-center font-semibold">{r.total}</td>
-                        <td className="px-3 py-2 text-center text-blue-700 font-semibold">
-                          {r.pending + r.inProgress}
-                          {r.openSamples.length > 0 && (
-                            <span className="block text-[10px] font-normal text-slate-500">
-                              {r.openSamples.slice(0, 3).join(", ")}
-                              {r.openSamples.length > 3 ? ` +${r.openSamples.length - 3}` : ""}
-                            </span>
-                          )}
-                        </td>
-                        <td className="px-3 py-2 text-center text-amber-700 font-semibold">
-                          {r.waitingReview}
-                          {r.reviewOrders.length > 0 && (
-                            <span className="block text-[10px] font-normal text-slate-500">
-                              {r.reviewOrders.slice(0, 3).join(", ")}
-                              {r.reviewOrders.length > 3 ? ` +${r.reviewOrders.length - 3}` : ""}
-                            </span>
-                          )}
-                        </td>
-                        <td className="px-3 py-2 text-center text-green-700 font-semibold">{r.completed}</td>
-                        <td className="px-3 py-2 text-center text-red-700 font-semibold">{r.rejected}</td>
-                        <td className="px-3 py-2 text-center text-slate-600 whitespace-nowrap">
-                          {r.endDate
-                            ? formatDateForLang(r.endDate, lang)
-                            : "—"}
-                          {r.daysUntilEnd != null && r.inClosureWindow && (
-                            <span className={`block text-[10px] font-semibold ${r.daysUntilEnd < 0 ? "text-red-600" : "text-amber-700"}`}>
-                              {r.daysUntilEnd < 0
-                                ? isAr
-                                  ? `متأخر ${Math.abs(r.daysUntilEnd)} ي`
-                                  : `${Math.abs(r.daysUntilEnd)}d overdue`
-                                : r.daysUntilEnd === 0
-                                  ? isAr
-                                    ? "اليوم"
-                                    : "Today"
-                                  : isAr
-                                    ? `${r.daysUntilEnd} ي`
-                                    : `${r.daysUntilEnd}d left`}
-                            </span>
-                          )}
-                        </td>
-                        <td className="px-3 py-2 text-end">
-                          <span className={`px-2 py-1 rounded font-bold ${
-                            r.readiness >= 80 ? "bg-green-100 text-green-700" :
-                            r.readiness >= 50 ? "bg-amber-100 text-amber-700" :
-                            "bg-red-100 text-red-700"
-                          }`}>
-                            {r.readiness}%
+                        <td className="px-3 py-2.5 text-xs text-slate-700">{row.technician || "—"}</td>
+                        <td className="px-3 py-2.5">
+                          <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold ${stageTone(row.stage)}`}>
+                            {stageLabel(row.stage)}
                           </span>
                         </td>
+                        <td className={`px-3 py-2.5 text-end text-xs tabular-nums font-medium ${row.ageDays >= 30 ? "text-red-600" : row.ageDays >= 7 ? "text-amber-700" : "text-slate-500"}`}>
+                          {row.ageDays}{isAr ? " ي" : "d"}
+                        </td>
                       </tr>
-                    );
-                    })}
+                    ))}
                   </tbody>
                 </table>
               </div>
             )}
-          </CardContent>
-        </Card>
+          </section>
 
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-semibold">{isAr ? "الفحوصات" : "Tests"}</CardTitle>
-            <CardDescription className="mt-1.5 text-xs">
+          <aside className="space-y-3">
+            <div className="bg-white border border-slate-200 rounded-xl p-4">
+              <h2 className="text-sm font-semibold text-slate-800 flex items-center gap-2">
+                <Users className="w-4 h-4 text-slate-500" />
+                {isAr ? "الفنيون اليوم" : "Technicians today"}
+              </h2>
+              {techWork.length === 0 ? (
+                <p className="text-xs text-slate-400 mt-3">{isAr ? "لا يوجد تكليف مفتوح" : "No open assignments"}</p>
+              ) : (
+                <div className="mt-3 space-y-1.5">
+                  {techWork.map((tech) => (
+                    <button
+                      key={tech.id}
+                      type="button"
+                      onClick={() => setQuery(tech.name)}
+                      className="w-full flex items-center justify-between gap-2 rounded-lg border border-slate-100 px-2.5 py-2 text-start hover:bg-slate-50"
+                    >
+                      <span className="min-w-0">
+                        <span className="block text-xs font-medium truncate">{tech.name}</span>
+                        {tech.specialty ? <span className="block text-[10px] text-slate-400 truncate">{tech.specialty}</span> : null}
+                      </span>
+                      <span className="text-[11px] tabular-nums text-slate-500 shrink-0">
+                        {tech.assigned} {isAr ? "مفتوح" : "open"} · {tech.doneToday} {isAr ? "اليوم" : "today"}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="bg-white border border-slate-200 rounded-xl p-4">
+              <h2 className="text-sm font-semibold text-slate-800 flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 text-amber-600" />
+                {isAr ? "تنبيهات" : "Watch"}
+              </h2>
+              <p className="text-[11px] text-slate-400 mt-1">
+                {isAr
+                  ? `جودة المقاول، أو الموقع، أو تأخر المختبر خلال ${CONTRACT_CLOSURE_ALERT_DAYS} يوماً من نهاية العقد.`
+                  : `Contractor quality, a site issue, or lab backlog within ${CONTRACT_CLOSURE_ALERT_DAYS} days of contract end.`}
+              </p>
+              {qualityAlerts.length === 0 ? (
+                <p className="text-xs text-slate-500 mt-3">{isAr ? "لا شيء يحتاج تنبيهاً" : "Nothing needs a warning"}</p>
+              ) : (
+                <div className="mt-3 space-y-2 max-h-64 overflow-auto">
+                  {qualityAlerts.map((alert) => (
+                    <button
+                      key={alert.id}
+                      type="button"
+                      onClick={() => handleAlertReport(alert)}
+                      className="w-full text-start rounded-lg border border-slate-100 px-2.5 py-2 hover:bg-slate-50"
+                    >
+                      <span className="flex items-center justify-between gap-2">
+                        <span className="text-xs font-semibold text-slate-800">{isAr ? alert.titleAr : alert.titleEn}</span>
+                        <span className="text-[10px] font-mono text-slate-400">{alert.metric}</span>
+                      </span>
+                      <span className="block text-[11px] text-slate-500 mt-0.5 leading-snug">{isAr ? alert.bodyAr : alert.bodyEn}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </aside>
+        </div>
+
+        <section className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+          <div className="px-4 py-3 border-b border-slate-100">
+            <h2 className="text-sm font-semibold text-slate-800">{isAr ? "الطلبات حسب العقد" : "Orders by contract"}</h2>
+            <p className="text-[11px] text-slate-400 mt-0.5">
               {isAr
-                ? "مفتوح = لم يُرسل بعد. مُرسل = أنهى الفني. النجاح والرسوب من نتيجة المكعبات أو نموذج الفحص بعد الإرسال، وليس من المسودة."
-                : "Open = not submitted yet. Submitted = technician finished. Pass and fail come from the saved cube or test form after submit, not from a draft."}
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {(followUp?.byTest.length ?? 0) === 0 ? (
-              <p className="text-sm text-muted-foreground py-4 text-center">{isAr ? "لا توجد فحوصات مكلّفة" : "No assigned tests"}</p>
+                ? "معتمد QC بعد الاعتماد فقط. المراجعة = أنهى الفني. الأرقام تحت العدد هي رقم الطلب والعينة."
+                : "QC done is approval only. Review means the technician finished. The lines under a count are the order and sample."}
+            </p>
+          </div>
+          {contractRows.length === 0 ? (
+            <p className="text-sm text-slate-400 py-8 text-center">{isAr ? "لا توجد عقود" : "No contracts"}</p>
+          ) : (
+            <div className="overflow-auto max-h-[420px]">
+              <table className="w-full text-xs">
+                <thead className="sticky top-0 bg-slate-50 text-slate-500">
+                  <tr>
+                    <th className="text-start px-3 py-2 font-medium">{isAr ? "العقد" : "Contract"}</th>
+                    <th className="text-start px-3 py-2 font-medium">{isAr ? "المقاول" : "Contractor"}</th>
+                    <th className="text-center px-3 py-2 font-medium">{isAr ? "الإجمالي" : "Total"}</th>
+                    <th className="text-center px-3 py-2 font-medium">{isAr ? "في المختبر" : "In lab"}</th>
+                    <th className="text-center px-3 py-2 font-medium">{isAr ? "مراجعة" : "Review"}</th>
+                    <th className="text-center px-3 py-2 font-medium">{isAr ? "معتمد" : "QC done"}</th>
+                    <th className="text-center px-3 py-2 font-medium">{isAr ? "مرفوض" : "Rejected"}</th>
+                    <th className="text-center px-3 py-2 font-medium">{isAr ? "النهاية" : "Ends"}</th>
+                    <th className="text-end px-3 py-2 font-medium">%</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {contractRows.map((r) => {
+                    const warn = r.inClosureWindow && r.readiness < 30 && r.total >= 5 && r.completed > 0;
+                    const pctTone = r.completed === 0
+                      ? "text-slate-400"
+                      : r.readiness >= 80 ? "text-emerald-700" : r.readiness >= 50 ? "text-amber-700" : "text-red-600";
+                    return (
+                      <tr key={`${r.contractNo}-${r.contractor}`} className={`border-t border-slate-100 ${warn ? "bg-red-50/50" : ""}`}>
+                        <td className="px-3 py-2.5 font-mono">
+                          {r.contractNo}
+                          {warn && <span className="ms-1 text-red-500">⚠</span>}
+                        </td>
+                        <td className="px-3 py-2.5">{r.contractor}</td>
+                        <td className="px-3 py-2.5 text-center font-semibold">{r.total}</td>
+                        <td className="px-3 py-2.5 text-center text-blue-700 font-semibold">
+                          {r.pending + r.inProgress}
+                          {r.openSamples.length > 0 && (
+                            <span className="block font-normal text-[10px] text-slate-400">
+                              {r.openSamples.slice(0, 2).join(", ")}
+                              {r.openSamples.length > 2 ? ` +${r.openSamples.length - 2}` : ""}
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-3 py-2.5 text-center text-amber-700 font-semibold">
+                          {r.waitingReview}
+                          {r.reviewOrders.length > 0 && (
+                            <span className="block font-normal text-[10px] text-slate-400">
+                              {r.reviewOrders.slice(0, 2).join(", ")}
+                              {r.reviewOrders.length > 2 ? ` +${r.reviewOrders.length - 2}` : ""}
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-3 py-2.5 text-center text-emerald-700 font-semibold">{r.completed}</td>
+                        <td className="px-3 py-2.5 text-center text-red-600 font-semibold">{r.rejected}</td>
+                        <td className="px-3 py-2.5 text-center text-slate-500 whitespace-nowrap">
+                          {r.endDate ? formatDateForLang(r.endDate, lang) : "—"}
+                          {r.daysUntilEnd != null && r.inClosureWindow && (
+                            <span className={`block text-[10px] font-semibold ${r.daysUntilEnd < 0 ? "text-red-600" : "text-amber-700"}`}>
+                              {r.daysUntilEnd < 0
+                                ? (isAr ? `متأخر ${Math.abs(r.daysUntilEnd)} ي` : `${Math.abs(r.daysUntilEnd)}d overdue`)
+                                : (isAr ? `${r.daysUntilEnd} ي` : `${r.daysUntilEnd}d left`)}
+                            </span>
+                          )}
+                        </td>
+                        <td className={`px-3 py-2.5 text-end font-semibold tabular-nums ${pctTone}`}>
+                          {r.completed === 0 ? "—" : `${r.readiness}%`}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+          <section className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+            <div className="px-4 py-3 border-b border-slate-100">
+              <h2 className="text-sm font-semibold text-slate-800">{isAr ? "المقاولون" : "Contractors"}</h2>
+              <p className="text-[11px] text-slate-400 mt-0.5">
+                {isAr
+                  ? "النجاح اعتماد QC فقط. المفتوح ليس 0%."
+                  : "Pass is QC approval only. Open orders are not 0%."}
+              </p>
+            </div>
+            {contractorBreakdown.length === 0 ? (
+              <p className="text-sm text-slate-400 py-8 text-center">{isAr ? "لا توجد بيانات" : "No data"}</p>
             ) : (
-              <div className="overflow-x-auto">
+              <div className="divide-y divide-slate-100">
+                {contractorBreakdown.map((c) => {
+                  const open = Math.max(0, c.totalOrders - c.decided);
+                  const expanded = openContractor === c.contractor;
+                  const label = c.decided === 0
+                    ? (isAr ? "بانتظار QC" : "Awaiting QC")
+                    : c.insufficientData
+                      ? (isAr ? "قراءة أولية" : "Early read")
+                      : c.riskLevel === "low"
+                        ? (isAr ? "جيد" : "Sound")
+                        : c.riskLevel === "medium"
+                          ? (isAr ? "متوسط" : "Watch")
+                          : (isAr ? "ضعيف" : "Weak");
+                  return (
+                    <div key={c.contractor}>
+                      <button
+                        type="button"
+                        onClick={() => setOpenContractor(expanded ? null : c.contractor)}
+                        className="w-full px-4 py-2.5 flex items-center gap-3 text-start hover:bg-slate-50"
+                      >
+                        <span className="flex-1 min-w-0">
+                          <span className="block text-xs font-semibold truncate">{c.contractor}</span>
+                          <span className="block text-[11px] text-slate-400">
+                            {c.totalOrders} {isAr ? "طلب" : "orders"} · {c.decided} QC · {open} {isAr ? "مفتوح" : "open"}
+                          </span>
+                        </span>
+                        <span className="text-[11px] text-slate-500 shrink-0">{label}</span>
+                        <span className={`text-xs font-semibold tabular-nums w-10 text-end ${c.decided === 0 ? "text-slate-300" : c.passRate >= 60 ? "text-emerald-700" : "text-red-600"}`}>
+                          {c.decided > 0 ? `${c.passRate}%` : "—"}
+                        </span>
+                        {expanded ? <ChevronUp className="w-3.5 h-3.5 text-slate-400" /> : <ChevronDown className="w-3.5 h-3.5 text-slate-400" />}
+                      </button>
+                      {expanded && (
+                        <div className="px-4 pb-3 space-y-1">
+                          <p className="text-[11px] text-slate-500">
+                            {c.passed} {isAr ? "نجاح" : "pass"} · {c.failed} {isAr ? "رفض" : "fail"}
+                            {c.insufficientData ? (isAr ? " · التقييم يحتاج 3 نتائج" : " · rating needs 3 results") : ""}
+                          </p>
+                          {c.projects.map((p) => (
+                            <div key={p.contractNo} className="flex items-center justify-between gap-2 rounded-md bg-slate-50 px-2 py-1.5 text-[11px]">
+                              <span className="font-mono truncate">{p.contractNo}</span>
+                              <span className="text-slate-500 shrink-0">
+                                {p.passed} {isAr ? "نجاح" : "pass"} · {p.failed} {isAr ? "رفض" : "fail"} · {Math.max(0, p.total - p.decided)} {isAr ? "مفتوح" : "open"}
+                                <span className="ms-2 font-semibold text-slate-700">{p.decided > 0 ? `${p.passRate}%` : "—"}</span>
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </section>
+
+          <section className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+            <div className="px-4 py-3 border-b border-slate-100">
+              <h2 className="text-sm font-semibold text-slate-800">{isAr ? "الفحوصات" : "Tests"}</h2>
+              <p className="text-[11px] text-slate-400 mt-0.5">
+                {isAr
+                  ? "النجاح والرسوب من النتيجة بعد الإرسال، وليس من المسودة."
+                  : "Pass and fail come from the saved result after submit, not from a draft."}
+              </p>
+            </div>
+            {(followUp?.byTest.length ?? 0) === 0 ? (
+              <p className="text-sm text-slate-400 py-8 text-center">{isAr ? "لا توجد فحوصات" : "No assigned tests"}</p>
+            ) : (
+              <div className="overflow-auto max-h-[420px]">
                 <table className="w-full text-xs">
-                  <thead>
-                    <tr className="border-b">
-                      <th className="text-start py-2 px-3 text-muted-foreground font-medium">{isAr ? "الفحص" : "Test"}</th>
-                      <th className="text-center py-2 px-3 text-muted-foreground font-medium">{isAr ? "مفتوح" : "Open"}</th>
-                      <th className="text-center py-2 px-3 text-muted-foreground font-medium">{isAr ? "مُرسل" : "Submitted"}</th>
-                      <th className="text-center py-2 px-3 text-muted-foreground font-medium">{isAr ? "ناجح" : "Pass"}</th>
-                      <th className="text-center py-2 px-3 text-muted-foreground font-medium">{isAr ? "راسب" : "Fail"}</th>
-                      <th className="text-end py-2 px-3 text-muted-foreground font-medium">{isAr ? "النجاح" : "Pass rate"}</th>
+                  <thead className="sticky top-0 bg-slate-50 text-slate-500">
+                    <tr>
+                      <th className="text-start px-3 py-2 font-medium">{isAr ? "الفحص" : "Test"}</th>
+                      <th className="text-center px-3 py-2 font-medium">{isAr ? "مفتوح" : "Open"}</th>
+                      <th className="text-center px-3 py-2 font-medium">{isAr ? "مُرسل" : "Sent"}</th>
+                      <th className="text-center px-3 py-2 font-medium">{isAr ? "ناجح" : "Pass"}</th>
+                      <th className="text-center px-3 py-2 font-medium">{isAr ? "راسب" : "Fail"}</th>
+                      <th className="text-end px-3 py-2 font-medium">%</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -851,13 +624,13 @@ export default function ManagerDashboard() {
                       const decided = row.passed + row.failed;
                       const pr = decided > 0 ? Math.round((row.passed / decided) * 100) : null;
                       return (
-                        <tr key={row.code} className="border-b last:border-0">
-                          <td className="py-2 px-3 font-medium">{isAr ? row.nameAr || row.nameEn : row.nameEn}</td>
-                          <td className="py-2 px-3 text-center text-blue-700 font-semibold">{row.open}</td>
-                          <td className="py-2 px-3 text-center font-semibold">{row.submitted}</td>
-                          <td className="py-2 px-3 text-center text-green-700 font-semibold">{row.passed}</td>
-                          <td className="py-2 px-3 text-center text-red-700 font-semibold">{row.failed}</td>
-                          <td className="py-2 px-3 text-end text-muted-foreground">{pr == null ? "—" : `${pr}%`}</td>
+                        <tr key={row.code} className="border-t border-slate-100">
+                          <td className="px-3 py-2 font-medium">{isAr ? row.nameAr || row.nameEn : row.nameEn}</td>
+                          <td className="px-3 py-2 text-center text-blue-700 font-semibold">{row.open}</td>
+                          <td className="px-3 py-2 text-center font-semibold">{row.submitted}</td>
+                          <td className="px-3 py-2 text-center text-emerald-700 font-semibold">{row.passed}</td>
+                          <td className="px-3 py-2 text-center text-red-600 font-semibold">{row.failed}</td>
+                          <td className="px-3 py-2 text-end text-slate-500">{pr == null ? "—" : `${pr}%`}</td>
                         </tr>
                       );
                     })}
@@ -865,24 +638,18 @@ export default function ManagerDashboard() {
                 </table>
               </div>
             )}
-          </CardContent>
-        </Card>
+          </section>
+        </div>
 
-        {/* VAT / TRN Settings */}
-        <LabTaxSettingsCard lang={lang as "ar" | "en"} />
-
-        {/* Report Generator */}
-        <Card id="report-generator">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-semibold flex items-center gap-2">
-              <FileText className="w-4 h-4 text-primary" />
-              {isAr ? "إنشاء تقرير" : "Generate Report"}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4" id="report-generator">
+          <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-3">
+            <h2 className="text-sm font-semibold text-slate-800 flex items-center gap-2">
+              <FileText className="w-4 h-4 text-slate-500" />
+              {isAr ? "تقرير" : "Report"}
+            </h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
               {REPORT_SECTIONS.map((sec) => (
-                <label key={sec.value} className="flex items-center gap-2 text-sm cursor-pointer">
+                <label key={sec.value} className="flex items-center gap-2 text-xs cursor-pointer text-slate-700">
                   <Checkbox
                     checked={reportSections.includes(sec.value)}
                     onCheckedChange={() => toggleSection(sec.value)}
@@ -891,75 +658,58 @@ export default function ManagerDashboard() {
                 </label>
               ))}
             </div>
-
-            <div className="flex flex-wrap items-center gap-3">
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-muted-foreground">{isAr ? "الفترة" : "Range"}</span>
-                <select
-                  className="h-8 text-xs border rounded-md px-2 bg-background"
-                  value={reportRange}
-                  onChange={(e) => setReportRange(e.target.value as typeof reportRange)}
-                >
-                  <option value="month">{isAr ? "هذا الشهر" : "This month"}</option>
-                  <option value="quarter">{isAr ? "هذا الربع" : "This quarter"}</option>
-                  <option value="year">{isAr ? "هذا العام" : "This year"}</option>
-                  <option value="custom">{isAr ? "نطاق مخصص" : "Custom range"}</option>
-                </select>
-              </div>
-
+            <div className="flex flex-wrap items-center gap-2">
+              <select
+                className="h-8 text-xs border rounded-md px-2 bg-white"
+                value={reportRange}
+                onChange={(e) => setReportRange(e.target.value as typeof reportRange)}
+              >
+                <option value="month">{isAr ? "هذا الشهر" : "This month"}</option>
+                <option value="quarter">{isAr ? "هذا الربع" : "This quarter"}</option>
+                <option value="year">{isAr ? "هذا العام" : "This year"}</option>
+                <option value="custom">{isAr ? "نطاق" : "Custom"}</option>
+              </select>
               {reportRange === "custom" && (
                 <>
                   <Input type="date" value={reportFrom} onChange={(e) => setReportFrom(e.target.value)} className="h-8 text-xs w-36" />
                   <Input type="date" value={reportTo} onChange={(e) => setReportTo(e.target.value)} className="h-8 text-xs w-36" />
                 </>
               )}
-
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-muted-foreground">{isAr ? "الصيغة" : "Format"}</span>
-                <select
-                  className="h-8 text-xs border rounded-md px-2 bg-background"
-                  value={reportFormat}
-                  onChange={(e) => setReportFormat(e.target.value as "pdf" | "excel")}
-                >
-                  <option value="pdf">PDF</option>
-                  <option value="excel">Excel</option>
-                </select>
+              <select
+                className="h-8 text-xs border rounded-md px-2 bg-white"
+                value={reportFormat}
+                onChange={(e) => setReportFormat(e.target.value as "pdf" | "excel")}
+              >
+                <option value="pdf">PDF</option>
+                <option value="excel">Excel</option>
+              </select>
+              <div className="flex border rounded-md overflow-hidden text-xs h-8">
+                {([
+                  { value: "ar" as const, label: "AR" },
+                  { value: "en" as const, label: "EN" },
+                  { value: "both" as const, label: isAr ? "ثنائي" : "Both" },
+                ]).map((opt) => (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => setReportLang(opt.value)}
+                    className={`px-2.5 h-full font-medium ${reportLang === opt.value ? "bg-slate-900 text-white" : "bg-white text-slate-500"}`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
               </div>
-
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-muted-foreground">{isAr ? "لغة التقرير" : "Report language"}</span>
-                <div className="flex items-center gap-0.5 border rounded-md overflow-hidden text-xs h-8">
-                  {([
-                    { value: "ar" as const, label: "AR" },
-                    { value: "en" as const, label: "EN" },
-                    { value: "both" as const, label: isAr ? "ثنائي" : "Both" },
-                  ]).map((opt) => (
-                    <button
-                      key={opt.value}
-                      type="button"
-                      onClick={() => setReportLang(opt.value)}
-                      className={`px-2.5 h-full font-medium transition-colors ${
-                        reportLang === opt.value
-                          ? "bg-primary text-primary-foreground"
-                          : "bg-background text-muted-foreground hover:bg-muted"
-                      }`}
-                    >
-                      {opt.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
               <Button size="sm" onClick={handleGenerate} disabled={generateReport.isPending || reportSections.length === 0}>
                 {generateReport.isPending ? (
                   <><Loader2 className="w-4 h-4 animate-spin me-1" />{isAr ? "جاري الإنشاء..." : "Generating..."}</>
                 ) : (
-                  <><Eye className="w-4 h-4 me-1" />{isAr ? "معاينة التقرير" : "Preview report"}</>
+                  <><Eye className="w-4 h-4 me-1" />{isAr ? "معاينة" : "Preview"}</>
                 )}
               </Button>
             </div>
-          </CardContent>
-        </Card>
+          </div>
+          <LabTaxSettingsCard lang={lang as "ar" | "en"} />
+        </div>
 
         <DashboardReportPreviewDialog
           open={previewOpen}
