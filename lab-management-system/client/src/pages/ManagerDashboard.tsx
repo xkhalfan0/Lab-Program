@@ -578,8 +578,8 @@ export default function ManagerDashboard() {
               <CardTitle className="text-sm font-semibold">{isAr ? "يحتاج متابعة" : "Needs follow-up"}</CardTitle>
               <CardDescription className="text-xs">
                 {isAr
-                  ? `اليوم: ${followUp?.receivedToday ?? 0} عينة مستلمة · ${followUp?.submittedToday ?? 0} فحص أُرسل. القائمة هي الفحوصات التي لم تُعتمد بعد، الأقدم أولاً.`
-                  : `Today: ${followUp?.receivedToday ?? 0} samples received · ${followUp?.submittedToday ?? 0} tests submitted. Oldest unfinished tests first.`}
+                  ? `اليوم: ${followUp?.receivedToday ?? 0} عينة مستلمة · ${followUp?.submittedToday ?? 0} فحص أُرسل. نفس تكليفات الفنيين فقط، بدون النسخ المكررة.`
+                  : `Today: ${followUp?.receivedToday ?? 0} samples received · ${followUp?.submittedToday ?? 0} tests submitted. Only real technician assignments, with duplicate copies hidden.`}
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -593,6 +593,7 @@ export default function ManagerDashboard() {
                         <th className="text-start py-2 px-2 font-medium">{isAr ? "العينة" : "Sample"}</th>
                         <th className="text-start py-2 px-2 font-medium">{isAr ? "الفحص" : "Test"}</th>
                         <th className="text-start py-2 px-2 font-medium">{isAr ? "المقاول" : "Contractor"}</th>
+                        <th className="text-start py-2 px-2 font-medium">{isAr ? "الفني" : "Technician"}</th>
                         <th className="text-start py-2 px-2 font-medium">{isAr ? "المرحلة" : "Stage"}</th>
                         <th className="text-end py-2 px-2 font-medium">{isAr ? "منذ" : "Age"}</th>
                       </tr>
@@ -613,6 +614,7 @@ export default function ManagerDashboard() {
                               <span className="block">{row.contractor}</span>
                               <span className="text-[10px] text-muted-foreground font-mono">{row.contractNo}</span>
                             </td>
+                            <td className="py-2 px-2">{row.technician}</td>
                             <td className="py-2 px-2">{stageLabel}</td>
                             <td className="py-2 px-2 text-end tabular-nums">{row.ageDays}{isAr ? " ي" : "d"}</td>
                           </tr>

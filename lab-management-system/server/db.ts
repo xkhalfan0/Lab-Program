@@ -985,6 +985,7 @@ export type QualityFollowUp = {
     testName: string;
     contractor: string;
     contractNo: string;
+    technician: string;
     stage: "to_start" | "testing" | "manager" | "qc";
     ageDays: number;
   }>;
@@ -1023,7 +1024,11 @@ export async function getQualityFollowUp(): Promise<QualityFollowUp> {
       id: distributions.id,
       status: distributions.status,
       testType: distributions.testType,
+      testSubType: distributions.testSubType,
       testName: distributions.testName,
+      sampleId: distributions.sampleId,
+      assignedTechnicianId: distributions.assignedTechnicianId,
+      technicianName: users.name,
       createdAt: distributions.createdAt,
       updatedAt: distributions.updatedAt,
       sampleCode: samples.sampleCode,
@@ -1036,16 +1041,18 @@ export async function getQualityFollowUp(): Promise<QualityFollowUp> {
     })
     .from(distributions)
     .innerJoin(samples, eq(distributions.sampleId, samples.id))
-    .leftJoin(labOrderItems, eq(labOrderItems.distributionId, distributions.id))
-    .leftJoin(labOrders, eq(labOrders.id, labOrderItems.orderId))
+    .innerJoin(labOrderItems, eq(labOrderItems.distributionId, distributions.id))
+    .innerJoin(labOrders, eq(labOrders.id, labOrderItems.orderId))
     .leftJoin(testTypes, eq(distributions.testType, testTypes.code))
+    .leftJoin(users, eq(distributions.assignedTechnicianId, users.id))
     .where(
       and(
         isNull(distributions.deletedAt),
+        isNotNull(distributions.assignedTechnicianId),
         ne(samples.status, "deleted"),
         buildSampleVisibilityCondition(),
-        or(isNull(labOrders.id), isNull(labOrders.deletedAt)),
-        or(isNull(labOrderItems.id), ne(labOrderItems.status, "cancelled")),
+        isNull(labOrders.deletedAt),
+        ne(labOrderItems.status, "cancelled"),
       ),
     );
 
@@ -1121,7 +1128,28 @@ export async function getQualityFollowUp(): Promise<QualityFollowUp> {
   };
   const tests = new Map<string, QualityFollowUp["byTest"][number]>();
 
-  for (const d of dists) {
+  // Same sample + test can have a leftover pending copy beside the real assignment.
+  const openKey = (d: (typeof dists)[number]) =>
+    `${d.sampleId}|${d.testType ?? ""}|${d.testSubType ?? ""}|${d.assignedTechnicianId ?? ""}`;
+  const finishedKeys = new Set(
+    dists
+      .filter((d) => d.status === "completed" || (d.orderStatus && !["pending", "distributed", "in_progress"].includes(d.orderStatus)))
+      .map(openKey),
+  );
+  const seenOpen = new Set<string>();
+  const visibleDists = dists
+    .slice()
+    .sort((a, b) => b.id - a.id)
+    .filter((d) => {
+      const pending = d.status === "pending" || d.status === "in_progress";
+      if (!pending) return true;
+      const key = openKey(d);
+      if (finishedKeys.has(key) || seenOpen.has(key)) return false;
+      seenOpen.add(key);
+      return true;
+    });
+
+  for (const d of visibleDists) {
     const outcome = resolveTestOutcome({
       specialized: specByDist.get(d.id) ?? null,
       concreteGroups: concreteByDist.get(d.id) ?? [],
@@ -1174,6 +1202,7 @@ export async function getQualityFollowUp(): Promise<QualityFollowUp> {
         testName: d.nameEn || d.testName || code,
         contractor: d.contractorName ?? "—",
         contractNo: d.contractNumber ?? "—",
+        technician: d.technicianName ?? "—",
         stage,
         ageDays,
       });
