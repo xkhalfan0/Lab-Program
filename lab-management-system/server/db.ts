@@ -743,7 +743,23 @@ export async function updateSampleStatus(
 }
 
 export async function checkAndUpdateSampleStatusAfterSubmission(sampleId: number) {
-  const allDistributions = await getDistributionsBySample(sampleId);
+  const db = await getDb();
+  const linked = db
+    ? await db
+        .select({ status: distributions.status })
+        .from(distributions)
+        .innerJoin(labOrderItems, eq(labOrderItems.distributionId, distributions.id))
+        .innerJoin(labOrders, eq(labOrders.id, labOrderItems.orderId))
+        .where(
+          and(
+            eq(distributions.sampleId, sampleId),
+            isNull(distributions.deletedAt),
+            isNull(labOrders.deletedAt),
+            ne(labOrderItems.status, "cancelled"),
+          ),
+        )
+    : [];
+  const allDistributions = linked.length > 0 ? linked : await getDistributionsBySample(sampleId);
   if (allDistributions.length === 0) return undefined;
 
   const allCompleted = allDistributions.every((d) => d.status === "completed");
@@ -836,16 +852,27 @@ export async function syncLabOrdersForSample(sampleId: number) {
       }
     }
 
+    const fresh = await getLabOrderItems(order.id);
+    const activeItems = fresh.filter((i) => i.status !== "cancelled");
+    const distStates = activeItems.map((i) =>
+      i.distributionId != null ? distStatus.get(i.distributionId) : undefined,
+    );
+    const allTestsDone =
+      activeItems.length > 0 && distStates.every((status) => status === "completed");
+    const anyOpen = distStates.some((status) => !status || status === "pending" || status === "in_progress");
+
     let next = desired;
-    if (!next) {
-      const fresh = await getLabOrderItems(order.id);
-      if (
-        fresh.length > 0 &&
-        fresh.every((i) => i.status === "completed" || i.status === "cancelled") &&
-        fresh.some((i) => i.status === "completed")
-      ) {
-        next = "completed";
-      }
+    if (allTestsDone && (!next || (LAB_ORDER_STAGE_RANK[next] ?? 0) < LAB_ORDER_STAGE_RANK.completed)) {
+      next = "completed";
+    } else if (
+      anyOpen &&
+      next &&
+      !["qc_passed", "clearance_requested", "clearance_issued", "qc_failed", "rejected"].includes(sample.status) &&
+      (LAB_ORDER_STAGE_RANK[next] ?? 0) > LAB_ORDER_STAGE_RANK.in_progress
+    ) {
+      next = "in_progress";
+    } else if (!next && allTestsDone) {
+      next = "completed";
     }
     if (!next || next === order.status) continue;
     const currentRank = LAB_ORDER_STAGE_RANK[order.status] ?? 0;

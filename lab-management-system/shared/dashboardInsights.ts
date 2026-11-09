@@ -102,6 +102,7 @@ export function computeOrderKpisFromStatusCounts(
 export type LabOrderRow = {
   id?: number;
   orderCode?: string | null;
+  sampleCode?: string | null;
   contractNumber?: string | null;
   contractorName?: string | null;
   status?: string | null;
@@ -155,6 +156,8 @@ export type ContractReadinessRow = {
   /** Technician finished; waiting for manager or QC. */
   waitingReview: number;
   rejected: number;
+  /** Sample codes still with the technician or not yet distributed. */
+  openSamples: string[];
   readiness: number;
   endDate: Date | null;
   daysUntilEnd: number | null;
@@ -209,6 +212,7 @@ export function computeContractReadinessRows(
       pending: number;
       waitingReview: number;
       rejected: number;
+      openSamples: string[];
     }
   >();
 
@@ -226,6 +230,7 @@ export function computeContractReadinessRows(
         pending: 0,
         waitingReview: 0,
         rejected: 0,
+        openSamples: [],
       });
     }
     const row = grouped.get(key)!;
@@ -236,6 +241,10 @@ export function computeContractReadinessRows(
     else if (st === "completed" || st === "reviewed") row.waitingReview++;
     else if (st === "distributed" || st === "in_progress") row.inProgress++;
     else row.pending++;
+    if (st !== "qc_passed" && st !== "rejected" && st !== "completed" && st !== "reviewed") {
+      const label = o.sampleCode?.trim() || o.orderCode?.trim();
+      if (label) row.openSamples.push(label);
+    }
   }
 
   return Array.from(grouped.values())

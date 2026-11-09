@@ -389,6 +389,8 @@ export default function ManagerDashboard() {
     ...o,
     contractNumber: o.contractNumber != null ? String(o.contractNumber) : null,
     contractorName: o.contractorName != null ? String(o.contractorName) : null,
+    sampleCode: o.sampleCode != null ? String(o.sampleCode) : null,
+    orderCode: o.orderCode != null ? String(o.orderCode) : null,
     status: o.status != null ? String(o.status) : null,
   }));
 
@@ -760,7 +762,15 @@ export default function ManagerDashboard() {
                         </td>
                         <td className="px-3 py-2">{r.contractor}</td>
                         <td className="px-3 py-2 text-center font-semibold">{r.total}</td>
-                        <td className="px-3 py-2 text-center text-blue-700 font-semibold">{r.pending + r.inProgress}</td>
+                        <td className="px-3 py-2 text-center text-blue-700 font-semibold">
+                          {r.pending + r.inProgress}
+                          {r.openSamples.length > 0 && (
+                            <span className="block text-[10px] font-normal text-slate-500">
+                              {r.openSamples.slice(0, 3).join(", ")}
+                              {r.openSamples.length > 3 ? ` +${r.openSamples.length - 3}` : ""}
+                            </span>
+                          )}
+                        </td>
                         <td className="px-3 py-2 text-center text-amber-700 font-semibold">{r.waitingReview}</td>
                         <td className="px-3 py-2 text-center text-green-700 font-semibold">{r.completed}</td>
                         <td className="px-3 py-2 text-center text-red-700 font-semibold">{r.rejected}</td>
